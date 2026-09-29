@@ -136,7 +136,8 @@ export function PhotoCropper({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="relative max-w-full cursor-grab touch-none overflow-hidden rounded-full bg-neutral-900 ring-4 ring-white/80 active:cursor-grabbing"
+          /* กรอบครอปเป็นสี่เหลี่ยมมุมมนมีขอบ ให้ตรงกับรูปที่แสดงจริงในระบบ (เจ้าของสั่ง 29 ก.ย. 2569) */
+          className="relative max-w-full cursor-grab touch-none overflow-hidden rounded-[28px] bg-neutral-900 ring-4 ring-white/80 active:cursor-grabbing"
         >
           {natural && (
             // eslint-disable-next-line @next/next/no-img-element

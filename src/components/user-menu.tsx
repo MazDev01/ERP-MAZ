@@ -49,11 +49,12 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
     };
   }, [open]);
 
+  /* รูปผู้ใช้เป็นสี่เหลี่ยมมุมมน ตามต้นแบบที่เจ้าของส่งมา (clay) ไม่ใช่วงกลม — สั่ง 29 ก.ย. 2569 */
   const avatar = photo ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={photo} alt="" className="size-8 rounded-full object-cover" />
+    <img src={photo} alt="" className="size-8 rounded-[10px] border border-border object-cover" />
   ) : (
-    <span className="grid size-8 place-items-center rounded-full bg-accent text-xs font-bold text-primary">
+    <span className="grid size-8 place-items-center rounded-[10px] bg-accent text-xs font-bold text-primary">
       {initials(me.name)}
     </span>
   );
@@ -78,7 +79,7 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label="บัญชีของฉัน"
-          className="glass-thin flex items-center gap-2.5 rounded-full py-1 pr-1 pl-1 transition-colors hover:border-primary sm:pr-3.5"
+          className="glass-thin flex items-center gap-2.5 rounded-[14px] py-1 pr-1 pl-1 transition-colors hover:border-primary sm:pr-3.5"
         >
           {avatar}
           {/* ชื่อกับบทบาทโผล่เฉพาะจอกว้าง จอแคบเหลือแค่รูปกลม */}
@@ -109,10 +110,10 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
               <img
                 src={photo}
                 alt=""
-                className="size-10 shrink-0 rounded-full object-cover"
+                className="size-10 shrink-0 rounded-[12px] object-cover"
               />
             ) : (
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-[15px] font-bold text-primary">
+              <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-accent text-[15px] font-bold text-primary">
                 {initials(me.name)}
               </span>
             )}

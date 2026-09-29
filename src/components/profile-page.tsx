@@ -132,10 +132,11 @@ function ProfileCard({
           <img
             src={photo}
             alt=""
-            className="size-16 rounded-full object-cover lg:size-[104px]"
+            className="size-16 rounded-[20px] border-[3px] border-white object-cover shadow-[0_4px_14px_rgba(28,20,45,.14)] lg:size-[104px] lg:rounded-[32px]"
           />
         ) : (
-          <span className="grid size-16 place-items-center rounded-full bg-accent text-xl font-bold text-primary lg:size-[104px] lg:text-[34px]">
+          /* รูปเป็นสี่เหลี่ยมมุมมนตามต้นแบบ (clay) ไม่ใช่วงกลม — เจ้าของสั่ง 29 ก.ย. 2569 */
+          <span className="grid size-16 place-items-center rounded-[20px] bg-accent text-xl font-bold text-primary lg:size-[104px] lg:rounded-[32px] lg:text-[34px]">
             {short}
           </span>
         )}
