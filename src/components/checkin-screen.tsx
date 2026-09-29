@@ -86,12 +86,8 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
 
   /*
    * ตัวเลขของหน้าจอมือถือ (ตามแบบ checkin.html) — ใช้สูตรชุดเดียวกับจอคอม ไม่ได้คิดใหม่
-   * workedMin  เวลาที่ทำไปแล้ววันนี้ (หักพักกลางวันตามกติกาเดิม)
    * weekDays   เจ็ดวันของสัปดาห์นี้ วันไหนตอกครบเข้า-ออกแล้วติดดาว
    */
-  const workedMin = today
-    ? Math.round(workedMsOfDay(todayRecords, tick ?? 0, leaveWindow) / 60000)
-    : 0;
   /* ชื่อที่ทำงานกับรัศมี อ่านจากที่ผู้ดูแลตั้งไว้ ไม่ใช่ข้อความตายตัวในหน้านี้ */
   /* อ่านผ่านฮุก ไม่ใช่ areaSettings() ตรง ๆ — ค่าที่ผู้ดูแลแก้ไว้อยู่ใน localStorage
      ถ้าอ่านตอนเรนเดอร์ ฝั่งเซิร์ฟเวอร์จะได้ค่าตั้งต้น คนละค่ากับฝั่งเครื่อง (hydration ไม่ตรง) */
@@ -113,9 +109,6 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   const viewWorked = viewDay
     ? Math.round(workedMsOfDay(viewRecords, viewIsToday ? (tick ?? 0) : 0, viewLeave) / 60000)
     : 0;
-  const viewRequired = requiredMinutes(viewLeave);
-  const viewPct =
-    viewRequired > 0 ? Math.min(100, Math.round((viewWorked * 100) / viewRequired)) : 0;
 
   const weekDays = (() => {
     if (!now) return [];
@@ -331,80 +324,64 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
           </span>
         </section>
 
-        {/* หน้าปัด — วงแหวนคือเวลาที่ทำไปแล้วเทียบกับเวลาที่ต้องทำวันนี้ */}
-        <section className="relative mx-auto aspect-square w-[min(290px,78vw)]">
-          <span
-            className="absolute inset-[6%] rounded-full [background:repeating-linear-gradient(45deg,rgba(208,2,27,.07)_0_3px,transparent_3px_9px)]"
-            aria-hidden="true"
-          />
-          <svg viewBox="0 0 120 120" className="absolute inset-0 size-full -rotate-90" aria-hidden="true">
-            <circle cx="60" cy="60" r="56" fill="none" stroke="#f3e6e9" strokeWidth="4" />
-            <circle
-              cx="60"
-              cy="60"
-              r="56"
-              fill="none"
-              stroke="var(--primary)"
-              strokeWidth="5"
-              strokeLinecap="round"
-              strokeDasharray="351.86"
-              strokeDashoffset={351.86 * (1 - viewPct / 100)}
-              style={{ transition: "stroke-dashoffset .6s ease" }}
+        {/*
+          การ์ดตอกบัตรบนมือถือ — หน้าตาเดียวกับจอคอม (เจ้าของสั่ง 29 ก.ย. 2569 "ทำหน้าตอกบัตรให้คล้ายกัน")
+          ฝั่งแดงคือนาฬิกา ฝั่งขาวคือสถานะกับปุ่ม · ของเดิมเป็นหน้าปัดวงกลมคนละแบบกับจอคอม
+        */}
+        <section className="glass overflow-hidden rounded-[24px]">
+          <div className="checkin-top relative px-6 pt-6 pb-14 text-center text-white">
+            <span
+              className="pointer-events-none absolute bottom-0 left-1/2 z-0 h-[90px] w-[112%] -translate-x-1/2 translate-y-1/2 rounded-[50%] bg-card"
+              aria-hidden="true"
             />
-          </svg>
-          {/* วันย้อนหลังดูได้อย่างเดียว ตอกบัตรไม่ได้ — กลางวงจึงเป็นสรุปของวันนั้น ไม่ใช่ปุ่ม */}
-          {!viewIsToday ? (
-            <div className="absolute inset-[14%] flex flex-col items-center justify-center gap-1 rounded-full bg-card text-foreground shadow-[0_0_0_8px_rgba(255,255,255,.9),0_24px_40px_-22px_rgba(142,0,18,.55)]">
-              <span className="text-[12.5px] text-muted-foreground">{viewDay ? thaiDate(viewDay) : ""}</span>
-              <b className="num text-[28px] leading-none font-bold">
-                {viewWorked ? formatMinutes(viewWorked) : "ไม่มีบันทึก"}
-              </b>
-              <button
-                type="button"
-                onClick={() => setSeeDay("")}
-                className="mt-1 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[12px] font-semibold text-primary"
-              >
-                กลับไปวันนี้
-              </button>
-            </div>
-          ) : (
-          <button
-            type="button"
-            disabled={!now}
-            onClick={() => {
-              setPopOpen(true);
-              if (!isWorking) void checkIn();
-            }}
-            className="absolute inset-[14%] flex flex-col items-center justify-center gap-1 rounded-full bg-card text-foreground shadow-[0_0_0_8px_rgba(255,255,255,.9),0_24px_40px_-22px_rgba(142,0,18,.55)] transition-transform active:scale-[0.97] disabled:opacity-60"
-          >
-            {isWorking ? (
+            <p className="relative z-10 text-[21px] font-bold tracking-widest opacity-90">MAZ</p>
+            <p className="relative z-10 mt-3 text-[14px] text-white/80">{greeting(now)}</p>
+            <p className="num relative z-10 mt-0.5 text-[38px] leading-tight font-semibold">
+              {now ? formatTime(now) : "--:--:--"}
+            </p>
+            <p className="relative z-10 text-[13px] text-white/75">{now ? formatThaiDate(now) : "—"}</p>
+          </div>
+
+          <div className="relative z-10 bg-card px-5 pt-10 pb-6 text-center">
+            {viewIsToday ? (
               <>
-                <span className="text-[12.5px] text-muted-foreground">เวลาทำงาน</span>
-                <b className="num text-[28px] leading-none font-bold">{formatMinutes(workedMin)}</b>
-                <span className="mt-1 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[12px] font-semibold text-primary">
-                  แตะเพื่อออกงาน
-                </span>
-              </>
-            ) : checkedOut ? (
-              <>
-                <span className="text-[12.5px] text-muted-foreground">วันนี้ทำงาน</span>
-                <b className="num text-[28px] leading-none font-bold">{formatMinutes(workedMin)}</b>
-                <span className="mt-1 rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--success)]">
-                  {workedMin >= requiredMin
-                    ? "ครบเวลาแล้ว"
-                    : `ขาด ${formatMinutes(Math.max(0, requiredMin - workedMin))}`}
-                </span>
+                <AreaBadge checkedOut={checkedOut} isWorking={isWorking} geo={lastIn?.geo} live={live} />
+                <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{homeNote()}</p>
+                <button
+                  type="button"
+                  disabled={!now}
+                  onClick={() => {
+                    setPopOpen(true);
+                    if (!isWorking) void checkIn();
+                  }}
+                  className={[
+                    "mx-auto mt-4 flex h-13 w-full max-w-xs items-center justify-center gap-2.5",
+                    "rounded-full py-3.5 text-[17px] font-semibold text-white",
+                    "transition-transform active:scale-[0.98] disabled:opacity-50",
+                    isWorking ? "bg-[var(--brand-700)]" : "bg-primary",
+                  ].join(" ")}
+                >
+                  <PowerIcon className="size-6" strokeWidth={2} />
+                  {isWorking ? "ออกงาน" : "เข้างาน"}
+                </button>
               </>
             ) : (
+              /* วันย้อนหลังตอกบัตรไม่ได้ — สรุปของวันนั้นแทนปุ่ม */
               <>
-                <b className="text-[28px] leading-none font-bold text-primary">เข้างาน</b>
-                <span className="px-6 text-center text-[12.5px] leading-snug text-muted-foreground">
-                  แตะเพื่อบันทึกเวลาเข้างาน
-                </span>
+                <p className="text-[12.5px] text-muted-foreground">{viewDay ? thaiDate(viewDay) : ""}</p>
+                <b className="num mt-1 block text-[26px] leading-none font-bold">
+                  {viewWorked ? formatMinutes(viewWorked) : "ไม่มีบันทึก"}
+                </b>
+                <button
+                  type="button"
+                  onClick={() => setSeeDay("")}
+                  className="mt-3 rounded-full bg-[var(--accent)] px-3.5 py-1.5 text-[12.5px] font-semibold text-primary"
+                >
+                  กลับไปวันนี้
+                </button>
               </>
             )}
-          </button>
-          )}
+          </div>
         </section>
 
         {/* สามช่องนี้เปลี่ยนตามวันที่เลือกในแถบสัปดาห์ ไม่ได้ผูกกับวันนี้อย่างเดียว */}
@@ -426,10 +403,6 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
           </span>
           <ChevronRightIcon className="size-[18px] flex-none text-muted-foreground" strokeWidth={2.4} />
         </Link>
-
-        <p className="glass rounded-2xl px-4 py-3 text-center text-[13px] leading-relaxed text-muted-foreground">
-          {homeNote()}
-        </p>
 
         {!embedded && (
           <Link href="/records" className="btn glass-thin btn-mini w-full justify-center">
