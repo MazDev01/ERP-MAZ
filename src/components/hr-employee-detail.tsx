@@ -139,7 +139,8 @@ export function EmployeeDetail({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="glass-solid flex max-h-[92dvh] w-full max-w-[900px] flex-col overflow-hidden rounded-t-[18px] sm:max-h-full sm:rounded-[18px]">
+      {/* ต้นแบบกำหนดกล่องกว้าง 680px สูง 720px (ไม่เกิน 90% ของจอ) — กว้างกว่านี้อ่านยาก */}
+      <div className="glass-solid flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[18px] sm:h-[720px] sm:max-h-[90dvh] sm:max-w-[680px] sm:rounded-[18px]">
         {/* แบนเนอร์แดงของแอป มีวงกลมจาง ๆ ประดับ ปุ่มปิดอยู่มุมขวาบนบนแบนเนอร์ */}
         <div
           /* เจ้าของทัก 28 ก.ย. 2569 ว่าแถบบนใหญ่ไป — ลดเหลือ 56px ขอบล่างตรงเหมือนเดิม
