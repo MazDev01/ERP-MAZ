@@ -105,7 +105,7 @@ export function HrAccountsPage() {
               <tr>
                 <th>พนักงาน</th>
                 <th style={{ width: 170 }}>ชื่อผู้ใช้</th>
-                <th style={{ width: 210 }}>บทบาท</th>
+                <th style={{ width: 210 }}>ตำแหน่งในระบบ</th>
                 <th style={{ width: 150 }}>สถานะบัญชี</th>
                 <th style={{ width: 150 }}>สร้างเมื่อ</th>
                 <th className="c" style={{ width: 240 }} aria-label="จัดการ" />
@@ -249,7 +249,7 @@ function AccountRow({
       <td data-label="ชื่อผู้ใช้" className="num">
         {a ? a.user : <span className="muted">ยังไม่มีบัญชี</span>}
       </td>
-      <td data-label="บทบาท">
+      <td data-label="ตำแหน่งในระบบ">
         {a ? (
           accountRoles(a).length ? (
             <span className="flex flex-wrap gap-1">
@@ -283,7 +283,7 @@ function AccountRow({
         {a ? (
           <span className="flex flex-wrap justify-center gap-1.5">
             <button type="button" className="btn glass-thin btn-mini" onClick={onRoles}>
-              บทบาท
+              ตำแหน่งในระบบ
             </button>
             <button type="button" className="btn glass-thin btn-mini" onClick={onReset}>
               รีเซ็ตรหัสผ่าน
@@ -424,7 +424,7 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
 
   return (
     <Sheet
-      title="บทบาทของบัญชี"
+      title="ตำแหน่งในระบบของบัญชีนี้"
       onClose={onClose}
       footer={
         <>
@@ -435,7 +435,7 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
             type="button"
             className="btn solid btn-solid"
             onClick={() => {
-              if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งบทบาท ไม่งั้นบัญชีนี้เข้าหน้าไหนไม่ได้เลย");
+              if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งตำแหน่ง ไม่งั้นบัญชีนี้เข้าหน้าไหนไม่ได้เลย");
               setAccountRoles(emp.id, picked);
               onClose();
             }}
@@ -475,7 +475,7 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
       </div>
       {warn && <p className="mt-3 text-[12.5px] font-semibold text-destructive">{warn}</p>}
       <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-        บทบาทกำหนดว่าบัญชีนี้เปิดเมนูไหนได้ · ถือหลายบทบาทได้ ระบบให้สลับมุมมองตอนเข้าใช้งาน
+        ตำแหน่งในระบบกำหนดว่าบัญชีนี้เปิดเมนูไหนได้ · ถือได้หลายตำแหน่ง ระบบให้สลับมุมมองตอนเข้าใช้งาน
       </p>
     </Sheet>
   );

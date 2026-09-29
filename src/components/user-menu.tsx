@@ -92,7 +92,7 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
             <b className="block max-w-[140px] truncate text-[13.5px] font-semibold">{me.name}</b>
             <span
               className="block max-w-[140px] truncate text-[11.5px] text-muted-foreground"
-              title={dual ? `ควบ ${myRoles.length} บทบาท: ${myRoles.map(roleLabel).join(" · ")}` : undefined}
+              title={dual ? `ควบ ${myRoles.length} ตำแหน่ง: ${myRoles.map(roleLabel).join(" · ")}` : undefined}
             >
               {dual ? `${roleLabel(role)} · ควบ ${myRoles.length}` : me.position}
             </span>
@@ -131,7 +131,7 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
               </span>
               {dual && (
                 <span className="mt-1 block text-[11.5px] leading-relaxed text-muted-foreground">
-                  ควบ {myRoles.length} บทบาท ·{" "}
+                  ควบ {myRoles.length} ตำแหน่ง ·{" "}
                   {myRoles.map((r, i) => (
                     <span key={r}>
                       {i > 0 && " · "}

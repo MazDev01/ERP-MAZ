@@ -224,7 +224,7 @@ export function LoginForm() {
             {/* ถูกระงับแล้วปิดแค่ปุ่มเข้าสู่ระบบตาม mockup (lockAccount) — การ์ดบทบาทยังเลือกได้ */}
             <fieldset className="mb-3">
               <legend className="mb-1.5 text-[13px] font-medium text-muted-foreground">
-                Sign in as · เข้าใช้งานในบทบาท
+                Sign in as · เข้าใช้งานในตำแหน่ง
               </legend>
               <div className="grid gap-1.5 sm:grid-cols-2">
                 {ROLES.map((r) => (
@@ -390,7 +390,7 @@ export function LoginForm() {
           </form>
 
           <p className="mt-3.5 text-center text-[11.5px] leading-relaxed text-muted-foreground">
-            ยังไม่มีระบบหลังบ้าน — เลือกบทบาทแล้วกด <b className="font-semibold">เข้าสู่ระบบ</b> ได้เลยโดยไม่ต้องกรอก
+            ยังไม่มีระบบหลังบ้าน — เลือกตำแหน่งแล้วกด <b className="font-semibold">เข้าสู่ระบบ</b> ได้เลยโดยไม่ต้องกรอก
             <br />
             ถ้ากรอกชื่อผู้ใช้ รหัสผ่านเดโมคือ <b className="font-semibold">{DEMO_PASSWORD}</b>
             <br />

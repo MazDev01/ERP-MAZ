@@ -23,6 +23,7 @@ import {
   ROLE_EMPLOYEE,
   accountRoles,
   rolesOfEmployee,
+  rolesOfPosition,
   HR_MAX_ROLES,
   payApproveKey,
   fillPeriod,
@@ -106,16 +107,37 @@ function addNewStaff(s: HrState): HrState {
         : e,
     ),
   };
+  /*
+   * เครื่องที่เก็บทะเบียนไว้ก่อน 29 ก.ย. 2569 ยังมีตำแหน่งรวม "บัญชีและบุคคล" (account_hr)
+   * ซึ่งถูกแยกเป็นบัญชีกับฝ่ายบุคคลแล้ว — ย้ายให้ตรงกับทะเบียนใหม่ ไม่งั้นหน้าจอโชว์ชื่อคีย์ดิบ
+   * และบทบาทของบัญชีนั้นจะค้างเป็นของตำแหน่งเดิม
+   */
+  const splitAccHr = {
+    ...withStaff,
+    emp: withStaff.emp.map((e) => {
+      if (e.pos !== ("account_hr" as PosKey)) return e;
+      const now = HR_EMP.find((x) => x.id === e.id);
+      const pos = (now?.pos ?? "hr") as PosKey;
+      return {
+        ...e,
+        pos,
+        posMore: now?.posMore ?? e.posMore,
+        history: e.history.map((h) => (h.pos === ("account_hr" as PosKey) ? { ...h, pos } : h)),
+        /* บทบาทตั้งใหม่ตามตำแหน่งจริง — ของเดิมเป็นชุดของตำแหน่งรวมที่ไม่มีแล้ว */
+        account: e.account ? { ...e.account, roles: rolesOfPosition(pos) } : e.account,
+      };
+    }),
+  };
   /* ข้อมูลที่เก็บไว้ก่อนแยกกลุ่มปิดรอบ ยังไม่มีช่องของกลุ่มรายวัน เติมให้ครบก่อนใช้ */
   return {
-    ...withStaff,
-    emp: withLoginAccounts(withStaff.emp),
-    periods: withStaff.periods.map(fillPeriod),
-    payruns: withStaff.payruns.map(fillPeriod),
-    slips: withStaff.slips.map(fillSlip),
+    ...splitAccHr,
+    emp: withLoginAccounts(splitAccHr.emp),
+    periods: splitAccHr.periods.map(fillPeriod),
+    payruns: splitAccHr.payruns.map(fillPeriod),
+    slips: splitAccHr.slips.map(fillSlip),
     /* ข้อมูลที่เก็บไว้ก่อนมีใบลาฝึกงานและการอนุมัติของ CEO */
-    internLeave: withStaff.internLeave ?? HR_INTERN_LEAVE,
-    payApprove: withStaff.payApprove ?? HR_PAYAPPROVE,
+    internLeave: splitAccHr.internLeave ?? HR_INTERN_LEAVE,
+    payApprove: splitAccHr.payApprove ?? HR_PAYAPPROVE,
   };
 }
 
