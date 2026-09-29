@@ -36,7 +36,8 @@ import { CloseIcon } from "./icons";
 export function EmpPhoto({ className = "", note = true }: { className?: string; note?: boolean }) {
   return (
     <span
-      className={`relative flex flex-none items-center justify-center overflow-hidden border border-border bg-muted/50 text-muted-foreground ${className}`}
+      /* พื้นในกรอบเป็นสีทึบตามต้นแบบ (--field) ไม่ใช่สีโปร่ง ไม่งั้นทับแบนเนอร์แดงแล้วกลายเป็นชมพู */
+      className={`relative flex flex-none items-center justify-center overflow-hidden border border-border bg-[#FAFBFC] text-muted-foreground ${className}`}
       aria-hidden="true"
     >
       <svg
