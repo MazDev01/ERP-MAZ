@@ -142,6 +142,8 @@ export function AdminCompanyPage() {
   }
 
   const canRemove = list.length > 1 && used === 0;
+  /* เลขที่เอกสารเก็บคนละหมวดกับผู้ออกเอกสาร แต่ใช้แถบบันทึกเดียวกัน */
+  const docs = useSectionDraft("docs", "เลขที่เอกสาร", describeDocs);
 
   return (
     <div className="space-y-4">
@@ -428,19 +430,25 @@ export function AdminCompanyPage() {
       )}
 
       {/* เลขที่เอกสารของทั้งระบบ — อยู่ในหัวข้อนี้เพราะเป็นเรื่องของเอกสารที่ออกให้ลูกค้าและพนักงาน */}
-      <DocNumbersCard />
+      <DocNumbersCard d={docs} />
 
+      {/* แถบบันทึกอันเดียวคุมทั้งผู้ออกเอกสารและเลขที่เอกสาร ไม่ให้มีแถบซ้ำสองอัน */}
       <SaveBar
-        dirty={d.dirty}
-        isDefault={d.isDefault}
-        invalid={problemOf(list)}
-        onSave={d.save}
+        dirty={d.dirty || docs.dirty}
+        isDefault={d.isDefault && docs.isDefault}
+        invalid={problemOf(list) || docProblem(docs.draft)}
+        onSave={() => {
+          if (d.dirty) d.save();
+          if (docs.dirty) docs.save();
+        }}
         onCancel={() => {
           d.cancel();
+          docs.cancel();
           setSelCode(d.saved[0]?.code ?? "");
         }}
         onDefault={() => {
           d.toDefault();
+          docs.toDefault();
           setSelCode("MAZ");
         }}
       />
@@ -553,8 +561,8 @@ function describeDocs(a: DocPrefixes, b: DocPrefixes) {
     .map((k) => `${DOC_LABEL[k]} ${a[k]} → ${b[k]}`);
 }
 
-function docProblem(p: DocPrefixes, keys: (keyof DocPrefixes)[]) {
-  const vals = keys.map((k) => p[k]);
+function docProblem(p: DocPrefixes) {
+  const vals = docRows().map((r) => p[r.key]);
   if (vals.some((v) => !/^[A-Z0-9]{1,6}$/.test(v))) return "ตัวนำหน้าใช้ตัวอักษรอังกฤษพิมพ์ใหญ่หรือตัวเลข 1–6 ตัว";
   const seen = new Set<string>();
   for (const v of vals) {
@@ -564,47 +572,40 @@ function docProblem(p: DocPrefixes, keys: (keyof DocPrefixes)[]) {
   return "";
 }
 
-function DocNumbersCard() {
-  const d = useSectionDraft("docs", "เลขที่เอกสาร", describeDocs);
+function DocNumbersCard({ d }: { d: ReturnType<typeof useSectionDraft<"docs">> }) {
   const rows = docRows();
-  const bad = docProblem(d.draft, rows.map((r) => r.key));
 
   return (
-    <>
-      <Card
-        title="เลขที่เอกสาร"
-        note="ตัวนำหน้าของเลขที่เอกสารแต่ละชนิด ปีและลำดับระบบออกให้เอง · เปลี่ยนแล้วลำดับของตัวนำหน้าใหม่เริ่มนับ 1 เอกสารเดิมคงเลขเดิม · เลขใบเสนอราคาตั้งที่ผู้ออกเอกสารแต่ละราย"
-      >
-        <div className="grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((r) => {
-            const changed = d.draft[r.key] !== d.saved[r.key];
-            return (
-              <div key={r.key} className="flex items-center gap-3 border-b border-border py-2.5 last:border-b-0">
-                <span className="min-w-0 flex-1">
-                  <b className="block text-[13.5px] font-semibold">{r.label}</b>
-                  <span className="block text-[11.5px] text-muted-foreground">{r.who}</span>
-                  <span className="num block text-[12px] text-muted-foreground">
-                    ถัดไป {r.sample(d.draft[r.key] || "—")}
-                  </span>
+    <Card
+      title="เลขที่เอกสาร"
+      note="ตัวนำหน้าของเลขที่เอกสารแต่ละชนิด ปีและลำดับระบบออกให้เอง · เปลี่ยนแล้วลำดับของตัวนำหน้าใหม่เริ่มนับ 1 เอกสารเดิมคงเลขเดิม · เลขใบเสนอราคาตั้งที่ผู้ออกเอกสารแต่ละราย"
+    >
+      <div className="grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((r) => {
+          const changed = d.draft[r.key] !== d.saved[r.key];
+          return (
+            <div key={r.key} className="flex items-center gap-3 border-b border-border py-2.5 last:border-b-0">
+              <span className="min-w-0 flex-1">
+                <b className="block text-[13.5px] font-semibold">{r.label}</b>
+                <span className="block text-[11.5px] text-muted-foreground">{r.who}</span>
+                <span className="num block text-[12px] text-muted-foreground">
+                  ถัดไป {r.sample(d.draft[r.key] || "—")}
                 </span>
-                {/* ครอบด้วยกล่องกว้างคงที่ เพราะ inputCls มี w-full อยู่แล้ว ถ้าใส่ความกว้างที่ input จะไม่ชนะ
-                    แล้วช่องจะกินพื้นที่จนชื่อเอกสารเหลือคอลัมน์เดียวตัวอักษร */}
-                <span className="w-[96px] flex-none">
-                  <input
-                    value={d.draft[r.key]}
-                    aria-label={`ตัวนำหน้า${r.label}`}
-                    maxLength={6}
-                    onChange={(e) => d.setDraft({ ...d.draft, [r.key]: e.target.value.toUpperCase().trim() })}
-                    className={`${inputCls} num text-center uppercase ${changed ? "border-primary" : ""}`}
-                  />
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      <SaveBar dirty={d.dirty} isDefault={d.isDefault} invalid={bad} onSave={d.save} onCancel={d.cancel} onDefault={d.toDefault} />
-    </>
+              </span>
+              {/* ครอบด้วยกล่องกว้างคงที่ เพราะ inputCls มี w-full อยู่แล้ว ถ้าใส่ความกว้างที่ input จะไม่ชนะ */}
+              <span className="w-[96px] flex-none">
+                <input
+                  value={d.draft[r.key]}
+                  aria-label={`ตัวนำหน้า${r.label}`}
+                  maxLength={6}
+                  onChange={(e) => d.setDraft({ ...d.draft, [r.key]: e.target.value.toUpperCase().trim() })}
+                  className={`${inputCls} num text-center uppercase ${changed ? "border-primary" : ""}`}
+                />
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
