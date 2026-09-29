@@ -9,6 +9,8 @@
  */
 
 import { USERS } from "./mock-data";
+import { HR_EMP, HR_EMPTYPE, hrDept, hrPos } from "./hr-data";
+import { staffEmployeeId, subscribeStaffEmployee } from "./staff-identity";
 import { createPersistedStore } from "./persisted-store";
 import { currentRole, subscribeRole, type Role } from "./role";
 import { useSyncExternalStore } from "react";
@@ -70,6 +72,25 @@ const store = createPersistedStore<ProfileByRole>(
  * ไม่งั้นพอต้นทางแก้ (เช่น ย้ายฝ่าย) คนที่เคยเปิดแอปแล้วจะเห็นของเก่าค้างตลอดไป
  */
 function hrOwned(role: Role) {
+  /*
+   * บทบาท "ทีมงาน" ไม่ได้ผูกกับคนเดียว — มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
+   * ชื่อกับตำแหน่งจึงมาจากคนที่เลือกไว้ในทะเบียนฝ่ายบุคคล ไม่ใช่ค่าตายตัวใน USERS (เจ้าของสั่ง 29 ก.ย. 2569)
+   */
+  if (role === "staff") {
+    const e = HR_EMP.find((x) => x.id === staffEmployeeId());
+    if (e) {
+      const boss = HR_EMP.find((x) => x.id === e.boss);
+      return {
+        employeeId: e.id,
+        position: hrPos(e.pos).label,
+        department: hrDept(hrPos(e.pos).dept).label,
+        supervisor: boss ? `${boss.name} (${hrPos(boss.pos).label})` : "",
+        startDate: e.startedAt,
+        employmentType: HR_EMPTYPE[e.type].label,
+        workSchedule: USERS.staff.workSchedule,
+      };
+    }
+  }
   const u = USERS[role];
   return {
     employeeId: u.employeeId,
@@ -88,12 +109,24 @@ let seenAll: ProfileByRole | null = null;
 let seenRole: Role | null = null;
 let merged: EmployeeProfile = { ...DEFAULT_PROFILE.sales, ...hrOwned("sales") };
 
+let seenStaff: string | null = null;
+
 function pick(all: ProfileByRole, role: Role): EmployeeProfile {
-  if (all !== seenAll || role !== seenRole) {
+  /* ทีมงานสลับคนได้ จึงต้องคิดใหม่เมื่อคนเปลี่ยนด้วย ไม่ใช่เฉพาะตอนสลับบทบาท */
+  const staffId = role === "staff" ? staffEmployeeId() : null;
+  if (all !== seenAll || role !== seenRole || staffId !== seenStaff) {
     seenAll = all;
     seenRole = role;
+    seenStaff = staffId;
+    const e = staffId ? HR_EMP.find((x) => x.id === staffId) : undefined;
     /* เครื่องที่เก็บโปรไฟล์ไว้ก่อนมีบทบาทใหม่จะไม่มีก้อนของบทบาทนั้น — เติมจากค่าตั้งต้น */
-    merged = { ...DEFAULT_PROFILE[role], ...all[role], ...hrOwned(role) };
+    merged = {
+      ...DEFAULT_PROFILE[role],
+      ...all[role],
+      /* สลับคนแล้วชื่อและช่องทางติดต่อต้องเป็นของคนนั้น ไม่ใช่ของคนก่อนหน้าที่ค้างอยู่ในเครื่อง */
+      ...(e ? { name: e.name, email: e.email, phone: e.phone, birth: e.birth } : {}),
+      ...hrOwned(role),
+    };
   }
   return merged;
 }
@@ -103,7 +136,7 @@ const getMergedServer = () => pick(store.getServer(), "sales");
 
 /* โปรไฟล์เปลี่ยนได้สองทาง — แก้ข้อมูลเอง หรือสลับบทบาท จึงต้องฟังทั้งคู่ */
 function subscribeBoth(onChange: () => void) {
-  const off = [store.subscribe(onChange), subscribeRole(onChange)];
+  const off = [store.subscribe(onChange), subscribeRole(onChange), subscribeStaffEmployee(onChange)];
   return () => off.forEach((fn) => fn());
 }
 

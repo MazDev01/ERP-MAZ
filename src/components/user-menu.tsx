@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { useProfile } from "@/lib/profile-data";
 import { useMyRoles } from "@/lib/hr-link";
 import { roleLabel, useRole } from "@/lib/role";
+import { hrPos } from "@/lib/hr-data";
+import { setStaffEmployee, staffTeam, useStaffEmployeeId } from "@/lib/staff-identity";
 import { useProfilePhoto } from "@/lib/profile-store";
 import { ConfirmDialog } from "./confirm-dialog";
 import { DownloadIcon, LockIcon, LogoutIcon, UserIcon } from "./icons";
@@ -28,6 +30,9 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
      ต้องเห็นว่าตอนนี้ทำงานในบทบาทไหน และตัวเองถือบทบาทอะไรอีกบ้าง
      ไม่งั้นพอคิวอนุมัติหรือเมนูไม่เหมือนที่คิด ก็เดาไม่ออกว่าเพราะสวมหมวกผิดใบ */
   const role = useRole();
+  /* ทีมงานสลับคนได้ — รายชื่อจากทะเบียนฝ่ายบุคคล ไม่ใช่รายชื่อตายตัวในหน้านี้ */
+  const staffId = useStaffEmployeeId();
+  const team = role === "staff" ? staffTeam() : [];
   const myRoles = useMyRoles();
   const dual = myRoles.length > 1;
   const photo = useProfilePhoto();
@@ -141,6 +146,49 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
           </div>
 
           <hr className="mx-1 my-1.5 border-border" />
+
+          {/*
+            บทบาททีมงานมีหลายคนหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
+            สลับได้ว่ากำลังใช้ระบบเป็นใคร — งานที่ได้รับ เวลาทำงาน ใบลา โอที ใบเบิก เป็นของคนนั้น
+            (เจ้าของสั่ง 29 ก.ย. 2569 · ยังไม่มีหลังบ้าน จึงเป็นตัวเลือกในเครื่อง)
+          */}
+          {role === "staff" && team.length > 1 && (
+            <>
+              <p className="px-2.5 pt-1 pb-1.5 text-[11px] font-bold text-muted-foreground">
+                เข้าใช้งานเป็น
+              </p>
+              <div className="scroll-stable max-h-[184px] overflow-y-auto">
+                {team.map((e) => {
+                  const on = e.id === staffId;
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setStaffEmployee(e.id);
+                        setOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-[9px] px-[11px] py-2 text-left text-[13px] transition-colors hover:bg-accent ${
+                        on ? "bg-[var(--accent)] font-semibold text-primary" : ""
+                      }`}
+                    >
+                      <span className="grid size-7 flex-none place-items-center rounded-[9px] bg-accent text-[10.5px] font-bold text-primary">
+                        {initials(e.name)}
+                      </span>
+                      <span className="min-w-0">
+                        <b className="block truncate font-semibold">{e.name}</b>
+                        <span className="block truncate text-[11px] text-muted-foreground">
+                          {hrPos(e.pos).label}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <hr className="mx-1 my-1.5 border-border" />
+            </>
+          )}
 
           <MenuLink href="/profile" onClick={() => setOpen(false)}>
             <UserIcon className="size-[15px]" />

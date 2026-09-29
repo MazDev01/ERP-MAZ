@@ -29,6 +29,10 @@ const store = createRoleStore<LeaveRecord[]>(
   LEAVE_RECORDS,
   (v): v is LeaveRecord[] => Array.isArray(v),
   fixLeaveStatuses,
+  /* หน้าอนุมัติมองทีมงานเป็นก้อนเดียว — รวมใบของทุกคนในบทบาทเข้าด้วยกัน */
+  (list) => list.flat(),
+  /* ทีมงานคนอื่นเริ่มจากไม่มีใบเลย ไม่ใช่ได้ใบตัวอย่างของคนตั้งต้นติดมา */
+  [],
 );
 
 export function useLeaveRecords() {

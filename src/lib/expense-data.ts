@@ -67,6 +67,8 @@ export type OtherRow = {
 };
 
 export type ExpenseClaim = {
+  /** ชื่อผู้ยื่น — ทีมงานมีหลายคน หน้าอนุมัติต้องรู้ว่าใบนี้ของใคร (29 ก.ย. 2569) */
+  employee?: string;
   /** เดือนของใบเบิก รูปแบบ yyyy-mm */
   month: string;
   status: ClaimStatus;

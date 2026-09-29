@@ -12,6 +12,8 @@ import { useHr } from "@/lib/hr-store";
 import { accountRoles } from "@/lib/hr-data";
 import { bkkStamp } from "@/lib/format";
 import { ROLES, setRole, useRole, type Role } from "@/lib/role";
+import { setStaffEmployee, staffEmployeeId, staffLabel, staffTeam } from "@/lib/staff-identity";
+import { Select } from "./ui";
 
 /** ผิดครบกี่ครั้งจึงระงับบัญชี — ยืนยันกับฝ่ายบุคคล (ต้นแบบ login.html MAX_TRIES) */
 const MAX_TRIES = 5;
@@ -96,6 +98,8 @@ export function LoginForm() {
   const savedRole = useRole();
   const hr = useHr();
   const [role, setPick] = useState<Role>(savedRole);
+  /* ทีมงานมีหลายตำแหน่ง จึงต้องเลือกด้วยว่าจะเข้าเป็นใคร (เจ้าของสั่ง 29 ก.ย. 2569) */
+  const [who, setWho] = useState(() => staffEmployeeId());
 
   function edit(which: "user" | "pass", v: string) {
     if (which === "user") {
@@ -117,6 +121,7 @@ export function LoginForm() {
     if (!user && !password) {
       const account = accountOf(role);
       if (account.suspended) return setLocked("admin");
+      if (role === "staff") setStaffEmployee(who);
       setRole(role);
       keepDevice("");
       markLogin(role, bkkStamp());
@@ -170,6 +175,8 @@ export function LoginForm() {
       if (!person && account.suspended) return setLocked("admin");
       const mustReset = person ? Boolean(person.account?.mustChange) : account.mustResetPassword;
       setFails(0);
+      /* เข้าด้วยชื่อผู้ใช้จริง — คนในทะเบียนใช้รหัสพนักงานของเขา ไม่ใช่ตัวเลือกในดรอปดาวน์ */
+      if (r === "staff") setStaffEmployee(person?.id ?? who);
       setRole(r);
       keepDevice(user);
       markLogin(r, bkkStamp());
@@ -239,6 +246,33 @@ export function LoginForm() {
                 ))}
               </div>
             </fieldset>
+
+            {/*
+              บทบาท "ทีมงาน" มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
+              เลือกได้ว่าเข้าเป็นใคร งานที่ได้รับกับตารางงานจะเป็นของคนนั้น (เจ้าของสั่ง 29 ก.ย. 2569)
+            */}
+            {role === "staff" && (
+              <div className="mb-3">
+                <label
+                  htmlFor="staff-who"
+                  className="mb-1.5 block text-[13px] font-medium text-muted-foreground"
+                >
+                  เข้าเป็นใครในทีม
+                </label>
+                <Select
+                  id="staff-who"
+                  value={who}
+                  onChange={(e) => setWho(e.target.value)}
+                  className="h-[46px] rounded-[12px]"
+                >
+                  {staffTeam().map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {staffLabel(e)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
 
             <div className="mb-2.5">
               <div

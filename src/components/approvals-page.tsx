@@ -634,8 +634,9 @@ function statusOf(s: string): Status {
 }
 
 /** ชื่อและตำแหน่งของบทบาทที่ล็อกอินได้ */
-function who(role: Role) {
-  return { src: "role" as const, role, name: USERS[role].name, sub: roleLabel(role) };
+/* บทบาททีมงานมีหลายคน — ใบที่จำชื่อผู้ยื่นไว้ต้องขึ้นชื่อคนนั้น ไม่ใช่ชื่อตัวแทนของบทบาท */
+function who(role: Role, name?: string) {
+  return { src: "role" as const, role, name: name || USERS[role].name, sub: roleLabel(role) };
 }
 
 /** คำขอของทีมงานตามรหัสพนักงาน (emp-requests) — รูปเดียวกับใบของบทบาท */
@@ -709,7 +710,7 @@ function fromLeave(
     note: status === "rejected" ? "" : v.comment,
     away,
     kind: "leave",
-    ...who(role),
+    ...who(role, v.employee),
     as,
     key: v.id,
     no: v.id,
@@ -731,7 +732,7 @@ function fromOt(role: Role, v: OtRecord, as: Role): Request {
   ];
   return {
     kind: "ot",
-    ...who(role),
+    ...who(role, v.employee),
     as,
     key: v.id,
     no: v.id,
@@ -752,7 +753,7 @@ function fromClaim(role: Role, v: ExpenseClaim, as: Role): Request {
   const lines = [`ค่าน้ำมัน ${thaiMonth(v.month)}`, `รวม ${km.toFixed(2)} กม.`, `เป็นเงิน ${baht(claimTotal(v))} บาท`];
   return {
     kind: "expense",
-    ...who(role),
+    ...who(role, v.employee),
     as,
     key: v.month,
     no: v.no ?? "",

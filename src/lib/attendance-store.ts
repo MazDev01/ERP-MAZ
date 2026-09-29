@@ -2,7 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 import { loadRecords, saveRecords, type PunchRecord } from "./attendance";
-import { currentRole, ROLES, subscribeRole, type Role } from "./role";
+import { ROLES, type Role } from "./role";
+import { personKey, personKeysOf, subscribePerson } from "./person-key";
 
 /*
  * localStorage และนาฬิกาเป็น "external store" ในสายตา React
@@ -13,8 +14,8 @@ import { currentRole, ROLES, subscribeRole, type Role } from "./role";
 // ─── รายการตอกบัตร ────────────────────────────────────────────────
 const EMPTY: PunchRecord[] = [];
 let recordsCache: PunchRecord[] | null = null;
-/* จำไว้ว่าแคชเป็นของบทบาทไหน พอสลับบทบาทต้องอ่านของคนใหม่ ไม่ใช้ของเดิมค้าง */
-let cachedRole: Role | null = null;
+/* จำไว้ว่าแคชเป็นของใคร พอสลับบทบาทหรือสลับคนในทีมต้องอ่านของคนใหม่ ไม่ใช้ของเดิมค้าง */
+let cachedKey: string | null = null;
 /** เพิ่มขึ้นทุกครั้งที่การตอกบัตรเปลี่ยน — ใช้บอก snapshot รวมว่าต้องอ่านใหม่ */
 let version = 0;
 const recordListeners = new Set<() => void>();
@@ -26,18 +27,18 @@ function bump() {
 
 export function subscribeRecords(onChange: () => void) {
   recordListeners.add(onChange);
-  const offRole = subscribeRole(onChange);
+  const offPerson = subscribePerson(onChange);
   return () => {
     recordListeners.delete(onChange);
-    offRole();
+    offPerson();
   };
 }
 
 export function getRecordsSnapshot(): PunchRecord[] {
-  const role = currentRole();
-  if (recordsCache === null || cachedRole !== role) {
-    cachedRole = role;
-    recordsCache = loadRecords(role);
+  const key = personKey();
+  if (recordsCache === null || cachedKey !== key) {
+    cachedKey = key;
+    recordsCache = loadRecords(key);
   }
   return recordsCache;
 }
@@ -50,15 +51,15 @@ export function getRecordsServerSnapshot(): PunchRecord[] {
 /** ล้างการตอกบัตรทั้งหมด — ใช้ตอนทดสอบ กู้คืนไม่ได้ */
 export function clearRecords() {
   recordsCache = EMPTY;
-  cachedRole = currentRole();
-  saveRecords(cachedRole, EMPTY);
+  cachedKey = personKey();
+  saveRecords(cachedKey, EMPTY);
   bump();
 }
 
 export function addRecord(record: PunchRecord) {
   recordsCache = [...getRecordsSnapshot(), record];
-  cachedRole = currentRole();
-  saveRecords(cachedRole, recordsCache);
+  cachedKey = personKey();
+  saveRecords(cachedKey, recordsCache);
   bump();
 }
 
@@ -76,8 +77,9 @@ function getAllSnapshot(): Record<Role, PunchRecord[]> {
   /* อ่านใหม่เมื่อมีคนตอกบัตรเพิ่มเท่านั้น จะได้คืนวัตถุอ้างอิงเดิมให้ useMemo ใช้ต่อได้ */
   if (allCache === null || allStamp !== version) {
     allStamp = version;
+    /* ฝ่ายบุคคลมองทีมงานเป็นบทบาทเดียว — รวมการตอกบัตรของทุกคนในทีมเข้าด้วยกัน */
     allCache = Object.fromEntries(
-      ROLES.map((r) => [r.key, loadRecords(r.key)]),
+      ROLES.map((r) => [r.key, personKeysOf(r.key).flatMap((k) => loadRecords(k))]),
     ) as Record<Role, PunchRecord[]>;
   }
   return allCache;

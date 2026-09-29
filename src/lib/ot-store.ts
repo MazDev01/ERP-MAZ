@@ -1,5 +1,6 @@
 "use client";
 import { bkkStamp, nextDocNo } from "./format";
+import { currentProfile } from "./profile-data";
 import { settings } from "./system-settings";
 
 import { OT_RECORDS, type OtRecord } from "./ot-data";
@@ -11,6 +12,11 @@ const store = createRoleStore<OtRecord[]>(
   "maz-erp.ot.v2",
   OT_RECORDS,
   (v): v is OtRecord[] => Array.isArray(v),
+  undefined,
+  /* หน้าอนุมัติมองทีมงานเป็นก้อนเดียว — รวมใบของทุกคนในบทบาทเข้าด้วยกัน */
+  (list) => list.flat(),
+  /* ทีมงานคนอื่นเริ่มจากไม่มีใบเลย ไม่ใช่ได้ใบตัวอย่างของคนตั้งต้นติดมา */
+  [],
 );
 
 export function useOtRecords() {
@@ -35,6 +41,7 @@ export function addOtRequest(input: {
     reason: input.reason,
     status: "รออนุมัติ",
     comment: "",
+    employee: currentProfile().name,
     submittedAt: bkkStamp(),
   };
   store.update((rs) => [record, ...rs]);

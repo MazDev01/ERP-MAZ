@@ -80,6 +80,8 @@ export type OtRecord = {
   decidedAt?: string;
   /** "yyyy-mm-dd hh:mm" เวลาที่แก้ไขล่าสุด — แก้ได้เฉพาะตอนยังรออนุมัติ */
   editedAt?: string;
+  /** ชื่อผู้ยื่น — ทีมงานมีหลายคน หน้าอนุมัติต้องรู้ว่าใบนี้ของใคร (29 ก.ย. 2569) */
+  employee?: string;
 };
 
 /**

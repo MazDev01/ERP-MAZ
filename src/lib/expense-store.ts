@@ -9,6 +9,7 @@ import {
 import { checkClaim, isLocked } from "./expense-data";
 import { bkkNow, nextDocNo, pad2 } from "./format";
 import { settings } from "./system-settings";
+import { currentProfile } from "./profile-data";
 import type { Role } from "./role";
 import { empRequestIds } from "./emp-requests";
 import { HR_REIMB } from "./hr-data";
@@ -27,6 +28,10 @@ const store = createRoleStore<ExpenseClaim[]>(
     claims.map((c) =>
       (c.status === "ร่าง" || c.status === "รออนุมัติ") && c.income.length ? { ...c, income: [] } : c,
     ),
+  /* หน้าอนุมัติมองทีมงานเป็นก้อนเดียว — รวมใบของทุกคนในบทบาทเข้าด้วยกัน */
+  (list) => list.flat(),
+  /* ทีมงานคนอื่นเริ่มจากไม่มีใบเลย ไม่ใช่ได้ใบตัวอย่างของคนตั้งต้นติดมา */
+  [],
 );
 
 export function useExpenseClaims() {
@@ -160,6 +165,7 @@ export function submitClaim(month: string) {
       ? {
           ...c,
           status: "รออนุมัติ",
+          employee: currentProfile().name,
           /* ยื่นใหม่หลังถูกตีกลับใช้เลขเดิม */
           no: c.no ?? no,
           comment: "",
