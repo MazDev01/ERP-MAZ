@@ -40,7 +40,9 @@ export const BUILTIN_HR_DEPT: { v: DeptKey; label: string }[] = [
 export type PosKey = string;
 
 export const BUILTIN_HR_POSITION: { v: PosKey; label: string; dept: DeptKey }[] = [
-  { v: "account_hr", label: "บัญชีและบุคคล", dept: "backoffice" },
+  /* เจ้าของสั่ง 29 ก.ย. 2569 — อย่าควบให้เอง แยกเป็นสองตำแหน่ง ใครทำทั้งสองอย่างให้ฝ่ายบุคคลติ๊กควบเอง */
+  { v: "acc", label: "บัญชี", dept: "backoffice" },
+  { v: "hr", label: "ฝ่ายบุคคล", dept: "backoffice" },
   { v: "maid", label: "แม่บ้าน", dept: "backoffice" },
   { v: "graphic", label: "Graphic", dept: "marketing" },
   { v: "pm", label: "PM", dept: "marketing" },
@@ -254,6 +256,9 @@ const ROLE_SEED_VERSION = 3;
  * ตำแหน่งที่ผู้ดูแลระบบเพิ่มเองทีหลังถือเป็น "ทีมงาน" ไว้ก่อน
  */
 const POSITION_ROLES: Record<string, Role[]> = {
+  acc: ["acc"],
+  hr: ["hr"],
+  /* ตำแหน่งเดิมที่รวมสองงานไว้ — เหลือไว้อ่านข้อมูลเก่า ไม่มีในดรอปดาวน์แล้ว */
   account_hr: ["acc", "hr"],
   pm: ["pm"],
   gm: ["gm"],
@@ -474,16 +479,17 @@ export const HR_EMP: Employee[] = [
             {at:"2024-01-01", pos:"gm", salary:52000, note:"ปรับประจำปี"}]},
 
   {id:"E12", name:"อรอนงค์ พรหมมา", nick:"อร", sex:"หญิง", birth:"1990-06-28",
-   pos:"account_hr", type:"full", status:"active", startedAt:"2020-09-01", boss:"E11",
+   /* ทำทั้งบัญชีและงานบุคคล — เป็นการ "ควบสองตำแหน่ง" ไม่ใช่ตำแหน่งเดียวที่รวมสองงานไว้ */
+   pos:"acc", posMore:["hr"], type:"full", status:"active", startedAt:"2020-09-01", boss:"E11",
    edu:"บช.บ. การบัญชี มหาวิทยาลัยพายัพ",
    exp:["เจ้าหน้าที่บัญชี สำนักงานบัญชี 3 ปี"],
    phone:"088-224-3390", email:"ornanong.p@example.com",
    address:"33 ต.วัดเกต อ.เมือง จ.เชียงใหม่ 50000",
    sos:{name:"บุญส่ง พรหมมา", rel:"บิดา", phone:"081-330-2214"},
    docs:["idcard","house","degree","photo","resume","cert"],
-   history:[{at:"2020-09-01", pos:"account_hr", salary:22000, note:"เริ่มงาน ทดลองงาน"},
-            {at:"2020-12-01", pos:"account_hr", salary:24000, note:"ผ่านทดลองงาน"},
-            {at:"2025-01-01", pos:"account_hr", salary:29000, note:"ปรับประจำปี"}]},
+   history:[{at:"2020-09-01", pos:"acc", salary:22000, note:"เริ่มงาน ทดลองงาน"},
+            {at:"2020-12-01", pos:"acc", salary:24000, note:"ผ่านทดลองงาน"},
+            {at:"2025-01-01", pos:"acc", salary:29000, note:"ปรับประจำปี"}]},
 
   /* พนักงานขายคนเดียวของบริษัท (ต้นแบบ dose-erp-maz/hr-employees.html) — ผู้ใช้บทบาทฝ่ายขาย */
   {id:"E18", name:"ชนัญชิดา ใจดี", nick:"ชญ", sex:"หญิง", birth:"1995-06-12",

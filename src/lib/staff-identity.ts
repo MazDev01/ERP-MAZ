@@ -26,7 +26,7 @@ const store = createPersistedStore<string>(
 
 /* ตำแหน่งที่มีหน้าจอของตัวเองอยู่แล้ว เข้าระบบเป็นบทบาทนั้นโดยตรง ไม่ใช่ "ทีมงาน"
    แม่บ้านใช้ระบบเฉพาะส่วน "ของฉัน" จึงยังเข้าเป็นทีมงานได้ (เอกสารตำแหน่ง 29 ก.ย. 2569) */
-const NOT_TEAM = ["gm", "pm", "account_hr", "sales"];
+const NOT_TEAM = ["gm", "pm", "acc", "hr", "account_hr", "sales"];
 /* คนที่ผูกกับบทบาทอื่นไว้แล้ว (ขาย ก่อนการขาย PM บัญชี บุคคล GM) */
 const BOUND = new Set(Object.values(ROLE_EMPLOYEE).filter((id) => id !== DEFAULT_ID));
 
