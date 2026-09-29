@@ -986,11 +986,17 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     padding: 10px 0;
   }
   .tabs button {
+    /* ยืดเต็มความกว้างแถว ไม่ปล่อยที่ว่างท้ายบรรทัด (เจ้าของสั่ง 29 ก.ย. 2569) */
+    flex: 1 1 auto;
+    justify-content: center;
     padding: 8px 13px;
     font-size: 13px;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--card);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .tabs button.on {
     background: var(--primary);
