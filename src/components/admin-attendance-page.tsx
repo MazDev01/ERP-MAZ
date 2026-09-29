@@ -320,6 +320,7 @@ export function AdminAttendancePage() {
             <div className="border-b border-border px-4 py-3.5 sm:px-5">
               <h2 className="text-[14.5px] font-bold">ประวัติการตั้งค่า</h2>
             </div>
+            {/* รายการยาวแค่ไหนก็ไม่ดันการ์ดให้ยาวเกินกรอบจุดลงเวลา — เลื่อนในกล่องแทน */}
             {hist.length === 0 ? (
               <p className="py-6 text-center text-[12.5px] text-muted-foreground">
                 ยังไม่เคยบันทึกค่าใหม่ — ค่าที่ใช้อยู่ตอนนี้คือเวลา{" "}
@@ -328,8 +329,8 @@ export function AdminAttendancePage() {
                 {place.radius / 1000} กม.
               </p>
             ) : (
-              <div className="px-4 pt-3 pb-4 sm:px-5">
-                <div className="grid grid-cols-[minmax(0,1fr)_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[130px_150px_150px_100px_84px]">
+              <div className="scroll-stable max-h-[262px] overflow-y-auto px-4 pt-3 pb-4 sm:px-5">
+                <div className="grid grid-cols-[minmax(0,1fr)_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[minmax(84px,1fr)_minmax(86px,1.1fr)_minmax(86px,1.1fr)_minmax(52px,0.7fr)_68px]">
                   <span>เริ่มใช้</span>
                   <span className="max-sm:hidden">เวลาทำงาน</span>
                   <span className="max-sm:hidden">พักเที่ยง</span>
@@ -341,7 +342,7 @@ export function AdminAttendancePage() {
                   return (
                     <div
                       key={h.at}
-                      className="grid grid-cols-[minmax(0,1fr)_84px] items-center gap-2 border-b border-border py-2.5 last:border-b-0 sm:grid-cols-[130px_150px_150px_100px_84px]"
+                      className="grid grid-cols-[minmax(0,1fr)_84px] items-center gap-2 border-b border-border py-2.5 last:border-b-0 sm:grid-cols-[minmax(84px,1fr)_minmax(86px,1.1fr)_minmax(86px,1.1fr)_minmax(52px,0.7fr)_68px]"
                     >
                       <span className="num text-[13.5px] font-semibold">
                         {thaiDate(h.at)}
