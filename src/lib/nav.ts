@@ -289,9 +289,14 @@ export function navItemsOf(
 
 /** กลุ่มเมนูของทุกบทบาทที่ควบอยู่ — "ของฉัน" มีชุดเดียวและอยู่ท้ายสุดเสมอ */
 export function navGroupsOf(roles: Role[]): NavGroup[] {
-  const all = roles.flatMap(navGroups);
-  const work = [...new Set(all.filter((g) => g !== "ของฉัน"))];
-  return all.includes("ของฉัน") ? [...work, "ของฉัน"] : work;
+  const all = [...new Set(roles.flatMap(navGroups))];
+  /*
+   * กลุ่มงานขึ้นก่อน แล้วค่อยตั้งค่าและของฉันไว้ล่างสุดเสมอ (เจ้าของสั่ง 29 ก.ย. 2569)
+   * คนที่ควบสองตำแหน่ง เช่น ฝ่ายบุคคล + บัญชี จะได้ไม่มีกลุ่มตั้งค่าคั่นกลางระหว่างงานสองฝ่าย
+   */
+  const last: NavGroup[] = ["ตั้งค่า", "ของฉัน"];
+  const work = all.filter((g) => !last.includes(g));
+  return [...work, ...last.filter((g) => all.includes(g))];
 }
 
 /** เข้าหน้านี้ได้ไหม เมื่อคนคนเดียวควบหลายบทบาท */
