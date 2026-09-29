@@ -124,7 +124,6 @@ export function AdminSettingsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <span className="eyebrow">ตั้งค่าระบบและข้อมูลหลัก</span>
           <h1>ตั้งค่าระบบ</h1>
           <p>ข้อมูลหลักและค่าที่ใช้คำนวณทั้งระบบ</p>
         </div>
@@ -138,9 +137,8 @@ export function AdminSettingsPage() {
         >
           {GROUPS.map((g) => (
             <div key={g.title} className="max-lg:flex max-lg:shrink-0 max-lg:items-center max-lg:gap-1.5">
-              <p className="mt-1 mb-1 rounded-[8px] bg-muted px-2.5 py-1 text-[11.5px] font-bold text-muted-foreground max-lg:mt-0">
-                {g.title}
-              </p>
+              {/* ต้นแบบ: ชื่อกลุ่มเป็นตัวหนังสือเล็กสีจาง ไม่ใช่แถบสีเทา */}
+              <p className="px-2.5 pt-3 pb-1 text-[11px] font-bold text-muted-foreground max-lg:pt-0">{g.title}</p>
               {g.items.map((it) => {
                 const on = sec === it.key;
                 return (
@@ -150,8 +148,8 @@ export function AdminSettingsPage() {
                     aria-current={on}
                     onClick={() => go(it.key)}
                     /* ต้นแบบใช้พื้นชมพูอ่อนตัวอักษรแดงตอนเลือกอยู่ ไม่ใช่แถบแดงทึบ */
-                    className={`flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[13.5px] transition-colors max-lg:w-auto max-lg:shrink-0 max-lg:whitespace-nowrap ${
-                      on ? "bg-primary/10 font-semibold text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className={`flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-left text-[13.5px] transition-colors max-lg:w-auto max-lg:shrink-0 max-lg:whitespace-nowrap ${
+                      on ? "bg-[var(--accent)] font-semibold text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
                     <SecIcon name={SEC_ICON[it.key]} />

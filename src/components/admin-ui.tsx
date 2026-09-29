@@ -17,8 +17,7 @@ export function AdminHead({ title, desc, children }: { title: string; desc: stri
   return (
     <div className="bar">
       <div>
-        {/* ฝ่ายบุคคลเป็นเจ้าของโมดูลตั้งค่า (Full Proposal · M5) หัวหน้าจึงบอกชื่อโมดูล ไม่ใช่ชื่อบทบาท */}
-        <span className="eyebrow">ตั้งค่าระบบและข้อมูลหลัก</span>
+        {/* ต้นแบบไม่มีบรรทัดนำสีแดงเหนือชื่อหัวข้อ (เจ้าของสั่งเอาออก 29 ก.ย. 2569) */}
         <h1>{title}</h1>
         <p>{desc}</p>
       </div>
