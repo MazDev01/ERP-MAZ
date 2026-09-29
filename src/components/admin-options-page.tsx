@@ -272,7 +272,14 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
         label: x.label,
         extra: spec.key === "whtTypes" && x.rate != null ? `${x.rate}%` : "",
         off: Boolean(x.off),
-        used: usageOfCat(spec.key, x.id, hr),
+        /* แผนกนับจำนวนตำแหน่งในร่างปัจจุบัน (ต้นแบบโชว์ "ตำแหน่ง 2") — นับที่นี่เพราะต้องใช้รายการตำแหน่งจากร่าง */
+        used:
+          spec.key === "depts"
+            ? (() => {
+                const n = toItems(cat.draft, "positions").filter((y) => y.dept === x.id).length;
+                return n ? `ตำแหน่ง ${n}` : "";
+              })()
+            : usageOfCat(spec.key, x.id, hr),
         block: BUILTIN[spec.key].some((b) => b.id === x.id) ? "รายการตั้งต้นของระบบลบไม่ได้ — ปิดใช้งานแทน" : usedBy(spec.key, x.id),
       }))
     : optGroup
