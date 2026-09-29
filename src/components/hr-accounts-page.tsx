@@ -21,7 +21,8 @@ import {
   type EmpAccount,
   type Employee,
 } from "@/lib/hr-data";
-import { createAccount, resetAccount, setAccountStatus, useHr } from "@/lib/hr-store";
+import { createAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
+import { ROLES, type Role } from "@/lib/role";
 import { Sheet } from "./lead-dialogs";
 import { Field, Input, Select } from "./ui";
 import { SearchBox } from "./sales-ui";
@@ -47,6 +48,8 @@ function tempPass() {
 }
 
 export function HrAccountsPage() {
+  /* กล่องกำหนดบทบาทของบัญชี — เดิมอยู่หน้าบทบาทและสิทธิ์ที่ยุบทิ้งไปแล้ว (29 ก.ย. 2569) */
+  const [roling, setRoling] = useState<string | null>(null);
   const hr = useHr();
   const today = todayIso();
   const [query, setQuery] = useState("");
@@ -100,7 +103,8 @@ export function HrAccountsPage() {
             <thead>
               <tr>
                 <th>พนักงาน</th>
-                <th style={{ width: 190 }}>ชื่อผู้ใช้</th>
+                <th style={{ width: 170 }}>ชื่อผู้ใช้</th>
+                <th style={{ width: 210 }}>บทบาท</th>
                 <th style={{ width: 150 }}>สถานะบัญชี</th>
                 <th style={{ width: 150 }}>สร้างเมื่อ</th>
                 <th className="c" style={{ width: 240 }} aria-label="จัดการ" />
@@ -109,7 +113,7 @@ export function HrAccountsPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-muted-foreground">
+                  <td colSpan={6} className="py-12 text-center text-muted-foreground">
                     ไม่พบรายการ
                   </td>
                 </tr>
@@ -120,6 +124,7 @@ export function HrAccountsPage() {
                     emp={e}
                     onNew={() => setEditing({ id: e.id, reset: false })}
                     onReset={() => setEditing({ id: e.id, reset: true })}
+                    onRoles={() => setRoling(e.id)}
                     onToggle={() =>
                       setAccountStatus(e.id, e.account?.status === "active" ? "suspended" : "active")
                     }
@@ -210,6 +215,10 @@ export function HrAccountsPage() {
         />
       )}
 
+      {roling && hr.emp.find((e) => e.id === roling)?.account && (
+        <RolesDialog emp={hr.emp.find((e) => e.id === roling)!} onClose={() => setRoling(null)} />
+      )}
+
     </div>
   );
 }
@@ -218,11 +227,13 @@ function AccountRow({
   emp,
   onNew,
   onReset,
+  onRoles,
   onToggle,
 }: {
   emp: Employee;
   onNew: () => void;
   onReset: () => void;
+  onRoles: () => void;
   onToggle: () => void;
 }) {
   const a = emp.account;
@@ -236,6 +247,23 @@ function AccountRow({
       </td>
       <td data-label="ชื่อผู้ใช้" className="num">
         {a ? a.user : <span className="muted">ยังไม่มีบัญชี</span>}
+      </td>
+      <td data-label="บทบาท">
+        {a ? (
+          accountRoles(a).length ? (
+            <span className="flex flex-wrap gap-1">
+              {accountRoles(a).map((r) => (
+                <em key={r} className="rounded-full bg-muted px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground not-italic">
+                  {ROLES.find((x) => x.key === r)?.label ?? r}
+                </em>
+              ))}
+            </span>
+          ) : (
+            <span className="muted">ยังไม่ได้กำหนด</span>
+          )
+        ) : (
+          <span className="muted">—</span>
+        )}
       </td>
       <td data-label="สถานะบัญชี">
         {st ? (
@@ -253,6 +281,9 @@ function AccountRow({
       <td data-label="จัดการ" className="c">
         {a ? (
           <span className="flex flex-wrap justify-center gap-1.5">
+            <button type="button" className="btn glass-thin btn-mini" onClick={onRoles}>
+              บทบาท
+            </button>
             <button type="button" className="btn glass-thin btn-mini" onClick={onReset}>
               รีเซ็ตรหัสผ่าน
             </button>
@@ -374,3 +405,75 @@ function AccountDialog({
 }
 
 export type { EmpAccount };
+
+/*
+ * บทบาทของบัญชีผู้ใช้ — บัญชีหนึ่งถือได้หลายบทบาท (เช่นบัญชีและบุคคลถือทั้ง acc และ hr)
+ * บทบาทเป็นตัวกำหนดว่าเข้าเมนูไหนได้ จึงให้ฝ่ายบุคคลกำหนดที่หน้าจัดการบัญชีผู้ใช้
+ */
+function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
+  const [picked, setPicked] = useState<Role[]>(accountRoles(emp.account));
+  const [warn, setWarn] = useState("");
+
+  function toggle(r: Role) {
+    setWarn("");
+    setPicked((v) => (v.includes(r) ? v.filter((x) => x !== r) : [...v, r]));
+  }
+
+  return (
+    <Sheet
+      title="บทบาทของบัญชี"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn glass-thin" onClick={onClose}>
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            className="btn solid btn-solid"
+            onClick={() => {
+              if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งบทบาท ไม่งั้นบัญชีนี้เข้าหน้าไหนไม่ได้เลย");
+              setAccountRoles(emp.id, picked);
+              onClose();
+            }}
+          >
+            บันทึก
+          </button>
+        </>
+      }
+    >
+      <Field label="พนักงาน">
+        <p className="text-[14px] font-semibold">
+          {emp.name}
+          <span className="ml-2 text-[12.5px] font-normal text-muted-foreground">{emp.account?.user}</span>
+        </p>
+      </Field>
+
+      <div className="mt-4 grid gap-2">
+        {ROLES.map((r) => (
+          <label
+            key={r.key}
+            className={`flex cursor-pointer items-start gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
+              picked.includes(r.key) ? "border-primary bg-primary/5" : "border-border bg-card"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={picked.includes(r.key)}
+              onChange={() => toggle(r.key)}
+              className="mt-0.5 size-4 accent-[var(--primary)]"
+            />
+            <span className="min-w-0">
+              <b className="block text-[13.5px] font-semibold">{r.label}</b>
+              <span className="block text-[12px] text-muted-foreground">{r.note}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {warn && <p className="mt-3 text-[12.5px] font-semibold text-destructive">{warn}</p>}
+      <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+        บทบาทกำหนดว่าบัญชีนี้เปิดเมนูไหนได้ · ถือหลายบทบาทได้ ระบบให้สลับมุมมองตอนเข้าใช้งาน
+      </p>
+    </Sheet>
+  );
+}
