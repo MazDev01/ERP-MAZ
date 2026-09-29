@@ -22,6 +22,7 @@ import {
   type Employee,
 } from "@/lib/hr-data";
 import { createAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
+import { rolesOfEmployee } from "@/lib/hr-data";
 import { ROLES, type Role } from "@/lib/role";
 import { Sheet } from "./lead-dialogs";
 import { Field, Input, Select } from "./ui";
@@ -319,9 +320,11 @@ function AccountDialog({
     reset ? (emp.account?.user ?? "") : suggestUser(emp.name, taken),
   );
   const [pass, setPass] = useState(tempPass);
-  /* ต้นแบบไม่มีตัวเลือกบทบาทในกล่องนี้ — บทบาทของบัญชีกำหนดที่ /admin/roles (แท็บ "บทบาทของบัญชีผู้ใช้")
-     รีเซ็ตรหัสคงบทบาทเดิมไว้ · บัญชีใหม่ยังไม่มีบทบาทจนกว่าผู้ดูแลระบบจะกำหนด */
-  const roles = accountRoles(emp.account);
+  /* ต้นแบบไม่มีตัวเลือกบทบาทในกล่องนี้ — บทบาทของบัญชีกำหนดที่หน้าจัดการบัญชีผู้ใช้ (ปุ่ม "บทบาท")
+     รีเซ็ตรหัสคงบทบาทเดิมไว้
+     บัญชีใหม่ตั้งบทบาทตาม "ตำแหน่ง" ให้เลย — ทุกบทบาทคือพนักงาน ต่างกันที่งานตามตำแหน่ง
+     (เจ้าของสั่ง 29 ก.ย. 2569 · ดู docs/ตำแหน่งและหน้าที่.md) แก้ทีหลังได้ที่ปุ่มบทบาท */
+  const roles = reset ? accountRoles(emp.account) : rolesOfEmployee(emp);
   const [warn, setWarn] = useState("");
 
   function save() {

@@ -240,6 +240,45 @@ const ACCOUNT_ROLE_SEED: Record<string, Role[]> = {};
 /** ขึ้นรุ่นเมื่อ ACCOUNT_ROLE_SEED เปลี่ยน — 3 = เอาผู้ดูแลระบบออกจากฝ่ายบุคคล (25 ก.ย. 2569) */
 const ROLE_SEED_VERSION = 3;
 
+/*
+ * ตำแหน่ง → บทบาทที่ใช้เข้าระบบ (เจ้าของสั่ง 29 ก.ย. 2569)
+ * "ทุกบทบาทคือพนักงาน มีการทำงานที่ต่างกันตำแหน่งต่างกัน" — ตำแหน่งในทะเบียนจึงบอกได้เลย
+ * ว่าคนนี้ควรเข้าระบบเป็นบทบาทอะไร ไม่ต้องให้ฝ่ายบุคคลเดาเองตอนสร้างบัญชี
+ *
+ * อ้างอิงเอกสารตำแหน่งของบริษัทที่เจ้าของส่งมา 29 ก.ย. 2569 (docs/ตำแหน่งและหน้าที่.md)
+ *   GM      — อาวุโสกว่า PM ทำงาน PM ด้วยและเป็นผู้อนุมัติ
+ *   PM (AE) — รับงานจากฝ่ายขาย วางแผน มอบหมาย ตรวจงาน
+ *   SA, BD  — ทำข้อเสนอในขั้นคำขอก่อนการขาย และรับงานโปรเจคด้วย จึงได้สองบทบาท
+ *   แม่บ้าน — ใช้เฉพาะส่วน "ของฉัน" (ลงเวลา ลา เบิก) ไม่รับงานโปรเจค จึงเป็นทีมงานเหมือนกัน
+ *   CEO     — ไม่ใช่พนักงานในทะเบียน ไม่มีตำแหน่งในรายการนี้
+ * ตำแหน่งที่ผู้ดูแลระบบเพิ่มเองทีหลังถือเป็น "ทีมงาน" ไว้ก่อน
+ */
+const POSITION_ROLES: Record<string, Role[]> = {
+  account_hr: ["acc", "hr"],
+  pm: ["pm"],
+  gm: ["gm"],
+  sales: ["sales"],
+  sa: ["ps", "staff"],
+  bd: ["ps", "staff"],
+  maid: ["staff"],
+  graphic: ["staff"],
+  content: ["staff"],
+  website: ["staff"],
+  dev: ["staff"],
+  media: ["staff"],
+};
+
+export function rolesOfPosition(pos: PosKey): Role[] {
+  return POSITION_ROLES[pos] ?? ["staff"];
+}
+
+/** บทบาทของคนนี้ตามตำแหน่งทั้งหมดที่ถืออยู่ (รวมตำแหน่งควบ) — ไม่เกินจำนวนที่ควบได้ */
+export function rolesOfEmployee(e: { pos: PosKey; posMore?: PosKey[] }): Role[] {
+  const out: Role[] = [];
+  for (const p of posOf(e)) for (const r of rolesOfPosition(p)) if (!out.includes(r)) out.push(r);
+  return out.slice(0, HR_MAX_ROLES);
+}
+
 /** ควบได้มากสุดกี่บทบาทต่อบัญชี — 2 ตามคนที่ควบบัญชีและบุคคล */
 export const HR_MAX_ROLES = 2;
 

@@ -25,6 +25,7 @@ import {
   hrPos,
   holdsPos,
   posOf,
+  rolesOfPosition,
   empYears,
   probColor,
   probDaysLeft,
@@ -37,6 +38,7 @@ import {
   type Employee,
   type PosKey,
 } from "@/lib/hr-data";
+import { roleLabel } from "@/lib/role";
 import {
   addEmployee,
   changePosition,
@@ -1080,7 +1082,17 @@ function AddDialog({
 
         <Sect title="การจ้างงาน">
           <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="ตำแหน่ง" required>
+            {/* ตำแหน่งบอกไปด้วยว่าเข้าระบบเป็นบทบาทอะไร — ทุกบทบาทคือพนักงาน ต่างกันที่งานตามตำแหน่ง
+                (เจ้าของสั่ง 29 ก.ย. 2569) ตอนสร้างบัญชีให้คนนี้ ระบบจะตั้งบทบาทตามนี้ให้เลย */}
+            <Field
+              label="ตำแหน่ง"
+              required
+              hint={
+                rolesOfPosition(f.pos).length
+                  ? `เข้าระบบเป็น ${rolesOfPosition(f.pos).map(roleLabel).join(" + ")}`
+                  : "ตำแหน่งนี้ไม่ได้ใช้ระบบ จึงไม่มีบัญชีเข้าใช้งาน"
+              }
+            >
               <Select value={f.pos} onChange={(e) => addPos.pick(e.target.value) || set("pos")(e)} aria-label="ตำแหน่ง">
                 {hrPositions().map((p) => (
                   <option key={p.v} value={p.v}>
