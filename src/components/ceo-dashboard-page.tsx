@@ -215,7 +215,7 @@ export function CeoDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Kpi title="รับชำระแล้ว" value={`${whole(got)} บาท`} note={`จาก ${pays.length} ใบแจ้งหนี้ในช่วงที่เลือก`} />
         <Kpi
           title="ค้างรับ"

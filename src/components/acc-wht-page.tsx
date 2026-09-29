@@ -76,7 +76,7 @@ export function AccWhtPage() {
           </b>
         </p>
         {/* มือถือ: สรุปสี่ช่องวางสองคอลัมน์ ไม่ต้องปัดผ่านกล่องใหญ่สี่กล่อง */}
-        <div className="mt-3.5 grid grid-cols-2 gap-3 max-sm:gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-3.5 grid grid-cols-2 gap-3 max-sm:gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           <Sum
             title="ภ.ง.ด.53 · นิติบุคคล"
             value={baht(sum(k53))}

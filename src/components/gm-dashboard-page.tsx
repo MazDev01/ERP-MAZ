@@ -63,7 +63,7 @@ export function GmDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 lg:grid-cols-4">
         <Kpi label="รออนุมัติ" value={pending.length} sub="การลา OT และใบเบิก" />
         <Kpi label="ลาวันนี้" value={todayNames.length} sub={todayNames.length ? todayNames.join(" · ") : "มาทำงานครบ"} />
         <Kpi label="โปรเจคเลยกำหนด" value={late.length} sub={`จาก ${running.length} โปรเจคที่กำลังทำ`} bad={late.length > 0} />

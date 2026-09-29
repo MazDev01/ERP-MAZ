@@ -96,7 +96,7 @@ export function PmDashboardPage() {
       </div>
 
       {/* มือถือ: การ์ดใบที่ห้าเหลือเดี่ยวอยู่แถวสุดท้าย ให้กินเต็มแถวแทนการเว้นช่องว่าง */}
-      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 max-sm:[&>*:last-child]:col-span-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 max-sm:[&>*:last-child]:col-span-2 lg:grid-cols-5">
         <Kpi label="งานเข้ารอรับ" value={waiting} sub={waiting ? "รอ PM รับเข้าโปรเจค" : "รับครบแล้ว"} tone="info" icon={<InboxIcon className="size-[15px]" strokeWidth={1.9} />} />
         <Kpi
           label="งานย่อยรอตรวจ"

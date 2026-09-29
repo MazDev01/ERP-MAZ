@@ -91,7 +91,7 @@ export function HrDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {/* ทุกการ์ดนับ "คนที่ยังอยู่วันนี้" — หน้ารายงานนับทั้งทะเบียนรวมผู้พ้นสภาพ จึงได้ตัวเลขมากกว่า
             แต่ละใบจึงต้องบอกฐานที่นับไว้ในการ์ดเอง ไม่ให้ดูเหมือนตัวเลขขัดกันเอง */}
         <Kpi

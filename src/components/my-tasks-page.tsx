@@ -192,7 +192,7 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
 
       {/* การ์ดสรุปสี่ใบ — กดเพื่อกรองรายการข้างล่าง */}
       {/* มือถือวางสองคอลัมน์ให้เห็นครบสี่ใบ ไม่ต้องปัดไปด้านข้าง */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         {STAGES.map((k) => (
           <StatCard
             key={k}

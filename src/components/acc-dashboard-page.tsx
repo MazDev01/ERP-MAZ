@@ -119,7 +119,7 @@ export function AccDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Kpi
           icon={<FileIcon className="size-[17px]" />}
           skin="info"
