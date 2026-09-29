@@ -13,13 +13,35 @@ import { saveSection, useSystemSettings, DEFAULT_SETTINGS, type SystemSettings }
 import { logChange, type LogArea } from "@/lib/admin-log";
 import { ConfirmDialog } from "./confirm-dialog";
 
-export function AdminHead({ title, desc, children }: { title: string; desc: string; children?: React.ReactNode }) {
+/*
+ * หัวหัวข้อในหน้าตั้งค่า — วางตามต้นแบบ (.shead): ชื่อ 19px + รหัสยูสเคสในวงเล็บกลม
+ * คำอธิบายอยู่ใต้ชื่อ ปุ่มอยู่ขวาแถวเดียวกัน (จอแคบตกบรรทัด)
+ */
+export function AdminHead({
+  title,
+  desc,
+  code,
+  children,
+}: {
+  title: string;
+  desc: string;
+  /** รหัสหน้าจอในเอกสารยูสเคส เช่น HR-13 */
+  code?: string;
+  children?: React.ReactNode;
+}) {
   return (
-    <div className="bar">
-      <div>
-        {/* ต้นแบบไม่มีบรรทัดนำสีแดงเหนือชื่อหัวข้อ (เจ้าของสั่งเอาออก 29 ก.ย. 2569) */}
-        <h1>{title}</h1>
-        <p>{desc}</p>
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+      <div className="min-w-0">
+        {/* หัวข้อย่อยในหน้า ใช้ h2 เพราะ h1 คือชื่อหน้า "ตั้งค่าระบบ" */}
+        <h2 className="flex flex-wrap items-center gap-2.5 text-[19px] font-bold">
+          {title}
+          {code && (
+            <small className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+              {code}
+            </small>
+          )}
+        </h2>
+        <p className="mt-1.5 max-w-[660px] text-[13px] leading-relaxed text-muted-foreground">{desc}</p>
       </div>
       {children && <div className="tools">{children}</div>}
     </div>

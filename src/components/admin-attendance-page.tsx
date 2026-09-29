@@ -145,6 +145,7 @@ export function AdminAttendancePage() {
     <div className="space-y-4">
       <AdminHead
         title="เวลาทำงานและจุดลงเวลา"
+        code="HR-15"
         desc="เวลาเข้า-ออกงาน เวลาพักเที่ยง พิกัดสำนักงาน และรัศมีที่ลงเวลาได้"
       />
 
@@ -173,6 +174,46 @@ export function AdminAttendancePage() {
                 <b className="font-semibold text-foreground">{formatMinutes(lunchMin)}</b>
               </>
             )}
+          </p>
+
+          {/* แถวบันทึกอยู่ท้ายการ์ดนี้ (เจ้าของสั่งย้ายมา 29 ก.ย. 2569) — ย่อขนาดให้พอดีในการ์ด */}
+          {err && (
+            <p className="mt-3 rounded-[11px] border border-destructive/25 bg-destructive/10 px-3 py-2 text-[12.5px] font-semibold text-destructive">
+              {err}
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-2.5 border-t border-border pt-3">
+            <label className="min-w-0">
+              <span className="mb-1 block text-[12px] font-semibold text-muted-foreground">วันที่เริ่มใช้ค่าใหม่</span>
+              <DateField
+                value={at}
+                onChange={setAt}
+                min={minAt || undefined}
+                label="วันที่เริ่มใช้ค่าใหม่"
+                placeholder="เลือกวันที่"
+                className="h-9 w-[150px] rounded-[9px] text-[13px]"
+              />
+            </label>
+            <div className="flex gap-2">
+              <button type="button" className="btn glass-thin btn-mini disabled:opacity-45" disabled={!dirty} onClick={reset}>
+                ยกเลิกการแก้
+              </button>
+              <button
+                type="button"
+                className="btn solid btn-solid btn-mini disabled:opacity-45"
+                disabled={Boolean(bad)}
+                onClick={save}
+              >
+                บันทึก
+              </button>
+            </div>
+          </div>
+          <p className="mt-2 text-[11.5px] text-muted-foreground">
+            {at > todayIso()
+              ? "ตั้งล่วงหน้า ระบบสลับให้เองเมื่อถึงวัน"
+              : minAt
+                ? `เลือกได้ตั้งแต่ ${thaiDate(minAt)} เป็นต้นไป`
+                : "มีผลตั้งแต่วันที่เลือกเป็นต้นไป"}
           </p>
         </Card>
 
@@ -234,45 +275,6 @@ export function AdminAttendancePage() {
           </div>
         </Card>
       </div>
-
-      <section className="glass rounded-[18px] px-4 py-4 sm:px-5">
-        {err && (
-          <p className="mb-3 rounded-[11px] border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-[12.5px] font-semibold text-destructive">
-            {err}
-          </p>
-        )}
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-[240px]">
-            <Input2
-              label="วันที่เริ่มใช้ค่าใหม่"
-              hint={
-                at > todayIso()
-                  ? "ตั้งล่วงหน้า ระบบสลับให้เองเมื่อถึงวัน"
-                  : minAt
-                    ? `เลือกได้ตั้งแต่ ${thaiDate(minAt)} เป็นต้นไป`
-                    : "มีผลตั้งแต่วันที่เลือกเป็นต้นไป"
-              }
-            >
-              <DateField
-                value={at}
-                onChange={setAt}
-                min={minAt || undefined}
-                label="วันที่เริ่มใช้ค่าใหม่"
-                placeholder="เลือกวันที่"
-                className="h-10 rounded-[10px] text-[14px]"
-              />
-            </Input2>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" className="btn glass-thin disabled:opacity-45" disabled={!dirty} onClick={reset}>
-              ยกเลิกการแก้
-            </button>
-            <button type="button" className="btn solid btn-solid disabled:opacity-45" disabled={Boolean(bad)} onClick={save}>
-              บันทึก
-            </button>
-          </div>
-        </div>
-      </section>
 
       <section className="glass overflow-hidden rounded-[18px]">
         <div className="border-b border-border px-4 py-3.5 sm:px-5">

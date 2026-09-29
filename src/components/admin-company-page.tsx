@@ -147,6 +147,7 @@ export function AdminCompanyPage() {
     <div className="space-y-4">
       <AdminHead
         title="ข้อมูลผู้ออกเอกสาร"
+        code="HR-18"
         desc="ผู้ออกเอกสาร — หัวกระดาษ บัญชีรับเงิน และการจด VAT ของแต่ละรายที่ใบเสนอราคาเลือก ‘ออกในนาม’ ได้"
       />
 

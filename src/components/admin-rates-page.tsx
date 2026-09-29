@@ -104,6 +104,7 @@ export function AdminRatesPage() {
     <div className="space-y-4">
       <AdminHead
         title="การคำนวณเงินเดือน"
+        code="HR-14"
         desc="ค่าที่ใช้คำนวณเงินเดือนและค่าจ้างรายวัน · ค่าใหม่มีวันเริ่มใช้ ค่าเดิมเก็บเป็นประวัติ"
       />
 

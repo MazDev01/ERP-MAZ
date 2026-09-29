@@ -358,6 +358,7 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
     <div className="space-y-4">
       <AdminHead
         title={onlySpec ? onlySpec.label : "ข้อมูลหลัก"}
+        code={only === "services" ? "HR-16" : only === "whtTypes" ? "HR-17" : "HR-10"}
         desc={
           onlySpec
             ? `เพิ่ม แก้ชื่อ และปิดใช้งานรายการ — ใช้ที่ ${onlySpec.where}`

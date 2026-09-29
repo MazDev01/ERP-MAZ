@@ -205,7 +205,7 @@ export function AdminPositionsPage() {
 
   return (
     <div className="space-y-4">
-      <AdminHead title="ตำแหน่งและสายอนุมัติ" desc="ผู้อนุมัติของแต่ละตำแหน่ง แยกตามประเภทคำขอ">
+      <AdminHead title="ตำแหน่งและสายอนุมัติ" code="HR-11" desc="ผู้อนุมัติของแต่ละตำแหน่ง แยกตามประเภทคำขอ">
         <button
           type="button"
           className="btn solid btn-solid"
