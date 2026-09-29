@@ -18,13 +18,13 @@ export function Faces({ ids, limit }: { ids: string[]; limit: number }) {
         <span
           key={id}
           title={memberOf(id)?.name}
-          className="-mr-2 grid size-[26px] place-items-center rounded-full border-2 border-white bg-accent text-[10px] font-bold text-primary"
+          className="-mr-2 grid size-[26px] place-items-center rounded-[8px] border-2 border-white bg-accent text-[10px] font-bold text-primary"
         >
           {initials(memberOf(id)?.name ?? "")}
         </span>
       ))}
       {rest > 0 && (
-        <span className="num -mr-2 grid size-[26px] place-items-center rounded-full border-2 border-white bg-muted text-[10px] font-bold text-muted-foreground">
+        <span className="num -mr-2 grid size-[26px] place-items-center rounded-[8px] border-2 border-white bg-muted text-[10px] font-bold text-muted-foreground">
           +{rest}
         </span>
       )}

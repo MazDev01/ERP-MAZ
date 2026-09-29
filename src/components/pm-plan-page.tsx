@@ -1171,7 +1171,7 @@ function WhoPicker({
                   on ? "bg-accent" : "hover:bg-muted"
                 }`}
               >
-                <span className="grid size-[34px] flex-none place-items-center rounded-full bg-accent text-xs font-bold text-primary">
+                <span className="grid size-[34px] flex-none place-items-center rounded-[10px] bg-accent text-xs font-bold text-primary">
                   {initials(m.name)}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -1480,7 +1480,7 @@ function TaskDialog({
                 key={id}
                 className="inline-flex items-center gap-[7px] rounded-lg border border-border bg-card px-[11px] py-[5px] text-xs font-semibold text-muted-foreground"
               >
-                <span className="grid size-[17px] place-items-center rounded-full bg-accent text-[8.5px] font-bold text-primary">
+                <span className="grid size-[17px] place-items-center rounded-[5px] bg-accent text-[8.5px] font-bold text-primary">
                   {initials(name)}
                 </span>
                 {name}
@@ -1749,7 +1749,7 @@ function PersonRow({
         on ? "border-primary bg-accent" : "border-border bg-white hover:border-primary"
       }`}
     >
-      <span className="grid size-11 flex-none place-items-center rounded-full bg-accent text-sm font-bold text-primary">
+      <span className="grid size-11 flex-none place-items-center rounded-[13px] bg-accent text-sm font-bold text-primary">
         {initials(member.name)}
       </span>
       <span className="min-w-0 flex-1">

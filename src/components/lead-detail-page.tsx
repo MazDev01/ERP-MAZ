@@ -225,7 +225,7 @@ export function LeadDetailPage({ code }: { code: string }) {
           <section className="glass rounded-2xl px-4 py-5 sm:px-[22px]">
             <div className="grid gap-[22px] lg:grid-cols-[210px_minmax(0,1fr)]">
               <div className="border-border pb-[18px] text-center lg:border-r lg:border-b-0 lg:pr-[22px] lg:pb-0">
-                <span className="mx-auto grid size-[84px] place-items-center rounded-full bg-accent text-[28px] font-semibold text-primary">
+                <span className="mx-auto grid size-[84px] place-items-center rounded-[26px] bg-accent text-[28px] font-semibold text-primary">
                   {initials(customer.name)}
                 </span>
                 <h2 className="mt-3 text-[17px] leading-snug font-semibold">{customer.name}</h2>

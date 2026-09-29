@@ -809,7 +809,7 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
                       <>
                         <span
                           title={first}
-                          className="grid size-[22px] flex-none place-items-center rounded-full bg-accent text-[9px] font-bold text-primary"
+                          className="grid size-[22px] flex-none place-items-center rounded-[7px] bg-accent text-[9px] font-bold text-primary"
                         >
                           {initials(first)}
                         </span>

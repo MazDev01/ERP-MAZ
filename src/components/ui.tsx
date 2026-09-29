@@ -329,7 +329,8 @@ export function Avatar({
   return (
     <span
       className={cn(
-        "grid shrink-0 place-items-center rounded-full font-semibold",
+        /* ตัวย่อชื่อเป็นสี่เหลี่ยมมุมมน ตามต้นแบบที่เจ้าของส่งมา ไม่ใช่วงกลม (29 ก.ย. 2569) */
+        "grid shrink-0 place-items-center rounded-[30%] font-semibold",
         AVATAR_SIZES[size],
         tones[tone],
         className,
