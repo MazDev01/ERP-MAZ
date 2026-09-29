@@ -222,7 +222,7 @@ export function withLoginAccounts(emp: Employee[]): Employee[] {
         return { ...e, account: { ...e.account, roles, seeded: ROLE_SEED_VERSION } };
       return e;
     }
-    const user = suggestUser(e.name, taken);
+    const user = suggestUserOf(e, taken);
     taken.push(user);
     return {
       ...e,
@@ -299,7 +299,14 @@ export const HR_ACC_STATUS: Record<EmpAccount["status"], { label: string; cls: s
 
 export type Employee = {
   id: string;
+  /** ชื่อ-นามสกุลภาษาไทยรวมกัน — ใช้แสดงทั้งระบบ (ประกอบจาก first + last ตอนบันทึก) */
   name: string;
+  /* กรอกแยกช่อง ชื่อกับนามสกุล และมีภาษาอังกฤษด้วย (เจ้าของสั่ง 29 ก.ย. 2569)
+     ภาษาอังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี · คนเก่าที่ยังไม่มีสี่ช่องนี้ยังอ่าน name ได้เหมือนเดิม */
+  first?: string;
+  last?: string;
+  firstEn?: string;
+  lastEn?: string;
   nick: string;
   sex: string;
   birth: string;
@@ -333,12 +340,22 @@ export type Employee = {
  * ชื่อผู้ใช้ที่ระบบเสนอจากชื่อจริง — ชื่อ + จุด + อักษรแรกของนามสกุล ซ้ำแล้วเติมเลข
  * เก็บสระและวรรณยุกต์ไว้ ตัดเฉพาะอักขระที่ใช้เป็นชื่อผู้ใช้ไม่ได้
  */
+/**
+ * ชื่อผู้ใช้ที่แนะนำ — ใช้ชื่ออังกฤษก่อนเสมอ (เจ้าของสั่ง 29 ก.ย. 2569)
+ * ไม่มีชื่ออังกฤษค่อยใช้ชื่อไทย เพื่อให้คนเก่าที่ยังไม่ได้กรอกยังสร้างบัญชีได้
+ */
+export function suggestUserOf(e: { name: string; firstEn?: string; lastEn?: string }, taken: string[]) {
+  const en = [e.firstEn, e.lastEn].filter(Boolean).join(" ").trim();
+  return suggestUser(en || e.name, taken);
+}
+
 export function suggestUser(name: string, taken: string[]) {
   const parts = name.trim().split(/\s+/);
   const clean = (x: string) => (x ?? "").replace(/[^\u0E00-\u0E7Fa-zA-Z0-9]/g, "");
   const first = clean(parts[0]) || "user";
   const last = clean(parts[1] ?? "");
-  const base = last ? `${first}.${last.charAt(0)}` : first;
+  /* ชื่อผู้ใช้เป็นตัวพิมพ์เล็กเสมอ — พิมพ์ตอนเข้าระบบง่ายกว่า และกันชื่อซ้ำที่ต่างกันแค่ตัวใหญ่เล็ก */
+  const base = (last ? `${first}.${last.charAt(0)}` : first).toLowerCase();
   if (!taken.includes(base)) return base;
   /* ชนกับของเดิมก็ไล่เลขขึ้นจนกว่าจะว่าง */
   for (let n = 2; n < 100; n++) {

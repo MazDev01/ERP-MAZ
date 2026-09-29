@@ -17,12 +17,11 @@ import {
   HR_ACC_STATUS,
   accountRoles,
   hrPos,
-  suggestUser,
   type EmpAccount,
   type Employee,
 } from "@/lib/hr-data";
 import { createAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
-import { rolesOfEmployee } from "@/lib/hr-data";
+import { rolesOfEmployee, suggestUserOf } from "@/lib/hr-data";
 import { ROLES, type Role } from "@/lib/role";
 import { Sheet } from "./lead-dialogs";
 import { Field, Input, Select } from "./ui";
@@ -317,7 +316,7 @@ function AccountDialog({
   onClose: () => void;
 }) {
   const [user, setUser] = useState(
-    reset ? (emp.account?.user ?? "") : suggestUser(emp.name, taken),
+    reset ? (emp.account?.user ?? "") : suggestUserOf(emp, taken),
   );
   const [pass, setPass] = useState(tempPass);
   /* ต้นแบบไม่มีตัวเลือกบทบาทในกล่องนี้ — บทบาทของบัญชีกำหนดที่หน้าจัดการบัญชีผู้ใช้ (ปุ่ม "บทบาท")

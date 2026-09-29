@@ -309,6 +309,9 @@ export type EmpProfile = Pick<
   Employee,
   "name" | "nick" | "sex" | "birth" | "edu" | "exp" | "phone" | "email" | "address" | "sos" | "boss" | "docs"
 > & {
+  /* ชื่อภาษาอังกฤษ — ใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี (เจ้าของสั่ง 29 ก.ย. 2569) */
+  firstEn?: string;
+  lastEn?: string;
   /* ตำแหน่งควบ — แก้พร้อมข้อมูลพนักงานได้เลย ไม่ต้องลงประวัติเงินเดือนเหมือนการปรับตำแหน่งหลัก */
   posMore?: PosKey[];
 };

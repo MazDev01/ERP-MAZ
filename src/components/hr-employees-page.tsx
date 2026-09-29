@@ -456,6 +456,9 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
 
   const [f, setF] = useState({
     name: emp.name,
+    /* ชื่ออังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี — คนเก่ายังไม่มี กรอกเพิ่มที่นี่ได้ */
+    firstEn: emp.firstEn ?? "",
+    lastEn: emp.lastEn ?? "",
     nick: emp.nick,
     sex: emp.sex,
     birth: emp.birth,
@@ -514,6 +517,8 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
     if (errors.length) return;
     updateEmpProfile(emp.id, {
       name: f.name.trim(),
+      firstEn: f.firstEn.trim(),
+      lastEn: f.lastEn.trim(),
       nick: f.nick.trim(),
       sex: f.sex,
       birth: f.birth,
@@ -557,6 +562,12 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
             <Field label="ชื่อ-สกุล" required>
               <Input value={f.name} onChange={set("name")} />
             </Field>
+            <Field label="ชื่อ-สกุล ภาษาอังกฤษ" hint="ใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j">
+              <span className="flex gap-2">
+                <Input value={f.firstEn} onChange={set("firstEn")} aria-label="ชื่อภาษาอังกฤษ" />
+                <Input value={f.lastEn} onChange={set("lastEn")} aria-label="นามสกุลภาษาอังกฤษ" />
+              </span>
+            </Field>
             <Field label="ชื่อเล่น">
               <Input value={f.nick} onChange={set("nick")} />
             </Field>
@@ -566,6 +577,7 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
                 value={f.sex}
                 onChange={(e) => addSex.pick(e.target.value) || setF((x) => ({ ...x, sex: e.target.value }))}
               >
+                <option value="">ยังไม่ระบุ</option>
                 {optionsOf("sex").map((g) => (
                   <option key={g} value={g}>
                     {g}
@@ -948,13 +960,18 @@ function AddDialog({
   onAdded?: (id: string) => void;
 }) {
   const [f, setF] = useState({
-    name: "",
+    /* กรอกแยกช่อง และมีภาษาอังกฤษไว้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี (เจ้าของสั่ง 29 ก.ย. 2569) */
+    first: "",
+    last: "",
+    firstEn: "",
+    lastEn: "",
     nick: "",
-    sex: optionsOf("sex")[0] ?? "ไม่ระบุ",
+    /* ดรอปดาวน์ที่ยังไม่เลือกขึ้นว่า "ยังไม่ระบุ" ทุกอัน ไม่เดาค่าให้เอง (เจ้าของสั่ง 29 ก.ย. 2569)
+       ของเดิมตั้งต้นเป็นตัวเลือกแรก ทำให้ฝ่ายบุคคลเผลอบันทึกตำแหน่งผิดคนโดยไม่รู้ตัว */
+    sex: "",
     birth: "",
-    pos: hrPositions()[0].v as PosKey,
-    /* ตั้งต้นที่ทดลองงานตามกติกา แต่ฝ่ายบุคคลเปลี่ยนได้ เช่นรับนักศึกษาฝึกงาน */
-    type: "probat" as EmpType,
+    pos: "" as PosKey | "",
+    type: "" as EmpType | "",
     startedAt: today,
     boss: "",
     salary: "",
@@ -988,10 +1005,14 @@ function AddDialog({
   const minStart = lock ? isoAfter(lock) : "";
 
   function save() {
-    const name = f.name.trim();
+    const first = f.first.trim();
+    const last = f.last.trim();
+    const name = `${first} ${last}`.trim();
     /* ตรวจทีละข้อแล้วบอกข้อแรกที่ติด ไม่รวมเป็นก้อนเดียวจนไม่รู้ว่าต้องแก้ช่องไหน */
-    if (!name) return setWarn("กรอกชื่อและนามสกุล");
-    if (name.split(/\s+/).length < 2) return setWarn("กรอกทั้งชื่อและนามสกุล");
+    if (!first) return setWarn("กรอกชื่อ (ไทย)");
+    if (!last) return setWarn("กรอกนามสกุล (ไทย)");
+    if (!f.pos) return setWarn("เลือกตำแหน่ง");
+    if (!f.type) return setWarn("เลือกประเภทการจ้าง");
     if (!f.startedAt) return setWarn("เลือกวันเริ่มงาน");
     if (minStart && f.startedAt < minStart)
       return setWarn(
@@ -1004,11 +1025,15 @@ function AddDialog({
 
     const id = addEmployee({
       name,
+      first,
+      last,
+      firstEn: f.firstEn.trim(),
+      lastEn: f.lastEn.trim(),
       nick: f.nick.trim(),
-      sex: f.sex,
+      sex: f.sex || "ไม่ระบุ",
       birth: f.birth,
-      pos: f.pos,
-      type: f.type,
+      pos: f.pos as PosKey,
+      type: f.type as EmpType,
       startedAt: f.startedAt,
       boss: f.boss,
       edu: "",
@@ -1043,8 +1068,18 @@ function AddDialog({
       <div onClick={() => setPicker("")}>
         <Sect title="ข้อมูลตัวบุคคล">
           <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="ชื่อและนามสกุล" required>
-              <Input value={f.name} onChange={set("name")} placeholder="เช่น สมชาย ใจดี" aria-label="ชื่อและนามสกุล" />
+            <Field label="ชื่อ (ไทย)" required>
+              <Input value={f.first} onChange={set("first")} placeholder="เช่น สมชาย" aria-label="ชื่อภาษาไทย" />
+            </Field>
+            <Field label="นามสกุล (ไทย)" required>
+              <Input value={f.last} onChange={set("last")} placeholder="เช่น ใจดี" aria-label="นามสกุลภาษาไทย" />
+            </Field>
+            {/* ชื่ออังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j (เจ้าของสั่ง 29 ก.ย. 2569) */}
+            <Field label="First name (EN)" hint="ใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j">
+              <Input value={f.firstEn} onChange={set("firstEn")} aria-label="ชื่อภาษาอังกฤษ" />
+            </Field>
+            <Field label="Last name (EN)">
+              <Input value={f.lastEn} onChange={set("lastEn")} aria-label="นามสกุลภาษาอังกฤษ" />
             </Field>
             <Field label="ชื่อเล่น">
               <Input value={f.nick} onChange={set("nick")} placeholder="เช่น ชาย" aria-label="ชื่อเล่น" />
@@ -1055,6 +1090,7 @@ function AddDialog({
                 aria-label="เพศ"
                 onChange={(e) => addSex.pick(e.target.value) || setF((x) => ({ ...x, sex: e.target.value }))}
               >
+                <option value="">ยังไม่ระบุ</option>
                 {optionsOf("sex").map((g) => (
                   <option key={g} value={g}>
                     {g}
@@ -1088,12 +1124,15 @@ function AddDialog({
               label="ตำแหน่ง"
               required
               hint={
-                rolesOfPosition(f.pos).length
-                  ? `เข้าระบบเป็น ${rolesOfPosition(f.pos).map(roleLabel).join(" + ")}`
-                  : "ตำแหน่งนี้ไม่ได้ใช้ระบบ จึงไม่มีบัญชีเข้าใช้งาน"
+                !f.pos
+                  ? "เลือกตำแหน่งแล้วระบบจะบอกว่าเข้าใช้งานในตำแหน่งไหน"
+                  : rolesOfPosition(f.pos).length
+                    ? `เข้าระบบเป็น ${rolesOfPosition(f.pos).map(roleLabel).join(" + ")}`
+                    : "ตำแหน่งนี้ไม่ได้ใช้ระบบ จึงไม่มีบัญชีเข้าใช้งาน"
               }
             >
               <Select value={f.pos} onChange={(e) => addPos.pick(e.target.value) || set("pos")(e)} aria-label="ตำแหน่ง">
+                <option value="">ยังไม่ระบุ</option>
                 {hrPositions().map((p) => (
                   <option key={p.v} value={p.v}>
                     {p.label} · {hrDept(p.dept).label}
@@ -1103,8 +1142,9 @@ function AddDialog({
               </Select>
             </Field>
             {addPos.dialog}
-            <Field label="ประเภทการจ้าง" hint="คนเข้าใหม่ตั้งต้นที่ทดลองงาน">
+            <Field label="ประเภทการจ้าง" required hint="คนเข้าใหม่ปกติเป็นทดลองงาน">
               <Select value={f.type} onChange={set("type")} aria-label="ประเภทการจ้าง">
+                <option value="">ยังไม่ระบุ</option>
                 {(Object.keys(HR_EMPTYPE) as EmpType[]).map((k) => (
                   <option key={k} value={k}>
                     {HR_EMPTYPE[k].label}

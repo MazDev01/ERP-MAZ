@@ -207,20 +207,36 @@ export function Input({
   );
 }
 
+/*
+ * ดรอปดาวน์ต้องมีลูกศรให้เห็นตั้งแต่ยังไม่กด ไม่งั้นดูเหมือนช่องกรอกธรรมดา (เจ้าของสั่ง 29 ก.ย. 2569)
+ * ลูกศรใส่เป็น background แบบ inline ไม่ใช่คลาสยูทิลิตี้ เพราะ Tailwind แปลงค่า data URI ในคลาสไม่ออก
+ * (ที่ผ่านมา appearance:none ตัดลูกศรของเบราว์เซอร์ทิ้ง แล้วไม่มีอะไรมาแทน)
+ */
+const SELECT_ARROW =
+  "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236E6164' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")";
+
+export const selectArrowStyle = {
+  backgroundImage: SELECT_ARROW,
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 10px center",
+  backgroundSize: "16px 16px",
+} as const;
+
 export function Select({
   className,
   children,
+  style,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       className={cn(
-        "h-9 w-full appearance-none rounded-[10px] border border-border bg-white py-0 pr-8 pl-3 text-sm outline-none",
+        "h-9 w-full appearance-none rounded-[10px] border border-border bg-white py-0 pr-9 pl-3 text-sm outline-none",
         "transition",
         "hover:border-[#d4d4d4] focus:border-ring focus:ring-3 focus:ring-primary/15",
-        "bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23999%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22m6 9 6 6 6-6%22/%3E%3C/svg%3E')] bg-[length:16px_16px] bg-[position:right_8px_center] bg-no-repeat",
         className,
       )}
+      style={{ ...selectArrowStyle, ...style }}
       {...props}
     >
       {children}
