@@ -587,13 +587,17 @@ function DocNumbersCard() {
                     ถัดไป {r.sample(d.draft[r.key] || "—")}
                   </span>
                 </span>
-                <input
-                  value={d.draft[r.key]}
-                  aria-label={`ตัวนำหน้า${r.label}`}
-                  maxLength={6}
-                  onChange={(e) => d.setDraft({ ...d.draft, [r.key]: e.target.value.toUpperCase().trim() })}
-                  className={`${inputCls} num w-[92px] flex-none text-center uppercase ${changed ? "border-primary" : ""}`}
-                />
+                {/* ครอบด้วยกล่องกว้างคงที่ เพราะ inputCls มี w-full อยู่แล้ว ถ้าใส่ความกว้างที่ input จะไม่ชนะ
+                    แล้วช่องจะกินพื้นที่จนชื่อเอกสารเหลือคอลัมน์เดียวตัวอักษร */}
+                <span className="w-[96px] flex-none">
+                  <input
+                    value={d.draft[r.key]}
+                    aria-label={`ตัวนำหน้า${r.label}`}
+                    maxLength={6}
+                    onChange={(e) => d.setDraft({ ...d.draft, [r.key]: e.target.value.toUpperCase().trim() })}
+                    className={`${inputCls} num text-center uppercase ${changed ? "border-primary" : ""}`}
+                  />
+                </span>
               </div>
             );
           })}
