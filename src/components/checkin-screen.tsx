@@ -325,63 +325,48 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         </section>
 
         {/*
-          การ์ดตอกบัตรบนมือถือ — หน้าตาเดียวกับจอคอม (เจ้าของสั่ง 29 ก.ย. 2569 "ทำหน้าตอกบัตรให้คล้ายกัน")
-          ฝั่งแดงคือนาฬิกา ฝั่งขาวคือสถานะกับปุ่ม · ของเดิมเป็นหน้าปัดวงกลมคนละแบบกับจอคอม
+          มือถือเอาแค่ปุ่มตอกบัตร (เจ้าของสั่ง 29 ก.ย. 2569 "เอาแค่ปุ่มไม่ใช่ทั้งหน้า")
+          ไม่เอาหน้าปัดวงกลม และไม่ต้องยกการ์ดนาฬิกาของจอคอมมาทั้งใบ
         */}
-        <section className="glass overflow-hidden rounded-[24px]">
-          <div className="checkin-top relative px-6 pt-6 pb-14 text-center text-white">
-            <span
-              className="pointer-events-none absolute bottom-0 left-1/2 z-0 h-[90px] w-[112%] -translate-x-1/2 translate-y-1/2 rounded-[50%] bg-card"
-              aria-hidden="true"
-            />
-            <p className="relative z-10 text-[21px] font-bold tracking-widest opacity-90">MAZ</p>
-            <p className="relative z-10 mt-3 text-[14px] text-white/80">{greeting(now)}</p>
-            <p className="num relative z-10 mt-0.5 text-[38px] leading-tight font-semibold">
-              {now ? formatTime(now) : "--:--:--"}
-            </p>
-            <p className="relative z-10 text-[13px] text-white/75">{now ? formatThaiDate(now) : "—"}</p>
-          </div>
-
-          <div className="relative z-10 bg-card px-5 pt-10 pb-6 text-center">
-            {viewIsToday ? (
-              <>
-                <AreaBadge checkedOut={checkedOut} isWorking={isWorking} geo={lastIn?.geo} live={live} />
-                <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{homeNote()}</p>
-                <button
-                  type="button"
-                  disabled={!now}
-                  onClick={() => {
-                    setPopOpen(true);
-                    if (!isWorking) void checkIn();
-                  }}
-                  className={[
-                    "mx-auto mt-4 flex h-13 w-full max-w-xs items-center justify-center gap-2.5",
-                    "rounded-full py-3.5 text-[17px] font-semibold text-white",
-                    "transition-transform active:scale-[0.98] disabled:opacity-50",
-                    isWorking ? "bg-[var(--brand-700)]" : "bg-primary",
-                  ].join(" ")}
-                >
-                  <PowerIcon className="size-6" strokeWidth={2} />
-                  {isWorking ? "ออกงาน" : "เข้างาน"}
-                </button>
-              </>
-            ) : (
-              /* วันย้อนหลังตอกบัตรไม่ได้ — สรุปของวันนั้นแทนปุ่ม */
-              <>
-                <p className="text-[12.5px] text-muted-foreground">{viewDay ? thaiDate(viewDay) : ""}</p>
-                <b className="num mt-1 block text-[26px] leading-none font-bold">
-                  {viewWorked ? formatMinutes(viewWorked) : "ไม่มีบันทึก"}
-                </b>
-                <button
-                  type="button"
-                  onClick={() => setSeeDay("")}
-                  className="mt-3 rounded-full bg-[var(--accent)] px-3.5 py-1.5 text-[12.5px] font-semibold text-primary"
-                >
-                  กลับไปวันนี้
-                </button>
-              </>
-            )}
-          </div>
+        <section className="glass rounded-[22px] px-5 py-5 text-center">
+          {viewIsToday ? (
+            <>
+              <AreaBadge checkedOut={checkedOut} isWorking={isWorking} geo={lastIn?.geo} live={live} />
+              <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{homeNote()}</p>
+              <button
+                type="button"
+                disabled={!now}
+                onClick={() => {
+                  setPopOpen(true);
+                  if (!isWorking) void checkIn();
+                }}
+                className={[
+                  "mx-auto mt-4 flex w-full max-w-xs items-center justify-center gap-2.5",
+                  "rounded-full py-4 text-[18px] font-semibold text-white",
+                  "transition-transform active:scale-[0.98] disabled:opacity-50",
+                  isWorking ? "bg-[var(--brand-700)]" : "bg-primary",
+                ].join(" ")}
+              >
+                <PowerIcon className="size-6" strokeWidth={2} />
+                {isWorking ? "ออกงาน" : "เข้างาน"}
+              </button>
+            </>
+          ) : (
+            /* วันย้อนหลังตอกบัตรไม่ได้ — สรุปของวันนั้นแทนปุ่ม */
+            <>
+              <p className="text-[12.5px] text-muted-foreground">{viewDay ? thaiDate(viewDay) : ""}</p>
+              <b className="num mt-1 block text-[26px] leading-none font-bold">
+                {viewWorked ? formatMinutes(viewWorked) : "ไม่มีบันทึก"}
+              </b>
+              <button
+                type="button"
+                onClick={() => setSeeDay("")}
+                className="mt-3 rounded-full bg-[var(--accent)] px-3.5 py-1.5 text-[12.5px] font-semibold text-primary"
+              >
+                กลับไปวันนี้
+              </button>
+            </>
+          )}
         </section>
 
         {/* สามช่องนี้เปลี่ยนตามวันที่เลือกในแถบสัปดาห์ ไม่ได้ผูกกับวันนี้อย่างเดียว */}
