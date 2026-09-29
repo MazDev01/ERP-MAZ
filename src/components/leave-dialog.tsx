@@ -8,7 +8,7 @@ import { todayIso } from "@/lib/format";
 import { lockScroll } from "@/lib/scroll-lock";
 import { isWorkday } from "@/lib/holidays";
 import { leaveTypes, type LeaveRecord, type LeaveType } from "@/lib/leave-data";
-import { addLeaveRequest, excessDays, leaveUsage } from "@/lib/leave-store";
+import { addLeaveRequest, editLeaveRequest, excessDays, leaveUsage } from "@/lib/leave-store";
 import { useOtRecords } from "@/lib/ot-store";
 import { hasNoApprover, useApprovalRoute, useRole } from "@/lib/role";
 import { currentProfile } from "@/lib/profile-data";
@@ -42,6 +42,7 @@ export function LeaveDialog({
   period,
   records,
   presetDate,
+  edit,
   onClose,
   onSubmitted,
 }: {
@@ -50,6 +51,8 @@ export function LeaveDialog({
   records: LeaveRecord[];
   /** วันที่ตั้งต้น — มาจากการกดขอลาจากแถววันนั้นในหน้าบันทึกเวลา */
   presetDate?: string;
+  /** ใบที่กำลังแก้ (ต้องยังรออนุมัติ) — ไม่ส่งมาคือยื่นใบใหม่ */
+  edit?: LeaveRecord;
   onClose: () => void;
   onSubmitted: (days: number) => void;
 }) {
@@ -57,23 +60,29 @@ export function LeaveDialog({
      ตอนที่กล่องเปิดมาตั้งแต่แรก (เช่นลิงก์ ?new=1) React จะฟ้อง hydration ไม่ตรงกัน */
   const hydrated = useHydrated();
   const types = leaveTypes();
-  const [type, setType] = useState<LeaveType>(types[0]);
+  const [type, setType] = useState<LeaveType>(edit?.type ?? types[0]);
   /* กดส่งแล้วยังไม่ครบ — ค่อยขึ้นข้อความว่าขาดอะไร ไม่ทักตั้งแต่ยังไม่ได้กรอก */
   const [tried, setTried] = useState(false);
   /* เปิดมาให้เริ่มที่วันนี้ก่อน — ลาย้อนหลังหรือล่วงหน้าค่อยเลื่อนเอง
      ถ้าถูกส่งวันที่มาจากหน้าบันทึกเวลา ให้ใช้วันนั้นแทน */
-  const [from, setFrom] = useState(presetDate || TODAY);
-  const [to, setTo] = useState(presetDate || TODAY);
+  const [from, setFrom] = useState(edit?.date || presetDate || TODAY);
+  const [to, setTo] = useState(edit?.toDate || presetDate || TODAY);
   /* ลาด่วน = นับเป็นชั่วโมง แล้วแปลงเป็นวันไปหักสิทธิ์ (เจ้าของสั่ง 28 ก.ย. 2569) */
-  const [span, setSpan] = useState<"full" | "half" | "hours">("full");
+  const [span, setSpan] = useState<"full" | "half" | "hours">(
+    edit?.hours ? "hours" : edit?.half ? "half" : "full",
+  );
   /* เลือกเป็นช่วงเวลา "เริ่มลา – จนถึง" แล้วระบบคิดชั่วโมงให้ (เจ้าของสั่ง 28 ก.ย. 2569) */
-  const [startAt, setStartAt] = useState(() => formatMinutesOfDay(minutesOfDay(WORK_SCHEDULE.start)));
-  const [endAt, setEndAt] = useState(() => formatMinutesOfDay(minutesOfDay(WORK_SCHEDULE.start) + 60));
-  const [half, setHalf] = useState<"morning" | "afternoon">("morning");
+  const [startAt, setStartAt] = useState(() =>
+    formatMinutesOfDay(edit?.hours && edit.startMin !== undefined ? edit.startMin : minutesOfDay(WORK_SCHEDULE.start)),
+  );
+  const [endAt, setEndAt] = useState(() =>
+    formatMinutesOfDay(edit?.hours && edit.endMin !== undefined ? edit.endMin : minutesOfDay(WORK_SCHEDULE.start) + 60),
+  );
+  const [half, setHalf] = useState<"morning" | "afternoon">(edit?.half ?? "morning");
   /* ครึ่งวันคือเช้าหรือบ่ายเท่านั้น เวลาจึงตายตัวตามกะ ไม่ให้กรอกเองซ้ำ */
   const { start: startMin, end: endMin } = preset()[half];
-  const [reason, setReason] = useState("");
-  const [files, setFiles] = useState<string[]>([]);
+  const [reason, setReason] = useState(edit?.comment ?? "");
+  const [files, setFiles] = useState<string[]>(edit?.files ?? []);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // ปิดด้วย Esc + ล็อกการเลื่อนพื้นหลังระหว่างเปิด
@@ -111,6 +120,8 @@ export function LeaveDialog({
     return (
       records.find(
         (r) =>
+          /* ใบที่กำลังแก้ไม่นับว่าทับกับตัวเอง */
+          r.id !== edit?.id &&
           /* ใบที่ถูกตีกลับหรือยกเลิกแล้วไม่กันวันซ้ำ — ยังยื่นช่วงเดิมใหม่ได้ */
           r.status !== "ไม่อนุมัติ" &&
           r.status !== "ยกเลิก" &&
@@ -118,7 +129,7 @@ export function LeaveDialog({
           to >= r.date,
       ) ?? null
     );
-  }, [records, from, to]);
+  }, [records, from, to, edit?.id]);
 
   const otRecords = useOtRecords();
   const noApprover = hasNoApprover(useRole(), "leave", useApprovalRoute());
@@ -214,7 +225,7 @@ export function LeaveDialog({
       setTried(true);
       return;
     }
-    addLeaveRequest({
+    const input = {
       type,
       from,
       to,
@@ -224,9 +235,10 @@ export function LeaveDialog({
       endMin: span === "half" ? endMin : span === "hours" ? urgentEnd : undefined,
       hours: span === "hours" ? hours : undefined,
       reason: reason.trim(),
-      employee: currentProfile().name,
       files,
-    });
+    };
+    if (edit) editLeaveRequest(edit.id, input);
+    else addLeaveRequest({ ...input, employee: currentProfile().name });
     onSubmitted(days);
     onClose();
   }
@@ -246,7 +258,7 @@ export function LeaveDialog({
       <div className="glass-solid flex max-h-[92dvh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[18px] sm:max-h-full sm:rounded-[18px]">
         <div className="flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 sm:py-4">
           <h2 id="leave-box-title" className="text-[16.5px] font-bold">
-            ยื่นใบลา
+            {edit ? `แก้ไขใบลา ${edit.id}` : "ยื่นใบลา"}
           </h2>
           <button
             type="button"
@@ -468,7 +480,7 @@ export function LeaveDialog({
             className="btn solid btn-solid flex-1 justify-center sm:flex-none"
             onClick={submit}
           >
-            ส่งคำขอ
+            {edit ? "บันทึกการแก้ไข" : "ส่งคำขอ"}
           </button>
         </div>
       </div>

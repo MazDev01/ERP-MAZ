@@ -88,10 +88,6 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
    * ตัวเลขของหน้าจอมือถือ (ตามแบบ checkin.html) — ใช้สูตรชุดเดียวกับจอคอม ไม่ได้คิดใหม่
    * weekDays   เจ็ดวันของสัปดาห์นี้ วันไหนตอกครบเข้า-ออกแล้วติดดาว
    */
-  /* เวลาที่ทำไปแล้ววันนี้ (หักพักกลางวันตามกติกาเดิม) — โชว์บนการ์ดตอกบัตรของมือถือ */
-  const workedMin = today
-    ? Math.round(workedMsOfDay(todayRecords, tick ?? 0, leaveWindow) / 60000)
-    : 0;
   /* ชื่อที่ทำงานกับรัศมี อ่านจากที่ผู้ดูแลตั้งไว้ ไม่ใช่ข้อความตายตัวในหน้านี้ */
   /* อ่านผ่านฮุก ไม่ใช่ areaSettings() ตรง ๆ — ค่าที่ผู้ดูแลแก้ไว้อยู่ใน localStorage
      ถ้าอ่านตอนเรนเดอร์ ฝั่งเซิร์ฟเวอร์จะได้ค่าตั้งต้น คนละค่ากับฝั่งเครื่อง (hydration ไม่ตรง) */
@@ -335,24 +331,14 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         <section className="glass rounded-[22px] px-5 py-5 text-center">
           {viewIsToday ? (
             <>
-              <AreaBadge checkedOut={checkedOut} isWorking={isWorking} geo={lastIn?.geo} live={live} />
+              {/* นาฬิกาของวันนี้ — เจ้าของสั่ง 29 ก.ย. 2569 ให้โชว์เวลาเดินจริงเหมือนจอคอม */}
+              <p className="text-[12.5px] text-muted-foreground">{greeting(now)}</p>
+              <p className="num text-[34px] leading-tight font-semibold">
+                {now ? formatTime(now) : "--:--:--"}
+              </p>
+              <p className="mb-3 text-[12.5px] text-muted-foreground">{now ? formatThaiDate(now) : "—"}</p>
 
-              {/* เวลาทำงานของวันนี้ — เดินสดตอนยังไม่ออกงาน (แบบเดียวกับหน้าปัดเดิม) */}
-              {(isWorking || checkedOut) && (
-                <div className="mt-3">
-                  <span className="block text-[12.5px] text-muted-foreground">
-                    {isWorking ? "เวลาทำงานวันนี้" : "วันนี้ทำงาน"}
-                  </span>
-                  <b className="num block text-[30px] leading-none font-bold">{formatMinutes(workedMin)}</b>
-                  {checkedOut && (
-                    <span className="mt-1.5 inline-block rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--success)]">
-                      {workedMin >= requiredMin
-                        ? "ครบเวลาแล้ว"
-                        : `ขาด ${formatMinutes(Math.max(0, requiredMin - workedMin))}`}
-                    </span>
-                  )}
-                </div>
-              )}
+              <AreaBadge checkedOut={checkedOut} isWorking={isWorking} geo={lastIn?.geo} live={live} />
 
               <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{homeNote()}</p>
               <button

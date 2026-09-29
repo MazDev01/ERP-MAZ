@@ -69,6 +69,8 @@ export function OtPage() {
   const params = useSearchParams();
   const presetDate = params.get("date") ?? undefined;
   const [dialogOpen, setDialogOpen] = useState(params.get("new") !== null);
+  /* ใบที่กำลังแก้ — ใช้กล่องเดียวกับตอนขอ แต่เติมค่าเดิมไว้ (เจ้าของสั่ง 29 ก.ย. 2569) */
+  const [editing, setEditing] = useState<OtRecord | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -254,7 +256,7 @@ export function OtPage() {
                   </td>
                 </tr>
               ) : (
-                list.map((r) => <Row key={r.id} row={r} hit={r.id === findId} />)
+                list.map((r) => <Row key={r.id} row={r} hit={r.id === findId} onEdit={() => setEditing(r)} />)
               )}
             </tbody>
           </table>
@@ -266,7 +268,7 @@ export function OtPage() {
               ไม่มีรายการในเดือนนี้
             </li>
           ) : (
-            list.map((r) => <MobileRow key={r.id} row={r} hit={r.id === findId} />)
+            list.map((r) => <MobileRow key={r.id} row={r} hit={r.id === findId} onEdit={() => setEditing(r)} />)
           )}
         </ul>
 
@@ -312,11 +314,15 @@ export function OtPage() {
         </div>
       </section>
 
-      {dialogOpen && (
+      {(dialogOpen || editing) && (
         <OtDialog
           records={records}
-          presetDate={presetDate}
-          onClose={() => setDialogOpen(false)}
+          presetDate={editing ? undefined : presetDate}
+          edit={editing ?? undefined}
+          onClose={() => {
+            setDialogOpen(false);
+            setEditing(null);
+          }}
           onSubmitted={(hours, date) => {
             setFlash(`ส่งคำขอโอที ${hours.toFixed(2)} ชั่วโมงเรียบร้อย — รอหัวหน้าอนุมัติ`);
             const d = new Date(`${date}T00:00:00`);
@@ -332,7 +338,7 @@ export function OtPage() {
   );
 }
 
-function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
+function Row({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit: () => void }) {
   const adjusted =
     row.status === "อนุมัติแล้ว" &&
     row.approvedHours != null &&
@@ -374,9 +380,14 @@ function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
       </td>
       <td className="c">
         {row.status === "รออนุมัติ" ? (
-          <button type="button" className="lnk" onClick={() => cancelOtRequest(row.id)}>
-            ยกเลิก
-          </button>
+          <span className="flex items-center justify-center gap-2.5">
+            <button type="button" className="lnk" onClick={onEdit}>
+              แก้ไข
+            </button>
+            <button type="button" className="lnk" onClick={() => cancelOtRequest(row.id)}>
+              ยกเลิก
+            </button>
+          </span>
         ) : (
           "—"
         )}
@@ -385,7 +396,7 @@ function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
   );
 }
 
-function MobileRow({ row, hit }: { row: OtRecord; hit?: boolean }) {
+function MobileRow({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit: () => void }) {
   const adjusted =
     row.status === "อนุมัติแล้ว" &&
     row.approvedHours != null &&
@@ -424,13 +435,14 @@ function MobileRow({ row, hit }: { row: OtRecord; hit?: boolean }) {
       )}
 
       {row.status === "รออนุมัติ" && (
-        <button
-          type="button"
-          className="lnk mt-2.5"
-          onClick={() => cancelOtRequest(row.id)}
-        >
-          ยกเลิกคำขอนี้
-        </button>
+        <span className="mt-2.5 flex items-center gap-4">
+          <button type="button" className="lnk" onClick={onEdit}>
+            แก้ไขคำขอนี้
+          </button>
+          <button type="button" className="lnk" onClick={() => cancelOtRequest(row.id)}>
+            ยกเลิกคำขอนี้
+          </button>
+        </span>
       )}
     </li>
   );

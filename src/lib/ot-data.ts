@@ -78,6 +78,8 @@ export type OtRecord = {
   submittedAt: string;
   /** "yyyy-mm-dd hh:mm" เวลาที่ผู้อนุมัติตัดสิน */
   decidedAt?: string;
+  /** "yyyy-mm-dd hh:mm" เวลาที่แก้ไขล่าสุด — แก้ได้เฉพาะตอนยังรออนุมัติ */
+  editedAt?: string;
 };
 
 /**

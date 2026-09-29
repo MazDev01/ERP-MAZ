@@ -90,6 +90,8 @@ export function LeavePage() {
   const [flash, setFlash] = useState<number | null>(null);
   /* ใบที่กำลังกดยกเลิก — ต้องกรอกเหตุผลก่อน ใบไม่ถูกลบทิ้ง (ผู้ใช้ตัดสิน 23 ก.ย. 2569) */
   const [cancelling, setCancelling] = useState<LeaveRecord | null>(null);
+  /* ใบที่กำลังแก้ — เปิดกล่องเดียวกับตอนยื่น แต่เติมค่าเดิมไว้ให้ (เจ้าของสั่ง 29 ก.ย. 2569) */
+  const [editing, setEditing] = useState<LeaveRecord | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -290,7 +292,7 @@ export function LeavePage() {
                 </tr>
               ) : (
                 list.map((r) => (
-                  <LeaveRow key={r.id} row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} />
+                  <LeaveRow key={r.id} row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} onEdit={() => setEditing(r)} />
                 ))
               )}
             </tbody>
@@ -304,7 +306,7 @@ export function LeavePage() {
             </li>
           ) : (
             list.map((r) => (
-              <MobileLeaveRow key={r.id} row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} />
+              <MobileLeaveRow key={r.id} row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} onEdit={() => setEditing(r)} />
             ))
           )}
         </ul>
@@ -355,12 +357,16 @@ export function LeavePage() {
         <CancelLeaveDialog row={cancelling} onClose={() => setCancelling(null)} />
       )}
 
-      {dialogOpen && (
+      {(dialogOpen || editing) && (
         <LeaveDialog
           period={period}
           records={records}
-          presetDate={presetDate}
-          onClose={() => setDialogOpen(false)}
+          presetDate={editing ? undefined : presetDate}
+          edit={editing ?? undefined}
+          onClose={() => {
+            setDialogOpen(false);
+            setEditing(null);
+          }}
           onSubmitted={(days) => {
             setFlash(days);
             if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -374,7 +380,7 @@ export function LeavePage() {
   );
 }
 
-function LeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onCancel: () => void }) {
+function LeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?: boolean; onCancel: () => void; onEdit: () => void }) {
   const canCancel = row.status === "รอการอนุมัติ";
   const partial =
     row.startMin != null && row.endMin != null
@@ -389,7 +395,10 @@ function LeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onC
       <td className="day">
         <b>{shortId(row.id)}</b>
         {/* วันที่ยื่นจริง — ใบเก่าที่ไม่ได้เก็บเวลายื่นไว้ ใช้วันแรกของช่วงลาแทน */}
-        <span>ยื่น {thaiDate(row.submittedAt ? row.submittedAt.slice(0, 10) : row.date)}</span>
+        <span>
+          ยื่น {thaiDate(row.submittedAt ? row.submittedAt.slice(0, 10) : row.date)}
+          {row.editedAt ? ` · แก้ไข ${thaiDate(row.editedAt.slice(0, 10))}` : ""}
+        </span>
       </td>
       <td>{row.type}</td>
       <td>
@@ -423,13 +432,14 @@ function LeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onC
       </td>
       <td className="c">
         {canCancel ? (
-          <button
-            type="button"
-            className="lnk"
-            onClick={onCancel}
-          >
-            ยกเลิก
-          </button>
+          <span className="flex items-center justify-center gap-2.5">
+            <button type="button" className="lnk" onClick={onEdit}>
+              แก้ไข
+            </button>
+            <button type="button" className="lnk" onClick={onCancel}>
+              ยกเลิก
+            </button>
+          </span>
         ) : (
           "—"
         )}
@@ -439,7 +449,7 @@ function LeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onC
 }
 
 /** ใบลาหนึ่งใบในรูปการ์ด สำหรับจอแคบ */
-function MobileLeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onCancel: () => void }) {
+function MobileLeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?: boolean; onCancel: () => void; onEdit: () => void }) {
   const canCancel = row.status === "รอการอนุมัติ";
   const partial =
     row.startMin != null && row.endMin != null
@@ -487,13 +497,14 @@ function MobileLeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolea
       )}
 
       {canCancel && (
-        <button
-          type="button"
-          className="lnk mt-2.5"
-          onClick={onCancel}
-        >
-          ยกเลิกใบลานี้
-        </button>
+        <span className="mt-2.5 flex items-center gap-4">
+          <button type="button" className="lnk" onClick={onEdit}>
+            แก้ไขใบลานี้
+          </button>
+          <button type="button" className="lnk" onClick={onCancel}>
+            ยกเลิกใบลานี้
+          </button>
+        </span>
       )}
     </li>
   );

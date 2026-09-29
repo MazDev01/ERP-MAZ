@@ -187,6 +187,8 @@ export type LeaveRecord = {
   cancelledBy?: string;
   /** "yyyy-mm-dd hh:mm" เวลาที่ยกเลิก */
   cancelledAt?: string;
+  /** "yyyy-mm-dd hh:mm" เวลาที่แก้ไขล่าสุด — แก้ได้เฉพาะตอนยังรออนุมัติ เลขที่ใบเดิมไม่เปลี่ยน */
+  editedAt?: string;
 };
 
 const SALES_LEAVE: LeaveRecord[] = [

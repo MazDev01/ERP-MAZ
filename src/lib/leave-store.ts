@@ -99,6 +99,48 @@ export function cancelLeaveRequest(id: string, reason: string) {
   );
 }
 
+/**
+ * แก้ใบลาที่ยังรออนุมัติ (เจ้าของสั่ง 29 ก.ย. 2569)
+ * ของเดิมต้องยกเลิกแล้วยื่นใหม่ ซึ่งทิ้งเลขที่ใบไปเปล่า ๆ และผู้อนุมัติเห็นใบยกเลิกรกคิว
+ * ใบที่ตัดสินหรือยกเลิกแล้วแก้ไม่ได้ · เลขที่ใบและเวลาที่ยื่นคงเดิม บันทึกเวลาที่แก้ไว้แทน
+ */
+export function editLeaveRequest(
+  id: string,
+  patch: {
+    type: LeaveType;
+    from: string;
+    to: string;
+    days: number;
+    half?: "morning" | "afternoon";
+    startMin?: number;
+    endMin?: number;
+    hours?: number;
+    reason: string;
+    files?: string[];
+  },
+) {
+  store.update((records) =>
+    records.map((r) =>
+      r.id === id && r.status === "รอการอนุมัติ"
+        ? {
+            ...r,
+            type: patch.type,
+            date: patch.from,
+            toDate: patch.to,
+            days: patch.days,
+            half: patch.half,
+            startMin: patch.startMin,
+            endMin: patch.endMin,
+            hours: patch.hours,
+            comment: patch.reason.trim(),
+            files: patch.files?.length ? patch.files : undefined,
+            editedAt: bkkStamp(),
+          }
+        : r,
+    ),
+  );
+}
+
 /** ใบลาของทุกบทบาท — หน้าอนุมัติเท่านั้น */
 export function useAllLeave() {
   return store.useAll();

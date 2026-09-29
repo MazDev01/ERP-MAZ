@@ -54,6 +54,32 @@ export function cancelOtRequest(id: string) {
   );
 }
 
+/**
+ * แก้คำขอโอทีที่ยังรออนุมัติ (เจ้าของสั่ง 29 ก.ย. 2569)
+ * เหมือนใบลา — ของเดิมต้องยกเลิกแล้วขอใหม่ ทิ้งเลขที่ใบไปเปล่า ๆ
+ * แก้ได้เฉพาะใบที่ยังไม่ถูกตัดสิน · เลขที่ใบและเวลาที่ยื่นคงเดิม
+ */
+export function editOtRequest(
+  id: string,
+  patch: { date: string; startMin: number; endMin: number; hours: number; reason: string },
+) {
+  store.update((rs) =>
+    rs.map((r) =>
+      r.id === id && r.status === "รออนุมัติ"
+        ? {
+            ...r,
+            date: patch.date,
+            startMin: patch.startMin,
+            endMin: patch.endMin,
+            hours: patch.hours,
+            reason: patch.reason.trim(),
+            editedAt: bkkStamp(),
+          }
+        : r,
+    ),
+  );
+}
+
 /** คำขอโอทีของทุกบทบาท — หน้าอนุมัติเท่านั้น */
 export function useAllOt() {
   return store.useAll();
