@@ -80,7 +80,7 @@ export function StatusPill({ emp, big }: { emp: Employee; big?: boolean }) {
 type TabKey = "over" | "person" | "work" | "docs" | "pay";
 
 const TABS: { k: TabKey; label: string }[] = [
-  { k: "over", label: "ภาพรวม" },
+  { k: "over", label: "Overview" },
   { k: "person", label: "ข้อมูลส่วนตัว" },
   { k: "work", label: "ข้อมูลงาน" },
   { k: "docs", label: "เอกสาร" },
@@ -144,7 +144,7 @@ export function EmployeeDetail({
         <div
           /* เจ้าของทัก 28 ก.ย. 2569 ว่าแถบบนใหญ่ไป — ลดเหลือ 56px ขอบล่างตรงเหมือนเดิม
              รูปลอยทับแค่นิดเดียว เว้นระยะจากขอบบนให้เห็นชัด */
-          className="relative h-[56px] flex-none overflow-hidden"
+          className="relative h-[78px] flex-none overflow-hidden"
           style={{ background: "linear-gradient(105deg,var(--primary) 0%,var(--primary-hover) 100%)" }}
         >
           <span className="pointer-events-none absolute -top-8 -right-6 size-[100px] rounded-full bg-white/10" />
@@ -160,25 +160,26 @@ export function EmployeeDetail({
           </button>
         </div>
 
-        <div className="scroll-stable min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-5 sm:pb-[18px]">
+        {/* แถวรูปกับชื่ออยู่นอกกรอบเลื่อน เพราะรูปลอยขึ้นไปทับแบนเนอร์ ถ้าอยู่ในกรอบเลื่อนจะถูกตัด */}
+        <div className="flex-none px-4 sm:px-5">
           {/* รูปลอยขึ้นมาทับแบนเนอร์ */}
-          <div className="flex items-end gap-3.5">
-            <EmpPhoto
-              note={false}
-              className="mt-2 size-[68px] rounded-[16px] border-[3px]! border-white! shadow-[0_4px_14px_rgba(28,20,45,.18)]"
-            />
-            <div className="min-w-0 flex-1 pb-1">
-              <h2 className="truncate text-[17px] font-bold">
-                {emp.name}
-                {emp.nick && <span className="ml-1.5 text-[13px] font-normal text-muted-foreground">({emp.nick})</span>}
-              </h2>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
+          {/* ต้นแบบ: รูป 80px ขอบขาว ลอยขึ้นทับแบนเนอร์ ชื่อกับสถานะอยู่ข้าง ๆ ใต้แนวแบนเนอร์ */}
+          <div className="flex items-start gap-4">
+            <EmpPhoto className="-mt-10 size-20 flex-none rounded-[16px] border-[3px]! border-white! shadow-[0_4px_14px_rgba(28,20,45,.14)]" />
+            <div className="min-w-0 flex-1 pt-11">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h2 className="truncate text-[18px] font-bold">
+                  {emp.name}
+                  {emp.nick && <span className="ml-1.5 text-[13px] font-normal text-muted-foreground">({emp.nick})</span>}
+                </h2>
                 <StatusPill emp={emp} big />
-                <span className="text-[12.5px] text-muted-foreground">{p.label}</span>
               </div>
             </div>
           </div>
 
+        </div>
+
+        <div className="scroll-stable min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-5 sm:pb-[18px]">
           {/* แถบข้อมูลสี่ช่อง — มือถือเหลือสองคอลัมน์ */}
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <InfoBox k="แผนก" v={hrDept(p.dept).label} />
@@ -187,11 +188,8 @@ export function EmployeeDetail({
             <InfoBox k="โทรศัพท์" v={emp.phone || "—"} num />
           </div>
 
-          <div
-            className="seg mt-4 w-full overflow-x-auto whitespace-nowrap"
-            role="tablist"
-            aria-label="ข้อมูลพนักงาน"
-          >
+          {/* ต้นแบบใช้แท็บขีดเส้นใต้ ไม่ใช่ปุ่มเม็ดยาในกล่องเทา */}
+          <div className="tabs wrap mt-4 border-b border-border" role="tablist" aria-label="ข้อมูลพนักงาน">
             {tabs.map((t) => (
               <button
                 key={t.k}
@@ -199,7 +197,6 @@ export function EmployeeDetail({
                 role="tab"
                 aria-selected={tab === t.k}
                 className={tab === t.k ? "on" : ""}
-                style={{ flex: "none" }}
                 onClick={() => setTab(t.k)}
               >
                 {t.label}
@@ -222,17 +219,15 @@ export function EmployeeDetail({
                         k={emp.leftAt ? "ทำงานรวม" : "ทำงานมาแล้ว"}
                         v={empYears(emp.startedAt, today, emp.leftAt)}
                       />
-                      <Row k="ผู้บังคับบัญชา" v={bossName || "ไม่มี"} muted={!bossName} />
                     </Kv>
                   </Sect>
                   <Sect title="สรุปส่วนตัว">
+                    {/* ต้นแบบโชว์สี่แถว จบด้วยเงินเดือนปัจจุบัน — ชื่อเล่น วันเกิด วุฒิ อยู่แท็บข้อมูลส่วนตัว */}
                     <Kv>
-                      <Row k="ชื่อเล่น" v={emp.nick || "—"} />
                       <Row k="เพศ" v={emp.sex} />
-                      <Row k="วันเกิด" v={emp.birth ? thaiDate(emp.birth) : "—"} num />
-                      <Row k="วุฒิการศึกษา" v={emp.edu || "—"} />
                       <Row k="โทรศัพท์" v={emp.phone || "—"} num />
                       <Row k="อีเมล" v={emp.email || "ไม่มี"} muted={!emp.email} />
+                      {seePay && <Row k="เงินเดือนปัจจุบัน" v={`${baht(cur.salary)} บาท`} num />}
                     </Kv>
                   </Sect>
                 </div>

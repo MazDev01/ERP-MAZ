@@ -202,12 +202,13 @@ export function HrEmployeesPage() {
                   const now = ev.currentTarget.open;
                   setOpen((v) => (v[g.type] === now ? v : { ...v, [g.type]: now }));
                 }}
-                className="group"
+                /* ต้นแบบ: แต่ละกลุ่มเป็นการ์ดขาวมีขอบ หัวการ์ดกดพับได้ */
+                className="group overflow-hidden rounded-[16px] border border-border bg-card"
               >
-                <summary className="flex cursor-pointer list-none items-center gap-2.5 py-1 text-[13.5px] font-bold marker:content-none [&::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-center gap-2.5 px-5 py-4 text-[15px] font-bold hover:bg-muted/40 marker:content-none [&::-webkit-details-marker]:hidden">
                   <i className="size-[9px] flex-none rounded-full" style={{ background: g.dot }} />
                   {g.label}
-                  <span className="num font-semibold text-muted-foreground">({list.length} คน)</span>
+                  <span className="num text-[13px] font-medium text-muted-foreground">({list.length} คน)</span>
                   <svg
                     width="14"
                     height="14"
@@ -217,13 +218,13 @@ export function HrEmployeesPage() {
                     strokeWidth="2.4"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-muted-foreground transition-transform group-open:rotate-180"
+                    className="ml-auto text-muted-foreground transition-transform group-open:rotate-180"
                     aria-hidden="true"
                   >
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </summary>
-                <div className="mt-2 flex flex-col gap-3">
+                <div className="flex flex-col gap-3 border-t border-border px-5 pt-4 pb-5">
                   {list.map((e) => (
                     <EmpCard key={e.id} emp={e} query={query} today={today} onOpen={() => setViewing(e.id)} />
                   ))}
