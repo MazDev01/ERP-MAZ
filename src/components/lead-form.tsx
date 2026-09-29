@@ -194,7 +194,7 @@ export function LeadForm({
               onChange={(e) => addSource.pick(e.target.value) || setSource(e.target.value)}
               className="field-control cursor-pointer"
             >
-              <option value="">— เลือก —</option>
+              <option value="">ยังไม่ระบุ</option>
               {optionsOf("leadSource").map((s) => (
                 <option key={s}>{s}</option>
               ))}
@@ -290,7 +290,7 @@ export function LeadForm({
               onChange={(e) => addChannel.pick(e.target.value) || setChannel(e.target.value)}
               className="field-control cursor-pointer"
             >
-              <option value="">— เลือก —</option>
+              <option value="">ยังไม่ระบุ</option>
               {optionsOf("leadChannel").map((c) => (
                 <option key={c}>{c}</option>
               ))}

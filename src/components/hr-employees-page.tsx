@@ -455,7 +455,9 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
   const lock = lockedUntil(hr);
 
   const [f, setF] = useState({
-    name: emp.name,
+    /* กรอกแยกช่องเหมือนหน้าเพิ่มพนักงาน — คนเก่าที่เก็บเป็นชื่อเต็ม ตัดที่ช่องว่างแรกให้ */
+    first: emp.first ?? emp.name.trim().split(/\s+/)[0] ?? "",
+    last: emp.last ?? emp.name.trim().split(/\s+/).slice(1).join(" "),
     /* ชื่ออังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี — คนเก่ายังไม่มี กรอกเพิ่มที่นี่ได้ */
     firstEn: emp.firstEn ?? "",
     lastEn: emp.lastEn ?? "",
@@ -502,7 +504,8 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
   const minAt = lock && lock >= emp.startedAt ? isoAfter(lock) : emp.startedAt;
 
   const errors: string[] = [];
-  if (!f.name.trim()) errors.push("ระบุชื่อ-สกุล");
+  if (!f.first.trim()) errors.push("ระบุชื่อ (ไทย)");
+  if (!f.last.trim()) errors.push("ระบุนามสกุล (ไทย)");
   if (!f.phone.trim()) errors.push("ระบุเบอร์โทรศัพท์");
   if (f.email.trim() && !/^\S+@\S+\.\S+$/.test(f.email.trim())) errors.push("อีเมลไม่ถูกรูปแบบ");
   if (!salaryOk) errors.push("เงินเดือนต้องเป็นตัวเลขมากกว่าศูนย์");
@@ -516,7 +519,9 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
     setTried(true);
     if (errors.length) return;
     updateEmpProfile(emp.id, {
-      name: f.name.trim(),
+      name: `${f.first.trim()} ${f.last.trim()}`.trim(),
+      first: f.first.trim(),
+      last: f.last.trim(),
       firstEn: f.firstEn.trim(),
       lastEn: f.lastEn.trim(),
       nick: f.nick.trim(),
@@ -559,8 +564,11 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
       <div onClick={() => setPicker("")}>
         <Sect title="ประวัติส่วนตัว">
           <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="ชื่อ-สกุล" required>
-              <Input value={f.name} onChange={set("name")} />
+            <Field label="ชื่อ (ไทย)" required>
+              <Input value={f.first} onChange={set("first")} aria-label="ชื่อภาษาไทย" />
+            </Field>
+            <Field label="นามสกุล (ไทย)" required>
+              <Input value={f.last} onChange={set("last")} aria-label="นามสกุลภาษาไทย" />
             </Field>
             <Field label="ชื่อ-สกุล ภาษาอังกฤษ" hint="ใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j">
               <span className="flex gap-2">

@@ -965,7 +965,7 @@ function AddTaskDialog({
             }}
             className="field-control cursor-pointer"
           >
-            <option value="">ไม่ระบุ</option>
+            <option value="">ยังไม่ระบุ</option>
             {teamRoles().map((r) => (
               <option key={r.key} value={r.key}>
                 {r.label}

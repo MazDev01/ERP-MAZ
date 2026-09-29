@@ -356,7 +356,7 @@ function OtherCard({
                     }}
                     className="field-control"
                   >
-                    <option value="">เลือกประเภท</option>
+                    <option value="">ยังไม่ระบุ</option>
                     {kinds.map((k) => (
                       <option key={k} value={k}>
                         {k}

@@ -566,7 +566,7 @@ function Input({
 function Select({ options, id }: { options: string[]; id?: string }) {
   return (
     <select id={id} className="field-control h-12 cursor-pointer rounded-xl px-[15px] text-sm">
-      <option value="">— เลือก —</option>
+      <option value="">ยังไม่ระบุ</option>
       {options.map((o) => (
         <option key={o}>{o}</option>
       ))}
