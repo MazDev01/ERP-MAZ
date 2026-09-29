@@ -124,9 +124,15 @@ export function QuotationsPage() {
           </button>
         </>
       )}
+      {/* ใบที่ส่งแล้วแก้ไม่ได้ตามกติกาเอกสาร — แก้ราคาหรือขอบเขตต้องออกฉบับแก้แทนใบเดิม
+          ใบที่ปิดไปแล้ว (มีดีล/ปฏิเสธ/หมดอายุ) แทนไม่ได้ ปุ่มจึงเป็นการคัดลอกไปออกใบใหม่เฉย ๆ */}
       {!isDraft(q) && (
-        <Link href={`/quotations/new?from=${encodeURIComponent(q.no)}`} className="lnk quiet">
-          ออกใบใหม่
+        <Link
+          href={`/quotations/new?from=${encodeURIComponent(q.no)}`}
+          className="lnk quiet"
+          title={canBill(q) ? "คัดลอกใบนี้ไปออกฉบับแก้ แล้วให้ใบเดิมถูกแทน" : "คัดลอกใบนี้ไปออกใบใหม่"}
+        >
+          {canBill(q) ? "ออกฉบับแก้" : "ออกใบใหม่"}
         </Link>
       )}
       {/* ปุ่มเอกสาร + ปุ่มดูรายละเอียด ขึ้นทุกแถวตามต้นแบบ */}
@@ -192,7 +198,7 @@ export function QuotationsPage() {
     if (!isDraft(q)) {
       items.push(
         <Link key="re" href={`/quotations/new?from=${encodeURIComponent(q.no)}`} className={plain}>
-          ออกใบใหม่
+          {canBill(q) ? "ออกฉบับแก้" : "ออกใบใหม่"}
         </Link>,
       );
     }
