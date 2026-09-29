@@ -49,6 +49,7 @@ import {
 } from "./schedule-board";
 import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select } from "./ui";
+import { useAddOption } from "./add-option";
 import { todayIso } from "@/lib/format";
 
 const KINDS: BoardKind[] = [
@@ -214,6 +215,8 @@ function GmEventForm({
   const staff = useHr().emp.filter((e) => e.status === "active");
   const [title, setTitle] = useState(event?.title ?? "");
   const [kind, setKind] = useState<EventKind>(event?.kind ?? "meeting");
+  /* เพิ่มประเภทนัดหมายใหม่ได้จากหน้างาน (ข้อมูลหลัก HR-10) */
+  const addKind = useAddOption({ catalog: "eventKinds" }, (v) => setKind(v as EventKind));
   const [date, setDate] = useState(event?.date ?? day ?? todayIso());
   const [from, setFrom] = useState(event?.from ?? "10:00");
   const [to, setTo] = useState(event?.to ?? "11:00");
@@ -328,13 +331,21 @@ function GmEventForm({
         </Field>
 
         <Field label="ประเภท">
-          <Select value={kind} onChange={(e) => setKind(e.target.value as EventKind)}>
+          <Select
+            value={kind}
+            onChange={(e) => {
+              if (addKind.pick(e.target.value)) return;
+              setKind(e.target.value as EventKind);
+            }}
+          >
             {eventKindList().map((k) => (
               <option key={k.key} value={k.key}>
                 {k.label}
               </option>
             ))}
+            {addKind.option}
           </Select>
+          {addKind.dialog}
         </Field>
 
         {/* จอแคบให้วันที่กินเต็มแถวบน แล้วเวลาเริ่ม–ถึงอยู่แถวล่าง

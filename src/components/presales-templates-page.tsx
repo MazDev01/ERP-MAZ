@@ -28,6 +28,7 @@ import { ConfirmDialog } from "./confirm-dialog";
 import { FileDrop, type PickedFile } from "./file-drop";
 import { PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
+import { useAddOption } from "./add-option";
 import { SearchBox } from "./sales-ui";
 
 type Tab = "all" | TemplateKind;
@@ -235,6 +236,8 @@ export function PresalesTemplatesPage() {
 function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate; onClose: () => void }) {
   const [name, setName] = useState(t?.name ?? "");
   const [service, setService] = useState(t?.service ?? "");
+  /* เพิ่มบริการใหม่ได้จากหน้างาน (ข้อมูลหลัก · หัวข้อบริการ HR-16) */
+  const addSvc = useAddOption({ catalog: "services" }, setService);
   const [files, setFiles] = useState<PickedFile[]>(() =>
     t ? [{ id: `cur-${t.id}`, name: t.url ?? t.file, size: t.size ?? 0, url: t.url }] : [],
   );
@@ -304,10 +307,14 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
           <label htmlFor="tpl-service" className={lb}>
             บริการ <span className="text-destructive">*</span>
           </label>
+          {/* เพิ่มบริการใหม่จากหน้างานได้ ไม่ต้องไปหน้าตั้งค่าก่อน */}
           <select
             id="tpl-service"
             value={service}
-            onChange={(e) => setService(e.target.value)}
+            onChange={(e) => {
+              if (addSvc.pick(e.target.value)) return;
+              setService(e.target.value);
+            }}
             className="field-control cursor-pointer"
             aria-invalid={touched && problems.service}
           >
@@ -317,7 +324,9 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
                 {s.label}
               </option>
             ))}
+            {addSvc.option}
           </select>
+          {addSvc.dialog}
           {touched && problems.service && <p className={err}>เลือกบริการที่ใช้เทมเพลตนี้</p>}
         </div>
 

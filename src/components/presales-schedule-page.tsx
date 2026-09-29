@@ -42,6 +42,7 @@ import { AppointmentSheet } from "./appointment-sheet";
 import { Sheet } from "./lead-dialogs";
 import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select } from "./ui";
+import { useAddOption } from "./add-option";
 import {
   ScheduleBoard,
   tintPaint,
@@ -232,6 +233,8 @@ function PsEventForm({
   const [ps, setPs] = useState(event?.ps ?? requests[0]?.no ?? "");
   const [title, setTitle] = useState(event?.title ?? "");
   const [kind, setKind] = useState<EventKind>(event?.kind ?? "client");
+  /* เพิ่มประเภทนัดหมายใหม่ได้จากหน้างาน (ข้อมูลหลัก HR-10) */
+  const addKind = useAddOption({ catalog: "eventKinds" }, (v) => setKind(v as EventKind));
   const [date, setDate] = useState(event?.date ?? day);
   const [from, setFrom] = useState(event?.from ?? "10:00");
   const [to, setTo] = useState(event?.to ?? "11:00");
@@ -363,13 +366,21 @@ function PsEventForm({
         </Field>
 
         <Field label="ประเภท">
-          <Select value={kind} onChange={(e) => setKind(e.target.value as EventKind)}>
+          <Select
+            value={kind}
+            onChange={(e) => {
+              if (addKind.pick(e.target.value)) return;
+              setKind(e.target.value as EventKind);
+            }}
+          >
             {eventKinds().map((k) => (
               <option key={k.key} value={k.key}>
                 {k.label}
               </option>
             ))}
+            {addKind.option}
           </Select>
+          {addKind.dialog}
         </Field>
 
         <div className="grid grid-cols-2 items-end gap-2.5 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">

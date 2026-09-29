@@ -8,9 +8,10 @@ import { newCatalogKey } from "./catalog";
 import { whtTypes } from "./acc-data";
 import { hrDepts, hrDocs, hrPositions } from "./hr-data";
 import { services, teamRoles } from "./pm-data";
+import { eventKinds } from "./pm-schedule-data";
 import { saveSection, settings } from "./system-settings";
 
-export type AddCatalogKey = "services" | "teamRoles" | "whtTypes" | "depts" | "positions" | "docs";
+export type AddCatalogKey = "services" | "teamRoles" | "whtTypes" | "depts" | "positions" | "docs" | "eventKinds";
 
 const LABEL: Record<AddCatalogKey, string> = {
   services: "ประเภทบริการ",
@@ -19,6 +20,7 @@ const LABEL: Record<AddCatalogKey, string> = {
   depts: "แผนก",
   positions: "ตำแหน่งงาน",
   docs: "เอกสารประจำตัวพนักงาน",
+  eventKinds: "ประเภทนัดหมาย",
 };
 
 /* สีของตำแหน่งในทีมที่เพิ่มจากหน้างาน — วนตามจำนวนที่มี ผู้ดูแลเปลี่ยนสีทีหลังได้ */
@@ -45,6 +47,15 @@ export function addCatalogItem(
       const dup = list.find(same);
       if (dup) return { value: dup.key };
       saveSection("catalog", { ...c, teamRoles: [...list, { key: id, label, color: TONES[list.length % TONES.length] }] });
+      break;
+    }
+    /* ประเภทนัดหมายเพิ่มจากหน้าตารางงานได้ — ให้สีวนตามรายการเหมือนตำแหน่งในทีม */
+    case "eventKinds": {
+      const list = eventKinds();
+      const dup = list.find(same);
+      if (dup) return { value: dup.key };
+      const saved = c.eventKinds ?? list.map((x) => ({ key: x.key, label: x.label, color: x.dot }));
+      saveSection("catalog", { ...c, eventKinds: [...saved, { key: id, label, color: TONES[list.length % TONES.length] }] });
       break;
     }
     case "whtTypes": {

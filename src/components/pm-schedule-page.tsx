@@ -57,6 +57,7 @@ import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 import { ScheduleBoard, useBoardNav, type BoardEvent, type BoardKind } from "./schedule-board";
 import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select } from "./ui";
+import { useAddOption } from "./add-option";
 
 /* ประเภทนัดอ่านจากข้อมูลหลักทุกครั้ง — ฝ่ายบุคคลเพิ่ม/แก้ชื่อได้ที่ /admin/options */
 const kindList = () => eventKinds();
@@ -241,6 +242,8 @@ function EventForm({
     col: event?.col ?? (event ? KIND_COLOR[event.kind] : "red"),
   }));
   const [err, setErr] = useState("");
+  /* เพิ่มประเภทนัดหมายใหม่ได้จากหน้างาน ไม่ต้องไปหน้าตั้งค่าก่อน (ข้อมูลหลัก HR-10) */
+  const addKind = useAddOption({ catalog: "eventKinds" }, (v) => set("kind", v as EventKind));
   /* เปิดตัวเลือกวันได้ทีละอัน — เปิดอันหนึ่งแล้วอีกอันต้องปิด ไม่งั้นปฏิทินสองอันซ้อนกัน */
   const [pick, setPick] = useState<"s" | "e" | null>(null);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -360,14 +363,22 @@ function EventForm({
         </Field>
 
         <Field label="ประเภท">
-          <Select value={form.kind} onChange={(e) => set("kind", e.target.value as EventKind)}>
+          <Select
+            value={form.kind}
+            onChange={(e) => {
+              if (addKind.pick(e.target.value)) return;
+              set("kind", e.target.value as EventKind);
+            }}
+          >
             {kindList().map((k) => (
               <option key={k.key} value={k.key}>
                 {k.label}
               </option>
             ))}
+            {addKind.option}
           </Select>
         </Field>
+        {addKind.dialog}
 
         <div>
           <p className="mb-2 block text-[0.8rem] font-medium">

@@ -32,6 +32,7 @@ import {
 } from "@/lib/presales-work";
 import { FileDrop, type PickedFile } from "./file-drop";
 import { Sheet } from "./lead-dialogs";
+import { useAddOption } from "./add-option";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 import { SearchBox } from "./sales-ui";
 
@@ -647,6 +648,11 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
   const [editing, setEditing] = useState(false);
   const [rows, setRows] = useState<ProposalPlanPhase[]>(saved);
   const roles = teamRoles();
+  /* เพิ่มตำแหน่งในทีมใหม่ได้จากหน้างาน (ข้อมูลหลัก HR-10) — ตั้งให้เฟสที่กำลังแก้อยู่ */
+  const [roleRow, setRoleRow] = useState(-1);
+  const addRole = useAddOption({ catalog: "teamRoles" }, (v) => {
+    if (roleRow >= 0) set(roleRow, { role: v });
+  });
 
   function start() {
     setRows(saved.length ? saved : [{ name: "", role: roles[0]?.key ?? "", fromWeek: 1, toWeek: 1, tasks: [] }]);
@@ -658,6 +664,7 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
 
   return (
     <section className="mt-[18px]">
+      {addRole.dialog}
       <div className="mb-2 flex items-center gap-2">
         <p className="text-[13px] font-bold">แผนงานของข้อเสนอ</p>
         {!readOnly && !editing && (
@@ -701,7 +708,11 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
               <select
                 value={x.role}
                 aria-label={`ตำแหน่งที่ทำเฟสที่ ${i + 1}`}
-                onChange={(e) => set(i, { role: e.target.value })}
+                onChange={(e) => {
+                  setRoleRow(i);
+                  if (addRole.pick(e.target.value)) return;
+                  set(i, { role: e.target.value });
+                }}
                 className="field-control cursor-pointer"
               >
                 {roles.map((r) => (
@@ -709,6 +720,7 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
                     {r.label}
                   </option>
                 ))}
+                {addRole.option}
               </select>
               <input
                 type="number"
