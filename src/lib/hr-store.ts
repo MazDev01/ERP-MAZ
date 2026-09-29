@@ -22,6 +22,8 @@ import {
   HR_PAYAPPROVE,
   ROLE_EMPLOYEE,
   accountRoles,
+  rolesOfEmployee,
+  HR_MAX_ROLES,
   payApproveKey,
   fillPeriod,
   withLoginAccounts,
@@ -293,7 +295,20 @@ export type EmpProfile = Pick<
 export function updateEmpProfile(id: string, profile: EmpProfile, by: string) {
   store.update((s) => ({
     ...s,
-    emp: s.emp.map((e) => (e.id === id ? { ...e, ...profile, edited: { by, at: bkkStamp() } } : e)),
+    emp: s.emp.map((e) => {
+      if (e.id !== id) return e;
+      const next = { ...e, ...profile, edited: { by, at: bkkStamp() } };
+      /*
+       * ฝ่ายบุคคลติ๊กควบตำแหน่งเพิ่ม → บัญชีของคนนั้นต้องได้เมนูของตำแหน่งใหม่ด้วย
+       * (เจ้าของถาม 29 ก.ย. 2569 "ฝ่ายบุคคลปรับควบ 2 ตำแหน่งไม่ได้หรอ")
+       * เติมบทบาทที่ยังขาด ไม่ถอดของที่ผู้ดูแลระบบตั้งเองไว้ และไม่เกินจำนวนที่ควบได้
+       */
+      if (!next.account) return next;
+      const has = accountRoles(next.account);
+      const add = rolesOfEmployee(next).filter((r) => !has.includes(r));
+      if (!add.length) return next;
+      return { ...next, account: { ...next.account, roles: [...has, ...add].slice(0, HR_MAX_ROLES) } };
+    }),
   }));
 }
 

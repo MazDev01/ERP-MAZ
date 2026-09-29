@@ -193,7 +193,8 @@ export const ROLE_EMPLOYEE: Partial<Record<Role, string>> = {
   /* ทีมก่อนการขาย = ปิยะวัฒน์ (SA) ตามต้นแบบ presales-work.html */
   ps: "E01",
   pm: "E10",
-  acc: "E12",
+  /* บัญชีกับฝ่ายบุคคลเป็นคนละคนแล้ว (เจ้าของสั่ง 29 ก.ย. 2569) */
+  acc: "E19",
   hr: "E12",
   /* ทีมงานอยู่ในทะเบียนมาตั้งแต่ต้นอยู่แล้ว (Website) ไม่ต้องเพิ่มคนสมมติ */
   staff: "E05",
@@ -478,9 +479,9 @@ export const HR_EMP: Employee[] = [
    history:[{at:"2019-05-01", pos:"gm", salary:45000, note:"เริ่มงาน"},
             {at:"2024-01-01", pos:"gm", salary:52000, note:"ปรับประจำปี"}]},
 
+  /* เจ้าของสั่ง 29 ก.ย. 2569 — อรอนงค์เป็นแค่ฝ่ายบุคคล งานบัญชีเป็นของ E19 */
   {id:"E12", name:"อรอนงค์ พรหมมา", nick:"อร", sex:"หญิง", birth:"1990-06-28",
-   /* ทำทั้งบัญชีและงานบุคคล — เป็นการ "ควบสองตำแหน่ง" ไม่ใช่ตำแหน่งเดียวที่รวมสองงานไว้ */
-   pos:"acc", posMore:["hr"], type:"full", status:"active", startedAt:"2020-09-01", boss:"E11",
+   pos:"hr", type:"full", status:"active", startedAt:"2020-09-01", boss:"E11",
    edu:"บช.บ. การบัญชี มหาวิทยาลัยพายัพ",
    exp:["เจ้าหน้าที่บัญชี สำนักงานบัญชี 3 ปี"],
    phone:"088-224-3390", email:"ornanong.p@example.com",
@@ -489,7 +490,21 @@ export const HR_EMP: Employee[] = [
    docs:["idcard","house","degree","photo","resume","cert"],
    history:[{at:"2020-09-01", pos:"acc", salary:22000, note:"เริ่มงาน ทดลองงาน"},
             {at:"2020-12-01", pos:"acc", salary:24000, note:"ผ่านทดลองงาน"},
-            {at:"2025-01-01", pos:"acc", salary:29000, note:"ปรับประจำปี"}]},
+            {at:"2025-01-01", pos:"hr", salary:29000, note:"ปรับประจำปี"}]},
+
+  /* พนักงานบัญชีของบริษัท — วางบิล ออกใบเสร็จ ยื่นภาษีหัก ณ ที่จ่าย
+     TODO: ⚠️ ชื่อและข้อมูลส่วนตัวเป็นข้อมูลสมมติ ต้องเปลี่ยนเป็นคนจริงก่อนใช้งาน */
+  {id:"E19", name:"สุนิสา ทรัพย์มั่น", nick:"นิด", sex:"หญิง", birth:"1992-02-09",
+   pos:"acc", type:"full", status:"active", startedAt:"2021-07-01", boss:"E11",
+   edu:"บช.บ. การบัญชี มหาวิทยาลัยเชียงใหม่",
+   exp:["เจ้าหน้าที่บัญชี สำนักงานบัญชี 4 ปี"],
+   phone:"086-551-7742", email:"sunisa.s@example.com",
+   address:"58/4 ต.ป่าแดด อ.เมือง จ.เชียงใหม่ 50100",
+   sos:{name:"สมบัติ ทรัพย์มั่น", rel:"บิดา", phone:"081-993-2210"},
+   docs:["idcard","house","degree","photo","resume"],
+   history:[{at:"2021-07-01", pos:"acc", salary:21000, note:"เริ่มงาน ทดลองงาน"},
+            {at:"2021-10-01", pos:"acc", salary:23000, note:"ผ่านทดลองงาน"},
+            {at:"2025-01-01", pos:"acc", salary:28000, note:"ปรับประจำปี"}]},
 
   /* พนักงานขายคนเดียวของบริษัท (ต้นแบบ dose-erp-maz/hr-employees.html) — ผู้ใช้บทบาทฝ่ายขาย */
   {id:"E18", name:"ชนัญชิดา ใจดี", nick:"ชญ", sex:"หญิง", birth:"1995-06-12",
