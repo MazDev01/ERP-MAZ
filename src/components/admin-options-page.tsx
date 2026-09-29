@@ -251,10 +251,10 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
   const tabOf = (it: { kind: "cat" | "opt"; key: string }) => {
     if (it.kind === "cat") {
       const c = CAT_SPECS.find((x) => x.key === it.key);
-      return c ? { kind: "cat" as const, key: c.key as string, label: c.label, where: c.where, count: toItems(cat.draft, c.key).length } : null;
+      return c ? { kind: "cat" as const, key: c.key as string, label: c.label, where: c.where } : null;
     }
     const g = OPTION_GROUPS.find((x) => x.key === it.key);
-    return g ? { kind: "opt" as const, key: g.key as string, label: g.label, where: g.where, count: d.draft[g.key].length } : null;
+    return g ? { kind: "opt" as const, key: g.key as string, label: g.label, where: g.where } : null;
   };
   const curSet = SETS.find((g) => g.items.some((i) => i.kind === sel.kind && i.key === sel.key)) ?? SETS[0];
   const tabs = only ? [] : curSet.items.flatMap((i) => (tabOf(i) ? [tabOf(i)!] : []));
@@ -425,8 +425,8 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
                   className={on ? "on" : ""}
                   onClick={() => setSel({ kind: t.kind, key: t.key })}
                 >
+                  {/* ไม่ใส่จำนวนต่อท้ายชื่อแท็บ (เจ้าของสั่งเอาออก 29 ก.ย. 2569) */}
                   {t.label}
-                  <b>{t.count}</b>
                 </button>
               );
             })}

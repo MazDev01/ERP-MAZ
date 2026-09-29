@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { useSearchParams } from "next/navigation";
+import { settings } from "@/lib/system-settings";
 import { useEffect, useRef, useMemo, useState } from "react";
 import {
   currentPeriod,
@@ -565,9 +566,13 @@ function round1(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-/** เลขที่คำขอ — รหัสใบลามี "LV-" นำหน้าอยู่แล้ว ห้ามเติมซ้ำ (เคยขึ้นเป็น LV-LV-2569-0041) */
+/*
+ * เลขที่คำขอ — รหัสใบลามีตัวนำหน้าติดมาแล้ว (nextDocNo) แสดงตามนั้นเลย ห้ามเติมซ้ำ
+ * ตัวนำหน้าตั้งได้ที่หน้าตั้งค่า จึงห้ามเขียน "LV-" ตายตัวที่นี่ (ใบเก่าที่ไม่มีตัวนำหน้าค่อยเติมให้)
+ */
 function shortId(id: string) {
-  return id.startsWith("LV-") ? id.toUpperCase() : `LV-${id.slice(-6).toUpperCase()}`;
+  const up = id.toUpperCase();
+  return /^[A-Z0-9]+-/.test(up) ? up : `${settings().docs.leave}-${up.slice(-6)}`;
 }
 
 function thaiDate(iso: string) {

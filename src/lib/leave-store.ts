@@ -52,7 +52,7 @@ export function addLeaveRequest(input: {
   const record: LeaveRecord = {
     /* เลขที่ใบลาตาม ERD: LV-ปี พ.ศ.-ลำดับ เดินต่อกันทั้งบริษัท รวมใบลาของนักศึกษาฝึกงาน */
     /* รวมเลขที่ของใบลาที่ยื่นผ่านคำขอของทีมงาน (emp-requests) ด้วย ไม่งั้นเลขซ้ำกับคิวของ GM */
-    id: nextDocNo("LV", [
+    id: nextDocNo(settings().docs.leave, [
       ...store.all().flat().map((r) => r.id),
       ...HR_INTERN_LEAVE.map((r) => r.id),
       ...empRequestIds("leave"),

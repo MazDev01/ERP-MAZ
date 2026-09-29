@@ -8,6 +8,7 @@ import {
 } from "./expense-data";
 import { checkClaim, isLocked } from "./expense-data";
 import { bkkNow, nextDocNo, pad2 } from "./format";
+import { settings } from "./system-settings";
 import type { Role } from "./role";
 import { empRequestIds } from "./emp-requests";
 import { HR_REIMB } from "./hr-data";
@@ -146,7 +147,7 @@ export function submitClaim(month: string) {
   if (!draft || !checkClaim(draft).ok) return false;
   const stamp = bkkNow();
   /* เลขที่ใบเบิกเดินต่อกันทั้งบริษัท — รวมใบของทีมงานที่ยังไม่มีบัญชี (emp-requests) และใบที่จ่ายคืนไปแล้ว (HR_REIMB) */
-  const no = nextDocNo("EX", [
+  const no = nextDocNo(settings().docs.expense, [
     ...store.all().flat().flatMap((c) => (c.no ? [c.no] : [])),
     ...empRequestIds("expense"),
     ...HR_REIMB.map((r) => r.no),

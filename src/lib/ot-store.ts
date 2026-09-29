@@ -1,5 +1,6 @@
 "use client";
 import { bkkStamp, nextDocNo } from "./format";
+import { settings } from "./system-settings";
 
 import { OT_RECORDS, type OtRecord } from "./ot-data";
 import type { Role } from "./role";
@@ -25,7 +26,7 @@ export function addOtRequest(input: {
 }) {
   const record: OtRecord = {
     /* เลขที่ใบขอตาม ERD: OT-ปี พ.ศ.-ลำดับ เดินต่อกันทั้งบริษัท */
-    id: nextDocNo("OT", store.all().flat().map((r) => r.id)),
+    id: nextDocNo(settings().docs.ot, store.all().flat().map((r) => r.id)),
     date: input.date,
     startMin: input.startMin,
     endMin: input.endMin,

@@ -116,6 +116,10 @@ export type DocPrefixes = {
   jobOrder: string;
   invoice: string;
   receipt: string;
+  /* เอกสารของพนักงาน — เดิมเขียนตัวอักษรตรง ๆ ในสโตร์ ย้ายมาตั้งได้ 29 ก.ย. 2569 */
+  leave: string;
+  ot: string;
+  expense: string;
   /*
    * ไม่มี CN/DN/RF แล้ว — เจ้าของระบบสั่งพักใบลดหนี้ ใบเพิ่มหนี้ และการคืนเงิน (24 ก.ย. 2569)
    * เปิดใช้ใหม่เมื่อไรค่อยเติมสามช่องนี้กลับ แล้วให้ acc-store.ts อ่านจากตรงนี้แทนตัวอักษรตรง ๆ
@@ -323,6 +327,9 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     jobOrder: "JO",
     invoice: "INV",
     receipt: "RCP",
+    leave: "LV",
+    ot: "OT",
+    expense: "EX",
   },
   options: {
     leadSource: ["เว็บไซต์", "เฟซบุ๊ก", "แนะนำต่อ", "ออกบูธ", "โทรเข้า", "ลูกค้าเก่า", "อื่นๆ"],

@@ -12,7 +12,7 @@
 
 import { useState } from "react";
 import { bkkNow, thaiDate, todayIso } from "@/lib/format";
-import type { Issuer, IssuerDoc } from "@/lib/system-settings";
+import type { DocPrefixes, Issuer, IssuerDoc } from "@/lib/system-settings";
 import { useCrm } from "@/lib/crm-store";
 import { AdminHead, Card, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
 import { FileDrop } from "./file-drop";
@@ -427,6 +427,9 @@ export function AdminCompanyPage() {
         />
       )}
 
+      {/* เลขที่เอกสารของทั้งระบบ — อยู่ในหัวข้อนี้เพราะเป็นเรื่องของเอกสารที่ออกให้ลูกค้าและพนักงาน */}
+      <DocNumbersCard />
+
       <SaveBar
         dirty={d.dirty}
         isDefault={d.isDefault}
@@ -512,5 +515,92 @@ function AttSheet({
         )}
       </div>
     </Sheet>
+  );
+}
+
+// ─── เลขที่เอกสาร ─────────────────────────────────────────────────
+/*
+ * ตัวนำหน้าของเลขที่เอกสารแต่ละชนิด (crm-store · acc-store · ใบลา/โอที/ใบเบิก)
+ * ปีและลำดับระบบออกให้เองเพื่อกันเลขซ้ำ · เปลี่ยนตัวนำหน้าแล้วลำดับของตัวใหม่เริ่มนับ 1
+ * เอกสารที่ออกเลขไปแล้วคงเลขเดิม · เลขใบเสนอราคาตั้งแยกรายผู้ออกเอกสารด้านบน
+ */
+type DocRow = { key: keyof DocPrefixes; label: string; who: string; sample: (p: string) => string };
+
+function docRows(): DocRow[] {
+  const now = bkkNow();
+  const be = now.getFullYear() + 543;
+  const be2 = String(be).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const year = (p: string) => `${p}-${be}-0001`;
+  return [
+    { key: "lead", label: "รหัสผู้สนใจ", who: "ฝ่ายขาย", sample: (p) => `${p}-${be2}${mm}-001` },
+    { key: "presales", label: "คำขอก่อนการขาย", who: "ฝ่ายขาย · ก่อนการขาย", sample: year },
+    { key: "deal", label: "ดีล", who: "ฝ่ายขาย · บัญชี · PM", sample: year },
+    { key: "jobOrder", label: "ใบงาน", who: "ฝ่ายขาย", sample: year },
+    { key: "invoice", label: "ใบแจ้งหนี้", who: "บัญชี", sample: year },
+    { key: "receipt", label: "ใบเสร็จ", who: "บัญชี", sample: year },
+    { key: "leave", label: "ใบลา", who: "พนักงานทุกคน", sample: year },
+    { key: "ot", label: "ใบโอที", who: "พนักงานทุกคน", sample: year },
+    { key: "expense", label: "ใบเบิกค่าใช้จ่าย", who: "พนักงานทุกคน", sample: year },
+  ];
+}
+
+const DOC_LABEL = Object.fromEntries(docRows().map((r) => [r.key, r.label])) as Record<keyof DocPrefixes, string>;
+
+function describeDocs(a: DocPrefixes, b: DocPrefixes) {
+  return (Object.keys(DOC_LABEL) as (keyof DocPrefixes)[])
+    .filter((k) => a[k] !== b[k])
+    .map((k) => `${DOC_LABEL[k]} ${a[k]} → ${b[k]}`);
+}
+
+function docProblem(p: DocPrefixes, keys: (keyof DocPrefixes)[]) {
+  const vals = keys.map((k) => p[k]);
+  if (vals.some((v) => !/^[A-Z0-9]{1,6}$/.test(v))) return "ตัวนำหน้าใช้ตัวอักษรอังกฤษพิมพ์ใหญ่หรือตัวเลข 1–6 ตัว";
+  const seen = new Set<string>();
+  for (const v of vals) {
+    if (seen.has(v)) return `ตัวนำหน้า ${v} ซ้ำกัน — เลขเอกสารคนละชนิดจะแยกไม่ออก`;
+    seen.add(v);
+  }
+  return "";
+}
+
+function DocNumbersCard() {
+  const d = useSectionDraft("docs", "เลขที่เอกสาร", describeDocs);
+  const rows = docRows();
+  const bad = docProblem(d.draft, rows.map((r) => r.key));
+
+  return (
+    <>
+      <Card
+        title="เลขที่เอกสาร"
+        note="ตัวนำหน้าของเลขที่เอกสารแต่ละชนิด ปีและลำดับระบบออกให้เอง · เปลี่ยนแล้วลำดับของตัวนำหน้าใหม่เริ่มนับ 1 เอกสารเดิมคงเลขเดิม · เลขใบเสนอราคาตั้งที่ผู้ออกเอกสารแต่ละราย"
+      >
+        <div className="grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
+          {rows.map((r) => {
+            const changed = d.draft[r.key] !== d.saved[r.key];
+            return (
+              <div key={r.key} className="flex items-center gap-3 border-b border-border py-2.5 last:border-b-0">
+                <span className="min-w-0 flex-1">
+                  <b className="block text-[13.5px] font-semibold">{r.label}</b>
+                  <span className="block text-[11.5px] text-muted-foreground">{r.who}</span>
+                  <span className="num block text-[12px] text-muted-foreground">
+                    ถัดไป {r.sample(d.draft[r.key] || "—")}
+                  </span>
+                </span>
+                <input
+                  value={d.draft[r.key]}
+                  aria-label={`ตัวนำหน้า${r.label}`}
+                  maxLength={6}
+                  onChange={(e) => d.setDraft({ ...d.draft, [r.key]: e.target.value.toUpperCase().trim() })}
+                  className={`${inputCls} num w-[92px] flex-none text-center uppercase ${changed ? "border-primary" : ""}`}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <SaveBar dirty={d.dirty} isDefault={d.isDefault} invalid={bad} onSave={d.save} onCancel={d.cancel} onDefault={d.toDefault} />
+    </>
   );
 }
