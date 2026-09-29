@@ -106,7 +106,8 @@ export function RoleHomePage() {
         <Link
           href="/profile"
           aria-label="โปรไฟล์ของฉัน"
-          className="size-11 flex-none overflow-hidden rounded-full bg-card shadow-[0_6px_16px_-10px_rgb(120_20_35/0.5)]"
+          /* รูปเป็นสี่เหลี่ยมมุมมนมีขอบ ไม่ใช่วงกลม (เจ้าของสั่ง 29 ก.ย. 2569) */
+          className="size-11 flex-none overflow-hidden rounded-[14px] border border-border bg-card shadow-[0_6px_16px_-10px_rgb(120_20_35/0.5)]"
         >
           {/* ตั้งรูปไว้แล้วใช้รูป ยังไม่ได้ตั้งใช้ตัวย่อชื่อ — อ่านจากสโตร์เดียวกับการ์ดโปรไฟล์ */}
           {photo ? (
