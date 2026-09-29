@@ -54,6 +54,7 @@ import {
   PencilIcon,
   PlusIcon,
   QuotationIcon,
+  TrashIcon,
   UserIcon,
 } from "./icons";
 import { fileSize } from "./file-drop";
@@ -645,7 +646,18 @@ export function PmPlanPage() {
           firstDay={job.firstDay}
           phases={phases}
           index={phaseEdit}
+          taskCount={phaseEdit >= 0 ? (plan[phaseEdit]?.length ?? 0) : 0}
           onClose={() => setPhaseEdit(null)}
+          onDelete={() => {
+            edit((b) => {
+              b.phases.splice(phaseEdit, 1);
+              b.plan.splice(phaseEdit, 1);
+            });
+            /* ลำดับเฟสขยับ คีย์ที่ติ๊กไว้จึงชี้ผิดใบ ล้างทิ้งเหมือนตอนลากสลับลำดับ */
+            setPicked({});
+            setShowPhase(0);
+            setPhaseEdit(null);
+          }}
           onSave={(v) => {
             edit((b) => {
               if (phaseEdit < 0) {
@@ -695,6 +707,13 @@ export function PmPlanPage() {
               fn(b.plan[open.phase][open.index]);
             })
           }
+          onDelete={() => {
+            edit((b) => {
+              b.plan[open.phase].splice(open.index, 1);
+            });
+            setPicked({});
+            setOpen(null);
+          }}
         />
       )}
     </div>
@@ -739,14 +758,19 @@ function PhaseDialog({
   firstDay,
   phases,
   index,
+  taskCount,
   onClose,
   onSave,
+  onDelete,
 }: {
   firstDay: string;
   phases: PlanPhase[];
   index: number;
+  /** จำนวนงานในเฟสนี้ — ลบเฟสแล้วงานข้างในหายไปด้วย ต้องบอกก่อน */
+  taskCount: number;
   onClose: () => void;
   onSave: (v: { name: string; start: string; end: string }) => void;
+  onDelete: () => void;
 }) {
   const isNew = index < 0;
   const ph = isNew ? undefined : phases[index];
@@ -757,6 +781,7 @@ function PhaseDialog({
   const [end, setEnd] = useState(ph?.end ?? (last ? addDays(last.end, 7) : addDays(first, 6)));
   const [pick, setPick] = useState<"s" | "e" | null>(null);
   const [warn, setWarn] = useState(false);
+  const [delAsk, setDelAsk] = useState(false);
 
   const ok = Boolean(name.trim() && start && end && end >= start);
   /* ยังไม่เคยแก้ก็ยังไม่มี baseEnd — ค่าบนเฟสตอนนี้คือค่าตามข้อเสนอ */
@@ -769,6 +794,21 @@ function PhaseDialog({
       onClose={onClose}
       footer={
         <>
+          {!isNew && (
+            <button
+              type="button"
+              className={`btn glass-thin mr-auto ${delAsk ? "!border-destructive !text-destructive" : ""}`}
+              title={taskCount ? `ลบเฟสนี้พร้อมงาน ${taskCount} ใบข้างใน` : "ลบเฟสนี้"}
+              onClick={() => (delAsk ? onDelete() : setDelAsk(true))}
+            >
+              <TrashIcon className="size-[14px]" strokeWidth={2.2} />
+              {delAsk
+                ? taskCount
+                  ? `กดอีกครั้ง ลบพร้อมงาน ${taskCount} ใบ`
+                  : "กดอีกครั้งเพื่อลบ"
+                : "ลบเฟสนี้"}
+            </button>
+          )}
           <button type="button" className="btn glass-thin" onClick={onClose}>
             ยกเลิก
           </button>
@@ -1338,6 +1378,7 @@ function TaskDialog({
   count,
   onClose,
   onEdit,
+  onDelete,
 }: {
   phase: PlanPhase;
   color: string;
@@ -1346,6 +1387,8 @@ function TaskDialog({
   count: number;
   onClose: () => void;
   onEdit: (fn: (t: Draft) => void) => void;
+  /** ลบงานนี้ออกจากแผน (เจ้าของสั่ง 29 ก.ย. 2569 — ของเดิมเพิ่มได้แต่เอาออกไม่ได้) */
+  onDelete: () => void;
 }) {
   const team = useTeam().filter((m) => !m.left);
   /* วันลาของทีม — อนุมัติแล้ว (ใบลาจริง + ทะเบียนฝ่ายบุคคล) และใบที่ยื่นไว้รออนุมัติ (ต้นแบบ PM_LEAVE_PENDING) */
@@ -1354,6 +1397,8 @@ function TaskDialog({
   /* รายชื่อปิดไว้เสมอตอนเปิดงาน กดปุ่มเองถึงจะเปิด (ตามต้นแบบ) */
   const [listOpen, setListOpen] = useState(false);
   const [pick, setPick] = useState<"s" | "e" | null>(null);
+  /* ลบต้องกดสองครั้ง — ลบพลาดแล้วโจทย์กับไฟล์ที่แนบไว้หายไปด้วย */
+  const [delAsk, setDelAsk] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const role = task.role ?? phase.role;
   const fits = (m: Member) => !role || m.roles.includes(role);
@@ -1394,6 +1439,19 @@ function TaskDialog({
           >
             {ready ? "พร้อมมอบหมาย" : !task.whos.length ? "ยังไม่มีผู้รับผิดชอบ" : "ยังไม่ได้กำหนดวัน"}
           </span>
+          <button
+            type="button"
+            className={`btn glass-thin ${delAsk ? "!border-destructive !text-destructive" : ""}`}
+            title={
+              task.from !== undefined
+                ? "งานนี้อยู่ในโปรเจคจริงแล้ว ลบออกจากแผนแล้วงานและไฟล์ที่ส่งไว้จะหายไปด้วย"
+                : "ลบงานนี้ออกจากแผน"
+            }
+            onClick={() => (delAsk ? onDelete() : setDelAsk(true))}
+          >
+            <TrashIcon className="size-[14px]" strokeWidth={2.2} />
+            {delAsk ? "กดอีกครั้งเพื่อลบ" : "ลบงานนี้"}
+          </button>
           <button type="button" className="btn solid btn-solid" onClick={onClose}>
             <CheckIcon className="size-[14px]" strokeWidth={2.3} />
             เสร็จสิ้น
