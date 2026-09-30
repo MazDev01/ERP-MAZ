@@ -25,6 +25,7 @@ import {
   useBotnavPrefs,
 } from "@/lib/botnav-prefs";
 import { navItemsOf, useMenuAccess } from "@/lib/nav";
+import { useMyEmpType } from "@/lib/leave-policy";
 import { useMyRoles } from "@/lib/hr-link";
 import { useApprovalRoute } from "@/lib/role";
 import { ICONS } from "./app-shell";
@@ -952,7 +953,8 @@ function BotnavPane({ onSaved }: { onSaved: (message: string) => void }) {
   const roles = useMyRoles();
   const access = useMenuAccess();
   const route = useApprovalRoute();
-  const items = navItemsOf(roles, access, route);
+  /* ประเภทการจ้างตัดเมนู "ของฉัน" เหมือนแถบซ้าย (เจ้าของสั่ง 30 ก.ย. 2569) */
+  const items = navItemsOf(roles, access, route, useMyEmpType());
   const prefs = useBotnavPrefs();
   const choices = botnavChoices(items, role);
   const current = botnavOf(prefs, role) ?? botnavDefault(items, role);

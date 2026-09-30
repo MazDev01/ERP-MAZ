@@ -65,6 +65,13 @@ export function empTypeOfRole(role: Role, staffId: string): EmpType {
   return HR_EMP.find((e) => e.id === id)?.type ?? "full";
 }
 
+/** ประเภทการจ้างของคนที่ล็อกอินอยู่ — เมนู "ของฉัน" ใช้ตัดรายการที่ไม่เกี่ยวกับคนนั้น */
+export function useMyEmpType(): EmpType {
+  const role = useRole();
+  const staffId = useStaffEmployeeId();
+  return useMemo(() => empTypeOfRole(role, staffId), [role, staffId]);
+}
+
 export function useMyLeavePolicy(): LeavePolicy {
   const role = useRole();
   const staffId = useStaffEmployeeId();

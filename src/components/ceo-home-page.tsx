@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { mobileHomeOf, navItemsOf, useMenuAccess } from "@/lib/nav";
+import { useMyEmpType } from "@/lib/leave-policy";
 import { useMyRoles } from "@/lib/hr-link";
 import { useHydrated } from "@/lib/pwa";
 import { useProfile } from "@/lib/profile-data";
@@ -57,7 +58,8 @@ export function RoleHomePage() {
   /* การ์ดตรงกับเมนูข้างเสมอ ไม่กรองทิ้งรายการไหน — มือถือกับจอกว้างจะได้เห็นหน้าชุดเดียวกัน
      (เดิมตัดโอทีกับสลิปเงินเดือนของทีมงานออกตามต้นแบบ my-home.html ที่มีแค่ห้าการ์ด
       แต่ต้นแบบนั้นไม่มีสองเมนูนี้ในเมนูข้างด้วย พอระบบจริงมี คนที่ใช้แต่มือถือจึงหาสลิปของตัวเองไม่เจอ) */
-  const items = navItemsOf(roles, access, route);
+  /* ประเภทการจ้างตัดเมนู "ของฉัน" เหมือนแถบซ้าย (เจ้าของสั่ง 30 ก.ย. 2569) */
+  const items = navItemsOf(roles, access, route, useMyEmpType());
   /* บนจอกว้างไปเมนูแรกที่เป็นงานของบทบาท — ข้ามหน้าตอกบัตรเพราะมีแถบข้างอยู่แล้ว */
   const first = items.find((i) => i.href !== "/")?.href ?? "/";
   /*

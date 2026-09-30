@@ -6,6 +6,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { bottomNav, canVisitAny, findItem, homeOf, mobileHomeOf, navGroupsOf, navItemsOf, pageTitle, useMenuAccess, type IconName, type NavItem } from "@/lib/nav";
 import { BillingNavDot } from "./acc-ui";
 import { useMyRoles } from "@/lib/hr-link";
+import { useMyEmpType } from "@/lib/leave-policy";
 import { thaiDate, todayIso } from "@/lib/format";
 import { useHydrated } from "@/lib/pwa";
 import { lockScroll } from "@/lib/scroll-lock";
@@ -103,14 +104,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const route = useApprovalRoute();
   /* คนที่ควบสองตำแหน่งเห็นแถบงานของทั้งสองฝ่าย (บัญชีผู้ใช้กำหนดไว้ที่ /hr/accounts) */
   const roles = useMyRoles();
-  const items = navItemsOf(roles, access, route);
+  /* ประเภทการจ้างตัดเมนู "ของฉัน" — ฝึกงานไม่มีโอทีและสลิป (เจ้าของสั่ง 30 ก.ย. 2569) */
+  const empType = useMyEmpType();
+  const items = navItemsOf(roles, access, route, empType);
   const groups = navGroupsOf(roles);
   const current = findItem(pathname, role);
   const title = pageTitle(pathname, role);
   /* บทบาทอ่านจาก localStorage ฝั่งเซิร์ฟเวอร์ยังไม่รู้ จึงเช็คสิทธิ์หลัง hydrate เท่านั้น
      ไม่งั้น PM จะเห็นหน้ากันแวบหนึ่งทุกครั้งที่รีเฟรช เพราะค่าเริ่มต้นฝั่งเซิร์ฟเวอร์เป็นฝ่ายขาย */
   const hydrated = useHydrated();
-  const blocked = hydrated && !canVisitAny(pathname, roles, access, route);
+  const blocked = hydrated && !canVisitAny(pathname, roles, access, route, empType);
   /*
    * หน้าที่ "ไปแล้วกลับไม่ได้" — หน้าย่อยที่ไม่มีในเมนูซ้าย เช่น รายละเอียดผู้สนใจ ใบเสนอราคา ใบแจ้งหนี้
    * บนมือถือมีปุ่มกลับหน้าหลักอยู่แล้ว จอคอมเดิมไม่มีอะไรให้กลับนอกจากปุ่ม back ของเบราว์เซอร์
@@ -443,7 +446,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : (
           /* บทบาทอื่นคงของเดิม — สี่หน้าที่เข้าบ่อย ที่เหลือกด "อื่นๆ" เปิดลิ้นชัก */
           <>
-            {bottomNav(role, access, route).map((item) => {
+            {bottomNav(role, access, route, empType).map((item) => {
               const ItemIcon = ICONS[item.icon];
               const active = (current?.parent ?? current?.href) === item.href;
               return (

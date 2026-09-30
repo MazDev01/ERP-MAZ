@@ -55,7 +55,12 @@ export type NavItem = {
   parent?: string;
 };
 
-/** งานบุคคลของตัวเอง — ทุกบทบาทเห็นชุดนี้เหมือนกัน */
+/*
+ * งานบุคคลของตัวเอง — ทุกบทบาทเห็นชุดนี้ แต่ "ประเภทการจ้าง" ตัดบางเมนูออก
+ * (เจ้าของสั่ง 30 ก.ย. 2569 · ตามเอกสารสอบถามฝ่ายบุคคล)
+ *   ฝึกงาน   ไม่มีค่าจ้างและสลิป และไม่มีโอที — เหลือเวลาทำงาน การลา เบิกค่าใช้จ่าย
+ *   ทดลองงาน จ่ายรายวัน มีสลิปค่าจ้างรายสัปดาห์ — เมนูครบ แต่เรียกว่า "สลิปค่าจ้าง"
+ */
 const MINE: NavItem[] = [
   {
     group: "ของฉัน",
@@ -73,6 +78,20 @@ const MINE: NavItem[] = [
   /* ปลายทางของสายเงินเดือน — ฝ่ายบุคคลเผยแพร่แล้วทุกคนเปิดดูของตัวเองได้จากตรงนี้ */
   { group: "ของฉัน", label: "สลิปเงินเดือน", icon: "receipt", href: "/payslip" },
 ];
+
+/** ประเภทการจ้าง — ชนิดเดียวกับทะเบียนฝ่ายบุคคล (ไม่ import เพื่อไม่ให้ nav ผูกกับข้อมูล HR) */
+export type MineEmpType = "full" | "probat" | "intern";
+
+/** เมนู "ของฉัน" ที่ประเภทการจ้างนี้เห็น */
+function mineFor(type: MineEmpType = "full"): NavItem[] {
+  if (type === "intern")
+    /* ฝึกงานไม่มีค่าจ้าง จึงไม่มีสลิปและไม่มีโอที — แต่ยังต้องลงเวลาและลา */
+    return MINE.filter((i) => i.href !== "/ot" && i.href !== "/payslip");
+  if (type === "probat")
+    /* ทดลองงานจ่ายรายวัน สลิปเป็นค่าจ้างรายสัปดาห์ ไม่ใช่เงินเดือน */
+    return MINE.map((i) => (i.href === "/payslip" ? { ...i, label: "สลิปค่าจ้าง" } : i));
+  return MINE;
+}
 
 /* ลำดับและชื่อเมนูตาม Proposal · Sales Site Map */
 const SALES: NavItem[] = [
@@ -260,6 +279,8 @@ export function navItems(
   role: Role,
   access: MenuAccess = accessStore.get(),
   route?: ApprovalRoute,
+  /** ประเภทการจ้างของคนที่ล็อกอินอยู่ — ตัดเมนู "ของฉัน" ที่ไม่เกี่ยวกับคนนั้นออก */
+  empType?: MineEmpType,
 ): NavItem[] {
   const hidden = new Set(access[role] ?? []);
   const { work: all, group, approvalsAfter } = BY_ROLE[role];
@@ -268,7 +289,7 @@ export function navItems(
   const shown = (i: NavItem) => !hidden.has(i.href);
   const approves = role !== "ceo" && approvesFor(role, route).length > 0;
   const approvals: NavItem[] = approves ? [{ ...APPROVALS_ITEM, group }] : [];
-  const mine = NO_MINE.includes(role) ? [] : MINE.filter(shown);
+  const mine = NO_MINE.includes(role) ? [] : mineFor(empType).filter(shown);
   return [...all.slice(0, at || all.length).filter(shown), ...approvals, ...all.slice(at || all.length).filter(shown), ...mine];
 }
 
@@ -280,10 +301,11 @@ export function navItemsOf(
   roles: Role[],
   access: MenuAccess = accessStore.get(),
   route?: ApprovalRoute,
+  empType?: MineEmpType,
 ): NavItem[] {
   const seen = new Set<string>();
   return roles
-    .flatMap((r) => navItems(r, access, route))
+    .flatMap((r) => navItems(r, access, route, empType))
     .filter((i) => (seen.has(i.href) ? false : seen.add(i.href)));
 }
 
@@ -305,8 +327,9 @@ export function canVisitAny(
   roles: Role[],
   access?: MenuAccess,
   route?: ApprovalRoute,
+  empType?: MineEmpType,
 ): boolean {
-  return roles.some((r) => canVisit(pathname, r, access, route));
+  return roles.some((r) => canVisit(pathname, r, access, route, empType));
 }
 
 export function navGroups(role: Role): NavGroup[] {
@@ -354,8 +377,13 @@ const BOTTOM_HREFS: Record<Role, string[]> = {
   ceo: ["/ceo/home", "/ceo/dashboard", "/ceo/approvals"],
 };
 
-export function bottomNav(role: Role, access?: MenuAccess, route?: ApprovalRoute): NavItem[] {
-  const all = navItems(role, access, route);
+export function bottomNav(
+  role: Role,
+  access?: MenuAccess,
+  route?: ApprovalRoute,
+  empType?: MineEmpType,
+): NavItem[] {
+  const all = navItems(role, access, route, empType);
   return BOTTOM_HREFS[role]
     /* หน้านอกเมนูซ้ายที่ตั้งใจให้อยู่แถบล่าง เช่น หน้าหลักของ CEO บนมือถือ */
     .map((href) => all.find((item) => item.href === href) ?? EXTRA_PAGES[href])
@@ -477,11 +505,12 @@ export function canVisit(
   role: Role,
   access?: MenuAccess,
   route?: ApprovalRoute,
+  empType?: MineEmpType,
 ): boolean {
   if (SHARED_PAGES.includes(pathname)) return true;
   const owner = EXTRA_OWNER[pathname];
   if (owner) return Array.isArray(owner) ? owner.includes(role) : owner === role;
-  return Boolean(matchIn(navItems(role, access, route), pathname));
+  return Boolean(matchIn(navItems(role, access, route, empType), pathname));
 }
 
 /*
