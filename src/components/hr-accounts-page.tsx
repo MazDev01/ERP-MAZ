@@ -20,9 +20,10 @@ import {
   type EmpAccount,
   type Employee,
 } from "@/lib/hr-data";
-import { createAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
+import { HR_ME, createAccount, deleteAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
 import { rolesOfEmployee, suggestUserOf } from "@/lib/hr-data";
 import { ROLES, type Role } from "@/lib/role";
+import { ConfirmDialog } from "./confirm-dialog";
 import { Sheet } from "./lead-dialogs";
 import { Field, Input, Select } from "./ui";
 import { SearchBox } from "./sales-ui";
@@ -50,6 +51,8 @@ function tempPass() {
 export function HrAccountsPage() {
   /* กล่องกำหนดบทบาทของบัญชี — เดิมอยู่หน้าบทบาทและสิทธิ์ที่ยุบทิ้งไปแล้ว (29 ก.ย. 2569) */
   const [roling, setRoling] = useState<string | null>(null);
+  /* บัญชีที่กำลังจะลบบนมือถือ — ยืนยันในกล่อง เพราะการ์ดไม่มีที่ให้กดสองครั้ง */
+  const [deleting, setDeleting] = useState<string | null>(null);
   const hr = useHr();
   const today = todayIso();
   const [query, setQuery] = useState("");
@@ -128,6 +131,8 @@ export function HrAccountsPage() {
                     onToggle={() =>
                       setAccountStatus(e.id, e.account?.status === "active" ? "suspended" : "active")
                     }
+                    onDelete={() => deleteAccount(e.id)}
+                    mine={e.id === HR_ME}
                   />
                 ))
               )}
@@ -185,6 +190,15 @@ export function HrAccountsPage() {
                       >
                         {a.status === "active" ? "ระงับบัญชี" : "คืนสิทธิ์"}
                       </button>
+                      {e.id !== HR_ME && (
+                        <button
+                          type="button"
+                          className="btn glass-thin !text-destructive"
+                          onClick={() => setDeleting(e.id)}
+                        >
+                          ลบบัญชี
+                        </button>
+                      )}
                     </>
                   ) : (
                     <button
@@ -215,6 +229,21 @@ export function HrAccountsPage() {
         />
       )}
 
+      {/* ยืนยันลบบัญชี — ใช้จากการ์ดบนมือถือ (ตารางบนจอคอมกดปุ่มซ้ำสองครั้งแทน) */}
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="ลบบัญชีผู้ใช้"
+        description={`ลบบัญชีของ ${hr.emp.find((e) => e.id === deleting)?.name ?? ""}`}
+        detail="คนนี้จะเข้าระบบไม่ได้จนกว่าจะสร้างบัญชีใหม่ · ข้อมูลพนักงาน เวลาทำงาน และเงินเดือนยังอยู่ครบ"
+        confirmLabel="ลบบัญชี"
+        tone="destructive"
+        onConfirm={() => {
+          if (deleting) deleteAccount(deleting);
+          setDeleting(null);
+        }}
+        onCancel={() => setDeleting(null)}
+      />
+
       {roling && hr.emp.find((e) => e.id === roling)?.account && (
         <RolesDialog emp={hr.emp.find((e) => e.id === roling)!} onClose={() => setRoling(null)} />
       )}
@@ -229,14 +258,21 @@ function AccountRow({
   onReset,
   onRoles,
   onToggle,
+  onDelete,
+  mine,
 }: {
   emp: Employee;
   onNew: () => void;
   onReset: () => void;
   onRoles: () => void;
   onToggle: () => void;
+  onDelete: () => void;
+  /** บัญชีของคนที่กำลังใช้งานอยู่ — ลบตัวเองไม่ได้ */
+  mine: boolean;
 }) {
   const a = emp.account;
+  /* ลบต้องกดสองครั้ง — ลบพลาดแล้วคนนั้นเข้าระบบไม่ได้จนกว่าจะสร้างบัญชีใหม่ */
+  const [delAsk, setDelAsk] = useState(false);
   const st = a ? HR_ACC_STATUS[a.status] : null;
   return (
     <tr>
@@ -289,6 +325,20 @@ function AccountRow({
             </button>
             <button type="button" className="btn glass-thin btn-mini" onClick={onToggle}>
               {a.status === "active" ? "ระงับบัญชี" : "คืนสิทธิ์"}
+            </button>
+            {/* ลบบัญชี ไม่ใช่ลบคน — พนักงานยังอยู่ในทะเบียน · กดสองครั้งกันพลาด */}
+            <button
+              type="button"
+              className={`btn btn-mini ${delAsk ? "solid btn-solid" : "glass-thin !text-destructive"}`}
+              title={
+                mine
+                  ? "ลบบัญชีของตัวเองไม่ได้ ไม่งั้นจะเข้าระบบไม่ได้อีก"
+                  : "ลบบัญชีผู้ใช้ของคนนี้ ข้อมูลพนักงานยังอยู่"
+              }
+              disabled={mine}
+              onClick={() => (delAsk ? onDelete() : setDelAsk(true))}
+            >
+              {delAsk ? "กดอีกครั้งเพื่อลบ" : "ลบบัญชี"}
             </button>
           </span>
         ) : (

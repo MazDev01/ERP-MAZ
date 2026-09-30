@@ -290,6 +290,23 @@ export function resetAccount(id: string, user: string, roles: Role[]) {
   for (const r of ownRoles(id, roles)) requirePasswordReset(r, true);
 }
 
+/**
+ * ลบบัญชีผู้ใช้ของพนักงานคนนี้ (เจ้าของถาม 30 ก.ย. 2569)
+ * ลบแค่ "บัญชี" ไม่ใช่ลบคน — พนักงานยังอยู่ในทะเบียน เวลาทำงานและเงินเดือนไม่หาย (BR-02)
+ * ใช้ตอนสร้างบัญชีผิดคนหรือคนนั้นไม่ต้องใช้ระบบแล้ว · สร้างใหม่ได้เสมอ
+ * คืนสิทธิ์ให้บทบาทที่เคยถูกระงับด้วย ไม่งั้นบัญชีใหม่ของบทบาทนั้นจะเข้าไม่ได้
+ */
+export function deleteAccount(id: string) {
+  const emp = store.get().emp.find((e) => e.id === id);
+  for (const r of ownRoles(id, accountRoles(emp?.account))) restoreAccount(r);
+  editEmp(id, (e) => {
+    if (!e.account) return e;
+    const next = { ...e };
+    delete next.account;
+    return next;
+  });
+}
+
 /** เปลี่ยนบทบาทที่บัญชีนี้เข้าใช้ได้ (คนควบสองตำแหน่งได้สองบทบาท) */
 export function setAccountRoles(id: string, roles: Role[]) {
   editEmp(id, (e) => (e.account ? { ...e, account: { ...e.account, roles } } : e));
