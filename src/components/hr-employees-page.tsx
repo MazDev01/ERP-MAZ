@@ -1136,12 +1136,11 @@ function AddDialog({
             <Field
               label="ตำแหน่ง"
               required
+              /* ยังไม่เลือกก็ไม่ต้องมีข้อความอะไร เลือกแล้วค่อยบอกว่าได้เมนูของตำแหน่งไหน */
               hint={
-                !f.pos
-                  ? "เลือกตำแหน่งแล้วระบบจะบอกว่าเข้าใช้งานในตำแหน่งไหน"
-                  : rolesOfPosition(f.pos).length
-                    ? `เข้าระบบเป็น ${rolesOfPosition(f.pos).map(roleLabel).join(" + ")}`
-                    : "ตำแหน่งนี้ไม่ได้ใช้ระบบ จึงไม่มีบัญชีเข้าใช้งาน"
+                f.pos && rolesOfPosition(f.pos).length
+                  ? `เข้าระบบเป็น ${rolesOfPosition(f.pos).map(roleLabel).join(" + ")}`
+                  : undefined
               }
             >
               <Select value={f.pos} onChange={(e) => addPos.pick(e.target.value) || set("pos")(e)} aria-label="ตำแหน่ง">
@@ -1155,7 +1154,7 @@ function AddDialog({
               </Select>
             </Field>
             {addPos.dialog}
-            <Field label="ประเภทการจ้าง" required hint="คนเข้าใหม่ปกติเป็นทดลองงาน">
+            <Field label="ประเภทการจ้าง" required>
               <Select value={f.type} onChange={set("type")} aria-label="ประเภทการจ้าง">
                 <option value="">ยังไม่ระบุ</option>
                 {(Object.keys(HR_EMPTYPE) as EmpType[]).map((k) => (
