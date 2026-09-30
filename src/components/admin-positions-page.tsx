@@ -29,8 +29,7 @@ import {
   type RequestKind,
   type Role,
 } from "@/lib/role";
-import { AdminHead, Card, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
-import type { ApproverNames } from "@/lib/system-settings";
+import { AdminHead, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
 import { ChevronDownIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
@@ -139,32 +138,11 @@ function ApprChip({ who, dim }: { who: string; dim?: boolean }) {
   );
 }
 
-/* ลำดับที่โชว์ในการ์ดชื่อผู้อนุมัติ และป้ายชื่อเต็มของแต่ละคีย์ */
-const NAME_ORDER: ApproverKey[] = ["gm", "exec", "hr", "acc", "pm"];
-const APPROVER_LABEL: Record<ApproverKey, string> = {
-  gm: "GM (ผู้จัดการทั่วไป)",
-  exec: "CEO (ผู้บริหาร)",
-  hr: "ฝ่ายบุคคล",
-  acc: "บัญชี",
-  pm: "ผู้จัดการโครงการ",
-};
-
-function describeNames(a: ApproverNames, b: ApproverNames) {
-  return NAME_ORDER.filter((k) => a[k].name !== b[k].name || a[k].title !== b[k].title).map(
-    (k) => `${APPROVER_LABEL[k]}: ${a[k].name} (${a[k].title}) → ${b[k].name} (${b[k].title})`,
-  );
-}
-
-function apprProblem(v: ApproverNames) {
-  const bad = NAME_ORDER.find((k) => !v[k].name.trim() || !v[k].title.trim());
-  return bad ? `กรอกชื่อและตำแหน่งของ${APPROVER_LABEL[bad]}ให้ครบ` : "";
-}
 
 export function AdminPositionsPage() {
   const cat = useSectionDraft("catalog", "ตำแหน่งและสายอนุมัติ", describePos);
   const route = useSectionDraft("posRoute", "ตำแหน่งและสายอนุมัติ", describeRoute);
   /* ชื่อและตำแหน่งของผู้อนุมัติ — ขึ้นบนใบอนุมัติและเอกสาร เดิมแก้ที่หน้าบทบาทที่ยุบทิ้งไปแล้ว */
-  const appr = useSectionDraft("approvers", "ตำแหน่งและสายอนุมัติ", describeNames);
   const hr = useHr();
   /* สายอนุมัติรายบทบาท — ใช้เป็นค่าที่ตกไปถึงเมื่อตำแหน่งไม่ได้ตั้งของตัวเอง */
   const byRole = useApprovalRoute();
@@ -352,54 +330,20 @@ export function AdminPositionsPage() {
         </div>
       )}
 
-      {/* ชื่อผู้อนุมัติที่ใช้พิมพ์บนใบอนุมัติและเอกสาร */}
-      <Card
-        title="ชื่อผู้อนุมัติ"
-        note="ชื่อกับตำแหน่งที่ขึ้นบนใบลา ใบโอที ใบเบิก และเอกสารที่ต้องมีผู้อนุมัติ — เปลี่ยนคนแล้วแก้ที่นี่ที่เดียว"
-      >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {NAME_ORDER.map((k) => (
-            <div key={k} className="rounded-[14px] border border-border bg-card px-3.5 py-3">
-              <p className="mb-2 text-[12.5px] font-bold text-muted-foreground">{APPROVER_LABEL[k]}</p>
-              <Input2 label="ชื่อ">
-                <input
-                  value={appr.draft[k].name}
-                  onChange={(e) => appr.setDraft({ ...appr.draft, [k]: { ...appr.draft[k], name: e.target.value } })}
-                  className={inputCls}
-                />
-              </Input2>
-              <div className="mt-2.5">
-                <Input2 label="ตำแหน่งที่พิมพ์ในเอกสาร">
-                  <input
-                    value={appr.draft[k].title}
-                    onChange={(e) => appr.setDraft({ ...appr.draft, [k]: { ...appr.draft[k], title: e.target.value } })}
-                    className={inputCls}
-                  />
-                </Input2>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
       <SaveBar
-        dirty={cat.dirty || route.dirty || appr.dirty}
-        isDefault={!(cat.saved.positions?.length ?? 0) && !Object.keys(route.saved).length && appr.isDefault}
-        invalid={apprProblem(appr.draft)}
+        dirty={cat.dirty || route.dirty}
+        isDefault={!(cat.saved.positions?.length ?? 0) && !Object.keys(route.saved).length}
         onSave={() => {
           if (cat.dirty) cat.save();
           if (route.dirty) route.save();
-          if (appr.dirty) appr.save();
         }}
         onCancel={() => {
           cat.cancel();
           route.cancel();
-          appr.cancel();
         }}
         onDefault={() => {
           cat.setDraft({ ...cat.draft, positions: [], depts: [] });
           route.toDefault();
-          appr.toDefault();
         }}
       />
 
