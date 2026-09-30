@@ -113,12 +113,18 @@ function counted(r: LeaveRecord) {
 
 /** ใบลาหนึ่งใบกินหลายวันได้ กางออกเป็นรายวันเพื่อให้ตรงกับที่ฝ่ายบุคคลนับ */
 function spread(r: LeaveRecord) {
-  const out: { d: string; type: LeaveKind; span: "full" | "half"; no: string }[] = [];
+  const out: { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no: string }[] = [];
   const type = LEAVE_GROUP[r.type] ?? "personal";
   const span = r.half ? ("half" as const) : ("full" as const);
+  /* ลาไม่เต็มวันส่งชั่วโมงจริงไปให้ฝ่ายบุคคลด้วย (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1)
+     ใบวันเดียวที่มีช่วงเวลา จึงหักค่าจ้างตามชั่วโมงที่ลาจริง ไม่ใช่เหมาเป็นครึ่งวัน */
+  const hours =
+    r.date === r.toDate && r.startMin != null && r.endMin != null
+      ? (r.hours ?? (r.endMin - r.startMin) / 60)
+      : undefined;
   for (let d = r.date; d <= r.toDate; d = addDays(d, 1)) {
     /* ติดเลขที่ใบไปกับทุกวัน — ใบเดียวกันที่มาถึงอีกทางจะได้ไม่ถูกนับซ้ำ */
-    out.push({ d, type, span, no: r.id });
+    out.push({ d, type, span, hours, no: r.id });
     /* กันวนไม่รู้จบถ้าเจอใบที่วันสิ้นสุดมาก่อนวันเริ่ม */
     if (out.length > 90) break;
   }

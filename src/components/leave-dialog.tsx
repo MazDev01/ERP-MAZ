@@ -9,6 +9,7 @@ import { lockScroll } from "@/lib/scroll-lock";
 import { isWorkday } from "@/lib/holidays";
 import { leaveTypes, type LeaveRecord, type LeaveType } from "@/lib/leave-data";
 import { addLeaveRequest, editLeaveRequest, excessDays, leaveUsage } from "@/lib/leave-store";
+import { useMyLeavePolicy } from "@/lib/leave-policy";
 import { useOtRecords } from "@/lib/ot-store";
 import { hasNoApprover, useApprovalRoute, useRole } from "@/lib/role";
 import { currentProfile } from "@/lib/profile-data";
@@ -59,6 +60,8 @@ export function LeaveDialog({
   /* เปิดกล่องได้หลัง hydrate เท่านั้น — ถ้าใช้ typeof document เซิร์ฟเวอร์จะวาดว่าง แต่เบราว์เซอร์วาดกล่อง
      ตอนที่กล่องเปิดมาตั้งแต่แรก (เช่นลิงก์ ?new=1) React จะฟ้อง hydration ไม่ตรงกัน */
   const hydrated = useHydrated();
+  /* กติกาวันลาตามประเภทการจ้างของผู้ยื่น (เอกสารฝ่ายบุคคล 30 ก.ย. 2569) */
+  const policy = useMyLeavePolicy();
   const types = leaveTypes();
   const [type, setType] = useState<LeaveType>(edit?.type ?? types[0]);
   /* กดส่งแล้วยังไม่ครบ — ค่อยขึ้นข้อความว่าขาดอะไร ไม่ทักตั้งแต่ยังไม่ได้กรอก */
@@ -182,7 +185,15 @@ export function LeaveDialog({
       blocked = true;
     }
   }
-  if (entitled <= 0) {
+  /*
+   * ทดลองงานกับฝึกงานไม่มีโควตาวันลา (เอกสารฝ่ายบุคคล 30 ก.ย. 2569)
+   * จึงไม่กั้นเรื่องสิทธิ์ แต่บอกกติกาของประเภทการจ้างแทน
+   *   ทดลองงาน — ลาได้ แต่ช่วงที่ลาไม่ได้ค่าจ้าง
+   *   ฝึกงาน   — ลาได้ไม่จำกัด ไม่มีการหักเงิน
+   */
+  if (!policy.quota) {
+    problems.push(policy.note);
+  } else if (entitled <= 0) {
     problems.push("ไม่มีสิทธิ์ลาประเภทนี้ในรอบปีนี้");
     blocked = true;
   }
@@ -196,13 +207,13 @@ export function LeaveDialog({
    * สิทธิ์ตัดตอนอนุมัติเท่านั้น ใบที่ยังรออนุมัติจึงไม่เอามาหักตรงนี้ (ไม่งั้นสองจอได้เลขไม่ตรงกัน)
    * แต่ยังบอกแยกอีกบรรทัดว่ามีใบค้างอยู่กี่วัน ผู้ยื่นจะได้ไม่เซอร์ไพรส์ทีหลัง
    */
-  const over = excessDays(records, type, days, period);
+  const over = policy.quota ? excessDays(records, type, days, period) : 0;
   if (over > 0) {
     problems.push(
       `เกินสิทธิ์คงเหลือ ${fmt(over)} วัน — ส่วนที่เกินถือเป็นลาไม่รับค่าจ้าง หักจากเงินเดือน`,
     );
   }
-  if (quota.pending > 0 && days > 0) {
+  if (policy.quota && quota.pending > 0 && days > 0) {
     const after = Math.max(0, quota.remaining - quota.pending - days);
     problems.push(
       `มีใบลาประเภทนี้รออนุมัติอยู่ ${fmt(quota.pending)} วัน — ถ้าอนุมัติครบทุกใบรวมใบนี้ จะเหลือ ${fmt(after)} วัน`,

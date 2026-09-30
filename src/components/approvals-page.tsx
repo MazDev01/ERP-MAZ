@@ -48,7 +48,7 @@ import {
 import { USERS } from "@/lib/mock-data";
 import { type OtRecord } from "@/lib/ot-data";
 import { approveOt, rejectOt, useAllOt } from "@/lib/ot-store";
-import { approvesFor, roleLabel, useApprovalRoute, type Role } from "@/lib/role";
+import { ROLES, approvesFor, roleLabel, useApprovalRoute, type Role } from "@/lib/role";
 import { useMyRoles } from "@/lib/hr-link";
 import { useSearchParams } from "next/navigation";
 import { formatMinutesOfDay, minutesOfDay } from "@/lib/work-schedule";
@@ -190,16 +190,31 @@ export function ApprovalsPage() {
           pending: r.status === "pending",
         })),
     ];
+    /*
+     * ใบลาของนักศึกษาฝึกงานขึ้นที่ฝ่ายบุคคล ไม่ใช่สายอนุมัติปกติ
+     * (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 — ฝึกงานลากับฝ่ายบุคคล)
+     * ดูจากชื่อผู้ยื่นเทียบทะเบียน เพราะบทบาททีมงานมีได้หลายคนหลายประเภทการจ้าง
+     */
+    const isIntern = (name: string) =>
+      hr.emp.some((e) => e.name === name && e.type === "intern");
     for (const { kind, from, as } of duties) {
       /* ใบลาที่ยกเลิกแล้วไม่เข้าคิวอนุมัติ แต่ยังอยู่ในระบบเป็นประวัติ */
       if (kind === "leave")
         for (const v of leaves[from])
-          if (v.status !== "ยกเลิก") out.push(fromLeave(from, v, as, leaves[from], spans));
+          if (v.status !== "ยกเลิก" && !isIntern(v.employee))
+            out.push(fromLeave(from, v, as, leaves[from], spans));
       if (kind === "ot")
         for (const v of ots[from]) if (v.status !== "ยกเลิก") out.push(fromOt(from, v, as));
       if (kind === "expense")
         for (const v of claims[from]) if (v.status !== "ร่าง") out.push(fromClaim(from, v, as));
     }
+    /* ฝ่ายบุคคลรับใบลาของนักศึกษาฝึกงานทุกคน ไม่ว่าสายอนุมัติปกติจะเป็นใคร */
+    if (myRoles.includes("hr"))
+      for (const role of ROLES.map((r) => r.key))
+        for (const v of leaves[role])
+          if (v.status !== "ยกเลิก" && isIntern(v.employee))
+            out.push(fromLeave(role, v, "hr", leaves[role], spans));
+
     /* คิวของ PM / GM — คำขอของทีมงานตามรหัสพนักงาน (ต้นแบบ PM_APPROVALS · gm-approvals) */
     for (const as of myRoles) {
       if (as !== "pm" && as !== "gm") continue;

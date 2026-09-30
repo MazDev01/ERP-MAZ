@@ -786,7 +786,12 @@ export const HR_ISSUE_LABEL: Record<IssueKind, string> = {
          (สโตร์ของบทบาท และคิวคำขอรายรหัส) ต้องนับครั้งเดียว จึงต้องเทียบเลขที่ก่อน
          ข้อมูลตั้งต้นของฝ่ายบุคคลไม่มีเลขที่ จึงเป็นช่องที่ว่างได้ */
 export type LateRow = { d: string; min: number; was?: number };
-export type LeaveRow = { d: string; type: LeaveKind; span: "full" | "half"; no?: string };
+/*
+ * วันลาหนึ่งวันของคนหนึ่ง
+ * hours = ชั่วโมงที่ลาจริงของวันนั้น (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1 — ลาไม่เต็มวันนับตามชั่วโมง)
+ * ไม่มีค่า = ใช้ span เหมือนเดิม (เต็มวัน หรือครึ่งวัน)
+ */
+export type LeaveRow = { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no?: string };
 export type OtRow = { d: string; h: number; kind: OtKind; was?: number; no?: string };
 export type IssueRow = { d: string; kind: IssueKind; note: string };
 
@@ -1226,12 +1231,12 @@ export function isDaily(e: Employee) {
 }
 
 /**
- * อัตราค่าจ้างรายวัน
- * ⚠️ ยังไม่มีข้อมูลค่าจ้างรายวันจริงของพนักงานทดลองงาน — ประมาณจากเงินเดือนที่บันทึกไว้ ÷ 30 ตามต้นแบบ
- * ต้องยืนยันกับฝ่ายบุคคลก่อนใช้จริง
+ * อัตราค่าจ้างรายวันของพนักงานทดลองงาน
+ * = ฐานเงินเดือน ÷ จำนวนวันทำงานต่อเดือน (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 1.2 — หารด้วย 22 วัน)
+ * ตัวหารตั้งได้ที่ตั้งค่าระบบ ไม่ใช่ค่าตายตัวในโปรแกรม
  */
 export function dailyRateIn(e: Employee, c: Cycle) {
-  return baseSalaryIn(e, c) / HR_OT_DIVISOR.days;
+  return baseSalaryIn(e, c) / (ratesOn(c.to).workDaysPerMonth || 22);
 }
 
 /**
@@ -1247,10 +1252,18 @@ export function workedDaysIn(
 ) {
   const upTo = (d: string) => !today || d <= today;
   const days = daysOfIn(e, c).filter(upTo).length;
+  /*
+   * ลาไม่เต็มวันหักตามชั่วโมงจริง (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1)
+   * เช่น ลากิจ 09:00–12:00 = 3 ชั่วโมง = 3/8 ของวัน ไม่ใช่ครึ่งวันเหมาะ ๆ
+   * ใบเก่าที่ไม่ได้เก็บชั่วโมงไว้ ยังใช้ครึ่งวัน = 0.5 เหมือนเดิม
+   */
   const leave = recInRange(time, e.id, c)
     .leave.filter((x) => upTo(x.d))
-    .reduce((a, x) => a + (x.span === "half" ? 0.5 : 1), 0);
-  return days - leave;
+    .reduce(
+      (a, x) => a + (x.hours != null ? Math.min(1, x.hours / HR_OT_DIVISOR.hours) : x.span === "half" ? 0.5 : 1),
+      0,
+    );
+  return round2(days - leave);
 }
 
 export type PaySlipCalc = {

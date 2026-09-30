@@ -24,6 +24,8 @@ import {
 import { formatMinutesOfDay } from "@/lib/work-schedule";
 import { ApproverNote } from "./approver-note";
 import { LeaveDialog } from "./leave-dialog";
+import { useMyLeavePolicy } from "@/lib/leave-policy";
+import { HR_EMPTYPE } from "@/lib/hr-data";
 import { Sheet } from "./lead-dialogs";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, LeaveIcon, PlusIcon } from "./icons";
 
@@ -90,6 +92,8 @@ export function LeavePage() {
   const [flash, setFlash] = useState<number | null>(null);
   /* ใบที่กำลังกดยกเลิก — ต้องกรอกเหตุผลก่อน ใบไม่ถูกลบทิ้ง (ผู้ใช้ตัดสิน 23 ก.ย. 2569) */
   const [cancelling, setCancelling] = useState<LeaveRecord | null>(null);
+  /* กติกาวันลาของคนที่ล็อกอินอยู่ — ประจำ / ทดลองงาน / ฝึกงาน คนละกติกากัน */
+  const policy = useMyLeavePolicy();
   /* ใบที่กำลังแก้ — เปิดกล่องเดียวกับตอนยื่น แต่เติมค่าเดิมไว้ให้ (เจ้าของสั่ง 29 ก.ย. 2569) */
   const [editing, setEditing] = useState<LeaveRecord | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -178,9 +182,22 @@ export function LeavePage() {
         </p>
       )}
 
+      {/*
+        กติกาวันลาต่างกันตามประเภทการจ้าง (เอกสารฝ่ายบุคคล 30 ก.ย. 2569)
+        ทดลองงานกับฝึกงานไม่มีโควตา จึงไม่ต้องขึ้นการ์ดสิทธิ์ให้เข้าใจผิดว่ามีวันลาสะสม
+      */}
+      {!policy.quota && (
+        <p className="glass flex items-start gap-2.5 rounded-2xl px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
+          <LeaveIcon className="mt-0.5 size-4 flex-none text-primary" strokeWidth={2.2} />
+          <span>
+            <b className="font-semibold text-foreground">{HR_EMPTYPE[policy.type].label}</b> · {policy.note}
+          </span>
+        </p>
+      )}
+
       {/* ── สิทธิ์คงเหลือแต่ละประเภท ── */}
       {/* มือถือวางสองคอลัมน์ ย่อขนาดตัวอักษรลงเล็กน้อยให้เห็นสิทธิ์ครบในจอเดียว */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
+      <div className={`grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] ${policy.quota ? "" : "hidden"}`}>
         {leaveTypes().filter((t) => entitlementDays(t, period) > 0).map((t, n) => {
           const base = entitlementDays(t, period);
           /* ลาพักร้อนที่ยกมาจากปีก่อน (ถ้าผู้ดูแลระบบเปิดให้ยกยอด) รวมเข้าไปในสิทธิ์ของปีนี้ */

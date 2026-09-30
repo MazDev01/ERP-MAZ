@@ -99,6 +99,11 @@ export type RateSettings = {
   lateFreeMinutes: number;
   /** ระยะทดลองงาน (เดือน) — probation_months ใน ERD */
   probationMonths: number;
+  /**
+   * วันทำงานต่อเดือนที่ใช้หารเป็นค่าจ้างรายวันของพนักงานทดลองงาน
+   * เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 1.2 — ค่าจ้างรายวัน = ฐานเงินเดือน ÷ 22 วัน
+   */
+  workDaysPerMonth: number;
   /** จ่ายคืนค่าน้ำมันกิโลเมตรละกี่บาท (Full Proposal · M5 การคำนวณเงินเดือน) */
   fuelPerKm: number;
   /** ลาพักร้อนที่เหลือยกไปปีถัดไปได้สูงสุดกี่วัน — 0 = ไม่ยกยอด หมดสิ้นปี (ตั้งที่ /admin/leave) */
@@ -313,6 +318,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     latePerMinute: 5,
     lateFreeMinutes: 0,
     probationMonths: 3,
+    workDaysPerMonth: 22,
     fuelPerKm: 5,
     /* ตั้งต้นไม่ยกยอด ตาม ERD (HR-BR-13 ไม่สะสมข้ามปี) — ผู้ดูแลเปิดได้ที่หน้าประเภทการลา */
     vacationCarryMax: 0,
