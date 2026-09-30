@@ -23,6 +23,7 @@ import {
   RejectQuotationDialog,
 } from "./quotation-dialogs";
 import { Pager, SearchBox, Who, usePaged } from "./sales-ui";
+import { QuotationsMobile } from "./quotations-mobile";
 
 const PER_PAGE = 7;
 
@@ -278,7 +279,10 @@ export function QuotationsPage() {
         </p>
       )}
 
-      <section className="panel glass flex flex-col">
+      {/* มือถือดูเป็น "รายลูกค้า" ตามต้นแบบ quotations-mobile.html · จอคอมยังเป็นตารางรายใบเหมือนเดิม */}
+      <QuotationsMobile />
+
+      <section className="panel glass hidden flex-col md:flex">
         <div className="strip">
           <button
             type="button"
@@ -353,7 +357,7 @@ export function QuotationsPage() {
           </table>
         </div>
 
-        <ul className="divide-y divide-border md:hidden">
+        <ul className="hidden divide-y divide-border">
           {paged.list.length === 0 ? (
             <li className="px-5 py-12 text-center text-muted-foreground">
               ไม่พบใบเสนอราคาที่ตรงกับเงื่อนไข
