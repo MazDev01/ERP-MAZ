@@ -51,32 +51,26 @@ function homeAfterLogin(r: Role) {
  * ผู้ใช้ในระบบมี 5 แบบเท่านั้น (เจ้าของกำหนด 30 ก.ย. 2569)
  * ที่เหลือเป็น "ตำแหน่ง" ในทะเบียนฝ่ายบุคคล ซึ่งเป็นตัวกำหนดว่าจะได้เมนูงานชุดไหน
  */
-type LoginKind = "ceo" | "full" | "probat" | "intern";
+type LoginKind = "ceo" | "hr" | "full" | "probat" | "intern";
 
-/*
- * เลือกตอนเข้าระบบแค่ "ประเภทการจ้าง" 3 แบบ (เจ้าของสั่ง 30 ก.ย. 2569)
- * ฝ่ายบุคคลเป็น "ตำแหน่ง" ของพนักงานประจำคนหนึ่ง ไม่ใช่แบบแยกต่างหาก
- * CEO ไม่ใช่พนักงานในทะเบียน จึงเข้าด้วยชื่อผู้ใช้ของตัวเองแทน (ลิงก์ใต้ฟอร์ม)
- */
 const LOGIN_KINDS: { key: LoginKind; label: string; en: string }[] = [
   { key: "full", label: "พนักงานประจำ", en: "Employee" },
   { key: "probat", label: "ทดลองงาน", en: "Probation" },
   { key: "intern", label: "ฝึกงาน", en: "Internship" },
+  { key: "hr", label: "ฝ่ายบุคคล", en: "Human Resources" },
+  { key: "ceo", label: "ผู้บริหาร", en: "CEO" },
 ];
 
-/**
- * คนในทะเบียนของแบบนั้น — ทุกแบบต้องเลือกได้ว่าเป็นใคร (เจ้าของทัก 30 ก.ย. 2569)
- * ฝ่ายบุคคล = คนที่ถือตำแหน่งฝ่ายบุคคล (รวมคนที่ควบตำแหน่งนี้)
- * CEO ไม่ได้อยู่ในทะเบียนพนักงาน (ไม่ลงเวลา ไม่มีสลิป) จึงไม่มีรายชื่อให้เลือก
- */
+/** คนในทะเบียนของแบบนั้น — CEO กับฝ่ายบุคคลผูกกับคนเดียวอยู่แล้ว จึงไม่ต้องเลือก */
 function peopleOfKind(kind: LoginKind): Employee[] {
-  if (kind === "ceo") return [];
+  if (kind === "ceo" || kind === "hr") return [];
   return HR_EMP.filter((e) => e.status === "active" && e.type === (kind as EmpType));
 }
 
 /** บทบาทที่จำไว้ครั้งก่อน → แบบที่ควรเลือกไว้ให้ */
 function kindOfRole(role: Role): LoginKind {
-  return role === "ceo" ? "ceo" : "full";
+  if (role === "ceo" || role === "hr") return role;
+  return "full";
 }
 
 export function LoginForm() {
@@ -143,8 +137,7 @@ export function LoginForm() {
   /* คนที่เลือกไว้ต้องอยู่ในรายการของแบบนี้ ไม่งั้นใช้คนแรก */
   const person = people.find((e) => e.id === who) ?? people[0];
   /* บทบาทจริงที่ใช้เปิดเมนู — มาจากตำแหน่งของคนที่เลือก ไม่ใช่สิ่งที่ผู้ใช้เลือกเอง */
-  /* ฝ่ายบุคคลกับผู้บริหารเข้าด้วยบทบาทของตัวเองตรง ๆ ที่เหลือดูจากตำแหน่งของคนที่เลือก */
-  const role: Role = kind === "ceo" ? "ceo" : (rolesOfEmployee(person)[0] ?? "staff");
+  const role: Role = people.length === 0 ? (kind as Role) : (rolesOfEmployee(person)[0] ?? "staff");
 
   function edit(which: "user" | "pass", v: string) {
     if (which === "user") {
@@ -274,7 +267,7 @@ export function LoginForm() {
               <legend className="mb-1.5 text-[13px] font-medium text-muted-foreground">
                 Sign in as · เข้าใช้งานเป็น
               </legend>
-              <div className="grid gap-1.5 sm:grid-cols-3">
+              <div className="grid gap-1.5 sm:grid-cols-2">
                 {LOGIN_KINDS.map((k) => (
                   <button
                     key={k.key}
@@ -292,17 +285,6 @@ export function LoginForm() {
                   </button>
                 ))}
               </div>
-              {/* ผู้บริหารไม่ได้อยู่ในทะเบียนพนักงาน จึงเข้าด้วยชื่อผู้ใช้ของตัวเอง ไม่ใช่การ์ดประเภทการจ้าง */}
-              <button
-                type="button"
-                onClick={() => setKind((v) => (v === "ceo" ? "full" : "ceo"))}
-                aria-pressed={kind === "ceo"}
-                className={`mt-1.5 text-[12px] font-semibold ${
-                  kind === "ceo" ? "text-primary underline" : "text-muted-foreground hover:text-primary"
-                }`}
-              >
-                เข้าเป็นผู้บริหาร (CEO)
-              </button>
             </fieldset>
 
             {/*
