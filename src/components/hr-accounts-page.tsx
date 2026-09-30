@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import { thaiDate, todayIso } from "@/lib/format";
 import {
   HR_ACC_STATUS,
+  HR_EMPTYPE,
   accountRoles,
   hrActivePositions,
   hrDepts,
@@ -283,8 +284,12 @@ function AccountRow({
     <tr>
       <td data-label="พนักงาน">
         <b className="block text-[13.5px] font-semibold">{emp.name}</b>
+        {/* ตอนสร้างบัญชีต้องเห็นว่าคนนี้ตำแหน่งอะไรและจ้างแบบไหน (เจ้าของถาม 30 ก.ย. 2569) */}
         {/* ยังไม่มีตำแหน่ง — ข้อความตาม mockup (posLabel) */}
-        <span className="why">{emp.pos ? hrPos(emp.pos).label : "ยังไม่ได้กรอกข้อมูล"}</span>
+        <span className="why">
+          {emp.pos ? posOf(emp).map((v) => hrPos(v).label).join(" · ") : "ยังไม่ได้กรอกข้อมูล"}
+          {` · ${HR_EMPTYPE[emp.type].label}`}
+        </span>
       </td>
       <td data-label="ชื่อผู้ใช้" className="num">
         {a ? a.user : <span className="muted">ยังไม่มีบัญชี</span>}
@@ -410,8 +415,12 @@ function AccountDialog({
         <p className="text-[14px] font-semibold">
           {emp.name}
           <span className="ml-2 text-[12.5px] font-normal text-muted-foreground">
-            {hrPos(emp.pos).label}
+            {posOf(emp).map((v) => hrPos(v).label).join(" · ")} · {HR_EMPTYPE[emp.type].label}
           </span>
+        </p>
+        {/* บอกไปเลยว่าบัญชีนี้จะได้เมนูของตำแหน่งไหน จะได้ไม่ต้องเดาตอนสร้าง */}
+        <p className="mt-1 text-[12.5px] text-muted-foreground">
+          ได้เมนู {roles.map(roleLabel).join(" + ") || "—"}
         </p>
       </Field>
 
