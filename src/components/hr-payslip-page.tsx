@@ -207,10 +207,18 @@ export function HrPayslipPage() {
           </div>
           {/* มือถือ: สองปุ่มแบ่งครึ่งแถว สูงพอให้นิ้วกด */}
           <span className="my-2 ml-auto flex gap-2 max-sm:ml-0 max-sm:w-full max-sm:[&>.btn]:h-10! max-sm:[&>.btn]:flex-1 max-sm:[&>.btn]:justify-center">
+            {/* ปุ่มที่กดไม่ลงต้องบอกเหตุผลที่ตัวปุ่มเอง ไม่ใช่ให้ไปหาอ่านในตาราง (ทดสอบฝ่ายบุคคล 30 ก.ย. 2569) */}
             <button
               type="button"
               className="btn glass-thin h-9 disabled:opacity-45"
               disabled={!payClosed || state !== "none"}
+              title={
+                !payClosed
+                  ? "ต้องปิดรอบเงินเดือนของกลุ่มนี้ก่อน"
+                  : state !== "none"
+                    ? "สร้างสลิปของรอบนี้ไปแล้ว"
+                    : undefined
+              }
               onClick={() => makeSlips(month, today, tab)}
             >
               สร้างสลิป
@@ -219,6 +227,13 @@ export function HrPayslipPage() {
               type="button"
               className="btn solid btn-solid h-9 disabled:opacity-45"
               disabled={!payClosed || state === "none"}
+              title={
+                !payClosed
+                  ? "ต้องปิดรอบเงินเดือนของกลุ่มนี้ก่อน"
+                  : state === "none"
+                    ? "ต้องสร้างสลิปก่อนจึงเผยแพร่ได้"
+                    : undefined
+              }
               onClick={() => setPublishing(true)}
             >
               {locked ? "ยกเลิกการเผยแพร่" : "เผยแพร่"}
