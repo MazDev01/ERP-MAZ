@@ -31,9 +31,11 @@ import { popupOn, useNotifySettings } from "@/lib/notify-settings";
 import { useOtRecords } from "@/lib/ot-store";
 import { BellIcon, CheckIcon, CloseIcon } from "./icons";
 
-export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
-  /* "bar" = ปุ่มในแถบล่างบนมือถือ — กล่องยังคลี่จากขอบบนเหมือนเดิม เพราะกล่องยาว */
-  const bar = variant === "bar";
+/*
+ * เรื่องที่ต้องรู้ของบทบาทที่ล็อกอินอยู่ — กระดิ่งกับหน้าหลักบนมือถือใช้ชุดเดียวกัน
+ * แยกเป็นฮุกเพื่อไม่ให้สองที่คิดคนละชุดแล้วตัวเลขไม่ตรงกัน (30 ก.ย. 2569)
+ */
+export function useNotices(): Notice[] {
   const crm = useCrm();
   const hr = useHr();
   const adminLog = useAdminLog();
@@ -47,7 +49,6 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
     getRecordsServerSnapshot,
   );
   const claims = useExpenseClaims();
-  const read = useReadNotices();
   const role = useRole();
   const route = useApprovalRoute();
   const access = useMenuAccess();
@@ -81,6 +82,31 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
     const queues = myRoles.filter((r): r is "pm" | "gm" => r === "pm" || r === "gm");
     return sum + extra.filter((r) => r.to !== "exec" && queues.includes(r.to) && r.status === "pending").length;
   }, [myRoles, route, allLeaves, allOt, allClaims, extra]);
+  const notices = useMemo(
+    () =>
+      buildNotices({
+        crm, pm, acc, leaves, ot, punches, claims,
+        now: bkkNow(), role, approvals, meId: me.employeeId, hr, adminLog, myRoles,
+        /* ผลการตัดสินของใบที่เรายื่นไว้ในคิวของทีม ต้องถึงเจ้าของใบเหมือนใบที่ยื่นจากหน้าตัวเอง */
+        empReqs: extra,
+        /* นัดหมายของทั้งระบบ — ในนี้กรองเฉพาะใบที่มีชื่อเราเป็นผู้เข้าร่วม */
+        events: sched.events,
+      })
+        // เรื่องที่ปิดไว้ในหน้าตั้งค่าแจ้งเตือน ไม่ต้องขึ้นกระดิ่ง
+        .filter((n) => !n.event || popupOn(notify, n.event))
+        // เมนูที่ผู้ดูแลระบบปิดไว้ ไม่ต้องเตือนเรื่องของหน้านั้น กดไปก็เข้าไม่ได้
+        .filter((n) => canVisitAny(n.href.split("?")[0], myRoles, access, route)),
+    [crm, pm, acc, hr, leaves, ot, punches, claims, notify, role, myRoles, approvals, me.employeeId, access, route, adminLog, extra, sched.events],
+  );
+
+  return notices;
+}
+
+export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
+  /* "bar" = ปุ่มในแถบล่างบนมือถือ — กล่องยังคลี่จากขอบบนเหมือนเดิม เพราะกล่องยาว */
+  const bar = variant === "bar";
+  const read = useReadNotices();
+  const notices = useNotices();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -99,23 +125,6 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
    * ผูกกับ "วันที่" ไม่ใช่เวลา เพื่อไม่ให้คำนวณใหม่ทุกวินาที
    * (เรื่องแจ้งเตือนทั้งหมดวัดกันเป็นวัน ไม่ใช่นาที)
    */
-  const notices = useMemo(
-    () =>
-      buildNotices({
-        crm, pm, acc, leaves, ot, punches, claims,
-        now: bkkNow(), role, approvals, meId: me.employeeId, hr, adminLog, myRoles,
-        /* ผลการตัดสินของใบที่เรายื่นไว้ในคิวของทีม ต้องถึงเจ้าของใบเหมือนใบที่ยื่นจากหน้าตัวเอง */
-        empReqs: extra,
-        /* นัดหมายของทั้งระบบ — ในนี้กรองเฉพาะใบที่มีชื่อเราเป็นผู้เข้าร่วม */
-        events: sched.events,
-      })
-        // เรื่องที่ปิดไว้ในหน้าตั้งค่าแจ้งเตือน ไม่ต้องขึ้นกระดิ่ง
-        .filter((n) => !n.event || popupOn(notify, n.event))
-        // เมนูที่ผู้ดูแลระบบปิดไว้ ไม่ต้องเตือนเรื่องของหน้านั้น กดไปก็เข้าไม่ได้
-        .filter((n) => canVisitAny(n.href.split("?")[0], myRoles, access, route)),
-    [crm, pm, acc, hr, leaves, ot, punches, claims, notify, role, myRoles, approvals, me.employeeId, access, route, adminLog, extra, sched.events],
-  );
-
   const unread = notices.filter((n) => !read.includes(n.id));
 
   useEffect(() => {
