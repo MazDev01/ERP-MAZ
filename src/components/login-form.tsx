@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { AccountLocked, type LockReason } from "./account-locked";
 import { LoginScene } from "./login-scene";
 import { DownloadIcon, EyeIcon, EyeOffIcon, LockIcon, UserIcon } from "./icons";
@@ -11,9 +11,8 @@ import { accountOf, markLogin } from "@/lib/accounts";
 import { useHr } from "@/lib/hr-store";
 import { accountRoles } from "@/lib/hr-data";
 import { bkkStamp } from "@/lib/format";
-import { setRole, useRole, type Role } from "@/lib/role";
-import { setStaffEmployee, staffEmployeeId, staffLabel } from "@/lib/staff-identity";
-import { HR_EMP, rolesOfEmployee, type EmpType, type Employee } from "@/lib/hr-data";
+import { ROLES, setRole, useRole, type Role } from "@/lib/role";
+import { setStaffEmployee, staffEmployeeId, staffLabel, staffTeam } from "@/lib/staff-identity";
 import { Select } from "./ui";
 
 /** ผิดครบกี่ครั้งจึงระงับบัญชี — ยืนยันกับฝ่ายบุคคล (ต้นแบบ login.html MAX_TRIES) */
@@ -45,32 +44,6 @@ function homeAfterLogin(r: Role) {
   if (phone) return homeOf(r, undefined, undefined, true);
   if (items.some((i) => i.href === "/")) return "/";
   return items[0]?.href ?? homeOf(r);
-}
-
-/*
- * ผู้ใช้ในระบบมี 5 แบบเท่านั้น (เจ้าของกำหนด 30 ก.ย. 2569)
- * ที่เหลือเป็น "ตำแหน่ง" ในทะเบียนฝ่ายบุคคล ซึ่งเป็นตัวกำหนดว่าจะได้เมนูงานชุดไหน
- */
-type LoginKind = "ceo" | "hr" | "full" | "probat" | "intern";
-
-const LOGIN_KINDS: { key: LoginKind; label: string; en: string }[] = [
-  { key: "full", label: "พนักงานประจำ", en: "Employee" },
-  { key: "probat", label: "ทดลองงาน", en: "Probation" },
-  { key: "intern", label: "ฝึกงาน", en: "Internship" },
-  { key: "hr", label: "ฝ่ายบุคคล", en: "Human Resources" },
-  { key: "ceo", label: "ผู้บริหาร", en: "CEO" },
-];
-
-/** คนในทะเบียนของแบบนั้น — CEO กับฝ่ายบุคคลผูกกับคนเดียวอยู่แล้ว จึงไม่ต้องเลือก */
-function peopleOfKind(kind: LoginKind): Employee[] {
-  if (kind === "ceo" || kind === "hr") return [];
-  return HR_EMP.filter((e) => e.status === "active" && e.type === (kind as EmpType));
-}
-
-/** บทบาทที่จำไว้ครั้งก่อน → แบบที่ควรเลือกไว้ให้ */
-function kindOfRole(role: Role): LoginKind {
-  if (role === "ceo" || role === "hr") return role;
-  return "full";
 }
 
 export function LoginForm() {
@@ -124,20 +97,9 @@ export function LoginForm() {
      ตั้งค่าจากที่เลือกไว้ครั้งก่อน จะได้ไม่ต้องเลือกซ้ำทุกครั้ง */
   const savedRole = useRole();
   const hr = useHr();
-  /*
-   * ในระบบมีผู้ใช้ 5 แบบ (เจ้าของกำหนด 30 ก.ย. 2569)
-   *   CEO · ฝ่ายบุคคล · พนักงานประจำ · ทดลองงาน · ฝึกงาน
-   * สามแบบหลังคือพนักงานในทะเบียน — เลือกตัวคนแล้วเมนูงานขึ้นตาม "ตำแหน่ง" ของคนนั้น
-   */
-  const [kind, setKind] = useState<LoginKind>(() => kindOfRole(savedRole));
+  const [role, setPick] = useState<Role>(savedRole);
   /* ทีมงานมีหลายตำแหน่ง จึงต้องเลือกด้วยว่าจะเข้าเป็นใคร (เจ้าของสั่ง 29 ก.ย. 2569) */
   const [who, setWho] = useState(() => staffEmployeeId());
-  /* คนในทะเบียนที่เลือกได้สำหรับแบบที่เลือกอยู่ — ว่างคือ CEO หรือฝ่ายบุคคล (ผูกกับคนเดียว) */
-  const people = useMemo(() => peopleOfKind(kind), [kind]);
-  /* คนที่เลือกไว้ต้องอยู่ในรายการของแบบนี้ ไม่งั้นใช้คนแรก */
-  const person = people.find((e) => e.id === who) ?? people[0];
-  /* บทบาทจริงที่ใช้เปิดเมนู — มาจากตำแหน่งของคนที่เลือก ไม่ใช่สิ่งที่ผู้ใช้เลือกเอง */
-  const role: Role = people.length === 0 ? (kind as Role) : (rolesOfEmployee(person)[0] ?? "staff");
 
   function edit(which: "user" | "pass", v: string) {
     if (which === "user") {
@@ -159,7 +121,7 @@ export function LoginForm() {
     if (!user && !password) {
       const account = accountOf(role);
       if (account.suspended) return setLocked("admin");
-      if (person) setStaffEmployee(person.id);
+      if (role === "staff") setStaffEmployee(who);
       setRole(role);
       keepDevice("");
       markLogin(role, bkkStamp());
@@ -205,16 +167,16 @@ export function LoginForm() {
 
       /* ชื่อผู้ใช้ที่ HR สร้างให้ (/hr/accounts) บอกบทบาทของคนนั้น — การ์ดที่เลือกไว้ต้องเป็นบทบาทของเขา
          ไม่งั้นใช้บทบาทแรกของบัญชี · ชื่อที่ไม่อยู่ในทะเบียน (เดโม) ใช้การ์ดที่เลือก */
-      const found = hr.emp.find((x) => x.account && x.account.user === user);
-      if (found?.account?.status === "suspended") return setLocked("admin");
-      const roles = accountRoles(found?.account);
+      const person = hr.emp.find((x) => x.account && x.account.user === user);
+      if (person?.account?.status === "suspended") return setLocked("admin");
+      const roles = accountRoles(person?.account);
       const r: Role = roles.length && !roles.includes(role) ? roles[0] : role;
       const account = accountOf(r);
-      if (!found && account.suspended) return setLocked("admin");
-      const mustReset = found ? Boolean(found.account?.mustChange) : account.mustResetPassword;
+      if (!person && account.suspended) return setLocked("admin");
+      const mustReset = person ? Boolean(person.account?.mustChange) : account.mustResetPassword;
       setFails(0);
       /* เข้าด้วยชื่อผู้ใช้จริง — คนในทะเบียนใช้รหัสพนักงานของเขา ไม่ใช่ตัวเลือกในดรอปดาวน์ */
-      if (found) setStaffEmployee(found.id);
+      if (r === "staff") setStaffEmployee(person?.id ?? who);
       setRole(r);
       keepDevice(user);
       markLogin(r, bkkStamp());
@@ -258,30 +220,28 @@ export function LoginForm() {
           </p>
 
           <form onSubmit={submit} noValidate>
-            {/*
-              เจ้าของกำหนด 30 ก.ย. 2569 — ในระบบมีแค่ CEO · ฝ่ายบุคคล · พนักงาน · ทดลองงาน · ฝึกงาน
-              ที่เหลือ (ขาย · PM · SA · Dev · Graphic ฯลฯ) เป็น "ตำแหน่ง" ไม่ใช่สิ่งที่เลือกตอนเข้าระบบ
-              เลือกคนแล้วระบบดูตำแหน่งของคนนั้นในทะเบียน แล้วเปิดเมนูงานให้ตามตำแหน่ง
-            */}
+            {/* บทบาทเปลี่ยนทั้งเมนูซ้ายและหน้างาน จึงต้องเลือกก่อนเข้า */}
+            {/* ถูกระงับแล้วปิดแค่ปุ่มเข้าสู่ระบบตาม mockup (lockAccount) — การ์ดบทบาทยังเลือกได้ */}
             <fieldset className="mb-3">
               <legend className="mb-1.5 text-[13px] font-medium text-muted-foreground">
-                Sign in as · เข้าใช้งานเป็น
+                Sign in as · เข้าใช้งานในตำแหน่ง
               </legend>
               <div className="grid gap-1.5 sm:grid-cols-2">
-                {LOGIN_KINDS.map((k) => (
+                {ROLES.map((r) => (
                   <button
-                    key={k.key}
+                    key={r.key}
                     type="button"
-                    onClick={() => setKind(k.key)}
-                    aria-pressed={kind === k.key}
+                    onClick={() => setPick(r.key)}
+                    aria-pressed={role === r.key}
                     className={`rounded-[12px] border px-3 py-[7px] text-left transition-colors ${
-                      kind === k.key
+                      role === r.key
                         ? "border-primary bg-accent text-primary"
                         : "glass-thin hover:border-primary"
                     }`}
                   >
-                    <b className="block text-[13px] font-semibold">{k.en}</b>
-                    <span className="block text-[11.5px] font-medium opacity-75">{k.label}</span>
+                    {/* ชื่อบทบาทสองภาษา — อังกฤษเป็นหลัก ไทยกำกับ ไม่มีคำอธิบาย */}
+                    <b className="block text-[13px] font-semibold">{r.en}</b>
+                    <span className="block text-[11.5px] font-medium opacity-75">{r.label}</span>
                   </button>
                 ))}
               </div>
@@ -291,13 +251,13 @@ export function LoginForm() {
               บทบาท "ทีมงาน" มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
               เลือกได้ว่าเข้าเป็นใคร งานที่ได้รับกับตารางงานจะเป็นของคนนั้น (เจ้าของสั่ง 29 ก.ย. 2569)
             */}
-            {people.length > 0 && (
+            {role === "staff" && (
               <div className="mb-3">
                 <label
                   htmlFor="staff-who"
                   className="mb-1.5 block text-[13px] font-medium text-muted-foreground"
                 >
-                  เข้าเป็นใคร · เมนูงานขึ้นตามตำแหน่งของคนนี้
+                  เข้าเป็นใครในทีม
                 </label>
                 <Select
                   id="staff-who"
@@ -305,7 +265,7 @@ export function LoginForm() {
                   onChange={(e) => setWho(e.target.value)}
                   className="h-[46px] rounded-[12px]"
                 >
-                  {people.map((e) => (
+                  {staffTeam().map((e) => (
                     <option key={e.id} value={e.id}>
                       {staffLabel(e)}
                     </option>
