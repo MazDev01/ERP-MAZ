@@ -165,7 +165,7 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
       </div>
 
       {/* ── หัวเรื่องแบบตัวอย่าง: คำทักทายซ้าย เครื่องมืออยู่ขวา ── */}
-      <div className="bar gap-3 max-md:hidden">
+      <div className="bar gap-3 max-md:hidden!">
         <div>
           <h1>{hello}</h1>
           <p>มาดูภาพรวมการขายของคุณกัน</p>
@@ -240,7 +240,7 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
       </div>
 
       {/* ── ตัวเลขสำคัญ ── */}
-      <div className="grid grid-cols-2 gap-3.5 min-[1360px]:grid-cols-4">
+      <div className="max-md:hidden grid grid-cols-2 gap-3.5 min-[1360px]:grid-cols-4">
         <Kpi
           tone="won"
           icon={<ChartIcon className="size-3.5" strokeWidth={2} />}
@@ -296,7 +296,7 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
       */}
       {/* จอแคบตั้งคอลัมน์เป็น minmax(0,1fr) ไว้ชัด ๆ — ปล่อยเป็นคอลัมน์อัตโนมัติ ช่องจะกว้างตาม
           เนื้อหาที่ยาวที่สุด (ข้อความไทยตัดคำไม่ได้) แล้วดันทั้งแถวล้นออกนอกจอ */}
-      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
+      <div className="max-md:hidden grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
         {showChart && (
         /* การ์ดกราฟยืดเต็มความสูงของแถว — ถ้าปล่อยให้สูงตามเนื้อหา จะเหลือช่องว่างใต้กราฟ
            เพราะการ์ดปฏิทินข้าง ๆ ยาวกว่า (ผู้ใช้ทักท้วง 24 ก.ย. 2569) */

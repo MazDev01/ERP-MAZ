@@ -18,6 +18,7 @@ import { useMemo } from "react";
 import type { PresalesRequest } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
 import { daysBetween, todayIso } from "@/lib/format";
+import { DashHero, DashSection } from "./mobile-dash";
 import { PS_ME as ME, psMine as mine, psOwner, psWorkLink } from "@/lib/presales-work";
 
 /** รายการในการ์ด "ต้องส่งเร็ว ๆ นี้" */
@@ -53,9 +54,51 @@ export function PresalesDashPage() {
     });
   const count = (st: Result) => results.filter((x) => x.st === st).length;
 
+  /* มือถือ: ไม่เอาการ์ดตัวเลข (KPI) — การ์ดยอดใบเดียวแล้วต่อด้วยรายการ (เจ้าของสั่ง 30 ก.ย. 2569) */
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="space-y-3.5 md:hidden">
+        <DashHero
+          label="งานที่อยู่ในมือ"
+          value={`${doing.length} คำขอ`}
+          foot={`รอรับงาน ${todo.length} · รอฝ่ายขายตอบ ${waiting.length} · เลยกำหนด ${late.length}`}
+          ringPct={todo.length + doing.length ? (doing.length * 100) / (todo.length + doing.length) : 0}
+          ringLabel="รับเข้ามาแล้ว"
+        />
+        <DashSection
+          title="ต้องส่งเร็ว ๆ นี้"
+          href="/presales-work"
+          empty="ไม่มีงานค้าง"
+          rows={soon.map((r) => {
+            const d = daysBetween(today, r.due);
+            return {
+              key: r.id,
+              title: cus(r),
+              meta: `${r.no} · ${r.kind}`,
+              metaTint: "grey" as const,
+              end: d < 0 ? `เลย ${-d}ว` : d === 0 ? "วันนี้" : `${d}ว`,
+              endTint: d < 0 ? ("rose" as const) : d <= 2 ? ("peach" as const) : ("grey" as const),
+              href: psWorkLink(r.no),
+            };
+          })}
+        />
+        <DashSection
+          title="ผลของข้อเสนอที่ส่งแล้ว"
+          href="/presales-work"
+          empty="ยังไม่มีข้อเสนอที่ส่งแล้ว"
+          rows={results.slice(0, 6).map((x) => ({
+            key: x.r.id,
+            title: cus(x.r),
+            meta: `${x.r.no} · ${x.rounds} รอบ`,
+            metaTint: "grey" as const,
+            end: RESULT_LABEL[x.st],
+            endTint: x.st === "won" ? ("mint" as const) : x.st === "lost" ? ("rose" as const) : ("grey" as const),
+            href: psWorkLink(x.r.no),
+          }))}
+        />
+      </div>
+
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ด</h1>
           {/* กล่องเดียวรวมทั้ง SA และ BD — คำขอต้องมีคนเห็นเสมอ (ดู psMine) */}
@@ -65,14 +108,14 @@ export function PresalesDashPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 max-md:hidden lg:grid-cols-4">
         <Kpi label="รอรับงาน" value={todo.length} sub="คำขอใหม่" />
         <Kpi label="กำลังทำ" value={doing.length} sub="งานที่อยู่ในมือ" />
         <Kpi label="รอข้อมูลเพิ่ม" value={waiting.length} sub="รอฝ่ายขายตอบ" />
         <Kpi label="เลยกำหนด" value={late.length} sub="ยังไม่ได้ส่งข้อเสนอ" bad={late.length > 0} />
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 max-md:hidden lg:grid-cols-2">
         <Card
           title="ต้องส่งเร็ว ๆ นี้"
           right={

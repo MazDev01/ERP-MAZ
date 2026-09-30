@@ -13,7 +13,7 @@ import {
   type OtStatus,
 } from "@/lib/ot-data";
 import { cancelOtRequest, useOtRecords } from "@/lib/ot-store";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, OtIcon, PlusIcon } from "./icons";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon , PlusIcon } from "./icons";
 import { ApproverNote } from "./approver-note";
 import { OtDialog } from "./ot-dialog";
 
@@ -43,15 +43,6 @@ const TABS: { key: "all" | OtStatus; label: string }[] = [
   { key: "ยกเลิก", label: "ยกเลิก" },
 ];
 
-/*
- * สีแผ่นไอคอนของการ์ดชั่วโมงโอทีบนมือถือ — โทนเดียวกับหน้าลงเวลาและหน้าการลา
- * เรียงตามลำดับเรต (วันธรรมดา · วันหยุด · วันหยุดบริษัท) ไม่ได้ผูกสีกับความหมาย
- */
-const OT_TONE = [
-  "bg-[var(--warning-soft)] text-[var(--warning)]",
-  "bg-[var(--destructive-soft)] text-destructive",
-  "bg-[var(--info-soft)] text-[var(--info)]",
-];
 
 export function OtPage() {
   const records = useOtRecords();
@@ -155,31 +146,24 @@ export function OtPage() {
       )}
 
       {/* ── ชั่วโมงที่อนุมัติแล้วแยกตามเรต ── */}
-      {/* มือถือ — การ์ดสามใบเรียงกัน ไอคอนอยู่ในแผ่นสีอ่อน แบบเดียวกับหน้าลงเวลา */}
-      <div className="sm:hidden">
-        <div className="grid grid-cols-3 gap-2.5">
-          {(Object.keys(OT_KIND) as OtKind[]).map((kind, n) => (
-            <div key={kind} className="glass flex min-h-[104px] flex-col rounded-[18px] p-3">
-              {/* เรตอยู่แถวเดียวกับไอคอน ชื่อวันจึงเหลือบรรทัดเดียวทุกใบ ตัวเลขทั้งสามใบอยู่ระดับเดียวกัน */}
-              <span className="flex items-center justify-between gap-1">
-                <i className={`grid size-[30px] flex-none place-items-center rounded-[10px] ${OT_TONE[n % OT_TONE.length]}`}>
-                  <OtIcon className="size-4" strokeWidth={2.2} />
-                </i>
-                <em className="num text-[11px] font-semibold text-muted-foreground not-italic">
-                  {OT_KIND[kind].rate}x
-                </em>
-              </span>
-              <b className="num mt-auto text-[20px] leading-none font-bold">{hoursOfKind(kind).toFixed(2)}</b>
-              <span className="mt-1 truncate text-[11.5px] leading-tight text-muted-foreground">
-                {OT_KIND[kind].label}
-              </span>
-            </div>
-          ))}
+      {/* มือถือ: แถวเดียวอ่านรวดเดียวจบ ไม่เอาการ์ดตัวเลขใหญ่ (เจ้าของสั่ง 30 ก.ย. 2569) */}
+      <section className="glass rounded-[20px] px-4 py-3.5 sm:hidden">
+        <div className="flex items-baseline justify-between gap-3">
+          <b className="text-[13.5px] font-bold">โอทีที่อนุมัติแล้วเดือนนี้</b>
+          <em className="num text-[11.5px] text-muted-foreground not-italic">
+            รวม {(Object.keys(OT_KIND) as OtKind[]).reduce((a, k) => a + hoursOfKind(k), 0).toFixed(2)} ชม.
+          </em>
         </div>
-        <p className="mt-2 text-center text-[11.5px] text-muted-foreground">
-          ชั่วโมงโอทีที่อนุมัติแล้วในเดือนนี้
-        </p>
-      </div>
+        <ul className="mt-2.5 flex list-none gap-2 p-0">
+          {(Object.keys(OT_KIND) as OtKind[]).map((kind) => (
+            <li key={kind} className="flex flex-1 flex-col items-center rounded-[14px] bg-muted/60 px-2 py-2">
+              <span className="truncate text-[11px] text-muted-foreground">{OT_KIND[kind].label}</span>
+              <b className="num text-[18px] leading-tight font-bold text-primary">{hoursOfKind(kind).toFixed(2)}</b>
+              <em className="num text-[10.5px] text-muted-foreground not-italic">{OT_KIND[kind].rate}x</em>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <div className="hidden gap-3.5 sm:grid sm:grid-cols-3">
         {(Object.keys(OT_KIND) as OtKind[]).map((kind) => (

@@ -38,6 +38,7 @@ import {
 import { useTodayAttendance, type AttState } from "@/lib/hr-link";
 import { useHr } from "@/lib/hr-store";
 import { services } from "@/lib/pm-data";
+import { DashChips, DashHero, DashSection } from "./mobile-dash";
 import { usePm } from "@/lib/pm-store";
 import { useCeoRequests } from "./ceo-approvals-page";
 import { Sheet } from "./lead-dialogs";
@@ -181,9 +182,82 @@ export function CeoDashboardPage() {
       })),
   ];
 
+  /* มือถือ: ไม่เอาการ์ดตัวเลข (KPI) — การ์ดยอดใบเดียวแล้วต่อด้วยรายการ
+     (เจ้าของสั่ง 30 ก.ย. 2569 ชุดเดียวกับหน้าหลักและแดชบอร์ดอื่น) */
+  const openAmt = open.reduce((a, v) => a + v.outstanding, 0);
+  const billedAll = got + openAmt;
+
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="space-y-3.5 md:hidden">
+        <DashHero
+          chips={
+            <DashChips
+              value={range}
+              items={(Object.keys(RANGE_LABEL) as Range[]).map((r) => ({ key: r, label: RANGE_LABEL[r] }))}
+              onPick={setRange}
+            />
+          }
+          label="รับชำระในช่วงนี้"
+          value={`${whole(got)} ฿`}
+          foot={`ค้างรับ ${whole(openAmt)} ฿ · ดีลที่ปิดได้ ${won.length} ดีล`}
+          ringPct={billedAll ? (got * 100) / billedAll : 0}
+          ringLabel="เก็บได้"
+        />
+
+        <DashSection
+          title="รอเราอนุมัติ"
+          href="/ceo/approvals"
+          linkLabel="ไปอนุมัติ"
+          empty="ไม่มีคำขอรออนุมัติ"
+          rows={[
+            ...waitPayMonths.map((m) => ({
+              key: `pay-${m}`,
+              title: `ยอดเงินเดือน ${shortRound(m)}`,
+              meta: "ฝ่ายบุคคลส่งมารออนุมัติ",
+              metaTint: "peach" as const,
+              href: "/ceo/approvals",
+            })),
+            ...pending.slice(0, REQ_LIMIT).map((r) => ({
+              key: r.key,
+              title: `${r.who} · ${r.type}`,
+              meta: r.when,
+              metaTint: "grey" as const,
+              href: r.href,
+            })),
+          ]}
+        />
+
+        <DashSection
+          title="พนักงานวันนี้"
+          href="/ceo/hr"
+          empty="ยังไม่มีข้อมูลการเข้างานวันนี้"
+          rows={ATT.map((a) => ({
+            key: a.key,
+            title: a.label,
+            end: String(cnt(a.key)),
+            endTint:
+              a.key === "ontime" ? ("mint" as const)
+              : a.key === "late" ? ("peach" as const)
+              : a.key === "leave" ? ("sky" as const)
+              : ("grey" as const),
+          }))}
+        />
+
+        <DashSection
+          title="ยอดขายแยกบริการ"
+          href="/ceo/sales"
+          empty="ยังไม่มียอดขายในช่วงนี้"
+          rows={svc.filter((s2) => s2.v > 0).slice(0, 5).map((s2) => ({
+            key: s2.label,
+            title: s2.label,
+            meta: `${whole(s2.v)} ฿`,
+            metaTint: "lilac" as const,
+          }))}
+        />
+      </div>
+
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ด</h1>
           {/* ช่วงนี้มีผลเฉพาะการ์ดเงิน ยอดขายแยกบริการ และประสิทธิภาพ
@@ -215,7 +289,7 @@ export function CeoDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 max-md:hidden lg:grid-cols-4">
         <Kpi title="รับชำระแล้ว" value={`${whole(got)} บาท`} note={`จาก ${pays.length} ใบแจ้งหนี้ในช่วงที่เลือก`} />
         <Kpi
           title="ค้างรับ"
@@ -249,7 +323,7 @@ export function CeoDashboardPage() {
       {waitPayMonths.length > 0 && (
         <Link
           href="/ceo/approvals"
-          className="glass flex items-center gap-3 rounded-[14px] border border-[var(--warning)] px-5 py-3.5 text-[13.5px] hover:bg-muted max-sm:min-h-14"
+          className="glass flex items-center gap-3 rounded-[14px] border border-[var(--warning)] px-5 py-3.5 text-[13.5px] max-md:hidden hover:bg-muted max-sm:min-h-14"
         >
           <span className="min-w-0 flex-1">
             <b className="block font-semibold text-destructive">
@@ -266,7 +340,7 @@ export function CeoDashboardPage() {
         </Link>
       )}
 
-      <div className="grid items-stretch gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid items-stretch gap-3.5 max-md:hidden xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Panel title="รับชำระเทียบต้นทุนแรงงาน (รอบที่ปิดแล้ว)">
           <Trend payments={acc.payments} payruns={hr.payruns} today={today} />
         </Panel>
@@ -295,7 +369,7 @@ export function CeoDashboardPage() {
         </Panel>
       </div>
 
-      <div className="grid items-stretch gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid items-stretch gap-3.5 max-md:hidden xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Panel title="ยอดขายแยกบริการ (บาท · ช่วงที่เลือก)">
           <ul className="space-y-2.5">
             {svc.map((s) => (
@@ -333,7 +407,7 @@ export function CeoDashboardPage() {
         </Panel>
       </div>
 
-      <section className="panel glass flex min-w-0 flex-col">
+      <section className="panel glass flex min-w-0 flex-col max-md:hidden">
         <div className="strip">
           <h2 className="py-2.5 text-[14.5px] font-bold">คำขอรออนุมัติ</h2>
         </div>

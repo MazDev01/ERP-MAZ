@@ -195,9 +195,39 @@ export function LeavePage() {
         </p>
       )}
 
-      {/* ── สิทธิ์คงเหลือแต่ละประเภท ── */}
-      {/* มือถือวางสองคอลัมน์ ย่อขนาดตัวอักษรลงเล็กน้อยให้เห็นสิทธิ์ครบในจอเดียว */}
-      <div className={`grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] ${policy.quota ? "" : "hidden"}`}>
+      {/* ── สิทธิ์คงเหลือแบบย่อสำหรับมือถือ ──
+         เจ้าของสั่ง 30 ก.ย. 2569 ให้เอาการ์ดตัวเลขใหญ่ (KPI) ออกจากจอมือถือ
+         เหลือแถวเดียวอ่านรวดเดียวจบ แบบเดียวกับ "วันนี้ของฉัน" ในหน้าหลัก */}
+      {policy.quota && (
+        <section className="glass rounded-[20px] px-4 py-3.5 md:hidden">
+          <div className="flex items-baseline justify-between gap-3">
+            <b className="text-[13.5px] font-bold">วันลาคงเหลือ</b>
+            <em className="text-[11.5px] text-muted-foreground not-italic">ปี {year + 543}</em>
+          </div>
+          <ul className="mt-2.5 flex list-none gap-2 overflow-x-auto p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {leaveTypes().filter((t) => entitlementDays(t, period) > 0).map((t) => {
+              const q = leaveUsage(records, t, period);
+              return (
+                <li
+                  key={t}
+                  className="flex min-w-[88px] flex-1 flex-col items-center rounded-[14px] bg-muted/60 px-2 py-2"
+                >
+                  <span className="truncate text-[11px] text-muted-foreground">{t}</span>
+                  <b className="num text-[18px] leading-tight font-bold text-primary">{round1(q.remaining)}</b>
+                  {q.pending > 0 && (
+                    <em className="num text-[10.5px] font-medium text-[var(--warning)] not-italic">
+                      รอ {round1(q.pending)}
+                    </em>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* ── สิทธิ์คงเหลือแต่ละประเภท (จอคอม) ── */}
+      <div className={`grid grid-cols-2 gap-2.5 max-md:hidden sm:gap-3.5 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] ${policy.quota ? "" : "hidden"}`}>
         {leaveTypes().filter((t) => entitlementDays(t, period) > 0).map((t, n) => {
           const base = entitlementDays(t, period);
           /* ลาพักร้อนที่ยกมาจากปีก่อน (ถ้าผู้ดูแลระบบเปิดให้ยกยอด) รวมเข้าไปในสิทธิ์ของปีนี้ */

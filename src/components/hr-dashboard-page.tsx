@@ -147,7 +147,7 @@ export function HrDashboardPage() {
         />
       </div>
 
-      <div className="bar max-md:hidden">
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ดฝ่ายบุคคล</h1>
           <p>ภาพรวมกำลังคนและงานที่ต้องดำเนินการ</p>
@@ -169,7 +169,7 @@ export function HrDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 max-md:hidden lg:grid-cols-4">
         {/* ทุกการ์ดนับ "คนที่ยังอยู่วันนี้" — หน้ารายงานนับทั้งทะเบียนรวมผู้พ้นสภาพ จึงได้ตัวเลขมากกว่า
             แต่ละใบจึงต้องบอกฐานที่นับไว้ในการ์ดเอง ไม่ให้ดูเหมือนตัวเลขขัดกันเอง */}
         <Kpi
@@ -214,7 +214,7 @@ export function HrDashboardPage() {
       */}
       {/* จอแคบตั้งคอลัมน์เป็น minmax(0,1fr) ไว้ชัด ๆ — ปล่อยเป็นคอลัมน์อัตโนมัติ ช่องจะกว้างตาม
           เนื้อหาที่ยาวที่สุด (ข้อความไทยตัดคำไม่ได้) แล้วดันทั้งแถวล้นออกนอกจอ */}
-      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 max-md:hidden md:grid-cols-6 xl:grid-cols-8">
         <Panel title="ภาพรวมกำลังคน" className="md:col-span-4 xl:col-span-6">
           <PeopleDonut active={active} />
         </Panel>

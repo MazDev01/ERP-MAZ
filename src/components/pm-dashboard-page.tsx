@@ -138,7 +138,7 @@ export function PmDashboardPage() {
         />
       </div>
 
-      <div className="bar max-md:hidden">
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ด</h1>
           <p>ภาพรวมงานที่ต้องดูแล</p>
@@ -146,7 +146,7 @@ export function PmDashboardPage() {
       </div>
 
       {/* มือถือ: การ์ดใบที่ห้าเหลือเดี่ยวอยู่แถวสุดท้าย ให้กินเต็มแถวแทนการเว้นช่องว่าง */}
-      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 max-sm:[&>*:last-child]:col-span-2 lg:grid-cols-5">
+      <div className="max-md:hidden grid grid-cols-2 gap-3.5 max-sm:gap-2.5 max-sm:[&>*:last-child]:col-span-2 lg:grid-cols-5">
         <Kpi label="งานเข้ารอรับ" value={waiting} sub={waiting ? "รอ PM รับเข้าโปรเจค" : "รับครบแล้ว"} tone="info" icon={<InboxIcon className="size-[15px]" strokeWidth={1.9} />} />
         <Kpi
           label="งานย่อยรอตรวจ"
@@ -185,7 +185,7 @@ export function PmDashboardPage() {
         />
       </div>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="max-md:hidden grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Card title="ความคืบหน้าโปรเจค">
           <ProjectProgress projects={projects} today={today} />
         </Card>
@@ -193,7 +193,7 @@ export function PmDashboardPage() {
         <NewJobs inbox={pm.inbox} />
       </div>
 
-      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="max-md:hidden grid items-stretch gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <DueTable open={open} />
         <MiniCalendar events={sc.events.filter((e) => !isPsEvent(e))} today={today} />
       </div>

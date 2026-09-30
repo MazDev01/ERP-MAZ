@@ -163,7 +163,7 @@ export function AccDashboardPage() {
         />
       </div>
 
-      <div className="bar max-md:hidden">
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ดบัญชี</h1>
           <p>{rangeNote(range, now)}</p>
@@ -184,7 +184,7 @@ export function AccDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      <div className="max-md:hidden grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Kpi
           icon={<FileIcon className="size-[17px]" />}
           skin="info"
@@ -216,7 +216,7 @@ export function AccDashboardPage() {
         />
       </div>
 
-      <div className="grid items-start gap-3.5 xl:grid-cols-[minmax(0,1.34fr)_minmax(0,0.66fr)]">
+      <div className="max-md:hidden grid items-start gap-3.5 xl:grid-cols-[minmax(0,1.34fr)_minmax(0,0.66fr)]">
         <section className="glass rounded-[15px] px-5 py-[18px]">
           <h2 className="text-[15px] font-bold">วางบิล เทียบ รับชำระ</h2>
           <p className="mt-1 text-[12.5px] text-muted-foreground">
@@ -268,7 +268,7 @@ export function AccDashboardPage() {
       {/* แถวล่างตามโครง mockup 24 ก.ย. 2569 — สองตารางซ้าย คอลัมน์ขวาเป็นรับชำระล่าสุดและสรุปช่วงนี้ */}
       {/* จอแคบตั้งคอลัมน์เป็น minmax(0,1fr) ไว้ชัด ๆ — ปล่อยเป็นคอลัมน์อัตโนมัติ ช่องจะกว้างตาม
           เนื้อหาที่ยาวที่สุด (ข้อความไทยตัดคำไม่ได้) แล้วดันทั้งแถวล้นออกนอกจอ */}
-      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
+      <div className="max-md:hidden grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
         {/* สองการ์ดนี้เป็นรายการแถวเดียวจบตามโครง mockup ไม่ใช่ตารางกว้าง
             เพราะอยู่คอลัมน์แคบ ตารางสี่คอลัมน์จะถูกตัดจนอ่านยอดไม่ครบ */}
         <section className="glass flex h-full flex-col md:col-span-3 rounded-[14px] px-5 py-[18px]">

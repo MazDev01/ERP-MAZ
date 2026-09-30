@@ -18,6 +18,7 @@ import { useApprovedOtHours, useGmPending, useTeamLeave, type TeamLeave } from "
 import { USERS } from "@/lib/mock-data";
 import { projectProgress } from "@/lib/pm-data";
 import { usePm } from "@/lib/pm-store";
+import { DashHero, DashSection } from "./mobile-dash";
 
 /** รอตั้งแต่กี่วันขึ้นไปถึงเป็นตัวแดง — ตรงกับหน้ารายการรออนุมัติ */
 const WAIT_HOT = 3;
@@ -54,23 +55,82 @@ export function GmDashboardPage() {
   const running = pm.projects.filter((p) => p.status === "running");
   const late = running.filter((p) => p.due && p.due < today);
 
+  /* มือถือ: ไม่เอาการ์ดตัวเลข (KPI) — ใช้การ์ดยอดใบเดียวแล้วต่อด้วยรายการ
+     (เจ้าของสั่ง 30 ก.ย. 2569 · ชุดเดียวกับหน้าหลักและแดชบอร์ดอื่น) */
+  const onTime = running.length ? Math.round(((running.length - late.length) / running.length) * 100) : 100;
+
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="space-y-3.5 md:hidden">
+        <DashHero
+          label="คำขอรออนุมัติ"
+          value={`${pending.length} รายการ`}
+          foot={`ลาวันนี้ ${todayNames.length} คน · โอทีเดือนนี้ ${otHours} ชม.`}
+          ringPct={running.length ? onTime : null}
+          ringLabel="ตามกำหนด"
+        />
+        <DashSection
+          title="รออนุมัติ"
+          href="/approvals"
+          linkLabel="ไปอนุมัติ"
+          empty="ไม่มีคำขอรออนุมัติ"
+          rows={pending.slice(0, PHONE_CAP).map((r) => {
+            const w = daysBetween(r.at.slice(0, 10), today);
+            return {
+              key: r.key,
+              title: r.name,
+              meta: r.kind === "leave" && r.from ? `${r.what} ${range(r.from, r.to ?? r.from)}` : r.what,
+              metaTint: "grey" as const,
+              end: w <= 0 ? "วันนี้" : `${w}ว`,
+              endTint: w >= WAIT_HOT ? ("rose" as const) : ("grey" as const),
+              href: "/approvals",
+            };
+          })}
+        />
+        <DashSection
+          title="ลาในสัปดาห์นี้"
+          href="/gm/calendar"
+          linkLabel="ดูตารางงาน"
+          empty="ไม่มีใครลาในสัปดาห์นี้"
+          rows={week.map((l) => ({
+            key: l.key,
+            title: l.name,
+            meta: `${l.type} ${range(l.from, l.to)}`,
+            metaTint: "sky" as const,
+            href: "/gm/calendar",
+          }))}
+        />
+        <DashSection
+          title="โปรเจคที่กำลังดำเนินการ"
+          href="/pm/projects"
+          empty="ไม่มีโปรเจคที่กำลังดำเนินการ"
+          rows={running.map((p) => ({
+            key: p.deal,
+            title: p.name || p.cus,
+            meta: p.due ? `ส่งมอบ ${short(p.due)}` : "ยังไม่มีแผน",
+            metaTint: p.due && p.due < today ? ("rose" as const) : ("mint" as const),
+            end: `${projectProgress(p).pct}%`,
+            endTint: "grey" as const,
+            href: `/pm/projects?deal=${encodeURIComponent(p.deal)}`,
+          }))}
+        />
+      </div>
+
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ด</h1>
           <p>{USERS.gm.name} · ผู้จัดการทั่วไป</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 max-md:hidden max-sm:gap-2.5 lg:grid-cols-4">
         <Kpi label="รออนุมัติ" value={pending.length} sub="การลา OT และใบเบิก" />
         <Kpi label="ลาวันนี้" value={todayNames.length} sub={todayNames.length ? todayNames.join(" · ") : "มาทำงานครบ"} />
         <Kpi label="โปรเจคเลยกำหนด" value={late.length} sub={`จาก ${running.length} โปรเจคที่กำลังทำ`} bad={late.length > 0} />
         <Kpi label="OT เดือนนี้" value={otHours} sub="ชั่วโมงที่อนุมัติแล้วทั้งบริษัท" />
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 max-md:hidden lg:grid-cols-2">
         <Card title="ลาในสัปดาห์นี้" more={{ href: "/gm/calendar", label: "ดูตารางงาน" }}>
           {week.length === 0 ? (
             <None>ไม่มีใครลาในสัปดาห์นี้</None>
@@ -120,6 +180,7 @@ export function GmDashboardPage() {
         </Card>
       </div>
 
+      <div className="max-md:hidden">
       <Card title="โปรเจคที่กำลังดำเนินการ" note="ดูอย่างเดียว PM เป็นผู้วางแผน">
         {running.length === 0 ? (
           <None>ไม่มีโปรเจคที่กำลังดำเนินการ</None>
@@ -142,6 +203,7 @@ export function GmDashboardPage() {
           </ul>
         )}
       </Card>
+      </div>
     </div>
   );
 }
