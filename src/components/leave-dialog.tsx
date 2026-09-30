@@ -258,7 +258,7 @@ export function LeaveDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-80 flex items-end justify-center bg-black/50 sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
+      className="veil-in fixed inset-0 z-80 flex items-end justify-center bg-[rgb(28_20_45/0.42)] sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="leave-box-title"
@@ -266,7 +266,7 @@ export function LeaveDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="glass-solid flex max-h-[92dvh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[18px] sm:max-h-full sm:rounded-[18px]">
+      <div className="sheet-in glass-solid flex max-h-[92dvh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[22px] shadow-[0_-10px_40px_-18px_rgb(40_25_60/0.5)] sm:max-h-full sm:rounded-[18px]">
         <div className="flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 sm:py-4">
           <h2 id="leave-box-title" className="text-[16.5px] font-bold">
             {edit ? `แก้ไขใบลา ${edit.id}` : "ยื่นใบลา"}

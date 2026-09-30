@@ -527,7 +527,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
       {popOpen && popAt && typeof document !== "undefined" &&
         createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5"
+          className="veil-in fixed inset-0 z-50 flex items-center justify-center bg-[rgb(28_20_45/0.42)] p-5"
           role="dialog"
           aria-modal="true"
           aria-labelledby="pop-title"

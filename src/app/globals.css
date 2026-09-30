@@ -1481,3 +1481,17 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   }
 }
 
+
+/* ===== เอฟเฟกต์กล่องซ้อน (ต้นแบบมือถือชุดใหม่ · attendance.html .veil/.box 30 ก.ย. 2569) =====
+   ฉากหลังเบลอและจาง กล่องเลื่อนขึ้นมาเล็กน้อยตอนเปิด */
+@keyframes veil-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+.veil-in {
+  animation: veil-in 0.18s ease-out;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.sheet-in { animation: sheet-in 0.22s cubic-bezier(0.22, 0.8, 0.3, 1) }
+@media (prefers-reduced-motion: reduce) {
+  .veil-in, .sheet-in { animation: none }
+}

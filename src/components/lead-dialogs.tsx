@@ -53,7 +53,7 @@ export function Sheet({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-80 flex items-end justify-center bg-black/50 sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
+      className="veil-in fixed inset-0 z-80 flex items-end justify-center bg-[rgb(28_20_45/0.42)] sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -62,7 +62,7 @@ export function Sheet({
       }}
     >
       <div
-        className={`glass-solid flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[18px] sm:max-h-full sm:rounded-[18px] ${
+        className={`sheet-in glass-solid flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[22px] shadow-[0_-10px_40px_-18px_rgb(40_25_60/0.5)] sm:max-h-full sm:rounded-[18px] ${
           wide ? "max-w-[1080px]" : mid ? "max-w-[720px]" : narrow ? "max-w-[620px]" : "max-w-[560px]"
         }`}
       >
