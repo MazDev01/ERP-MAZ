@@ -1288,7 +1288,14 @@ function CeoTag({ ap, drifted }: { ap: ReturnType<typeof payApproval>; drifted: 
       </span>
     );
   }
-  return null;
+  /* ยังไม่เคยส่ง — เดิมไม่มีป้ายเลย ฝ่ายบุคคลจึงไม่รู้ว่ารอบนี้อยู่ตรงไหนของสายอนุมัติ
+     (ทดสอบฝ่ายบุคคล 30 ก.ย. 2569) */
+  return (
+    <span className="tag t-miss">
+      <i />
+      ยังไม่ได้ส่งให้ CEO อนุมัติ
+    </span>
+  );
 }
 
 /** กติกาหักมาสายที่ผู้ดูแลระบบเลือกไว้ (/admin/schedule) เป็นข้อความสั้น */

@@ -243,6 +243,7 @@ export function HrTimesheetPage() {
                   <TimeRow
                     key={x.e.id}
                     line={x}
+                    waitDocs={(pending[x.e.id]?.leave ?? 0) + (pending[x.e.id]?.ot ?? 0)}
                     waitDays={pending[x.e.id]?.leaveDays ?? 0}
                     locked={locked}
                     dayLabel={tab === "month" ? "วันทำงาน (วัน)" : "วันที่มาทำงาน (วัน)"}
@@ -269,6 +270,7 @@ export function HrTimesheetPage() {
             <TimeCard
               key={x.e.id}
               line={x}
+              waitDocs={(pending[x.e.id]?.leave ?? 0) + (pending[x.e.id]?.ot ?? 0)}
               waitDays={pending[x.e.id]?.leaveDays ?? 0}
               locked={locked}
               dayLabel={tab === "month" ? "วันทำงาน" : "วันที่มาทำงาน"}
@@ -348,6 +350,7 @@ function Th({ w, unit, children }: { w: number; unit: string; children: React.Re
 
 function TimeRow({
   line: { e, r, days },
+  waitDocs,
   waitDays,
   locked,
   dayLabel,
@@ -355,6 +358,8 @@ function TimeRow({
   onEdit,
 }: {
   line: Line;
+  /** จำนวนใบลา/โอทีของคนนี้ที่ผู้อนุมัติยังไม่ตัดสิน — ตัวเลขของรอบยังขยับได้ */
+  waitDocs: number;
   /** วันลาที่ยื่นไว้แต่ยังไม่อนุมัติ — ยังไม่เข้าช่อง "ลา" ของรอบ */
   waitDays: number;
   locked: boolean;
@@ -402,14 +407,31 @@ function TimeRow({
       <Num label="โอทีวันหยุด (ชม.)" v={otHours(r, "holiday") + otHours(r, "public")} fixed2 />
       <td data-label="ต้องตรวจ">
         {open > 0 ? (
-          <span className="tag t-late">
+          /* ป้ายนี้เป็นปุ่มจริง ๆ — เดิมเป็นข้อความเฉย ๆ ต้องเดาว่าคลิกทั้งแถวได้
+             (ทดสอบฝ่ายบุคคล 30 ก.ย. 2569) */
+          <button
+            type="button"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onOpen();
+            }}
+            className="tag t-late cursor-pointer underline-offset-2 hover:underline"
+            aria-label={`ตรวจรายการของ ${e.name} ${open} รายการ`}
+          >
             <i />
-            ต้องตรวจ {open}
-          </span>
+            ต้องตรวจ {open} ›
+          </button>
         ) : fixed > 0 ? (
           <span className="tag t-early">
             <i />
             บันทึกเหตุผลแล้ว
+          </span>
+        ) : waitDocs > 0 ? (
+          /* ใบลา/โอทีที่ยังไม่ตัดสินทำให้ตัวเลขยังขยับได้ — บอกตั้งแต่ในตาราง
+             ไม่ใช่ไปรู้ตอนกดปิดรอบ (ทดสอบฝ่ายบุคคล 30 ก.ย. 2569) */
+          <span className="tag t-early">
+            <i />
+            รออนุมัติ {waitDocs} ใบ
           </span>
         ) : (
           <span className="tag t-ok">
@@ -445,6 +467,7 @@ function TimeRow({
 /** การ์ดของหนึ่งคนบนมือถือ — ข้อมูลชุดเดียวกับแถวในตาราง */
 function TimeCard({
   line: { e, r, days },
+  waitDocs,
   waitDays,
   locked,
   dayLabel,
@@ -452,6 +475,8 @@ function TimeCard({
   onEdit,
 }: {
   line: Line;
+  /** ใบลา/โอทีที่ยังไม่ตัดสินของคนนี้ */
+  waitDocs: number;
   waitDays: number;
   locked: boolean;
   dayLabel: string;
@@ -483,6 +508,11 @@ function TimeCard({
           <span className="tag t-early">
             <i />
             บันทึกเหตุผลแล้ว
+          </span>
+        ) : waitDocs > 0 ? (
+          <span className="tag t-early">
+            <i />
+            รออนุมัติ {waitDocs} ใบ
           </span>
         ) : (
           <span className="tag t-ok">
