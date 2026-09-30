@@ -31,7 +31,7 @@ import { useMemo, useState } from "react";
 import { decideEmpRequest, empFuelKm, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
 import { claimTotal, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
 import { hrPos } from "@/lib/hr-data";
-import { useHr } from "@/lib/hr-store";
+import { hrSnapshot, useHr } from "@/lib/hr-store";
 import { approveClaim, rejectClaim, useAllClaims } from "@/lib/expense-store";
 import { baht, daysBetween, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
 import { type LeaveRecord } from "@/lib/leave-data";
@@ -649,9 +649,13 @@ function statusOf(s: string): Status {
 }
 
 /** ชื่อและตำแหน่งของบทบาทที่ล็อกอินได้ */
-/* บทบาทพนักงานมีหลายคน — ใบที่จำชื่อผู้ยื่นไว้ต้องขึ้นชื่อคนนั้น ไม่ใช่ชื่อตัวแทนของบทบาท */
+/* บทบาทพนักงานมีหลายคน — ใบที่จำชื่อผู้ยื่นไว้ต้องขึ้นชื่อคนนั้น ไม่ใช่ชื่อตัวแทนของบทบาท
+   บรรทัดรองเป็น "ตำแหน่งงาน" ของคนนั้นตามทะเบียนฝ่ายบุคคล ให้ตรงกับคำขอที่มาจาก emp-requests
+   (เดิมขึ้นชื่อบทบาท ใบของพนักงานจึงขึ้นว่า "พนักงาน" ทั้งที่แถวอื่นบอกตำแหน่งจริง) */
 function who(role: Role, name?: string) {
-  return { src: "role" as const, role, name: name || USERS[role].name, sub: roleLabel(role) };
+  const person = name || USERS[role].name;
+  const emp = hrSnapshot().emp.find((e) => e.name === person);
+  return { src: "role" as const, role, name: person, sub: emp ? hrPos(emp.pos).label : roleLabel(role) };
 }
 
 /** คำขอของพนักงานตามรหัสพนักงาน (emp-requests) — รูปเดียวกับใบของบทบาท */
