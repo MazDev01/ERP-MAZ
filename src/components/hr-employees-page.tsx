@@ -1019,6 +1019,9 @@ function AddDialog({
     /* ตรวจทีละข้อแล้วบอกข้อแรกที่ติด ไม่รวมเป็นก้อนเดียวจนไม่รู้ว่าต้องแก้ช่องไหน */
     if (!first) return setWarn("กรอกชื่อ (ไทย)");
     if (!last) return setWarn("กรอกนามสกุล (ไทย)");
+    /* ชื่ออังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี จึงต้องมีตั้งแต่ตอนเพิ่มคน (เจ้าของสั่ง 30 ก.ย. 2569) */
+    if (!f.firstEn.trim()) return setWarn("กรอกชื่อภาษาอังกฤษ (First name)");
+    if (!f.lastEn.trim()) return setWarn("กรอกนามสกุลภาษาอังกฤษ (Last name)");
     if (!f.pos) return setWarn("เลือกตำแหน่ง");
     if (!f.type) return setWarn("เลือกประเภทการจ้าง");
     if (!f.startedAt) return setWarn("เลือกวันเริ่มงาน");
@@ -1083,10 +1086,10 @@ function AddDialog({
               <Input value={f.last} onChange={set("last")} placeholder="เช่น ใจดี" aria-label="นามสกุลภาษาไทย" />
             </Field>
             {/* ชื่ออังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j (เจ้าของสั่ง 29 ก.ย. 2569) */}
-            <Field label="First name (EN)" hint="ใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j">
+            <Field label="First name (EN)" required hint="ใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j">
               <Input value={f.firstEn} onChange={set("firstEn")} aria-label="ชื่อภาษาอังกฤษ" />
             </Field>
-            <Field label="Last name (EN)">
+            <Field label="Last name (EN)" required>
               <Input value={f.lastEn} onChange={set("lastEn")} aria-label="นามสกุลภาษาอังกฤษ" />
             </Field>
             <Field label="ชื่อเล่น">
