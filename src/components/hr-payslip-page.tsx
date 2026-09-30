@@ -33,6 +33,7 @@ import {
   inPeriod,
   dailyRateIn,
   isDaily,
+  isPaid,
   payIn,
   prorate,
   workedDaysIn,
@@ -116,7 +117,8 @@ export function HrPayslipPage() {
   const state: SlipState = !madeAt ? "none" : published ? "pub" : "made";
   const locked = state === "pub";
 
-  const inCycle = hr.emp.filter((e) => inPeriod(e, month));
+  /* ฝึกงานไม่มีค่าจ้างและไม่มีสลิป (เจ้าของยืนยัน 30 ก.ย. 2569) */
+  const inCycle = hr.emp.filter((e) => inPeriod(e, month) && isPaid(e));
   const monthlyCount = inCycle.filter((e) => !isDaily(e)).length;
   const dailyCount = inCycle.length - monthlyCount;
   const people = inCycle.filter((e) => (day ? isDaily(e) : !isDaily(e)));

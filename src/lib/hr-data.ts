@@ -1134,6 +1134,14 @@ export function inRange(e: Employee, c: Cycle) {
   return true;
 }
 
+/**
+ * คนที่มีค่าจ้างในระบบ — นักศึกษาฝึกงานไม่มีค่าจ้างและไม่มีสลิป
+ * (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 · เจ้าของยืนยัน) ยังอยู่ในทะเบียนและต้องลงเวลาตามปกติ
+ */
+export function isPaid(e: Employee) {
+  return e.type !== "intern";
+}
+
 export function inPeriod(e: Employee, month: string) {
   return inRange(e, hrCycle(month));
 }
@@ -1458,7 +1466,8 @@ export function payLines(
   month: string | null | undefined,
 ): PayLine[] {
   return emp
-    .filter((e) => inRange(e, range))
+    /* ฝึกงานไม่มีค่าจ้าง จึงไม่มีบรรทัดในรอบเงินเดือนและไม่มีสลิป */
+    .filter((e) => inRange(e, range) && isPaid(e))
     .map((e) => {
       const g: PayGroup = isDaily(e) ? "day" : "month";
       const saved = month ? lineIn(payrun, g, e.id) : null;
