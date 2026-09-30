@@ -13,7 +13,7 @@
  * การตัดสินอยู่ในกล่องเดียว: อนุมัติ = บันทึกทันที · ไม่อนุมัติ = กดครั้งแรกเปิดช่องเหตุผล กดอีกครั้งถึงบันทึก
  * คำขอที่ตัดสินแล้วเปิดดูย้อนหลังได้อย่างเดียว ไม่มีปุ่มตัดสิน
  *
- * PM / GM เห็นคำขอของทีมงานที่ยังไม่มีบัญชีเข้าระบบด้วย (emp-requests ที่ to ตรงกับบทบาท)
+ * PM / GM เห็นคำขอของพนักงานที่ยังไม่มีบัญชีเข้าระบบด้วย (emp-requests ที่ to ตรงกับบทบาท)
  * ชื่อและตำแหน่งของผู้ขออ่านจากทะเบียนฝ่ายบุคคล
  *
  * ⚠️ คิวเป็นของ "คน" ไม่ใช่ของบทบาทที่เลือกอยู่ (ผู้ใช้สั่ง 23 ก.ย. 2569)
@@ -62,7 +62,7 @@ type Status = "pending" | "approved" | "rejected";
 /** คำขอหนึ่งใบ — รวมสามประเภทให้อยู่ในรูปเดียวกัน */
 type Request = {
   kind: Kind;
-  /** role = ใบของบทบาทที่ล็อกอินได้ (leave/ot/expense-store) · emp = คำขอของทีมงานตามรหัสพนักงาน */
+  /** role = ใบของบทบาทที่ล็อกอินได้ (leave/ot/expense-store) · emp = คำขอของพนักงานตามรหัสพนักงาน */
   src: "role" | "emp";
   /** บทบาทผู้ยื่น — เฉพาะ src = role */
   role?: Role;
@@ -175,7 +175,7 @@ export function ApprovalsPage() {
 
   const all = useMemo(() => {
     const out: Request[] = [];
-    /* ใครไม่อยู่วันไหนบ้างทั้งบริษัท — ใบลาของทุกบทบาท บวกคำขอลาของทีมงานที่ยังไม่มีบัญชี
+    /* ใครไม่อยู่วันไหนบ้างทั้งบริษัท — ใบลาของทุกบทบาท บวกคำขอลาของพนักงานที่ยังไม่มีบัญชี
        ถ้าเอาแค่ฝั่งเดียว ผู้อนุมัติจะเห็นครึ่งเดียวแล้วอนุมัติจนไม่เหลือคน */
     const spans: AwaySpan[] = [
       ...awaySpans(leaves),
@@ -193,7 +193,7 @@ export function ApprovalsPage() {
     /*
      * ใบลาของนักศึกษาฝึกงานขึ้นที่ฝ่ายบุคคล ไม่ใช่สายอนุมัติปกติ
      * (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 — ฝึกงานลากับฝ่ายบุคคล)
-     * ดูจากชื่อผู้ยื่นเทียบทะเบียน เพราะบทบาททีมงานมีได้หลายคนหลายประเภทการจ้าง
+     * ดูจากชื่อผู้ยื่นเทียบทะเบียน เพราะบทบาทพนักงานมีได้หลายคนหลายประเภทการจ้าง
      */
     const isIntern = (name: string) =>
       hr.emp.some((e) => e.name === name && e.type === "intern");
@@ -215,7 +215,7 @@ export function ApprovalsPage() {
           if (v.status !== "ยกเลิก" && isIntern(v.employee))
             out.push(fromLeave(role, v, "hr", leaves[role], spans));
 
-    /* คิวของ PM / GM — คำขอของทีมงานตามรหัสพนักงาน (ต้นแบบ PM_APPROVALS · gm-approvals) */
+    /* คิวของ PM / GM — คำขอของพนักงานตามรหัสพนักงาน (ต้นแบบ PM_APPROVALS · gm-approvals) */
     for (const as of myRoles) {
       if (as !== "pm" && as !== "gm") continue;
       for (const r of extra) {
@@ -649,13 +649,13 @@ function statusOf(s: string): Status {
 }
 
 /** ชื่อและตำแหน่งของบทบาทที่ล็อกอินได้ */
-/* บทบาททีมงานมีหลายคน — ใบที่จำชื่อผู้ยื่นไว้ต้องขึ้นชื่อคนนั้น ไม่ใช่ชื่อตัวแทนของบทบาท */
+/* บทบาทพนักงานมีหลายคน — ใบที่จำชื่อผู้ยื่นไว้ต้องขึ้นชื่อคนนั้น ไม่ใช่ชื่อตัวแทนของบทบาท */
 function who(role: Role, name?: string) {
   return { src: "role" as const, role, name: name || USERS[role].name, sub: roleLabel(role) };
 }
 
-/** คำขอของทีมงานตามรหัสพนักงาน (emp-requests) — รูปเดียวกับใบของบทบาท */
-/** แปลงช่วงที่ไม่อยู่เป็นบรรทัดอ่านง่าย — ใช้ทั้งใบลาของบทบาทและคำขอลาของทีมงาน */
+/** คำขอของพนักงานตามรหัสพนักงาน (emp-requests) — รูปเดียวกับใบของบทบาท */
+/** แปลงช่วงที่ไม่อยู่เป็นบรรทัดอ่านง่าย — ใช้ทั้งใบลาของบทบาทและคำขอลาของพนักงาน */
 function awayList(spans: AwaySpan[], me: { id: string; who: string; date: string; toDate: string }) {
   return othersAway(spans, me).map((x) => ({
     name: x.who,
@@ -687,7 +687,7 @@ function fromEmp(r: EmpRequest, name: string, sub: string, as: Role, spans: Away
       topic: r.leaveType ?? "การลา",
       line: `${lines.join(" ")} ${r.note}`,
       lines,
-      /* สูตรเดียวกับหน้าของ CEO สำหรับคำขอของทีมงาน (quota − ที่ใช้ไปก่อนใบนี้ − ใบนี้) */
+      /* สูตรเดียวกับหน้าของ CEO สำหรับคำขอของพนักงาน (quota − ที่ใช้ไปก่อนใบนี้ − ใบนี้) */
       quota: quotaAfterUsed(r.leaveType ?? "", r.used ?? 0, r.days ?? 0),
       note: r.note,
       away: awayList(spans, {

@@ -90,7 +90,7 @@ const BARE_PAGES = ["/login", "/install", "/offline", "/set-password"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  /* ทีมงานใช้เปลือกมือถือแบบใหม่ (ปุ่มเมนูกลมกลางจอ) — คลี่จากปุ่มนี้ */
+  /* พนักงานใช้เปลือกมือถือแบบใหม่ (ปุ่มเมนูกลมกลางจอ) — คลี่จากปุ่มนี้ */
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   /* บทบาทอื่นยังใช้ลิ้นชักด้านซ้ายแบบเดิม ตามที่ผู้ใช้สั่งไว้ */
@@ -143,7 +143,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (home !== "/") router.replace(home);
   }, [hydrated, pathname, home, router, role]);
   /*
-   * เปลือกแบบมือถือใหม่ใช้เฉพาะทีมงาน เพราะมีแบบดีไซน์ของบทบาทนี้อย่างเดียว
+   * เปลือกแบบมือถือใหม่ใช้เฉพาะพนักงาน เพราะมีแบบดีไซน์ของบทบาทนี้อย่างเดียว
    * บทบาทอื่นยังไม่มีแบบ จึงคงของเดิมไว้ ไม่เดาแทนผู้ใช้
    * ฝั่งจอกว้างใช้แถบข้างสีแบรนด์เหมือนกันหมด ตรงนั้นไม่ได้แยกตามบทบาท
    */
@@ -227,7 +227,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           newMobile ? "w-[236px]" : "w-[288px]",
           "md:sticky md:top-0 md:flex md:h-dvh md:translate-x-0",
           newMobile
-            ? /* ทีมงานเข้าเมนูจากปุ่มกลมด้านบน จอแคบจึงไม่มีแถบข้างเลย */
+            ? /* พนักงานเข้าเมนูจากปุ่มกลมด้านบน จอแคบจึงไม่มีแถบข้างเลย */
               "hidden"
             : [
                 "fixed inset-y-0 left-0 flex transition-transform duration-200 ease-out",
@@ -238,7 +238,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         {/* หัวแถบ — เวิร์ดมาร์กอย่างเดียวตามดีไซน์ บทบาทไปอยู่ในเมนูผู้ใช้มุมขวาบนแทน */}
         {newMobile ? (
-          /* หัวแถบของทีมงาน — เวิร์ดมาร์กอย่างเดียวตามดีไซน์ */
+          /* หัวแถบของพนักงาน — เวิร์ดมาร์กอย่างเดียวตามดีไซน์ */
           <div className="flex flex-none items-center px-5 py-5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/maz-logo.png" alt="MAZ" className="h-[26px] w-auto" />
@@ -355,7 +355,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           )}
 
-          {/* ทีมงานย้ายกระดิ่งกับเมนูผู้ใช้ไปแถบล่าง จอแคบจึงไม่มีตรงนี้ */}
+          {/* พนักงานย้ายกระดิ่งกับเมนูผู้ใช้ไปแถบล่าง จอแคบจึงไม่มีตรงนี้ */}
           {/* กระดิ่งอยู่มุมขวาบนทุกจอ (ผู้ใช้สั่ง 22 ก.ย. 2569 ย้ายออกจากแถบล่าง) · เมนูผู้ใช้บนมือถืออยู่แถบล่าง */}
           <div className="ml-auto flex flex-none items-center gap-[9px] max-md:-ml-11">
             <NotificationMenu />

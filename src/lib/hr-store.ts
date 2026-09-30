@@ -147,7 +147,7 @@ export function useHr() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);
 }
 
-/** อ่านนอก React — ทีมงานของ PM ซิงก์จากทะเบียนชุดเดียวกันนี้ (ERD HR-BR-19, ดู pm-store) */
+/** อ่านนอก React — พนักงานของ PM ซิงก์จากทะเบียนชุดเดียวกันนี้ (ERD HR-BR-19, ดู pm-store) */
 export function hrSnapshot() {
   return store.get();
 }
@@ -266,7 +266,7 @@ function editEmp(id: string, fn: (e: Employee) => Employee) {
  * บัญชีเป็นของพนักงานรายคน (ERD: user_account ผูกกับ employee หนึ่งต่อหนึ่ง)
  * สถานะในหน้าเข้าสู่ระบบยังเก็บตามบทบาท (accounts.ts) เพราะตอนนี้หนึ่งบทบาทคือหนึ่งคนที่ล็อกอินได้ (ROLE_EMPLOYEE)
  * จึงแตะสถานะของบทบาทได้เฉพาะเมื่อพนักงานคนนี้คือคนที่ล็อกอินในบทบาทนั้นจริง
- * ไม่งั้นระงับพนักงานใหม่ที่ได้บทบาท "ทีมงาน" จะไประงับกมลชนก (E05) ที่ใช้บทบาทนั้นอยู่ไปด้วย
+ * ไม่งั้นระงับพนักงานใหม่ที่ได้บทบาท "พนักงาน" จะไประงับกมลชนก (E05) ที่ใช้บทบาทนั้นอยู่ไปด้วย
  */
 function ownRoles(id: string, roles: Role[]) {
   return roles.filter((r) => ROLE_EMPLOYEE[r] === id);

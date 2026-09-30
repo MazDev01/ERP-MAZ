@@ -98,7 +98,7 @@ export function LoginForm() {
   const savedRole = useRole();
   const hr = useHr();
   const [role, setPick] = useState<Role>(savedRole);
-  /* ทีมงานมีหลายตำแหน่ง จึงต้องเลือกด้วยว่าจะเข้าเป็นใคร (เจ้าของสั่ง 29 ก.ย. 2569) */
+  /* พนักงานมีหลายตำแหน่ง จึงต้องเลือกด้วยว่าจะเข้าเป็นใคร (เจ้าของสั่ง 29 ก.ย. 2569) */
   const [who, setWho] = useState(() => staffEmployeeId());
 
   function edit(which: "user" | "pass", v: string) {
@@ -248,7 +248,7 @@ export function LoginForm() {
             </fieldset>
 
             {/*
-              บทบาท "ทีมงาน" มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
+              บทบาท "พนักงาน" มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
               เลือกได้ว่าเข้าเป็นใคร งานที่ได้รับกับตารางงานจะเป็นของคนนั้น (เจ้าของสั่ง 29 ก.ย. 2569)
             */}
             {role === "staff" && (

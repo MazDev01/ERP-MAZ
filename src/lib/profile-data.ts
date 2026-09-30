@@ -73,7 +73,7 @@ const store = createPersistedStore<ProfileByRole>(
  */
 function hrOwned(role: Role) {
   /*
-   * บทบาท "ทีมงาน" ไม่ได้ผูกกับคนเดียว — มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
+   * บทบาท "พนักงาน" ไม่ได้ผูกกับคนเดียว — มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
    * ชื่อกับตำแหน่งจึงมาจากคนที่เลือกไว้ในทะเบียนฝ่ายบุคคล ไม่ใช่ค่าตายตัวใน USERS (เจ้าของสั่ง 29 ก.ย. 2569)
    */
   if (role === "staff") {
@@ -112,7 +112,7 @@ let merged: EmployeeProfile = { ...DEFAULT_PROFILE.sales, ...hrOwned("sales") };
 let seenStaff: string | null = null;
 
 function pick(all: ProfileByRole, role: Role): EmployeeProfile {
-  /* ทีมงานสลับคนได้ จึงต้องคิดใหม่เมื่อคนเปลี่ยนด้วย ไม่ใช่เฉพาะตอนสลับบทบาท */
+  /* พนักงานสลับคนได้ จึงต้องคิดใหม่เมื่อคนเปลี่ยนด้วย ไม่ใช่เฉพาะตอนสลับบทบาท */
   const staffId = role === "staff" ? staffEmployeeId() : null;
   if (all !== seenAll || role !== seenRole || staffId !== seenStaff) {
     seenAll = all;

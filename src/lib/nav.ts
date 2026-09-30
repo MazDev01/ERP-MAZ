@@ -124,7 +124,7 @@ const PM: NavItem[] = [
   { group: "โปรเจค", label: "แดชบอร์ด", icon: "chart", href: "/pm/dashboard" },
   { group: "โปรเจค", label: "งานเข้าใหม่", icon: "inbox", href: "/pm/inbox" },
   { group: "โปรเจค", label: "โปรเจค", icon: "project", href: "/pm/projects" },
-  /* งานที่ทีมส่งกลับมาให้ตรวจ — คู่กับหน้า "งานที่ได้รับ" ของทีมงาน */
+  /* งานที่ทีมส่งกลับมาให้ตรวจ — คู่กับหน้า "งานที่ได้รับ" ของพนักงาน */
   { group: "โปรเจค", label: "งานรอตรวจ", icon: "tasks", href: "/pm/reviews" },
   /* ปฏิทินนัดหมายของ PM — คนละเรื่องกับงานย่อยในโปรเจค */
   { group: "โปรเจค", label: "ตารางงาน", icon: "leave", href: "/pm/schedule" },
@@ -133,12 +133,12 @@ const PM: NavItem[] = [
 ];
 
 /*
- * ทีมงาน — เห็นแค่งานที่ตัวเองถูกมอบหมาย กับตารางงานที่ใช้ร่วมกับ PM
+ * พนักงาน — เห็นแค่งานที่ตัวเองถูกมอบหมาย กับตารางงานที่ใช้ร่วมกับ PM
  * ไม่เห็นรายการโปรเจคทั้งหมด เพราะไม่ได้เป็นคนคุมภาพรวม
  */
 const STAFF: NavItem[] = [
   { group: "งานของฉัน", label: "งานที่ได้รับ", icon: "tasks", href: "/my-tasks" },
-  /* ตารางงานของทีมงานเป็นหน้าของตัวเอง (ต้นแบบ my-schedule.html) — เห็นเฉพาะนัดที่ตัวเองต้องเข้าร่วม */
+  /* ตารางงานของพนักงานเป็นหน้าของตัวเอง (ต้นแบบ my-schedule.html) — เห็นเฉพาะนัดที่ตัวเองต้องเข้าร่วม */
   { group: "งานของฉัน", label: "ตารางงาน", icon: "leave", href: "/my-schedule" },
 ];
 
@@ -342,7 +342,7 @@ export function navGroups(role: Role): NavGroup[] {
 
 /**
  * หน้าหลักการ์ดเมนูบนมือถือ — ผู้ใช้สั่ง 22 ก.ย. 2569 ให้ทุกบทบาทใช้แบบเดียวกับหน้าหลัก CEO (ceo-home.html)
- * CEO กับทีมงานคงที่อยู่เดิมตามต้นแบบของตัวเอง บทบาทอื่นใช้ /home
+ * CEO กับพนักงานคงที่อยู่เดิมตามต้นแบบของตัวเอง บทบาทอื่นใช้ /home
  */
 export function mobileHomeOf(role: Role) {
   if (role === "ceo") return "/ceo/home";
@@ -352,7 +352,7 @@ export function mobileHomeOf(role: Role) {
 
 /**
  * หน้าแรกหลังล็อกอิน — ปกติคือหน้าตอกบัตร ถ้าบทบาทนี้ไม่มีหน้าตอกบัตรไปเมนูแรกของตัวเอง
- * บนมือถือ (phone) CEO กับทีมงานมีหน้าหลักการ์ดเมนูของตัวเอง (ต้นแบบ ceo-home.html · my-home.html)
+ * บนมือถือ (phone) CEO กับพนักงานมีหน้าหลักการ์ดเมนูของตัวเอง (ต้นแบบ ceo-home.html · my-home.html)
  */
 export function homeOf(role: Role, access?: MenuAccess, route?: ApprovalRoute, phone = false) {
   if (phone) return mobileHomeOf(role);
@@ -365,7 +365,7 @@ export function homeOf(role: Role, access?: MenuAccess, route?: ApprovalRoute, p
  * ที่เหลือกดปุ่ม "อื่นๆ" แล้วเปิดเมนูเต็มเป็นลิ้นชัก
  *
  * "เวลาทำงาน" อยู่ช่องแรกทุกบทบาท เพราะทุกคนต้องตอกบัตรก่อนเริ่มงาน
- * ทีมงานใช้เปลือกแบบใหม่ (แถบล่างสามช่อง) จึงไม่ได้อ่านตารางนี้
+ * พนักงานใช้เปลือกแบบใหม่ (แถบล่างสามช่อง) จึงไม่ได้อ่านตารางนี้
  */
 const BOTTOM_HREFS: Record<Role, string[]> = {
   sales: ["/", "/leads", "/quotations", "/leave"],
@@ -442,7 +442,7 @@ const EXTRA_PAGES: Record<string, NavItem> = {
     icon: "home",
     href: "/ceo/home",
   },
-  /* หน้าหลักของทีมงานมีเฉพาะบนมือถือ (ต้นแบบ my-home.html) — จอใหญ่เด้งไปเมนูแรก */
+  /* หน้าหลักของพนักงานมีเฉพาะบนมือถือ (ต้นแบบ my-home.html) — จอใหญ่เด้งไปเมนูแรก */
   "/my-home": {
     group: "งานของฉัน",
     label: "หน้าหลัก",
@@ -493,7 +493,7 @@ const EXTRA_OWNER: Record<string, Role | Role[]> = {
   "/ceo/deals": "ceo",
   "/ceo/home": "ceo",
   "/my-home": "staff",
-  /* ทุกบทบาทเปิด /home ได้ — บทบาทที่มีหน้าหลักของตัวเอง (ทีมงาน · CEO) ถูกพาไปหน้านั้นต่อ (HomePage) */
+  /* ทุกบทบาทเปิด /home ได้ — บทบาทที่มีหน้าหลักของตัวเอง (พนักงาน · CEO) ถูกพาไปหน้านั้นต่อ (HomePage) */
   "/home": ["sales", "ps", "pm", "acc", "hr", "gm", "staff", "ceo"],
 };
 

@@ -60,7 +60,7 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
   const extra = useEmpRequests();
 
   /* คำขอที่ยังไม่ได้ตัดสิน — นับเฉพาะประเภทและบทบาทที่เราเป็นผู้อนุมัติ
-     รวมคำขอของทีมงานที่ยังไม่มีบัญชีเข้าระบบ (emp-requests) ที่ส่งถึง PM / GM ด้วย
+     รวมคำขอของพนักงานที่ยังไม่มีบัญชีเข้าระบบ (emp-requests) ที่ส่งถึง PM / GM ด้วย
 
      นับรวมทุกบทบาทที่คนนี้ถืออยู่ ไม่ใช่เฉพาะบทบาทที่เลือกอยู่ (เช่น บัญชีกับบุคคลเป็นคนเดียวกัน)
      ตัวเลขบนกระดิ่งจึงตรงกับคิวในหน้าคำขออนุมัติเสมอ — หน้านั้นก็รวมทุกบทบาทเหมือนกัน */
@@ -77,7 +77,7 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
         else if (kind === "ot") sum += allOt[from].filter((v) => v.status === "รออนุมัติ").length;
         else sum += allClaims[from].filter((v) => v.status === "รออนุมัติ").length;
       }
-    /* คิวของทีมงานที่ยังไม่มีบัญชีเข้าระบบมีเฉพาะสองบทบาทนี้ (emp-requests.to) */
+    /* คิวของพนักงานที่ยังไม่มีบัญชีเข้าระบบมีเฉพาะสองบทบาทนี้ (emp-requests.to) */
     const queues = myRoles.filter((r): r is "pm" | "gm" => r === "pm" || r === "gm");
     return sum + extra.filter((r) => r.to !== "exec" && queues.includes(r.to) && r.status === "pending").length;
   }, [myRoles, route, allLeaves, allOt, allClaims, extra]);

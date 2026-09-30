@@ -59,7 +59,7 @@ export function leavePolicyOf(type: EmpType): LeavePolicy {
   return POLICY[type] ?? POLICY.full;
 }
 
-/** ประเภทการจ้างของคนที่ล็อกอินอยู่ — ทีมงานอ่านจากคนที่เลือกไว้ บทบาทอื่นอ่านจากคนที่ผูกไว้ */
+/** ประเภทการจ้างของคนที่ล็อกอินอยู่ — พนักงานอ่านจากคนที่เลือกไว้ บทบาทอื่นอ่านจากคนที่ผูกไว้ */
 export function empTypeOfRole(role: Role, staffId: string): EmpType {
   const id = role === "staff" ? staffId : ROLE_EMPLOYEE[role];
   return HR_EMP.find((e) => e.id === id)?.type ?? "full";

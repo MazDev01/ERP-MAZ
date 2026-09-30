@@ -77,7 +77,7 @@ function getAllSnapshot(): Record<Role, PunchRecord[]> {
   /* อ่านใหม่เมื่อมีคนตอกบัตรเพิ่มเท่านั้น จะได้คืนวัตถุอ้างอิงเดิมให้ useMemo ใช้ต่อได้ */
   if (allCache === null || allStamp !== version) {
     allStamp = version;
-    /* ฝ่ายบุคคลมองทีมงานเป็นบทบาทเดียว — รวมการตอกบัตรของทุกคนในทีมเข้าด้วยกัน */
+    /* ฝ่ายบุคคลมองพนักงานเป็นบทบาทเดียว — รวมการตอกบัตรของทุกคนในทีมเข้าด้วยกัน */
     allCache = Object.fromEntries(
       ROLES.map((r) => [r.key, personKeysOf(r.key).flatMap((k) => loadRecords(k))]),
     ) as Record<Role, PunchRecord[]>;

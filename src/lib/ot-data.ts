@@ -80,7 +80,7 @@ export type OtRecord = {
   decidedAt?: string;
   /** "yyyy-mm-dd hh:mm" เวลาที่แก้ไขล่าสุด — แก้ได้เฉพาะตอนยังรออนุมัติ */
   editedAt?: string;
-  /** ชื่อผู้ยื่น — ทีมงานมีหลายคน หน้าอนุมัติต้องรู้ว่าใบนี้ของใคร (29 ก.ย. 2569) */
+  /** ชื่อผู้ยื่น — พนักงานมีหลายคน หน้าอนุมัติต้องรู้ว่าใบนี้ของใคร (29 ก.ย. 2569) */
   employee?: string;
 };
 
@@ -241,7 +241,7 @@ export const OT_RECORDS: Record<Role, OtRecord[]> = {
   pm: PM_OT,
   acc: ACC_OT,
   hr: HR_OT,
-  /* ทีมงาน (E05 Website) — ต้นแบบ ceo-approvals.html CEO_REQ OT-2569-0014 · ตำแหน่งนี้ CEO เป็นผู้อนุมัติ */
+  /* พนักงาน (E05 Website) — ต้นแบบ ceo-approvals.html CEO_REQ OT-2569-0014 · ตำแหน่งนี้ CEO เป็นผู้อนุมัติ */
   staff: [
     { id: "OT-2569-0014", date: "2026-09-08", startMin: 1080, endMin: 1260, hours: 3, approvedHours: null, reason: "ปรับหน้าเว็บให้แสดงผลบนมือถือตามที่ลูกค้าขอเพิ่ม", status: "รออนุมัติ", comment: "", submittedAt: "2026-09-08 21:05" },
   ],

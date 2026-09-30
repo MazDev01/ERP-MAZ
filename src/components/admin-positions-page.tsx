@@ -60,7 +60,7 @@ const APPR_SHORT: Record<ApproverKey, string> = {
 
 /*
  * ตำแหน่งงานนี้เข้าระบบได้ในฐานะอะไร
- * ฝ่ายบุคคลตั้งเองได้รายตำแหน่ง (roles) · ไม่ตั้ง = ค่าตั้งต้นของระบบ (ตำแหน่งที่เพิ่มใหม่คือทีมงาน)
+ * ฝ่ายบุคคลตั้งเองได้รายตำแหน่ง (roles) · ไม่ตั้ง = ค่าตั้งต้นของระบบ (ตำแหน่งที่เพิ่มใหม่คือพนักงาน)
  */
 function roleKeysOf(pos: string, roles?: string[]): Role[] {
   if (roles?.length) return roles.filter((r) => ROLES.some((x) => x.key === r)) as Role[];
@@ -454,7 +454,7 @@ function PosSheet({
   const [label, setLabel] = useState(initial?.label ?? "");
   const [dept, setDept] = useState(initial?.dept ?? depts[0]?.v ?? "");
   const [appr, setAppr] = useState<Partial<Record<RequestKind, string>>>(route);
-  /* ตำแหน่งในระบบของตำแหน่งงานนี้ — ว่างไว้ = ใช้ค่าตั้งต้น (ตำแหน่งใหม่คือทีมงาน) */
+  /* ตำแหน่งในระบบของตำแหน่งงานนี้ — ว่างไว้ = ใช้ค่าตั้งต้น (ตำแหน่งใหม่คือพนักงาน) */
   const [roles, setRoles] = useState<string[]>(initial?.roles ?? []);
   const bad = !label.trim() ? "ใส่ชื่อตำแหน่ง" : "";
   const pos = initial?.v ?? "";

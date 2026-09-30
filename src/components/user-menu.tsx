@@ -30,7 +30,7 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
      ต้องเห็นว่าตอนนี้ทำงานในบทบาทไหน และตัวเองถือบทบาทอะไรอีกบ้าง
      ไม่งั้นพอคิวอนุมัติหรือเมนูไม่เหมือนที่คิด ก็เดาไม่ออกว่าเพราะสวมหมวกผิดใบ */
   const role = useRole();
-  /* ทีมงานสลับคนได้ — รายชื่อจากทะเบียนฝ่ายบุคคล ไม่ใช่รายชื่อตายตัวในหน้านี้ */
+  /* พนักงานสลับคนได้ — รายชื่อจากทะเบียนฝ่ายบุคคล ไม่ใช่รายชื่อตายตัวในหน้านี้ */
   const staffId = useStaffEmployeeId();
   const team = role === "staff" ? staffTeam() : [];
   const myRoles = useMyRoles();
@@ -148,7 +148,7 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
           <hr className="mx-1 my-1.5 border-border" />
 
           {/*
-            บทบาททีมงานมีหลายคนหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
+            บทบาทพนักงานมีหลายคนหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
             สลับได้ว่ากำลังใช้ระบบเป็นใคร — งานที่ได้รับ เวลาทำงาน ใบลา โอที ใบเบิก เป็นของคนนั้น
             (เจ้าของสั่ง 29 ก.ย. 2569 · ยังไม่มีหลังบ้าน จึงเป็นตัวเลือกในเครื่อง)
           */}

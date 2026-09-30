@@ -6,8 +6,8 @@
  *
  * ทุกอย่างคิดสดจากสโตร์ ไม่เก็บตัวเลขสรุปซ้ำ
  *   วันลาที่อนุมัติแล้ว — ทะเบียนเวลาทำงานของฝ่ายบุคคล (useHrTime ทับด้วยใบจริงของบทบาทที่ล็อกอินได้)
- *                        + คำขอของทีมงานใน emp-requests ที่อนุมัติแล้ว (ยังไม่ไหลเข้าทะเบียน)
- *   วันลาที่รออนุมัติ — ใบของบทบาทใน leave-store + คำขอของทีมงานใน emp-requests
+ *                        + คำขอของพนักงานใน emp-requests ที่อนุมัติแล้ว (ยังไม่ไหลเข้าทะเบียน)
+ *   วันลาที่รออนุมัติ — ใบของบทบาทใน leave-store + คำขอของพนักงานใน emp-requests
  *   คิวรออนุมัติ     — ตามสายอนุมัติใน role.ts (approvesFor) + emp-requests ที่ส่งถึง GM
  *                        ชุดเดียวกับที่หน้า /approvals แสดง ตัวเลขสองหน้าจึงตรงกัน
  */
@@ -83,7 +83,7 @@ export function useTeamLeave(): TeamLeave[] {
       }
     }
 
-    /* คำขอของทีมงานที่ยังไม่มีบัญชี — อนุมัติแล้วยังไม่ไหลเข้าทะเบียน จึงนับจากตรงนี้ด้วย */
+    /* คำขอของพนักงานที่ยังไม่มีบัญชี — อนุมัติแล้วยังไม่ไหลเข้าทะเบียน จึงนับจากตรงนี้ด้วย */
     for (const r of extra) {
       if (r.kind !== "leave" || r.status === "rejected" || !r.from) continue;
       const pending = r.status === "pending";
@@ -162,7 +162,7 @@ export function useApprovedOtHours(month: string): number {
   return useMemo(() => {
     let h = 0;
     for (const rec of Object.values(time)) for (const x of rec.ot ?? []) if (x.d.slice(0, 7) === month) h += x.h;
-    /* โอทีของทีมงานที่ยังไม่มีบัญชี — อนุมัติแล้วยังไม่ไหลเข้าทะเบียน */
+    /* โอทีของพนักงานที่ยังไม่มีบัญชี — อนุมัติแล้วยังไม่ไหลเข้าทะเบียน */
     for (const r of extra)
       if (r.kind === "ot" && r.status === "approved" && (r.date ?? "").slice(0, 7) === month) h += r.approvedHours ?? r.hours ?? 0;
     return Math.round(h * 100) / 100;

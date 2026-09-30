@@ -28,9 +28,9 @@ const store = createRoleStore<ExpenseClaim[]>(
     claims.map((c) =>
       (c.status === "ร่าง" || c.status === "รออนุมัติ") && c.income.length ? { ...c, income: [] } : c,
     ),
-  /* หน้าอนุมัติมองทีมงานเป็นก้อนเดียว — รวมใบของทุกคนในบทบาทเข้าด้วยกัน */
+  /* หน้าอนุมัติมองพนักงานเป็นก้อนเดียว — รวมใบของทุกคนในบทบาทเข้าด้วยกัน */
   (list) => list.flat(),
-  /* ทีมงานคนอื่นเริ่มจากไม่มีใบเลย ไม่ใช่ได้ใบตัวอย่างของคนตั้งต้นติดมา */
+  /* พนักงานคนอื่นเริ่มจากไม่มีใบเลย ไม่ใช่ได้ใบตัวอย่างของคนตั้งต้นติดมา */
   [],
 );
 
@@ -151,7 +151,7 @@ export function submitClaim(month: string) {
   const draft = store.current().find((c) => c.month === month);
   if (!draft || !checkClaim(draft).ok) return false;
   const stamp = bkkNow();
-  /* เลขที่ใบเบิกเดินต่อกันทั้งบริษัท — รวมใบของทีมงานที่ยังไม่มีบัญชี (emp-requests) และใบที่จ่ายคืนไปแล้ว (HR_REIMB) */
+  /* เลขที่ใบเบิกเดินต่อกันทั้งบริษัท — รวมใบของพนักงานที่ยังไม่มีบัญชี (emp-requests) และใบที่จ่ายคืนไปแล้ว (HR_REIMB) */
   const no = nextDocNo(settings().docs.expense, [
     ...store.all().flat().flatMap((c) => (c.no ? [c.no] : [])),
     ...empRequestIds("expense"),
