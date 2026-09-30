@@ -36,6 +36,8 @@ const PROBATION_WARN_DAYS = 30;
 /** ช่วงเวลาของงานที่ต้องดำเนินการ */
 type Range = "m" | "q" | "y";
 
+import { DashHero, DashSection, DashWeek } from "./mobile-dash";
+
 const RANGE_LABEL: Record<Range, string> = { m: "เดือนนี้", q: "ไตรมาส", y: "ปีนี้" };
 
 /** สัดส่วนในโดนัทใช้สีแดงชุดเดิมไล่ความเข้ม ไม่เพิ่มสีใหม่เข้าระบบ */
@@ -67,9 +69,85 @@ export function HrDashboardPage() {
   const payCycle = hrCycle(lastMonth);
   const span = rangeSpan(today, range);
 
+  /* ── มือถือ: แดชบอร์ดแบบแอป (ตัวเลขชุดเดียวกับจอคอม) ── */
+  const [pickDay, setPickDay] = useState(() => todayIso());
+  /* ปฏิทินของฝ่ายบุคคลดูวันครบกำหนดทดลองงาน กับวันที่นักศึกษาฝึกงานขอลา */
+  const dayItems = (iso: string) => [
+    ...probation
+      .filter((x) => toIsoDate(probEnd(x.e.startedAt)) === iso)
+      .map((x) => ({
+        key: `p-${x.e.id}`,
+        title: `ครบกำหนดทดลองงาน · ${x.e.name}`,
+        meta: x.left < 0 ? `เลยกำหนด ${Math.abs(x.left)} วัน` : `เหลือ ${x.left} วัน`,
+        metaTint: (x.left < 0 ? "rose" : "peach") as "rose" | "peach",
+        href: "/hr/employees",
+      })),
+    ...hr.internLeave
+      .filter((r) => r.status === "pending" && r.from <= iso && r.to >= iso)
+      .map((r) => ({
+        key: `l-${r.id}`,
+        title: `ใบลาฝึกงาน · ${hr.emp.find((e) => e.id === r.emp)?.name ?? r.emp}`,
+        meta: "รออนุมัติ",
+        metaTint: "sky" as const,
+        href: "/hr/employees",
+      })),
+  ];
+  const newbies = [...active].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 5);
+
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="space-y-3.5 md:hidden">
+        <DashHero
+          label="พนักงานทั้งหมด"
+          value={`${active.length} คน`}
+          foot={`ทดลองงาน ${byType("probat").length} · ฝึกงาน ${byType("intern").length} · ใกล้ครบทดลองงาน ${nearEnd}`}
+          ringPct={active.length ? (byType("full").length * 100) / active.length : 0}
+          ringLabel="พนักงานประจำ"
+        />
+
+        <DashWeek value={pickDay} onPick={setPickDay} has={(iso) => dayItems(iso).length > 0} />
+
+        <DashSection
+          title={pickDay === today ? "กำหนดของวันนี้" : `กำหนด ${thaiDate(pickDay)}`}
+          href="/hr/employees"
+          rows={dayItems(pickDay)}
+          empty="ไม่มีกำหนดในวันนี้"
+        />
+
+        <DashSection
+          title="เงินเดือนรอบนี้"
+          href="/hr/payroll"
+          linkLabel="จัดการ"
+          rows={[
+            {
+              key: "pay",
+              title: payClosed ? "ปิดรอบเงินเดือนแล้ว" : `รอดำเนินการ ${active.length} คน`,
+              meta: `รอบ ${thaiDate(payCycle.from)} – ${thaiDate(payCycle.to)}`,
+              metaTint: (payClosed ? "mint" : "peach") as "mint" | "peach",
+              href: "/hr/payroll",
+            },
+          ]}
+          empty=""
+        />
+
+        <DashSection
+          title="เริ่มงานล่าสุด"
+          href="/hr/employees"
+          rows={newbies.map((e) => ({
+            key: e.id,
+            title: `${e.name}${e.nick ? ` (${e.nick})` : ""}`,
+            meta: `${hrPos(e.pos).label} · เริ่ม ${thaiDate(e.startedAt)}`,
+            metaTint: (e.type === "intern" ? "sky" : e.type === "probat" ? "peach" : "mint") as
+              | "sky"
+              | "peach"
+              | "mint",
+            href: "/hr/employees",
+          }))}
+          empty="ยังไม่มีพนักงานใหม่"
+        />
+      </div>
+
+      <div className="bar max-md:hidden">
         <div>
           <h1>แดชบอร์ดฝ่ายบุคคล</h1>
           <p>ภาพรวมกำลังคนและงานที่ต้องดำเนินการ</p>

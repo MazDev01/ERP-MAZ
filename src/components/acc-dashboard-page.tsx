@@ -20,6 +20,8 @@ import {
   toIsoDate,
 } from "@/lib/format";
 
+import { DashChips, DashHero, DashSection, DashWeek } from "./mobile-dash";
+
 type Range = "m" | "q" | "y";
 
 const MON = [
@@ -96,9 +98,72 @@ export function AccDashboardPage() {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
 
+  /* ── มือถือ: แดชบอร์ดแบบแอป (ตัวเลขชุดเดียวกับจอคอม) ── */
+  const [pickDay, setPickDay] = useState(() => toIsoDate(bkkNow()));
+  /* ปฏิทินของบัญชีดู "วันครบกำหนดชำระ" ของใบที่ยังไม่ได้รับเงิน */
+  const dueOn = (iso: string) => openInv.filter((v) => v.due === iso);
+  const recent = [...acc.receipts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
   return (
     <div className="space-y-3.5">
-      <div className="bar">
+      <div className="space-y-3.5 md:hidden">
+        <DashHero
+          chips={<DashChips value={range} items={RANGES} onPick={setRange} />}
+          label="รับชำระในช่วงนี้"
+          value={`${baht(got)} ฿`}
+          foot={`วางบิล ${baht(billed)} ฿ · ค้างรับ ${openInv.length} ใบ`}
+          ringPct={billed ? (got * 100) / billed : 0}
+          ringLabel="เก็บได้จากที่วางบิล"
+        />
+
+        <DashWeek value={pickDay} onPick={setPickDay} has={(iso) => dueOn(iso).length > 0} />
+
+        <DashSection
+          title={pickDay === today ? "ครบกำหนดชำระวันนี้" : `ครบกำหนดชำระ ${thaiDate(pickDay)}`}
+          href="/acc/billing"
+          rows={dueOn(pickDay).map((v) => ({
+            key: v.no,
+            title: `${v.cus} · ${v.no}`,
+            meta: `${baht(invoiceDue(v))} ฿`,
+            metaTint: "peach" as const,
+            href: `/acc/billing?find=${encodeURIComponent(v.no)}`,
+          }))}
+          empty="ไม่มีใบแจ้งหนี้ครบกำหนดวันนี้"
+        />
+
+        <DashSection
+          title="ลูกหนี้ค้างนานสุด"
+          href="/acc/billing"
+          rows={[...late]
+            .sort((a, b) => daysBetween(b.due, today) - daysBetween(a.due, today))
+            .slice(0, 5)
+            .map((v, i) => ({
+              key: v.no,
+              title: `${v.cus} · ${baht(invoiceDue(v))} ฿`,
+              meta: `เกิน ${daysBetween(v.due, today)} วัน`,
+              metaTint: "rose" as const,
+              end: String(i + 1),
+              endTint: (["rose", "peach", "sky", "lilac", "mint"] as const)[i % 5],
+              href: `/acc/billing?find=${encodeURIComponent(v.no)}`,
+            }))}
+          empty="ไม่มีใบแจ้งหนี้ที่เกินกำหนด"
+        />
+
+        <DashSection
+          title="รับชำระล่าสุด"
+          href="/acc/receipts"
+          rows={recent.map((r) => ({
+            key: r.no,
+            title: `${r.cus} · ${baht(r.total)} ฿`,
+            meta: `${thaiDate(r.date)} · ${r.no}`,
+            metaTint: "mint" as const,
+            href: `/acc/receipts?find=${encodeURIComponent(r.no)}`,
+          }))}
+          empty="ยังไม่มีการรับชำระ"
+        />
+      </div>
+
+      <div className="bar max-md:hidden">
         <div>
           <h1>แดชบอร์ดบัญชี</h1>
           <p>{rangeNote(range, now)}</p>

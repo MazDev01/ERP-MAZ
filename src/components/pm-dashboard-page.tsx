@@ -26,6 +26,7 @@ import {
 } from "@/lib/pm-data";
 import { colorOf, eventKind, eventsOn, isPsEvent } from "@/lib/pm-schedule-data";
 import { useSchedule } from "@/lib/pm-schedule-store";
+import { DashHero, DashSection, DashWeek } from "./mobile-dash";
 import { memberName, usePm } from "@/lib/pm-store";
 import { ClockIcon, InboxIcon, ProjectIcon, TasksIcon } from "./icons";
 
@@ -86,9 +87,58 @@ export function PmDashboardPage() {
     (p) => p.status === "done" && p.tasks.some((t) => t.status !== "done"),
   ).length;
 
+  /* ── มือถือ: แดชบอร์ดแบบแอป (ตัวเลขชุดเดียวกับจอคอม) ── */
+  const [pickDay, setPickDay] = useState(() => todayIso());
+  const evOf = (iso: string) =>
+    sc.events.filter((e) => e.date <= iso && (e.dateEnd ?? e.date) >= iso).sort((a, b) => (a.from < b.from ? -1 : 1));
+  const doneTasks = tasks.filter((x) => x.t.status === "done").length;
+  /* งานที่ต้องติดตาม = เลยกำหนด ขึ้นก่อน แล้วค่อยงานที่ใกล้ครบกำหนด */
+  const watch = open
+    .filter((x) => x.left < 0 || x.left <= SOON_DAYS)
+    .sort((a, b) => a.left - b.left)
+    .slice(0, 5);
+
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="space-y-3.5 md:hidden">
+        <DashHero
+          label="โปรเจคที่กำลังทำ"
+          value={`${running} โปรเจค`}
+          foot={`จากทั้งหมด ${totalProjects} โปรเจค · งานรอตรวจ ${review} งาน`}
+          ringPct={tasks.length ? (doneTasks * 100) / tasks.length : 0}
+          ringLabel="งานที่ทีมทำเสร็จ"
+        />
+
+        <DashWeek value={pickDay} onPick={setPickDay} has={(iso) => evOf(iso).length > 0} />
+
+        <DashSection
+          title={pickDay === today ? "นัดหมายวันนี้" : `นัดหมาย ${thaiDate(pickDay)}`}
+          href="/pm/schedule"
+          rows={evOf(pickDay).map((e) => ({
+            key: e.id,
+            title: e.title,
+            meta: `${e.from}–${e.to}${e.place ? ` · ${e.place}` : ""}`,
+            metaTint: "sky" as const,
+            href: "/pm/schedule",
+          }))}
+          empty="ไม่มีนัดหมายในวันนี้"
+        />
+
+        <DashSection
+          title="งานที่ต้องติดตาม"
+          href="/pm/projects"
+          rows={watch.map((x) => ({
+            key: `${x.p.deal}-${x.t.name}`,
+            title: `${x.t.name} · ${x.p.cus}`,
+            meta: x.left < 0 ? `ล่าช้า ${Math.abs(x.left)} วัน` : `เหลือ ${x.left} วัน`,
+            metaTint: (x.left < 0 ? "rose" : "peach") as "rose" | "peach",
+            href: `/pm/projects?deal=${encodeURIComponent(x.p.deal)}`,
+          }))}
+          empty="ไม่มีงานที่ต้องติดตาม"
+        />
+      </div>
+
+      <div className="bar max-md:hidden">
         <div>
           <h1>แดชบอร์ด</h1>
           <p>ภาพรวมงานที่ต้องดูแล</p>
