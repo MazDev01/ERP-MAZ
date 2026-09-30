@@ -103,6 +103,9 @@ export function GmCalendarPage() {
         /* ใบที่ GM เป็นผู้อนุมัติ กดแล้วไปที่ใบนั้นในหน้ารายการรออนุมัติ */
         href: l.pending && l.mine && l.id ? `/approvals?kind=leave&find=${encodeURIComponent(l.id)}` : undefined,
         ...paintOf(l.pending ? "wait" : "leave"),
+        /* ใบลาที่ไม่มีที่ให้ไปต่อไม่ต้องทำเป็นปุ่ม — เดิมกดได้แต่ไม่เกิดอะไรขึ้น
+           (ทดสอบกดทุกปุ่ม 30 ก.ย. 2569) */
+        inert: true,
         data: null,
       });
 
