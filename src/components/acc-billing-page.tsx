@@ -114,6 +114,8 @@ export function AccBillingPage() {
       inRange(v.due),
   );
 
+  /* ดีลที่กางงวดอยู่บนมือถือ — ว่าง = ยังไม่กางใบไหน */
+  const [openPlan, setOpenPlan] = useState("");
   /* ดีลใหม่ที่ยังไม่ได้เปิดดู (AC-BR-01) — เปิดแท็บรอวางบิลอยู่ ให้จุดแดงค้างไว้ครู่หนึ่งพอให้เห็น แล้วถือว่าเปิดดูแล้ว */
   const newDeals = unseenDeals(acc).filter((d) => todo.some((t) => t.no === d.no)).length;
   const hasUnseen = unseenDeals(acc).length > 0;
@@ -425,10 +427,23 @@ export function AccBillingPage() {
                       <button type="button" className="btn glass-thin" data-ceo-hide onClick={() => setPlanning(d)}>
                         {has ? "แก้งวด" : "แบ่งงวด"}
                       </button>
+                      {/* ต้นแบบมือถือ: ปุ่มหลักคือ "ออกใบแจ้งหนี้" กดแล้วค่อยกางงวดให้เลือก
+                         (dose-erp-maz/mobile/billing-mobile-preview.html · 30 ก.ย. 2569) */}
+                      {has && (
+                        <button
+                          type="button"
+                          className="btn solid btn-solid"
+                          data-ceo-hide
+                          aria-expanded={openPlan === d.no}
+                          onClick={() => setOpenPlan(openPlan === d.no ? "" : d.no)}
+                        >
+                          {openPlan === d.no ? "ซ่อนงวด" : "ออกใบแจ้งหนี้"}
+                        </button>
+                      )}
                       {canCancel(d.no) && (
                         <button
                           type="button"
-                          className="btn glass-thin text-destructive!"
+                          className="btn text-destructive! basis-full! border-0! bg-transparent! shadow-none!"
                           data-ceo-hide
                           onClick={() => openCancel(d.no)}
                         >
@@ -438,8 +453,10 @@ export function AccBillingPage() {
                     </>
                   }
                 >
-                  {/* งวดที่รอออกใบแจ้งหนี้กางไว้ในการ์ดเลย ไม่ต้องแตะเพื่อกางอีกชั้น */}
-                  {has && <PlanPhone acc={acc} deal={d} onBill={(item) => setBilling({ deal: d, item })} />}
+                  {/* งวดกางเมื่อกด "ออกใบแจ้งหนี้" ตามต้นแบบมือถือ */}
+                  {has && openPlan === d.no && (
+                    <PlanPhone acc={acc} deal={d} onBill={(item) => setBilling({ deal: d, item })} />
+                  )}
                 </PhoneCard>
               );
             })}

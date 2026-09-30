@@ -93,7 +93,9 @@ export function AccFilters({
           aria-label="ค้นหาเลขที่เอกสารหรือลูกค้า"
         />
       </div>
-      <div className="w-[calc(50%-5px)] sm:w-[160px]">
+      {/* มือถือเหลือแค่ช่องค้นหาตามต้นแบบใหม่ — ช่วงวันที่ยังกรองได้บนจอคอม
+         (เลือกไว้แล้วยังขึ้นบนมือถือ จะได้รู้ว่ากำลังกรองอยู่และกดล้างได้) */}
+      <div className={`w-[calc(50%-5px)] sm:w-[160px] ${f.from ? "" : "max-sm:hidden"}`}>
         <DateField
           value={f.from}
           onChange={(iso) => setF((x) => ({ ...x, from: iso }))}
@@ -103,7 +105,7 @@ export function AccFilters({
           className="h-9 rounded-[10px] text-[13.5px]"
         />
       </div>
-      <div className="w-[calc(50%-5px)] sm:w-[160px]">
+      <div className={`w-[calc(50%-5px)] sm:w-[160px] ${f.to ? "" : "max-sm:hidden"}`}>
         <DateField
           value={f.to}
           onChange={(iso) => setF((x) => ({ ...x, to: iso }))}

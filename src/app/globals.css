@@ -1008,6 +1008,47 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     border-color: transparent;
     color: #fff;
   }
+
+  /* สามแท็บหรือน้อยกว่า วางเรียงเต็มแถวเดียวแบบเส้นใต้ตามต้นแบบมือถือชุดใหม่
+     (dose-erp-maz/mobile/billing-mobile-preview.html · 30 ก.ย. 2569)
+     มากกว่านั้นยังเป็นเม็ดยาเหมือนเดิม เพราะแท็บจะตกบรรทัดแล้วเส้นใต้ใช้ไม่ได้ */
+  .tabs:not(:has(button:nth-child(4))) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+    border-bottom: 1.5px solid var(--border);
+  }
+  .tabs:not(:has(button:nth-child(4))) button {
+    position: relative;
+    height: 46px;
+    padding: 0 6px;
+    gap: 6px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+  .tabs:not(:has(button:nth-child(4))) button.on {
+    background: none;
+    color: var(--primary);
+  }
+  .tabs:not(:has(button:nth-child(4))) button.on::after {
+    content: "";
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    bottom: -1.5px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--primary);
+  }
+  .tabs:not(:has(button:nth-child(4))) button.on b {
+    background: var(--primary);
+    color: #fff;
+  }
 }
 
 /* ปุ่มกลุ่มแบบเม็ดยา (.seg) บนมือถือ — ขึ้นบรรทัดใหม่แทนการเลื่อนซ้ายขวา
