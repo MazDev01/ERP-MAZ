@@ -307,6 +307,19 @@ export function deleteAccount(id: string) {
   });
 }
 
+/**
+ * ตั้งตำแหน่งที่คนนี้ทำอยู่ทั้งหมด (เจ้าของกำหนด 30 ก.ย. 2569 — "บทบาทคือตำแหน่งงาน")
+ * ตำแหน่งหลักคงเดิมถ้ายังอยู่ในรายการที่เลือก เพราะเงินเดือนและประวัติผูกกับตำแหน่งหลัก
+ * ไม่งั้นย้ายตำแหน่งหลักไปเป็นอันแรกที่เลือก · ที่เหลือเป็นตำแหน่งควบ
+ */
+export function setEmpPositions(id: string, positions: PosKey[]) {
+  if (!positions.length) return;
+  editEmp(id, (e) => {
+    const main = positions.includes(e.pos) ? e.pos : positions[0];
+    return { ...e, pos: main, posMore: positions.filter((v) => v !== main) };
+  });
+}
+
 /** เปลี่ยนบทบาทที่บัญชีนี้เข้าใช้ได้ (คนควบสองตำแหน่งได้สองบทบาท) */
 export function setAccountRoles(id: string, roles: Role[]) {
   editEmp(id, (e) => (e.account ? { ...e, account: { ...e.account, roles } } : e));

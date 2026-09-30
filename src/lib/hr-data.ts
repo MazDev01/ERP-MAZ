@@ -352,10 +352,10 @@ export function suggestUserOf(e: { name: string; firstEn?: string; lastEn?: stri
 export function suggestUser(name: string, taken: string[]) {
   const parts = name.trim().split(/\s+/);
   const clean = (x: string) => (x ?? "").replace(/[^\u0E00-\u0E7Fa-zA-Z0-9]/g, "");
-  const first = clean(parts[0]) || "user";
-  const last = clean(parts[1] ?? "");
-  /* ชื่อผู้ใช้เป็นตัวพิมพ์เล็กเสมอ — พิมพ์ตอนเข้าระบบง่ายกว่า และกันชื่อซ้ำที่ต่างกันแค่ตัวใหญ่เล็ก */
-  const base = (last ? `${first}.${last.charAt(0)}` : first).toLowerCase();
+  /* ใช้แค่ชื่อต้น ไม่ต่อท้ายด้วยอักษรแรกของนามสกุล (เจ้าของสั่ง 30 ก.ย. 2569)
+     ชื่อผู้ใช้เป็นตัวพิมพ์เล็กเสมอ — พิมพ์ตอนเข้าระบบง่ายกว่า และกันชื่อซ้ำที่ต่างกันแค่ตัวใหญ่เล็ก
+     ชื่อซ้ำกันจะถูกไล่เลขต่อท้ายให้เองด้านล่าง */
+  const base = (clean(parts[0]) || "user").toLowerCase();
   if (!taken.includes(base)) return base;
   /* ชนกับของเดิมก็ไล่เลขขึ้นจนกว่าจะว่าง */
   for (let n = 2; n < 100; n++) {

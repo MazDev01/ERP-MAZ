@@ -16,13 +16,18 @@ import { thaiDate, todayIso } from "@/lib/format";
 import {
   HR_ACC_STATUS,
   accountRoles,
+  hrActivePositions,
+  hrDepts,
   hrPos,
+  posOf,
+  rolesOfPosition,
   type EmpAccount,
   type Employee,
+  type PosKey,
 } from "@/lib/hr-data";
-import { HR_ME, createAccount, deleteAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
+import { HR_ME, createAccount, deleteAccount, resetAccount, setAccountRoles, setAccountStatus, setEmpPositions, useHr } from "@/lib/hr-store";
 import { rolesOfEmployee, suggestUserOf } from "@/lib/hr-data";
-import { ROLES, type Role } from "@/lib/role";
+import { roleLabel, type Role } from "@/lib/role";
 import { ConfirmDialog } from "./confirm-dialog";
 import { Sheet } from "./lead-dialogs";
 import { Field, Input, Select } from "./ui";
@@ -290,7 +295,7 @@ function AccountRow({
             <span className="flex flex-wrap gap-1">
               {accountRoles(a).map((r) => (
                 <em key={r} className="rounded-full bg-muted px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground not-italic">
-                  {ROLES.find((x) => x.key === r)?.label ?? r}
+                  {roleLabel(r)}
                 </em>
               ))}
             </span>
@@ -439,13 +444,6 @@ function AccountDialog({
         </Field>
       </div>
 
-      <p className="mt-3 rounded-[11px] bg-muted/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed">
-        ส่งชื่อผู้ใช้และรหัสผ่านนี้ให้พนักงาน เมื่อเข้าระบบครั้งแรกจะให้ตั้งรหัสใหม่เอง
-      </p>
-      <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-        ระบบยังไม่มีฐานข้อมูล จึงเก็บเฉพาะชื่อผู้ใช้กับสถานะ ไม่ได้เก็บรหัสผ่านไว้
-        ต้องคัดลอกรหัสนี้ไปให้พนักงานก่อนปิดกล่อง
-      </p>
 
       {warn && (
         <p className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] text-destructive">
@@ -459,16 +457,26 @@ function AccountDialog({
 export type { EmpAccount };
 
 /*
- * บทบาทของบัญชีผู้ใช้ — บัญชีหนึ่งถือได้หลายบทบาท (เช่นบัญชีและบุคคลถือทั้ง acc และ hr)
- * บทบาทเป็นตัวกำหนดว่าเข้าเมนูไหนได้ จึงให้ฝ่ายบุคคลกำหนดที่หน้าจัดการบัญชีผู้ใช้
+ * ตำแหน่งในระบบของบัญชีผู้ใช้ — "บทบาทคือตำแหน่งงาน" (เจ้าของกำหนด 30 ก.ย. 2569)
+ * จึงเลือกจากรายการตำแหน่งจริงของบริษัท ไม่ใช่ชื่อบทบาทภายในระบบ
+ * เลือกได้ทุกตำแหน่ง (CEO ไม่อยู่ในรายการ เพราะไม่ใช่พนักงานในทะเบียน)
+ * ติ๊กตำแหน่งไหน ระบบเปิดเมนูของตำแหน่งนั้นให้ และบันทึกเป็นตำแหน่งควบของคนนั้นด้วย
  */
 function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
-  const [picked, setPicked] = useState<Role[]>(accountRoles(emp.account));
+  const [picked, setPicked] = useState<PosKey[]>(posOf(emp));
   const [warn, setWarn] = useState("");
+  /* เมนูที่จะได้จากตำแหน่งที่ติ๊กไว้ — บอกให้เห็นก่อนกดบันทึก */
+  /* ติ๊กกี่ตำแหน่งก็ได้ เมนูของทุกตำแหน่งต่อกันหมด (เจ้าของกำหนด 30 ก.ย. 2569)
+     ไม่ตัดทิ้งเงียบ ๆ เหมือนเดิม ไม่งั้นติ๊กแล้วไม่ได้เมนูที่ตั้งใจ */
+  const roles = useMemo(() => {
+    const out: Role[] = [];
+    for (const v of picked) for (const r of rolesOfPosition(v)) if (!out.includes(r)) out.push(r);
+    return out;
+  }, [picked]);
 
-  function toggle(r: Role) {
+  function toggle(v: PosKey) {
     setWarn("");
-    setPicked((v) => (v.includes(r) ? v.filter((x) => x !== r) : [...v, r]));
+    setPicked((list) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]));
   }
 
   return (
@@ -485,7 +493,10 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
             className="btn solid btn-solid"
             onClick={() => {
               if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งตำแหน่ง ไม่งั้นบัญชีนี้เข้าหน้าไหนไม่ได้เลย");
-              setAccountRoles(emp.id, picked);
+              if (!roles.length) return setWarn("ตำแหน่งที่เลือกยังไม่มีเมนูในระบบ เลือกตำแหน่งอื่นเพิ่ม");
+              /* บันทึกทั้งตำแหน่งควบของคนนั้น และเมนูที่บัญชีเปิดได้ ให้ตรงกันเสมอ */
+              setEmpPositions(emp.id, picked);
+              setAccountRoles(emp.id, roles);
               onClose();
             }}
           >
@@ -502,30 +513,40 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
       </Field>
 
       <div className="mt-4 grid gap-2">
-        {ROLES.map((r) => (
-          <label
-            key={r.key}
-            className={`flex cursor-pointer items-start gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
-              picked.includes(r.key) ? "border-primary bg-primary/5" : "border-border bg-card"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={picked.includes(r.key)}
-              onChange={() => toggle(r.key)}
-              className="mt-0.5 size-4 accent-[var(--primary)]"
-            />
-            <span className="min-w-0">
-              <b className="block text-[13.5px] font-semibold">{r.label}</b>
-              <span className="block text-[12px] text-muted-foreground">{r.note}</span>
-            </span>
-          </label>
-        ))}
+        {hrDepts().map((d) => {
+          const list = hrActivePositions().filter((x) => x.dept === d.v);
+          if (!list.length) return null;
+          return (
+            <div key={d.v}>
+              <p className="mt-1.5 mb-1 px-1 text-[11.5px] font-bold text-muted-foreground">{d.label}</p>
+              <div className="grid gap-2">
+                {list.map((x) => (
+                  <label
+                    key={x.v}
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
+                      picked.includes(x.v) ? "border-primary bg-primary/5" : "border-border bg-card"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={picked.includes(x.v)}
+                      onChange={() => toggle(x.v)}
+                      className="mt-0.5 size-4 accent-[var(--primary)]"
+                    />
+                    <span className="min-w-0">
+                      <b className="block text-[13.5px] font-semibold">{x.label}</b>
+                      <span className="block text-[12px] text-muted-foreground">
+                        เมนู: {rolesOfPosition(x.v).map(roleLabel).join(" + ") || "ไม่มีเมนูของตัวเอง"}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
       {warn && <p className="mt-3 text-[12.5px] font-semibold text-destructive">{warn}</p>}
-      <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-        ตำแหน่งในระบบกำหนดว่าบัญชีนี้เปิดเมนูไหนได้ · ถือได้หลายตำแหน่ง ระบบให้สลับมุมมองตอนเข้าใช้งาน
-      </p>
     </Sheet>
   );
 }

@@ -114,13 +114,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
      ไม่งั้น PM จะเห็นหน้ากันแวบหนึ่งทุกครั้งที่รีเฟรช เพราะค่าเริ่มต้นฝั่งเซิร์ฟเวอร์เป็นฝ่ายขาย */
   const hydrated = useHydrated();
   const blocked = hydrated && !canVisitAny(pathname, roles, access, route, empType);
-  /*
-   * หน้าที่ "ไปแล้วกลับไม่ได้" — หน้าย่อยที่ไม่มีในเมนูซ้าย เช่น รายละเอียดผู้สนใจ ใบเสนอราคา ใบแจ้งหนี้
-   * บนมือถือมีปุ่มกลับหน้าหลักอยู่แล้ว จอคอมเดิมไม่มีอะไรให้กลับนอกจากปุ่ม back ของเบราว์เซอร์
-   */
-  const onMenuPage =
-    items.some((i) => i.href === pathname) ||
-    items.some((i) => i.sub?.some((x) => x.href === pathname));
   const router = useRouter();
 
   /* บทบาทที่ไม่มีหน้าตอกบัตร (ผู้ดูแลระบบ) เปิด "/" แล้วพาไปหน้าแรกของตัวเอง ไม่ขึ้นหน้าห้ามเข้า */
@@ -379,17 +372,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         <main id="main" className="w-full min-w-0 flex-1 px-4 pt-[18px] pb-10 max-md:pb-[calc(94px+env(safe-area-inset-bottom))] sm:px-[30px]">
-          {/* จอคอม — ทางกลับของหน้าย่อยที่ไม่มีในเมนู วางเหนือเนื้อหาเป็นลิงก์ข้อความ
-              ไม่เอาไว้บนแถบบน เพราะปุ่มกลมเบียดชื่อหน้าแล้วดูไม่เข้ากับหัวหน้าจอ (เจ้าของทัก 28 ก.ย. 2569) */}
-          {!blocked && !onMenuPage && (
-            /* .btn ประกาศ display เอง คลาส hidden/md:inline-flex จึงสู้ไม่ได้ ต้องซ่อนที่กล่องนอกแทน */
-            <div className="mb-3 hidden md:block">
-              <button type="button" onClick={() => router.back()} className="btn glass-thin gap-1.5">
-                <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
-                ย้อนกลับ
-              </button>
-            </div>
-          )}
+          {/* จอคอมไม่มีปุ่มย้อนกลับแล้ว (เจ้าของสั่ง 30 ก.ย. 2569) — กลับด้วยเมนูซ้ายหรือปุ่มของเบราว์เซอร์
+              บนมือถือยังมีปุ่มวงกลมที่หัวจอเหมือนเดิม เพราะไม่มีเมนูซ้ายให้กด */}
           {blocked ? (
             /* ทุกบทบาทอยู่ในหน้าของตัวเองเท่านั้น — ลิงก์เก่าหรือพิมพ์ที่อยู่เองก็เข้าหน้าของบทบาทอื่นไม่ได้ */
             <section className="glass mx-auto mt-10 max-w-[520px] rounded-[16px] px-6 py-12 text-center">
