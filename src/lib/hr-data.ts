@@ -11,7 +11,7 @@
  * (E11 ขึ้นไปเป็นคนละคนกัน เพราะสองชุดนี้เดินเลขต่อกันคนละที)
  */
 
-import type { Role } from "./role";
+import { ROLES, type Role } from "./role";
 import { daysBetween, thaiDate, toIsoDate } from "./format";
 import { ratesOn, settings } from "./system-settings";
 import { merged } from "./catalog";
@@ -39,7 +39,7 @@ export const BUILTIN_HR_DEPT: { v: DeptKey; label: string }[] = [
 /** รหัสตำแหน่ง — ชุดตั้งต้นด้านล่าง + ที่ผู้ดูแลระบบเพิ่ม (hrPositions()) */
 export type PosKey = string;
 
-export const BUILTIN_HR_POSITION: { v: PosKey; label: string; dept: DeptKey }[] = [
+export const BUILTIN_HR_POSITION: { v: PosKey; label: string; dept: DeptKey; off?: boolean; roles?: string[] }[] = [
   /* เจ้าของสั่ง 29 ก.ย. 2569 — อย่าควบให้เอง แยกเป็นสองตำแหน่ง ใครทำทั้งสองอย่างให้ฝ่ายบุคคลติ๊กควบเอง */
   { v: "acc", label: "บัญชี", dept: "backoffice" },
   { v: "hr", label: "ฝ่ายบุคคล", dept: "backoffice" },
@@ -255,6 +255,9 @@ const ROLE_SEED_VERSION = 3;
  *   แม่บ้าน — ใช้เฉพาะส่วน "ของฉัน" (ลงเวลา ลา เบิก) ไม่รับงานโปรเจค จึงเป็นทีมงานเหมือนกัน
  *   CEO     — ไม่ใช่พนักงานในทะเบียน ไม่มีตำแหน่งในรายการนี้
  * ตำแหน่งที่ผู้ดูแลระบบเพิ่มเองทีหลังถือเป็น "ทีมงาน" ไว้ก่อน
+ *
+ * ตารางนี้เป็นแค่ "ค่าตั้งต้น" — ฝ่ายบุคคลตั้งทับได้รายตำแหน่งที่หน้าตำแหน่งและสายอนุมัติ
+ * (catalog.positions[].roles) ตำแหน่งที่เพิ่มใหม่จึงเลือกบทบาทเองได้ ไม่ต้องแก้โค้ด
  */
 const POSITION_ROLES: Record<string, Role[]> = {
   acc: ["acc"],
@@ -275,7 +278,19 @@ const POSITION_ROLES: Record<string, Role[]> = {
 };
 
 export function rolesOfPosition(pos: PosKey): Role[] {
+  /* ที่ฝ่ายบุคคลตั้งไว้มาก่อนเสมอ · ไม่ได้ตั้ง (หรือตั้งเป็นว่าง) ค่อยใช้ค่าตั้งต้นของระบบ */
+  const own = hrPositions().find((p) => p.v === pos)?.roles;
+  if (own?.length) return own.filter(isRoleKey).slice(0, HR_MAX_ROLES);
   return POSITION_ROLES[pos] ?? ["staff"];
+}
+
+/** ค่าตั้งต้นของระบบสำหรับตำแหน่งนี้ — หน้าตั้งค่าใช้บอกว่า "ไม่ตั้งเอง" แล้วจะได้บทบาทอะไร */
+export function defaultRolesOfPosition(pos: PosKey): Role[] {
+  return POSITION_ROLES[pos] ?? ["staff"];
+}
+
+function isRoleKey(v: string): v is Role {
+  return ROLES.some((r) => r.key === v);
 }
 
 /** บทบาทของคนนี้ตามตำแหน่งทั้งหมดที่ถืออยู่ (รวมตำแหน่งควบ) — ไม่เกินจำนวนที่ควบได้ */

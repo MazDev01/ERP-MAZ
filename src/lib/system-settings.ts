@@ -157,8 +157,11 @@ export type OptionKey =
 export type Catalog = {
   services?: { key: string; label: string; off?: boolean }[];
   depts?: { v: string; label: string; off?: boolean }[];
-  /** off = ปิดใช้งาน ยังอยู่ในระบบให้ข้อมูลเก่าอ่านชื่อได้ แต่ไม่ขึ้นให้เลือกใหม่ */
-  positions?: { v: string; label: string; dept: string; off?: boolean }[];
+  /**
+   * off = ปิดใช้งาน ยังอยู่ในระบบให้ข้อมูลเก่าอ่านชื่อได้ แต่ไม่ขึ้นให้เลือกใหม่
+   * roles = ตำแหน่งในระบบที่ตำแหน่งงานนี้ได้ (rolesOfPosition) — ไม่ตั้งไว้ = ใช้ค่าตั้งต้นของระบบ
+   */
+  positions?: { v: string; label: string; dept: string; off?: boolean; roles?: string[] }[];
   docs?: { v: string; label: string; req: boolean; off?: boolean }[];
   teamRoles?: { key: string; label: string; color: string; off?: boolean }[];
   /** ประเภทนัดหมายของ PM (Full Proposal · M5 ข้อมูลหลัก) */

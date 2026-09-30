@@ -14,7 +14,15 @@
 
 import { useState } from "react";
 import type { Catalog, PosRoute } from "@/lib/system-settings";
-import { BUILTIN_HR_DEPT, BUILTIN_HR_POSITION, holdsPos, hrDept, hrPos } from "@/lib/hr-data";
+import {
+  BUILTIN_HR_DEPT,
+  BUILTIN_HR_POSITION,
+  HR_MAX_ROLES,
+  defaultRolesOfPosition,
+  holdsPos,
+  hrDept,
+  hrPos,
+} from "@/lib/hr-data";
 import { merged } from "@/lib/catalog";
 import { useHr } from "@/lib/hr-store";
 import {
@@ -50,6 +58,19 @@ const APPR_SHORT: Record<ApproverKey, string> = {
   exec: "CEO",
 };
 
+/*
+ * ตำแหน่งงานนี้เข้าระบบได้ในฐานะอะไร
+ * ฝ่ายบุคคลตั้งเองได้รายตำแหน่ง (roles) · ไม่ตั้ง = ค่าตั้งต้นของระบบ (ตำแหน่งที่เพิ่มใหม่คือทีมงาน)
+ */
+function roleKeysOf(pos: string, roles?: string[]): Role[] {
+  if (roles?.length) return roles.filter((r) => ROLES.some((x) => x.key === r)) as Role[];
+  return defaultRolesOfPosition(pos);
+}
+
+function roleNames(pos: string, roles?: string[]) {
+  return roleKeysOf(pos, roles).map(roleLabel).join(" · ");
+}
+
 /** บทบาทที่นั่งอยู่ในตำแหน่งนี้ — ใช้กันไม่ให้ตั้งผู้อนุมัติเป็นตัวเอง */
 function rolesOfPos(pos: string): Role[] {
   return ROLES.map((r) => r.key).filter((r) => positionOfRole(r) === pos);
@@ -77,6 +98,8 @@ function describePos(a: Catalog, b: Catalog) {
     else if (old.label !== p.label || old.dept !== p.dept)
       out.push(`แก้ตำแหน่ง ${old.label} → ${p.label} (${hrDept(p.dept).label})`);
     else if (isOff(old) !== isOff(p)) out.push(`${isOff(p) ? "ปิด" : "เปิด"}ใช้งานตำแหน่ง ${p.label}`);
+    else if ((old.roles ?? []).join() !== (p.roles ?? []).join())
+      out.push(`ตำแหน่งในระบบของ ${p.label} → ${roleNames(p.v, p.roles)}`);
   }
   for (const p of was) if (!now.some((x) => x.v === p.v)) out.push(`ลบตำแหน่ง ${p.label}`);
 
@@ -157,11 +180,11 @@ export function AdminPositionsPage() {
   const depts = merged(cat.draft.depts, BUILTIN_HR_DEPT, (d) => d.v);
   const names = approvers();
 
-  function savePos(prev: string, label: string, dept: string) {
+  function savePos(prev: string, label: string, dept: string, roles: string[]) {
     const v = prev || label.trim().toLowerCase().replace(/\s+/g, "_");
     const next = prev
-      ? list.map((p) => (p.v === prev ? { ...p, label: label.trim(), dept } : p))
-      : [...list, { v, label: label.trim(), dept }];
+      ? list.map((p) => (p.v === prev ? { ...p, label: label.trim(), dept, roles } : p))
+      : [...list, { v, label: label.trim(), dept, roles }];
     cat.setDraft({ ...cat.draft, positions: next });
     setEditing(null);
   }
@@ -277,6 +300,8 @@ export function AdminPositionsPage() {
                                   )}
                                 </b>
                                 <small className="block text-[11.5px] text-muted-foreground">
+                                  เข้าระบบเป็น {roleNames(p.v, p.roles)}
+                                  {" · "}
                                   {n ? `พนักงานอยู่ ${n} คน` : "ยังไม่มีพนักงาน"}
                                 </small>
                                 {/* จอแคบไม่มีคอลัมน์ป้าย เอาสายอนุมัติมาไว้ใต้ชื่อแทน */}
@@ -362,9 +387,9 @@ export function AdminPositionsPage() {
           names={names}
           route={route.draft[editing] ?? {}}
           onClose={() => setEditing(null)}
-          onSave={(label, dept, appr) => {
+          onSave={(label, dept, appr, roles) => {
             const v = editing || label.trim().toLowerCase().replace(/\s+/g, "_");
-            savePos(editing, label, dept);
+            savePos(editing, label, dept, roles);
             setApproversOf(v, appr);
           }}
         />
@@ -419,18 +444,26 @@ function PosSheet({
   onClose,
   onSave,
 }: {
-  initial?: { v: string; label: string; dept: string };
+  initial?: { v: string; label: string; dept: string; roles?: string[] };
   depts: { v: string; label: string }[];
   names: ReturnType<typeof approvers>;
   route: Partial<Record<RequestKind, string>>;
   onClose: () => void;
-  onSave: (label: string, dept: string, appr: Partial<Record<RequestKind, string>>) => void;
+  onSave: (label: string, dept: string, appr: Partial<Record<RequestKind, string>>, roles: string[]) => void;
 }) {
   const [label, setLabel] = useState(initial?.label ?? "");
   const [dept, setDept] = useState(initial?.dept ?? depts[0]?.v ?? "");
   const [appr, setAppr] = useState<Partial<Record<RequestKind, string>>>(route);
+  /* ตำแหน่งในระบบของตำแหน่งงานนี้ — ว่างไว้ = ใช้ค่าตั้งต้น (ตำแหน่งใหม่คือทีมงาน) */
+  const [roles, setRoles] = useState<string[]>(initial?.roles ?? []);
   const bad = !label.trim() ? "ใส่ชื่อตำแหน่ง" : "";
   const pos = initial?.v ?? "";
+  const roleNow = roleKeysOf(pos, roles);
+  const full = roles.length >= HR_MAX_ROLES;
+
+  function toggleRole(key: Role) {
+    setRoles((v) => (v.includes(key) ? v.filter((x) => x !== key) : v.length >= HR_MAX_ROLES ? v : [...v, key]));
+  }
 
   return (
     <Sheet
@@ -445,7 +478,7 @@ function PosSheet({
             type="button"
             className="btn solid btn-solid disabled:opacity-45"
             disabled={Boolean(bad)}
-            onClick={() => onSave(label, dept, appr)}
+            onClick={() => onSave(label, dept, appr, roles)}
           >
             บันทึก
           </button>
@@ -467,6 +500,31 @@ function PosSheet({
             </select>
           </Input2>
         </div>
+
+        <p className="mt-1 text-[12.5px] font-bold text-muted-foreground">ตำแหน่งในระบบที่ได้ (เลือกได้ไม่เกิน {HR_MAX_ROLES})</p>
+        <div className="flex flex-wrap gap-2">
+          {ROLES.filter((r) => r.key !== "ceo").map((r) => {
+            const on = roles.includes(r.key);
+            return (
+              <button
+                key={r.key}
+                type="button"
+                aria-pressed={on}
+                disabled={!on && full}
+                onClick={() => toggleRole(r.key)}
+                className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold disabled:opacity-40 ${
+                  on ? "bg-primary text-white" : "glass-thin text-muted-foreground"
+                }`}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
+          ไม่เลือกเลย = ใช้ค่าตั้งต้นของระบบ ({roleNames(pos, [])}) · ตอนนี้ตำแหน่งนี้จะได้เมนูของ{" "}
+          {roleNow.map(roleLabel).join(" · ")}
+        </p>
 
         <p className="mt-1 text-[12.5px] font-bold text-muted-foreground">ผู้อนุมัติของคำขอแต่ละประเภท</p>
         <div className="grid gap-3 sm:grid-cols-3">
