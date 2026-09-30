@@ -29,15 +29,20 @@ import { useMyEmpType } from "@/lib/leave-policy";
 import { useMyRoles } from "@/lib/hr-link";
 import { useApprovalRoute } from "@/lib/role";
 import { ICONS } from "./app-shell";
+import Link from "next/link";
 import {
   BellIcon,
   CameraIcon,
   CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ClockIcon,
+  DownloadIcon,
   GridIcon,
   HomeIcon,
   LockIcon,
   LogoutIcon,
+  PencilIcon,
   UserIcon,
 } from "./icons";
 import { FileDrop, type PickedFile } from "./file-drop";
@@ -77,22 +82,163 @@ export function ProfilePage() {
     setSaved(message);
   }
 
-  return (
-    <div className="mx-auto grid max-w-[1060px] grid-cols-[minmax(0,1fr)] items-start gap-[22px] lg:grid-cols-[262px_minmax(0,1fr)]">
-      <ProfileCard pane={current} panes={panes} onPane={(p) => { setPane(p); setSaved(null); }} />
+  /*
+   * มือถือ: หน้ารวมก่อน แล้วค่อยเข้าไปทีละเรื่อง (ต้นแบบ mobile/profile-glass.html 30 ก.ย. 2569)
+   * เดิมยัดทุกแผงไว้หน้าเดียวจนต้องเลื่อนยาวมาก · จอกว้างยังเป็นสองคอลัมน์เหมือนเดิม
+   */
+  const [open, setOpen] = useState<Pane | null>(params.get("tab") ? initial : null);
 
-      <div className="min-w-0">
-        {saved && (
-          <p className="mb-[18px] flex items-center gap-[11px] rounded-[14px] bg-[var(--success-soft)] px-[17px] py-3 text-[13.5px] font-medium text-[var(--success)]">
-            <CheckIcon className="size-[18px] shrink-0" strokeWidth={2.4} />
-            {saved}
-          </p>
+  return (
+    <>
+      {/* ── มือถือ ── */}
+      <div className="sm:hidden">
+        {open === null ? (
+          <ProfileHub panes={panes} onPane={setOpen} />
+        ) : (
+          <div>
+            {/* ปุ่มย้อนกลับของเปลือกแอปพาออกจากหน้าโปรไฟล์ไปเลย ตรงนี้จึงเป็นทางกลับไป "หน้ารวมโปรไฟล์"
+               เขียนเป็นข้อความ ไม่ใช่ลูกศรอีกอัน จะได้ไม่ซ้ำกับปุ่มบนแถบหัว (30 ก.ย. 2569) */}
+            <div className="mb-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { setOpen(null); setSaved(null); }}
+                className="glass flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold"
+              >
+                <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
+                โปรไฟล์
+              </button>
+              <b className="text-[17px] font-bold">{panes.find((x) => x.key === open)?.label}</b>
+            </div>
+            {saved && (
+              <p className="mb-[18px] flex items-center gap-[11px] rounded-[14px] bg-[var(--success-soft)] px-[17px] py-3 text-[13.5px] font-medium text-[var(--success)]">
+                <CheckIcon className="size-[18px] shrink-0" strokeWidth={2.4} />
+                {saved}
+              </p>
+            )}
+            {open === "profile" && <PersonalPane onSaved={flash} />}
+            {open === "notify" && <NotifyPane onSaved={flash} />}
+            {open === "security" && <SecurityPane onSaved={flash} />}
+            {open === "botnav" && <BotnavPane onSaved={flash} />}
+          </div>
         )}
-        {current === "profile" && <PersonalPane onSaved={flash} />}
-        {current === "notify" && <NotifyPane onSaved={flash} />}
-        {current === "security" && <SecurityPane onSaved={flash} />}
-        {current === "botnav" && <BotnavPane onSaved={flash} />}
       </div>
+
+      {/* ── จอคอม ── */}
+      <div className="mx-auto hidden max-w-[1060px] grid-cols-[minmax(0,1fr)] items-start gap-[22px] sm:grid lg:grid-cols-[262px_minmax(0,1fr)]">
+        <ProfileCard pane={current} panes={panes} onPane={(p) => { setPane(p); setSaved(null); }} />
+
+        <div className="min-w-0">
+          {saved && (
+            <p className="mb-[18px] flex items-center gap-[11px] rounded-[14px] bg-[var(--success-soft)] px-[17px] py-3 text-[13.5px] font-medium text-[var(--success)]">
+              <CheckIcon className="size-[18px] shrink-0" strokeWidth={2.4} />
+              {saved}
+            </p>
+          )}
+          {current === "profile" && <PersonalPane onSaved={flash} />}
+          {current === "notify" && <NotifyPane onSaved={flash} />}
+          {current === "security" && <SecurityPane onSaved={flash} />}
+          {current === "botnav" && <BotnavPane onSaved={flash} />}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/*
+ * หน้ารวมของโปรไฟล์บนมือถือ — รูป ชื่อ ตำแหน่ง ปุ่มแก้ไข แล้วตามด้วยรายการเรื่องอื่น
+ * รูปยังเป็นสี่เหลี่ยมมุมมนมีขอบตามที่เจ้าของสั่งไว้ (29 ก.ย. 2569) ไม่ใช่วงกลมแบบในต้นแบบ
+ */
+function ProfileHub({ panes, onPane }: { panes: typeof PANES; onPane: (p: Pane) => void }) {
+  const me = useProfile();
+  const photo = useProfilePhoto();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [cropping, setCropping] = useState<string | null>(null);
+  const short = me.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
+  const rows = panes.filter((p) => p.key !== "profile");
+
+  function pick(file: File | undefined) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setCropping(String(reader.result));
+    reader.readAsDataURL(file);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <section className="glass flex flex-col items-center rounded-[28px] px-4 pt-6 pb-5 text-center">
+        <span className="relative inline-block">
+          {photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photo} alt="" className="size-[92px] rounded-[28px] border-[3px] border-white object-cover shadow-[0_10px_24px_-12px_rgb(26_93_181/0.6)]" />
+          ) : (
+            <span className="grid size-[92px] place-items-center rounded-[28px] border-[3px] border-white bg-[#E3EEFC] text-[30px] font-bold text-[#1A5DB5] shadow-[0_10px_24px_-12px_rgb(26_93_181/0.6)]">
+              {short}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            aria-label="เปลี่ยนรูปโปรไฟล์"
+            className="absolute -right-0.5 -bottom-0.5 grid size-8 place-items-center rounded-full border-[3px] border-white bg-foreground text-white"
+          >
+            <CameraIcon className="size-[15px]" strokeWidth={2.2} />
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif"
+            aria-label="เลือกไฟล์รูปโปรไฟล์"
+            className="sr-only"
+            onChange={(e) => pick(e.target.files?.[0])}
+          />
+        </span>
+        <h2 className="mt-4 text-[19px] font-bold">{me.name}</h2>
+        <p className="mt-1.5 text-[13px] text-muted-foreground">{me.position}</p>
+        <button
+          type="button"
+          onClick={() => onPane("profile")}
+          className="mt-[18px] flex h-[42px] items-center gap-2 rounded-full bg-primary px-5 text-[14px] font-semibold text-white shadow-[0_10px_20px_-12px_rgb(200_16_46/0.9)]"
+        >
+          <PencilIcon className="size-4" strokeWidth={2.2} />
+          แก้ไขข้อมูลส่วนตัว
+        </button>
+      </section>
+
+      {rows.map((p) => (
+        <button
+          key={p.key}
+          type="button"
+          onClick={() => onPane(p.key)}
+          className="glass flex h-[54px] items-center gap-3 rounded-[16px] px-4 text-left"
+        >
+          <span className="flex text-muted-foreground">{p.icon}</span>
+          <span className="flex-1 text-[14.5px] font-semibold">{p.label}</span>
+          <ChevronRightIcon className="size-[18px] text-muted-foreground" strokeWidth={2.3} />
+        </button>
+      ))}
+
+      <Link href="/install" className="glass flex h-[54px] items-center gap-3 rounded-[16px] px-4 text-foreground">
+        <DownloadIcon className="size-[18px] text-muted-foreground" strokeWidth={2} />
+        <span className="flex-1 text-[14.5px] font-semibold">ติดตั้งแอป</span>
+        <ChevronRightIcon className="size-[18px] text-muted-foreground" strokeWidth={2.3} />
+      </Link>
+
+      <a href="/login" className="glass mt-1 flex h-[54px] items-center gap-3 rounded-[16px] px-4 text-primary">
+        <LogoutIcon className="size-[18px]" strokeWidth={2} />
+        <span className="flex-1 text-[14.5px] font-semibold">ออกจากระบบ</span>
+      </a>
+
+      {cropping && (
+        <PhotoCropper
+          src={cropping}
+          onCancel={() => setCropping(null)}
+          onDone={(url) => {
+            setProfilePhoto(url);
+            setCropping(null);
+          }}
+        />
+      )}
     </div>
   );
 }
