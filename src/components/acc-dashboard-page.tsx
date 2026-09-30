@@ -20,7 +20,7 @@ import {
   toIsoDate,
 } from "@/lib/format";
 
-import { DashChips, DashHero, DashSection, DashWeek } from "./mobile-dash";
+import { DashWrap, DashChips, DashHero, DashSection, DashWeek } from "./mobile-dash";
 
 type Range = "m" | "q" | "y";
 
@@ -106,14 +106,14 @@ export function AccDashboardPage() {
 
   return (
     <div className="space-y-3.5">
-      <div className="space-y-3.5 md:hidden">
+      <DashWrap>
         <DashHero
           chips={<DashChips value={range} items={RANGES} onPick={setRange} />}
           label="รับชำระในช่วงนี้"
           value={`${baht(got)} ฿`}
           foot={`วางบิล ${baht(billed)} ฿ · ค้างรับ ${openInv.length} ใบ`}
           ringPct={billed ? (got * 100) / billed : 0}
-          ringLabel="เก็บได้จากที่วางบิล"
+          ringLabel="เก็บได้แล้ว"
         />
 
         <DashWeek value={pickDay} onPick={setPickDay} has={(iso) => dueOn(iso).length > 0} />
@@ -161,7 +161,7 @@ export function AccDashboardPage() {
           }))}
           empty="ยังไม่มีการรับชำระ"
         />
-      </div>
+      </DashWrap>
 
       <div className="bar max-md:hidden!">
         <div>

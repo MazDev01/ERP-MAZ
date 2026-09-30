@@ -31,6 +31,30 @@ export const DASH_TINT = {
 
 export type DashTint = keyof typeof DASH_TINT;
 
+/* ผิวการ์ดชุดเดียวกับหน้าหลักบนมือถือ (mobile-home.tsx) — กระจกขาวบนพื้นไล่สีชมพู */
+const GLASS =
+  "bg-white/72 backdrop-blur-[18px] border border-white/95 shadow-[0_12px_30px_-20px_rgb(140_20_40/0.45)]";
+
+/*
+ * กรอบของแดชบอร์ดบนมือถือ — พื้นไล่สีชมพูด้านบนเหมือนหน้าหลัก
+ * ทุกบทบาทห่อบล็อก md:hidden ด้วยตัวนี้ หน้าตาจะได้เป็นชุดเดียวกันทั้งระบบ (30 ก.ย. 2569)
+ */
+export function DashWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="-mx-4 -mt-[18px] px-4 pt-3 pb-2 md:hidden">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[340px]"
+        style={{
+          background:
+            "radial-gradient(60% 55% at 18% 18%, #FFFFFF 0%, rgba(255,255,255,0) 70%), radial-gradient(55% 60% at 85% 10%, #FFE9EC 0%, rgba(255,233,236,0) 70%), radial-gradient(70% 60% at 60% 60%, #FCD9DF 0%, rgba(252,217,223,0) 75%), linear-gradient(180deg, #F9D3DA 0%, #FDF0F2 70%, rgba(250,246,246,0) 100%)",
+        }}
+      />
+      <div className="relative flex flex-col gap-4">{children}</div>
+    </div>
+  );
+}
+
 export type DashRow = {
   key: string;
   title: string;
@@ -96,7 +120,7 @@ export function DashHero({
   const C = 2 * Math.PI * R;
   const pct = Math.max(0, Math.min(100, ringPct ?? 0));
   return (
-    <section className="grid grid-cols-[minmax(0,1fr)_112px] items-center gap-3 rounded-[26px] bg-[linear-gradient(150deg,#FDE3E7,#FBEFF1_70%)] p-[18px] shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-18px_rgba(120,20,35,.3)]">
+    <section className={`grid grid-cols-[minmax(0,1fr)_112px] items-center gap-3 rounded-[28px] p-[18px] ${GLASS}`}>
       <div className="min-w-0">
         {chips}
         <h2 className="mt-3.5 text-[14px] font-semibold text-muted-foreground">{label}</h2>
@@ -121,7 +145,9 @@ export function DashHero({
           <span className="absolute inset-0 flex flex-col items-center justify-center text-center">
             <b className="num text-[22px] leading-none">{Math.round(pct)}%</b>
             {ringLabel && (
-              <small className="mt-1 block text-[10.5px] leading-tight text-muted-foreground">{ringLabel}</small>
+              <small className="mt-1 line-clamp-2 block max-w-[86px] px-1 text-[10px] leading-tight text-muted-foreground">
+                {ringLabel}
+              </small>
             )}
           </span>
         </div>
@@ -159,7 +185,7 @@ export function DashWeek({
   const mid = days[3];
 
   return (
-    <section className="glass rounded-[22px] p-3.5">
+    <section className={`rounded-[24px] p-3.5 ${GLASS}`}>
       <div className="flex items-center justify-between">
         <b className="text-[16px]">
           {TH_MONTH[mid.month]} {mid.year + 543}
@@ -243,7 +269,7 @@ export function DashSection({
       </div>
 
       {rows.length === 0 ? (
-        <p className="glass rounded-[20px] px-5 py-6 text-center text-[13px] text-muted-foreground">{empty}</p>
+        <p className={`rounded-[22px] px-5 py-6 text-center text-[13px] text-muted-foreground ${GLASS}`}>{empty}</p>
       ) : (
         <ul className="space-y-2.5">
           {rows.map((r) => {
@@ -272,8 +298,7 @@ export function DashSection({
                 )}
               </>
             );
-            const cls =
-              "glass grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[20px] p-3.5 text-foreground";
+            const cls = `grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[22px] p-3.5 text-foreground ${GLASS}`;
             return (
               <li key={r.key}>
                 {r.href ? (

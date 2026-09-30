@@ -26,7 +26,7 @@ import {
 } from "@/lib/pm-data";
 import { colorOf, eventKind, eventsOn, isPsEvent } from "@/lib/pm-schedule-data";
 import { useSchedule } from "@/lib/pm-schedule-store";
-import { DashHero, DashSection, DashWeek } from "./mobile-dash";
+import { DashWrap, DashHero, DashSection, DashWeek } from "./mobile-dash";
 import { memberName, usePm } from "@/lib/pm-store";
 import { ClockIcon, InboxIcon, ProjectIcon, TasksIcon } from "./icons";
 
@@ -100,13 +100,13 @@ export function PmDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3.5 md:hidden">
+      <DashWrap>
         <DashHero
           label="โปรเจคที่กำลังทำ"
           value={`${running} โปรเจค`}
           foot={`จากทั้งหมด ${totalProjects} โปรเจค · งานรอตรวจ ${review} งาน`}
           ringPct={tasks.length ? (doneTasks * 100) / tasks.length : 0}
-          ringLabel="งานที่ทีมทำเสร็จ"
+          ringLabel="งานเสร็จแล้ว"
         />
 
         <DashWeek value={pickDay} onPick={setPickDay} has={(iso) => evOf(iso).length > 0} />
@@ -136,7 +136,7 @@ export function PmDashboardPage() {
           }))}
           empty="ไม่มีงานที่ต้องติดตาม"
         />
-      </div>
+      </DashWrap>
 
       <div className="bar max-md:hidden!">
         <div>

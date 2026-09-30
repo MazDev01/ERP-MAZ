@@ -39,7 +39,7 @@ import {
   UserIcon,
 } from "./icons";
 
-import { DashChips, DashHero, DashSection, DashWeek } from "./mobile-dash";
+import { DashWrap, DashChips, DashHero, DashSection, DashWeek } from "./mobile-dash";
 
 const RANGES: RangeKey[] = ["m", "q", "y"];
 
@@ -108,7 +108,7 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
   return (
     <div className="space-y-3.5">
       {/* ─────────── มือถือ: แดชบอร์ดแบบแอปตามต้นแบบ (ตัวเลขชุดเดียวกับจอคอม) ─────────── */}
-      <div className="space-y-3.5 md:hidden">
+      <DashWrap>
         <DashHero
           chips={
             <DashChips
@@ -162,7 +162,7 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
           }))}
           empty="ยังไม่มีดีลที่ปิดได้ในช่วงนี้"
         />
-      </div>
+      </DashWrap>
 
       {/* ── หัวเรื่องแบบตัวอย่าง: คำทักทายซ้าย เครื่องมืออยู่ขวา ── */}
       <div className="bar gap-3 max-md:hidden!">

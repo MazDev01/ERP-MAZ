@@ -38,7 +38,7 @@ import {
 import { useTodayAttendance, type AttState } from "@/lib/hr-link";
 import { useHr } from "@/lib/hr-store";
 import { services } from "@/lib/pm-data";
-import { DashChips, DashHero, DashSection } from "./mobile-dash";
+import { DashWrap, DashChips, DashHero, DashSection } from "./mobile-dash";
 import { usePm } from "@/lib/pm-store";
 import { useCeoRequests } from "./ceo-approvals-page";
 import { Sheet } from "./lead-dialogs";
@@ -189,7 +189,7 @@ export function CeoDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3.5 md:hidden">
+      <DashWrap>
         <DashHero
           chips={
             <DashChips
@@ -255,7 +255,7 @@ export function CeoDashboardPage() {
             metaTint: "lilac" as const,
           }))}
         />
-      </div>
+      </DashWrap>
 
       <div className="bar max-md:hidden!">
         <div>

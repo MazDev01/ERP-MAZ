@@ -18,7 +18,7 @@ import { useMemo } from "react";
 import type { PresalesRequest } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
 import { daysBetween, todayIso } from "@/lib/format";
-import { DashHero, DashSection } from "./mobile-dash";
+import { DashWrap, DashHero, DashSection } from "./mobile-dash";
 import { PS_ME as ME, psMine as mine, psOwner, psWorkLink } from "@/lib/presales-work";
 
 /** รายการในการ์ด "ต้องส่งเร็ว ๆ นี้" */
@@ -57,7 +57,7 @@ export function PresalesDashPage() {
   /* มือถือ: ไม่เอาการ์ดตัวเลข (KPI) — การ์ดยอดใบเดียวแล้วต่อด้วยรายการ (เจ้าของสั่ง 30 ก.ย. 2569) */
   return (
     <div className="space-y-4">
-      <div className="space-y-3.5 md:hidden">
+      <DashWrap>
         <DashHero
           label="งานที่อยู่ในมือ"
           value={`${doing.length} คำขอ`}
@@ -96,7 +96,7 @@ export function PresalesDashPage() {
             href: psWorkLink(x.r.no),
           }))}
         />
-      </div>
+      </DashWrap>
 
       <div className="bar max-md:hidden!">
         <div>

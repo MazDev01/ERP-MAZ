@@ -18,7 +18,7 @@ import { useApprovedOtHours, useGmPending, useTeamLeave, type TeamLeave } from "
 import { USERS } from "@/lib/mock-data";
 import { projectProgress } from "@/lib/pm-data";
 import { usePm } from "@/lib/pm-store";
-import { DashHero, DashSection } from "./mobile-dash";
+import { DashWrap, DashHero, DashSection } from "./mobile-dash";
 
 /** รอตั้งแต่กี่วันขึ้นไปถึงเป็นตัวแดง — ตรงกับหน้ารายการรออนุมัติ */
 const WAIT_HOT = 3;
@@ -61,7 +61,7 @@ export function GmDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3.5 md:hidden">
+      <DashWrap>
         <DashHero
           label="คำขอรออนุมัติ"
           value={`${pending.length} รายการ`}
@@ -114,7 +114,7 @@ export function GmDashboardPage() {
             href: `/pm/projects?deal=${encodeURIComponent(p.deal)}`,
           }))}
         />
-      </div>
+      </DashWrap>
 
       <div className="bar max-md:hidden!">
         <div>

@@ -36,7 +36,7 @@ const PROBATION_WARN_DAYS = 30;
 /** ช่วงเวลาของงานที่ต้องดำเนินการ */
 type Range = "m" | "q" | "y";
 
-import { DashHero, DashSection, DashWeek } from "./mobile-dash";
+import { DashWrap, DashHero, DashSection, DashWeek } from "./mobile-dash";
 
 const RANGE_LABEL: Record<Range, string> = { m: "เดือนนี้", q: "ไตรมาส", y: "ปีนี้" };
 
@@ -96,7 +96,7 @@ export function HrDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3.5 md:hidden">
+      <DashWrap>
         <DashHero
           label="พนักงานทั้งหมด"
           value={`${active.length} คน`}
@@ -145,7 +145,7 @@ export function HrDashboardPage() {
           }))}
           empty="ยังไม่มีพนักงานใหม่"
         />
-      </div>
+      </DashWrap>
 
       <div className="bar max-md:hidden!">
         <div>
