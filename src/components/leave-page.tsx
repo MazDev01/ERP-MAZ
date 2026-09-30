@@ -309,7 +309,7 @@ export function LeavePage() {
               );
             })}
           </div>
-          <div className="legend hidden sm:flex">
+          <div className="legend hidden! sm:flex!">
             <span><i style={{ background: "var(--warning)" }} />รอการอนุมัติ</span>
             <span><i style={{ background: "var(--success)" }} />อนุมัติแล้ว</span>
             <span><i style={{ background: "var(--destructive)" }} />ไม่อนุมัติ</span>

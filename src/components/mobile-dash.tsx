@@ -131,16 +131,19 @@ export function DashHero({
         <div className="relative size-[112px]">
           <svg viewBox="0 0 112 112" className="size-full -rotate-90" aria-hidden="true">
             <circle cx="56" cy="56" r={R} fill="none" stroke="#FFF" strokeWidth="11" />
-            <circle
-              cx="56"
-              cy="56"
-              r={R}
-              fill="none"
-              stroke="var(--primary)"
-              strokeWidth="11"
-              strokeLinecap="round"
-              strokeDasharray={`${((C * pct) / 100).toFixed(1)} ${C.toFixed(1)}`}
-            />
+            {/* 0% ไม่ต้องวาดเส้น ไม่งั้นปลายเส้นแบบมนเหลือเป็นจุดแดงลอย */}
+            {pct > 0 && (
+              <circle
+                cx="56"
+                cy="56"
+                r={R}
+                fill="none"
+                stroke="var(--primary)"
+                strokeWidth="11"
+                strokeLinecap="round"
+                strokeDasharray={`${((C * pct) / 100).toFixed(1)} ${C.toFixed(1)}`}
+              />
+            )}
           </svg>
           <span className="absolute inset-0 flex flex-col items-center justify-center text-center">
             <b className="num text-[22px] leading-none">{Math.round(pct)}%</b>

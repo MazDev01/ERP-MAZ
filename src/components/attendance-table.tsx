@@ -139,6 +139,23 @@ export function AttendanceTable() {
     0,
   );
 
+  /* สรุปทั้งเดือนสำหรับมือถือ (ต้นแบบ dose-erp-maz/mobile/attendance.html · .m-sum 30 ก.ย. 2569)
+     ชั่วโมงที่ทำจริงเทียบกับที่ต้องทำ พร้อมจำนวนวันแยกตามสถานะ */
+  const sum = useMemo(() => {
+    const count: Partial<Record<Status, number>> = {};
+    let worked = 0;
+    let required = 0;
+    for (const r of workdays) {
+      const st = statusOf(r);
+      count[st] = (count[st] ?? 0) + 1;
+      worked += actualMinutesOf(r.inMin, r.outMin);
+      const sh = shiftOf(r.leave);
+      required += Math.max(0, sh.out - sh.in);
+    }
+    return { count, worked, required, days: workdays.length };
+  }, [workdays]);
+  const donePct = sum.required ? Math.min(100, Math.round((sum.worked * 100) / sum.required)) : 0;
+
   return (
     <div className="space-y-4">
       {/* ── หัวเรื่อง + เครื่องมือ ── */}
@@ -177,8 +194,56 @@ export function AttendanceTable() {
         </div>
       </div>
 
+      {/* ── สรุปเดือนนี้ (มือถือ) ── */}
+      <section className="grid grid-cols-[minmax(0,1fr)_104px] items-center gap-3 rounded-[24px] border border-white/95 bg-white/72 p-[18px] shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] md:hidden">
+        <div className="min-w-0">
+          <small className="text-[12.5px] font-semibold text-muted-foreground">ชั่วโมงทำงานเดือนนี้</small>
+          <p className="num text-[30px] leading-tight font-bold">
+            {(sum.worked / 60).toFixed(1)}
+            <span className="ml-1 text-[14px] font-semibold text-muted-foreground">ชม.</span>
+          </p>
+          <p className="num text-[12px] text-muted-foreground">
+            จาก {(sum.required / 60).toFixed(1)} ชม. ใน {sum.days} วันทำงาน
+          </p>
+        </div>
+        <div className="relative size-[104px]">
+          <svg viewBox="0 0 104 104" className="size-full -rotate-90" aria-hidden="true">
+            <circle cx="52" cy="52" r="42" fill="none" stroke="#FFF" strokeWidth="10" />
+            {/* 0% ไม่ต้องวาดเส้น ไม่งั้นปลายเส้นแบบมนจะเหลือเป็นจุดแดงลอยอยู่ */}
+            {donePct > 0 && (
+              <circle
+                cx="52"
+                cy="52"
+                r="42"
+                fill="none"
+                stroke="var(--primary)"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeDasharray={`${((2 * Math.PI * 42 * donePct) / 100).toFixed(1)} ${(2 * Math.PI * 42).toFixed(1)}`}
+              />
+            )}
+          </svg>
+          <span className="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <b className="num text-[20px] leading-none">{donePct}%</b>
+            <small className="mt-1 text-[10px] leading-tight text-muted-foreground">
+              ของเวลา
+              <br />
+              ที่ต้องทำ
+            </small>
+          </span>
+        </div>
+        <div className="col-span-2 grid grid-cols-5 gap-1.5">
+          {(["ok", "late", "early", "leave", "miss"] as Status[]).map((k) => (
+            <span key={k} className="rounded-[14px] bg-white/75 px-1 py-2 text-center">
+              <b className="num block text-[17px] font-bold">{sum.count[k] ?? 0}</b>
+              <span className="text-[10.5px] text-muted-foreground">{STATUS[k].label}</span>
+            </span>
+          ))}
+        </div>
+      </section>
+
       {/* ── แผงตาราง ── */}
-      <section className="panel glass flex flex-col">
+      <section className="panel glass flex flex-col max-md:border-0! max-md:bg-transparent! max-md:shadow-none!">
         <div className="strip">
           <div className="tabs">
             {TABS.map((t) => {
@@ -211,7 +276,7 @@ export function AttendanceTable() {
               รออนุมัติอีก {waitingDays} วัน (ยังไม่นับเป็นวันลา)
             </span>
           )}
-          <div className="legend hidden sm:flex">
+          <div className="legend hidden! sm:flex!">
             <span><i style={{ background: "var(--success)" }} />ปกติ</span>
             <span><i style={{ background: "var(--destructive)" }} />มาสาย</span>
             <span><i style={{ background: "var(--warning)" }} />ออกก่อนเวลา</span>
@@ -250,7 +315,7 @@ export function AttendanceTable() {
           </table>
         </div>
 
-        <ul className="divide-y divide-border md:hidden">
+        <ul className="flex flex-col gap-2.5 pt-2.5 md:hidden">
           {list.length === 0 ? (
             <li className="px-5 py-12 text-center text-muted-foreground">
               ไม่มีรายการในหมวดนี้
@@ -381,7 +446,11 @@ function MobileRow({ row }: { row: DayRow }) {
   const offShift = s.in !== std.in || s.out !== std.out;
 
   return (
-    <li className={`px-4 py-3 ${row.isToday ? "bg-[rgb(254_247_248/0.75)]" : ""}`}>
+    <li
+      className={`rounded-[22px] border border-white/95 bg-white/72 p-3.5 shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] ${
+        row.isToday ? "ring-2 ring-primary ring-inset" : ""
+      }`}
+    >
       {/* วันที่กับชื่อวันอยู่บรรทัดเดียว — เดือนหนึ่งมีสามสิบวัน ทุกบรรทัดที่ประหยัดได้คือหนึ่งจอที่ไม่ต้องเลื่อน */}
       <div className="flex items-center justify-between gap-3">
         <b className="num min-w-0 truncate text-[14.5px] font-semibold">
@@ -399,7 +468,7 @@ function MobileRow({ row }: { row: DayRow }) {
 
       {row.holiday && <p className="mt-0.5 text-xs text-[var(--info)]">{row.holiday}</p>}
 
-      <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+      <dl className="mt-2.5 grid grid-cols-3 gap-2 text-center [&>div]:rounded-[14px] [&>div]:bg-muted/60 [&>div]:px-1 [&>div]:py-2">
         <div>
           <dt className="text-[10.5px] text-muted-foreground">เข้างาน</dt>
           <dd className="num mt-0.5 text-[13.5px] font-semibold">

@@ -127,9 +127,11 @@ export function OtPage() {
               <ChevronRightIcon className="size-[15px]" strokeWidth={2.4} />
             </button>
           </div>
+          {/* มือถือ: ปุ่มลอยเหนือแถบเมนูล่าง กดได้ตลอดไม่ต้องเลื่อนขึ้นมาหา
+             (ต้นแบบ dose-erp-maz/mobile/attendance.html · 30 ก.ย. 2569) */}
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile shrink-0"
+            className="btn solid btn-solid btn-block-mobile shrink-0 max-md:fixed max-md:inset-x-4 max-md:bottom-[calc(104px+env(safe-area-inset-bottom))] max-md:z-40 max-md:h-[50px] max-md:justify-center max-md:rounded-[16px] max-md:shadow-[0_14px_24px_-12px_rgb(208_2_27/0.9)]"
             onClick={() => setDialogOpen(true)}
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
@@ -189,7 +191,7 @@ export function OtPage() {
         ))}
       </div>
 
-      <section className="panel glass flex flex-col">
+      <section className="panel glass flex flex-col max-md:mb-20 max-md:border-0! max-md:bg-transparent! max-md:shadow-none!">
         <div className="strip">
           <div className="tabs">
             {TABS.map((t) => {
@@ -212,7 +214,7 @@ export function OtPage() {
               );
             })}
           </div>
-          <div className="legend hidden sm:flex">
+          <div className="legend hidden! sm:flex!">
             <span><i style={{ background: "var(--warning)" }} />รออนุมัติ</span>
             <span><i style={{ background: "var(--success)" }} />อนุมัติแล้ว</span>
             <span><i style={{ background: "var(--destructive)" }} />ไม่อนุมัติ</span>
@@ -246,7 +248,7 @@ export function OtPage() {
           </table>
         </div>
 
-        <ul className="divide-y divide-border md:hidden">
+        <ul className="flex flex-col gap-2.5 pt-2.5 md:hidden">
           {list.length === 0 ? (
             <li className="px-5 py-12 text-center text-muted-foreground">
               ไม่มีรายการในเดือนนี้
@@ -380,6 +382,10 @@ function Row({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit: () =>
   );
 }
 
+/*
+ * การ์ดคำขอโอทีบนมือถือ — ต้นแบบ dose-erp-maz/mobile/attendance.html (30 ก.ย. 2569)
+ * วันที่กับสถานะอยู่แถวบน · ช่วงเวลากับชั่วโมงเป็นกล่องนุ่มมีป้ายกำกับ · งานที่ปฏิบัติอยู่ล่าง
+ */
 function MobileRow({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit: () => void }) {
   const adjusted =
     row.status === "อนุมัติแล้ว" &&
@@ -387,16 +393,20 @@ function MobileRow({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit:
     row.approvedHours !== row.hours;
 
   return (
-    <li className={`px-5 py-4 ${hit ? "ring-2 ring-primary ring-inset" : ""}`}>
+    <li
+      className={`rounded-[22px] border border-white/95 bg-white/72 p-3.5 shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] ${
+        hit ? "ring-2 ring-primary ring-inset" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <Link
             href={`/records?month=${row.date.slice(0, 7)}`}
-            className="block text-[15px] font-semibold hover:text-primary hover:underline"
+            className="block text-[15px] font-bold hover:text-primary hover:underline"
           >
             {thaiDate(row.date)}
           </Link>
-          <span className="num block text-xs text-muted-foreground">
+          <span className="num block text-[11.5px] text-muted-foreground">
             {row.id} · โอที{OT_KIND[otKindOf(row.date)].label}
           </span>
         </div>
@@ -406,20 +416,31 @@ function MobileRow({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit:
         </span>
       </div>
 
-      <p className="num mt-2.5 text-sm">
-        {hhmm(row.startMin)}–{hhmm(row.endMin)} น.
-        <b className="ml-2 font-semibold text-primary">{row.hours.toFixed(2)} ชม.</b>
-      </p>
-      {adjusted && (
-        <p className="adj">อนุมัติจริง {row.approvedHours?.toFixed(2)} ชม.</p>
-      )}
-      <p className="mt-1.5 text-sm break-words">{row.reason}</p>
+      <div className="mt-2.5 grid grid-cols-2 gap-2">
+        <span className="rounded-[14px] bg-muted/60 px-2.5 py-2">
+          <small className="block text-[11px] font-semibold text-muted-foreground">ช่วงเวลา</small>
+          <b className="num text-[15px] font-bold">
+            {hhmm(row.startMin)}–{hhmm(row.endMin)}
+          </b>
+        </span>
+        <span className="rounded-[14px] bg-muted/60 px-2.5 py-2">
+          <small className="block text-[11px] font-semibold text-muted-foreground">ชั่วโมง</small>
+          <b className="num text-[15px] font-bold text-primary">{row.hours.toFixed(2)}</b>
+          {adjusted && (
+            <em className="num block text-[11px] font-semibold text-[var(--warning)] not-italic">
+              อนุมัติจริง {row.approvedHours?.toFixed(2)}
+            </em>
+          )}
+        </span>
+      </div>
+
+      <p className="mt-2 text-[13px] break-words">{row.reason}</p>
       {row.comment && (
-        <p className="mt-1 text-xs text-muted-foreground">หัวหน้า: {row.comment}</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">หัวหน้า: {row.comment}</p>
       )}
 
       {row.status === "รออนุมัติ" && (
-        <span className="mt-2.5 flex items-center gap-4">
+        <span className="mt-2.5 flex items-center justify-end gap-3">
           <button type="button" className="lnk" onClick={onEdit}>
             แก้ไขคำขอนี้
           </button>
