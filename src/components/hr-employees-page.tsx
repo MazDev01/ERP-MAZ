@@ -1029,7 +1029,8 @@ function AddDialog({
       return setWarn(
         `รอบเงินเดือนถึง ${thaiDate(lock!)} ปิดไปแล้ว วันเริ่มงานต้องตั้งแต่ ${thaiDate(minStart)} เป็นต้นไป · ถ้าเข้าใหม่ย้อนหลังจริง ให้จ่ายเป็นรายการปรับปรุงในรอบถัดไป`,
       );
-    if (!(salary > 0)) return setWarn("กรอกเงินเดือน");
+    /* ฝึกงานไม่มีค่าจ้าง จึงไม่บังคับกรอกเงินเดือน */
+    if (f.type !== "intern" && !(salary > 0)) return setWarn("กรอกเงินเดือน");
     if (!f.phone.trim()) return setWarn("กรอกเบอร์โทร");
     /* ชื่อซ้ำตรวจเป็นข้อสุดท้าย — ช่องที่ยังว่างต้องบอกก่อน (ลำดับตามต้นแบบ) */
     if (hr.emp.some((e) => e.name === name)) return setWarn("มีพนักงานชื่อนี้ในระบบแล้ว ตรวจสอบก่อนบันทึก");
@@ -1054,7 +1055,8 @@ function AddDialog({
       address: f.address.trim(),
       sos: { name: f.sosName.trim(), rel: f.sosRel.trim(), phone: f.sosPhone.trim() },
       docs: hrDocs().map((d) => d.v).filter((v) => docs.includes(v)),
-      salary,
+      /* ฝึกงานไม่มีค่าจ้าง — บันทึกเป็น 0 ไม่ใช่ปล่อยค่าที่ค้างในช่อง */
+      salary: f.type === "intern" ? 0 : salary,
     });
     onClose();
     if (id) onAdded?.(id);
@@ -1190,22 +1192,26 @@ function AddDialog({
                 ))}
               </Select>
             </Field>
+            {/* ฝึกงานไม่มีค่าจ้าง จึงไม่ต้องกรอกเงินเดือน (เจ้าของสั่ง 30 ก.ย. 2569) */}
             <Field
               label="เงินเดือน"
-              required
+              required={f.type !== "intern"}
               hint={
-                f.type === "probat"
-                  ? "ช่วงทดลองงานจ่ายรายวัน คิดจากค่านี้หารจำนวนวันของเดือน"
-                  : undefined
+                f.type === "intern"
+                  ? "นักศึกษาฝึกงานไม่มีค่าจ้างและไม่มีสลิป จึงไม่ต้องกรอก"
+                  : f.type === "probat"
+                    ? "ช่วงทดลองงานจ่ายรายวัน คิดจากค่านี้หารจำนวนวันทำงานต่อเดือน"
+                    : undefined
               }
             >
               <Input
-                value={f.salary}
+                value={f.type === "intern" ? "" : f.salary}
                 onChange={(e) => setF((v) => ({ ...v, salary: commaInput(e.target.value) }))}
                 inputMode="decimal"
-                placeholder="บาท"
+                placeholder={f.type === "intern" ? "ไม่มีค่าจ้าง" : "บาท"}
                 className="num"
                 aria-label="เงินเดือน"
+                disabled={f.type === "intern"}
               />
             </Field>
           </div>
