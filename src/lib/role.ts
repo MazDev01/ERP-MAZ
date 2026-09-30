@@ -35,8 +35,9 @@ export const ROLES: { key: Role; label: string; note: string; en: string }[] = [
     en: "Accountant" },
   { key: "hr", label: "ฝ่ายบุคคล", note: "ดูแลข้อมูลพนักงาน เวลาทำงาน และเงินเดือน",
     en: "Human Resources" },
-  { key: "staff", label: "ทีมงาน", note: "รับงานจาก PM ลงมือทำ แล้วส่งผลงานให้ตรวจ",
-    en: "Team Member" },
+  /* เจ้าของสั่งเปลี่ยนชื่อจาก "ทีมงาน" เป็น "พนักงาน" (30 ก.ย. 2569) — คีย์ในโค้ดยังเป็น staff เหมือนเดิม */
+  { key: "staff", label: "พนักงาน", note: "รับงานจาก PM ลงมือทำ แล้วส่งผลงานให้ตรวจ",
+    en: "Employee" },
   { key: "gm", label: "ผู้จัดการทั่วไป (GM)", note: "อนุมัติใบลาของพนักงานทั่วไป",
     en: "General Manager" },
   { key: "ceo", label: "ผู้บริหาร", note: "อนุมัติคำขอที่ขึ้นถึงผู้บริหาร และอนุมัติยอดเงินเดือน",
