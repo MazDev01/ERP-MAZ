@@ -131,7 +131,7 @@ export function OtPage() {
              (ต้นแบบ dose-erp-maz/mobile/attendance.html · 30 ก.ย. 2569) */}
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile shrink-0 max-md:fixed max-md:inset-x-4 max-md:bottom-[calc(104px+env(safe-area-inset-bottom))] max-md:z-40 max-md:h-[50px] max-md:justify-center max-md:rounded-[16px] max-md:shadow-[0_14px_24px_-12px_rgb(208_2_27/0.9)]"
+            className="btn solid btn-solid btn-block-mobile shrink-0 max-md:fixed max-md:inset-x-4 max-md:w-auto! max-md:bottom-[calc(104px+env(safe-area-inset-bottom))] max-md:z-40 max-md:h-[50px] max-md:justify-center max-md:rounded-[16px] max-md:shadow-[0_14px_24px_-12px_rgb(208_2_27/0.9)]"
             onClick={() => setDialogOpen(true)}
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
@@ -258,7 +258,9 @@ export function OtPage() {
           )}
         </ul>
 
-        <div className="foot flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
+        {/* มือถือไม่ต้องมีแถบสรุปท้ายรายการ — ยอดรวมอยู่ในการ์ด "โอทีที่อนุมัติแล้วเดือนนี้" แล้ว
+           และปุ่มลอยด้านล่างจะไปทับพอดี (เจ้าของแจ้ง 1 ต.ค. 2569) */}
+        <div className="foot flex-col items-stretch gap-3 text-center max-md:hidden! sm:flex-row sm:items-center sm:text-left">
           <span>
             {scoped.length === 0
               ? "แสดง 0 รายการ"
