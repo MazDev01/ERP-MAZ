@@ -13,6 +13,7 @@ import { accountRoles } from "@/lib/hr-data";
 import { bkkStamp } from "@/lib/format";
 import { ROLES, setRole, useRole, type Role } from "@/lib/role";
 import { setStaffEmployee, staffEmployeeId, staffLabel, staffTeam } from "@/lib/staff-identity";
+import { HR_EMPTYPE } from "@/lib/hr-data";
 import { Select } from "./ui";
 
 /** ผิดครบกี่ครั้งจึงระงับบัญชี — ยืนยันกับฝ่ายบุคคล (ต้นแบบ login.html MAX_TRIES) */
@@ -100,6 +101,16 @@ export function LoginForm() {
   const [role, setPick] = useState<Role>(savedRole);
   /* พนักงานมีหลายตำแหน่ง จึงต้องเลือกด้วยว่าจะเข้าเป็นใคร (เจ้าของสั่ง 29 ก.ย. 2569) */
   const [who, setWho] = useState(() => staffEmployeeId());
+  /* การ์ดเข้าใช้งานแบบทดลองงาน/ฝึกงาน — หยิบคนแรกของแต่ละประเภทที่ยังทำงานอยู่จากทะเบียนจริง
+     ไม่ตั้งรหัสพนักงานตายตัว เพราะฝ่ายบุคคลเพิ่มหรือเปลี่ยนคนได้ */
+  const demoTypes = (["probat", "intern"] as const)
+    .map((type) => {
+      const e = hr.emp.find((x) => x.type === type && x.status === "active" && staffTeam().some((t) => t.id === x.id));
+      return e
+        ? { id: e.id, name: e.name, label: HR_EMPTYPE[type].label, en: type === "probat" ? "Probation" : "Intern" }
+        : null;
+    })
+    .filter((x) => x !== null);
 
   function edit(which: "user" | "pass", v: string) {
     if (which === "user") {
@@ -230,14 +241,24 @@ export function LoginForm() {
                 Sign in as · เข้าใช้งานในตำแหน่ง
               </legend>
               <div className="grid gap-1.5 sm:grid-cols-2">
-                {ROLES.map((r) => (
+                {ROLES.map((r) => {
+                  /* การ์ด "พนักงาน" ไม่ติดสว่างตอนเลือกทดลองงาน/ฝึกงานอยู่ ไม่งั้นดูเหมือนเลือกสองใบ */
+                  const on = role === r.key && !(r.key === "staff" && demoTypes.some((d) => d.id === who));
+                  return (
                   <button
                     key={r.key}
                     type="button"
-                    onClick={() => setPick(r.key)}
-                    aria-pressed={role === r.key}
+                    onClick={() => {
+                      setPick(r.key);
+                      if (r.key === "staff" && demoTypes.some((d) => d.id === who)) {
+                        /* กลับไปเป็นพนักงานประจำคนแรก ไม่ค้างอยู่ที่คนทดลองงาน/ฝึกงานที่เพิ่งเลือก */
+                        const normal = staffTeam().find((e) => !demoTypes.some((d) => d.id === e.id));
+                        if (normal) setWho(normal.id);
+                      }
+                    }}
+                    aria-pressed={on}
                     className={`rounded-[12px] border px-3 py-[7px] text-left transition-colors ${
-                      role === r.key
+                      on
                         ? "border-primary bg-accent text-primary"
                         : "glass-thin hover:border-primary"
                     }`}
@@ -246,8 +267,36 @@ export function LoginForm() {
                     <b className="block text-[13px] font-semibold">{r.en}</b>
                     <span className="block text-[11.5px] font-medium opacity-75">{r.label}</span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
+              {/* ทดลองงานกับฝึกงานไม่ใช่บทบาทแยก แต่เป็นประเภทการจ้างของ "พนักงาน"
+                 กติกาวันลาและสลิปต่างกัน จึงต้องมีทางเข้าไปดูหน้าจอของคนกลุ่มนี้ (เจ้าของสั่ง 1 ต.ค. 2569) */}
+              {demoTypes.length > 0 && (
+                <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                  {demoTypes.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => {
+                        setPick("staff");
+                        setWho(d.id);
+                      }}
+                      aria-pressed={role === "staff" && who === d.id}
+                      className={`rounded-[12px] border px-3 py-[7px] text-left transition-colors ${
+                        role === "staff" && who === d.id
+                          ? "border-primary bg-accent text-primary"
+                          : "glass-thin hover:border-primary"
+                      }`}
+                    >
+                      <b className="block text-[13px] font-semibold">{d.en}</b>
+                      <span className="block text-[11.5px] font-medium opacity-75">
+                        {d.label} · {d.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </fieldset>
 
             {/*

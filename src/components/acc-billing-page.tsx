@@ -36,7 +36,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useFindParam } from "@/lib/deep-link";
 import { PlusIcon, TrashIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
-import { AccFilters, MonthNav, NewDot, useAccFilter } from "./acc-ui";
+import { AccDayFilter, AccFilters, MonthNav, NewDot, useAccFilter } from "./acc-ui";
 import { Field, Textarea } from "./ui";
 import { PhoneCard, PhoneList } from "./acchr-phone";
 
@@ -125,6 +125,14 @@ export function AccBillingPage() {
     return () => window.clearTimeout(t);
   }, [tab, hasUnseen]);
 
+  /* วันที่ที่มีรายการของแท็บที่เปิดอยู่ ใช้ขึ้นจุดในปฏิทินมือถือ — ไม่กรองด้วยวันที่ที่เลือก ไม่งั้นจุดจะเหลือวันเดียว */
+  const dayDots =
+    tab === "todo"
+      ? acc.deals.filter((d) => !d.cancelled).map((d) => d.quoDate)
+      : tab === "inv"
+        ? acc.invoices.map((v) => v.issue)
+        : acc.invoices.map((v) => v.due);
+
   function pickTab(k: TabKey) {
     setTab(k);
     if (k === "inv") setInvDot(false);
@@ -143,11 +151,17 @@ export function AccBillingPage() {
           <h1>วางบิล</h1>
         </div>
         <div className="tools w-full sm:w-auto">
-          <MonthNav view={view} onChange={setView} />
+          {/* มือถือ: ปุ่มปฏิทินเลือกวันแทนแถบเลือกเดือน (ต้นแบบ billing.html 1 ต.ค. 2569)
+             วันที่ที่มีจุดเปลี่ยนตามแท็บ — รอวางบิลใช้วันที่ส่งใบเสนอราคา ใบแจ้งหนี้ใช้วันที่วางบิล ค้างชำระใช้วันครบกำหนด */}
+          <AccDayFilter filter={filter} dates={dayDots} />
+          <span className="max-sm:hidden">
+            <MonthNav view={view} onChange={setView} />
+          </span>
         </div>
       </div>
 
-      <section className="panel glass flex flex-col">
+      {/* มือถือ: การ์ดแต่ละใบลอยบนพื้นหน้า ไม่ต้องมีแผงครอบอีกชั้น (ต้นแบบ billing.html) */}
+      <section className="panel plain-mobile glass flex flex-col">
         <div className="strip">
           <div className="tabs">
             <Tab on={tab === "todo"} onClick={() => pickTab("todo")} count={todo.length} dot={newDeals > 0 ? "มีดีลใหม่รอวางบิล" : ""}>
@@ -559,6 +573,7 @@ export function AccBillingPage() {
           </PhoneList>
         )}
 
+        {/* ท้ายรายการ: มือถือเป็นการ์ดขาวกลางจอ บอกยอดรวมอย่างเดียว (ต้นแบบ billing.html) */}
         <div className="foot flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
           <Foot tab={tab} acc={acc} invoices={invoices} todo={todo} overdue={overdue} />
         </div>

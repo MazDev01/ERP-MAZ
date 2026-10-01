@@ -13,7 +13,7 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { HR_EMP, ROLE_EMPLOYEE, hrPos, type Employee } from "./hr-data";
+import { HR_EMP, HR_EMPTYPE, ROLE_EMPLOYEE, hrPos, type Employee } from "./hr-data";
 import { createPersistedStore } from "./persisted-store";
 
 const DEFAULT_ID = ROLE_EMPLOYEE.staff ?? "E05";
@@ -60,7 +60,8 @@ export function useStaffEmployeeId() {
   return useSyncExternalStore(store.subscribe, staffEmployeeId, () => DEFAULT_ID);
 }
 
-/** ชื่อ + ตำแหน่ง สำหรับดรอปดาวน์เลือกคน */
+/** ชื่อ + ตำแหน่ง สำหรับดรอปดาวน์เลือกคน — ทดลองงานกับฝึกงานกำกับไว้ด้วย เพราะกติกาวันลาต่างกัน */
 export function staffLabel(e: Employee) {
-  return `${e.name} · ${hrPos(e.pos).label}`;
+  const type = e.type === "full" ? "" : ` · ${HR_EMPTYPE[e.type].label}`;
+  return `${e.name} · ${hrPos(e.pos).label}${type}`;
 }

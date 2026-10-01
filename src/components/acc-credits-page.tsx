@@ -161,7 +161,8 @@ export function AccCreditsPage() {
         </p>
       )}
 
-      <section className="panel glass flex flex-col">
+      {/* มือถือ: การ์ดลอยบนพื้นหน้า ไม่มีแผงครอบ (ต้นแบบ billing.html) */}
+      <section className="panel plain-mobile glass flex flex-col">
         <div className="strip">
           <div className="tabs">
             <button type="button" className={tab === "credit" ? "on" : ""} onClick={() => setTab("credit")}>

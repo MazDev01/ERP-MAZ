@@ -1505,3 +1505,28 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 @media (prefers-reduced-motion: reduce) {
   .veil-in, .sheet-in { animation: none }
 }
+
+/* ─── มือถือ: แผงรายการกลายเป็นการ์ดลอยบนพื้นหน้า (ต้นแบบ billing.html · 1 ต.ค. 2569) ───
+   แผงครอบ แถบแท็บ และแถบสรุปท้ายรายการ ไม่ต้องมีพื้นของตัวเองอีก
+   เหลือการ์ดขาวของแต่ละรายการลอยบนพื้นชมพูอ่อน ส่วนยอดรวมเป็นการ์ดขาวกลางจอ */
+@media (max-width: 639px) {
+  .panel.plain-mobile {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    margin-bottom: 118px;
+  }
+  .panel.plain-mobile > .strip {
+    background: transparent;
+    border-bottom: 0;
+  }
+  .panel.plain-mobile > .foot {
+    margin: 12px 16px 0;
+    border: 0;
+    border-radius: 16px;
+    background: var(--card);
+    justify-content: center;
+    text-align: center;
+    box-shadow: 0 1px 2px rgb(120 20 35 / 0.05), 0 12px 28px -18px rgb(120 20 35 / 0.3);
+  }
+}
