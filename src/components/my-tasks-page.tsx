@@ -184,7 +184,8 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-muted-foreground">ภาพรวม</p>
+        {/* มือถือไม่ต้องมีคำว่า "ภาพรวม" — ชิปขั้นของงานบอกอยู่แล้ว (ต้นแบบ my-tasks.html บล็อก mt-mobile) */}
+        <p className="text-[13px] text-muted-foreground max-sm:hidden">ภาพรวม</p>
         {/* ใช้ช่องค้นหากลางของระบบ — เคยเขียนเองแล้วไอคอนทับตัวอักษร
             เพราะ .field-control กำหนด padding ของตัวเองทับคลาส pl-* */}
         <SearchBox value={query} onChange={setQuery} placeholder="ค้นหางานหรือโครงการ" />
@@ -192,7 +193,8 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
 
       {/* การ์ดสรุปสี่ใบ — กดเพื่อกรองรายการข้างล่าง */}
       {/* มือถือวางสองคอลัมน์ให้เห็นครบสี่ใบ ไม่ต้องปัดไปด้านข้าง */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+      {/* มือถือ: ชิปเลื่อนแนวนอนแถวเดียว · จอใหญ่: การ์ดสรุปสี่ใบเหมือนเดิม */}
+      <div className="chip-scroll flex gap-2 overflow-x-auto max-sm:-mx-4 max-sm:px-4 sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible lg:grid-cols-4">
         {STAGES.map((k) => (
           <StatCard
             key={k}
@@ -291,20 +293,27 @@ function StatCard({
       aria-pressed={on}
       /* การ์ดกระจกขาว ไอคอนพื้นอ่อน — ชุดเดียวกับการ์ดสรุปของหน้าอื่นทั้งระบบ */
       className={[
-        "glass flex min-w-0 items-center gap-2.5 rounded-[18px] px-3 py-3.5 text-left sm:gap-3 sm:px-[18px] sm:py-4",
-        "transition-colors",
-        on ? "border-primary" : "hover:border-primary",
+        /* มือถือเป็นชิปกลม สูง 38 ตามต้นแบบ · จอใหญ่เป็นการ์ดกระจกเหมือนเดิม */
+        "flex min-w-0 flex-none items-center text-left transition-colors",
+        "max-sm:h-[38px] max-sm:gap-1.5 max-sm:rounded-full max-sm:px-4 max-sm:text-[13.5px] max-sm:font-semibold",
+        on
+          ? "max-sm:bg-primary max-sm:text-primary-foreground"
+          : "max-sm:bg-[#EDE8EA] max-sm:text-[#6E6164]",
+        "sm:glass sm:flex-1 sm:gap-3 sm:rounded-[18px] sm:px-[18px] sm:py-4",
+        on ? "sm:border-primary" : "sm:hover:border-primary",
       ].join(" ")}
     >
       <span
-        className={`flex size-9 flex-none items-center justify-center rounded-[12px] sm:size-[42px] sm:rounded-[13px] ${look.tone}`}
+        className={`hidden flex-none items-center justify-center sm:flex sm:size-[42px] sm:rounded-[13px] ${look.tone}`}
         aria-hidden="true"
       >
         <Icon className="size-[21px]" strokeWidth={1.9} />
       </span>
-      <span className="min-w-0">
-        <b className="num block text-[22px] leading-none font-extrabold">{n}</b>
-        <span className="mt-1 block text-[11.5px] text-muted-foreground max-sm:leading-snug sm:truncate">
+      <span className="min-w-0 max-sm:contents">
+        <b className="num max-sm:order-2 max-sm:text-[13px] max-sm:font-semibold max-sm:opacity-85 sm:block sm:text-[22px] sm:leading-none sm:font-extrabold">
+          {n}
+        </b>
+        <span className="whitespace-nowrap max-sm:order-1 sm:mt-1 sm:block sm:truncate sm:text-[11.5px] sm:text-muted-foreground">
           {look.label}
         </span>
       </span>
@@ -343,7 +352,7 @@ function TaskCard({
     <article className="glass-thin rounded-[16px] px-4 py-4 sm:px-5">
       <div className="flex gap-3 sm:gap-4">
         <span
-          className={`grid size-11 flex-none place-items-center rounded-[13px] sm:size-[58px] sm:rounded-[14px] ${look.tone}`}
+          className={`grid size-10 flex-none place-items-center rounded-full sm:size-[58px] sm:rounded-[14px] ${look.tone}`}
           aria-hidden="true"
         >
           <Icon className="size-[22px] sm:size-[26px]" strokeWidth={1.8} />
@@ -405,7 +414,8 @@ function TaskCard({
             )}
           </p>
 
-          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3">
+          {/* มือถือ: เส้นประคั่นก่อนแถวกำหนดส่ง/ปุ่มส่งงาน ตามต้นแบบ my-tasks.html (mt-mobile) */}
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3 max-sm:mt-3 max-sm:gap-2 max-sm:border-t max-sm:border-dashed max-sm:border-[#ECE3E5] max-sm:pt-3">
             <p
               className={`text-[13px] font-semibold ${late ? "text-destructive" : "text-foreground"}`}
             >
@@ -425,7 +435,7 @@ function TaskCard({
                 type="button"
                 onClick={onSend}
                 /* มือถือขยายปุ่มเต็มแถว นิ้วกดง่าย */
-                className="btn solid btn-solid btn-mini max-sm:h-10! max-sm:w-full max-sm:justify-center max-sm:text-[13.5px]!"
+                className="btn solid btn-solid btn-mini max-sm:h-[34px]! max-sm:rounded-[10px]! max-sm:px-4! max-sm:text-[13px]!"
               >
                 {stage === "revise" ? "ส่งแก้ไข" : "ส่งงาน"}
               </button>

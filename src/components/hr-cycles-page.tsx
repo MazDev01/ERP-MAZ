@@ -25,6 +25,7 @@ import { HrSteps } from "./hr-steps";
 import { Sheet } from "./lead-dialogs";
 import { CheckCircleIcon } from "./icons";
 import { PhoneCard, PhoneList } from "./acchr-phone";
+import { GroupBack, GroupTiles, useGroupBack } from "./hr-pay-mobile";
 
 type Row = { period: Period; sum: CycleSum | null; at: string; by: string };
 
@@ -32,6 +33,10 @@ export function HrCyclesPage() {
   const hr = useHr();
   const [tab, setTab] = useState<PayGroup>("month");
   const [open, setOpen] = useState<{ month: string; group: PayGroup } | null>(null);
+  /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ — ชุดเดียวกับหน้าอื่นในสายรอบเงินเดือน
+     (ต้นแบบ hr-cycles.html บล็อก pay-tiles 1 ต.ค. 2569) */
+  const [mgroup, setMgroup] = useState<PayGroup | null>(null);
+  useGroupBack(mgroup !== null, () => setMgroup(null));
 
   const day = tab === "day";
   /* รอบล่าสุดขึ้นก่อน คนมักย้อนดูรอบที่เพิ่งผ่านมา */
@@ -54,11 +59,27 @@ export function HrCyclesPage() {
 
   return (
     <div className="space-y-4">
-      <HrSteps month={stepMonth} />
+      {mgroup === null && (
+        <GroupTiles
+          onPick={(g) => {
+            const k: PayGroup = g === "month" ? "month" : "day";
+            setTab(k);
+            setMgroup(k);
+          }}
+        />
+      )}
 
-      <section className="panel glass flex flex-col">
+      <div className={mgroup === null ? "max-md:hidden" : ""}>
+        <HrSteps month={stepMonth} />
+      </div>
+
+      {mgroup !== null && (
+        <GroupBack label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"} count={rows.length} />
+      )}
+
+      <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>
         <div className="strip">
-          <div className="tabs">
+          <div className="tabs max-md:hidden!">
             <button type="button" className={tab === "month" ? "on" : ""} onClick={() => setTab("month")}>
               รอบรายเดือน
             </button>

@@ -34,6 +34,7 @@ import { ROLE_EMPLOYEE, useComSource, useHrTime } from "@/lib/hr-link";
 import { downloadCsv, toCsv } from "@/lib/report-export";
 import { useRole } from "@/lib/role";
 import { Sheet } from "./lead-dialogs";
+import { PhoneCard, PhoneList } from "./acchr-phone";
 
 /** หนึ่งแถวในรายการ = รอบที่เผยแพร่แล้วหนึ่งรอบ พร้อมบรรทัดของเราในรอบนั้น */
 type Row = { month: string; line: CycleLine; day: boolean; at: string };
@@ -79,7 +80,7 @@ export function MyPayslipPage() {
   return (
     <div className="space-y-4">
       <section className="panel glass flex flex-col">
-        <div className="scroll-stable min-h-0 flex-1 overflow-auto">
+        <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">
           <table className="data-table cards-sm min-w-[940px]">
             <thead>
               <tr>
@@ -152,6 +153,41 @@ export function MyPayslipPage() {
             </tbody>
           </table>
         </div>
+
+        {/* มือถือ: การ์ดต่อรอบ ชื่อเดือนเป็นหัวการ์ด ยอดสุทธิเป็นแถบชมพู แตะเพื่อเปิดสลิป
+            (ต้นแบบ my-payslip.html บล็อก myslip-mobile 1 ต.ค. 2569) */}
+        <PhoneList
+          empty={
+            why || rows.length === 0
+              ? why || "ยังไม่มีสลิปที่เผยแพร่ · ฝ่ายบุคคลจะแจ้งเมื่อรอบเงินเดือนพร้อมให้ดู"
+              : undefined
+          }
+        >
+          {rows.map((r) => {
+            const c = hrCycle(r.month);
+            return (
+              <PhoneCard
+                key={r.month}
+                title={thaiMonth(r.month)}
+                sub={`${thaiDate(c.from)} – ${thaiDate(c.to)}`}
+                onOpen={() => openSlip(r.month)}
+                openLabel={`เปิดสลิปรอบ ${thaiMonth(r.month)}`}
+                statRows
+                stats={[
+                  { label: "ประกันสังคม (บาท)", value: cutText(r.line.ss), muted: !r.line.ss, tone: r.line.ss ? "text-destructive" : "" },
+                  { label: "หักมาสาย (บาท)", value: cutText(r.line.late), muted: !r.line.late, tone: r.line.late ? "text-destructive" : "" },
+                  { label: "ปรับปรุงอื่น (บาท)", value: cutText(-r.line.adj), muted: !r.line.adj },
+                  { label: "เผยแพร่เมื่อ", value: thaiDate(r.at), muted: true },
+                ]}
+              >
+                <div className="mt-2 flex items-center justify-between gap-3 rounded-[12px] bg-[var(--primary-soft,#FDF0F2)] px-3.5 py-3">
+                  <span className="text-[12.5px] text-[#6E6164]">ยอดสุทธิ (บาท)</span>
+                  <b className="num text-[18px] font-bold">{baht(r.line.net)}</b>
+                </div>
+              </PhoneCard>
+            );
+          })}
+        </PhoneList>
       </section>
 
       {me && picked && (
@@ -165,6 +201,11 @@ export function MyPayslipPage() {
     /* เปิดดูรอบไหนก็นับครั้งของรอบนั้น — ฝ่ายบุคคลใช้ยืนยันว่าพนักงานได้รับสลิปแล้ว (BR-05) */
     if (myId) countView(month, myId);
   }
+}
+
+/** ยอดที่ถูกหักไปในรูปข้อความ — ติดลบคือคืนกลับเข้ายอด */
+function cutText(v: number) {
+  return v ? (v > 0 ? `-${baht(v)}` : `+${baht(-v)}`) : "—";
 }
 
 /**

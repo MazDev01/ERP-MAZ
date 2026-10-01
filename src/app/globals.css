@@ -623,6 +623,9 @@ body {
 /* แท็บบนจอแคบ: แถวเดียวเลื่อนข้างได้ ไม่ตัดบรรทัด */
 .tabs::-webkit-scrollbar { display: none; }
 .tabs { scrollbar-width: none; }
+/* แถวชิปที่เลื่อนแนวนอนบนมือถือ ไม่ต้องมีแถบเลื่อนให้เกะกะ */
+.chip-scroll::-webkit-scrollbar { display: none; }
+.chip-scroll { scrollbar-width: none; }
 .tabs button { white-space: nowrap; }
 
 /* ข้อความไทยยาว ๆ ไม่มีช่องว่าง ถ้าไม่ยอมให้ตัดคำจะดันหน้าจอกว้างเกินจอมือถือ */
@@ -952,7 +955,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 @media (max-width: 767.98px) {
   /* ความสูงจริงของแถบล่าง ใช้เป็นที่อ้างอิงที่เดียว — ปุ่มลอยทุกหน้าวัดจากค่านี้
      เคยเขียนเลข 66px ไว้ตามหน้าต่าง ๆ แล้วแถบโตขึ้นเป็น 74px ปุ่มจึงไปซ่อนอยู่ใต้แถบ */
-  :root { --botbar: calc(74px + env(safe-area-inset-bottom)); }
+  :root { --botbar: calc(78px + env(safe-area-inset-bottom)); }
   body { background: #fbf5f4; }
 
   /* การ์ดทุกใบบนมือถือ — มนขึ้น ไม่มีเส้นขอบ เงาอมแดงแบบในแบบ */
@@ -1081,10 +1084,10 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     align-items: end;
     /* มุมบนมนตามแบบ ไม่มีเส้นขอบ เงาลอยขึ้นด้านบน */
     border: 0;
-    border-radius: 26px 26px 0 0;
-    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0;
+    padding: 6px 6px calc(10px + env(safe-area-inset-bottom));
     background: var(--card);
-    box-shadow: 0 -10px 30px -18px rgb(120 20 35 / 0.45);
+    box-shadow: 0 -8px 24px -16px rgb(90 20 35 / 0.35);
   }
   /* เมนูผู้ใช้กับกระดิ่งห่อปุ่มไว้ในกล่องของตัวเอง (ต้องใช้อ้างอิงตอนคลิกนอกกล่อง)
      กล่องนั้นจึงต้องโปร่ง ให้ปุ่มข้างในกลายเป็นช่องในแถบแทน */
@@ -1097,7 +1100,8 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     align-items: center;
     justify-content: center;
     gap: 3px;
-    padding: 6px 0;
+    height: 62px;
+    padding: 0;
     background: none;
     border: none;
     font-family: inherit;
@@ -1107,7 +1111,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   }
   .botnav > *:not(.botnav-slot) > span,
   .botnav > .botnav-slot > button > span {
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 1.25;
     max-width: 100%;
@@ -1121,18 +1125,18 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .botnav > .botnav-slot > button.on > span { font-weight: 700; }
 
   /* ปุ่มกลางยกนูน — หน้าที่ใช้ทุกวันคือลงเวลา จึงอยู่ตรงที่นิ้วโป้งถึงง่ายที่สุด (ตามแบบ .fab) */
-  .botnav > .bn-mid { color: var(--muted-foreground); }
+  .botnav > .bn-mid { gap: 14px; color: var(--muted-foreground); }
   .botnav > .bn-mid > i {
     display: grid;
     place-items: center;
-    width: 60px;
-    height: 60px;
-    margin-top: -30px;
+    width: 58px;
+    height: 58px;
+    margin-top: -42px;
     border-radius: 50%;
-    background: linear-gradient(160deg, #e8253c, #a00f26);
+    background: #c8102e;
     color: #ffffff;
-    border: 5px solid #fbf5f4;
-    box-shadow: 0 12px 22px -10px rgb(208 2 27 / 0.9);
+    /* วงกลมสีชมพูอ่อนรอบปุ่ม แทนขอบสีพื้น — ตามต้นแบบชุด tabbar2 */
+    box-shadow: 0 0 0 9px rgb(253 227 231 / 0.85), 0 12px 22px -10px rgb(200 16 46 / 0.9);
   }
 }
 

@@ -148,7 +148,7 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
     <div ref={wrapRef} className={bar ? "botnav-slot" : "relative"}>
       <button
         type="button"
-        className={bar ? `relative${open ? " on" : ""}` : "iconbtn glass-thin"}
+        className={bar ? `relative${open ? " on" : ""}` : "iconbtn glass-thin size-[42px] rounded-full"}
         aria-label={unread.length ? `แจ้งเตือน ${unread.length} รายการ` : "แจ้งเตือน"}
         aria-expanded={open}
         aria-haspopup="menu"
