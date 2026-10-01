@@ -20,7 +20,7 @@
  */
 
 import { settings } from "@/lib/system-settings";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, cycleTitle } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, cycleTitle, useGroupBack } from "./hr-pay-mobile";
 import Link from "next/link";
 import { useState } from "react";
 import { baht, bkkStamp, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
@@ -102,6 +102,8 @@ export function HrPayrollPage() {
      และเลือกรอบจากปฏิทินแทนช่องวันที่สองช่อง (ต้นแบบชุด 1 ต.ค. 2569) */
   const [mgroup, setMgroup] = useState<Tab | null>(null);
   const [cal, setCal] = useState(false);
+  /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
+  useGroupBack(mgroup !== null, () => setMgroup(null));
 
   /* ตรงกับรอบเดือนไหนพอดีหรือเปล่า — ตัวนี้เป็นตัวตัดสินว่าปิดรอบได้ไหม */
   const month = cycleMonthOf(range, months);
@@ -283,7 +285,6 @@ export function HrPayrollPage() {
         <GroupBack
           label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"}
           count={mgroup === "month" ? monthly.length : daily.length}
-          onBack={() => setMgroup(null)}
         />
       )}
 

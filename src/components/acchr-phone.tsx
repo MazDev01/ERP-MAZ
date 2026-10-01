@@ -37,6 +37,7 @@ export function PhoneCard({
   amountNote,
   badge,
   stats,
+  statRows,
   actions,
   onOpen,
   openLabel,
@@ -49,6 +50,8 @@ export function PhoneCard({
   amountNote?: ReactNode;
   badge?: ReactNode;
   stats?: PhoneStat[];
+  /** แสดงตัวเลขเป็นแถว ชื่อซ้าย ค่าขวา แทนกล่องสี่เหลี่ยม (ต้นแบบหน้าตรวจเวลาทำงาน 1 ต.ค. 2569) */
+  statRows?: boolean;
   actions?: ReactNode;
   onOpen?: () => void;
   openLabel?: string;
@@ -91,7 +94,22 @@ export function PhoneCard({
         )}
       </div>
       {badge && <div className="mt-2 flex flex-wrap items-center gap-1.5">{badge}</div>}
-      {stats && stats.length > 0 && (
+      {stats && stats.length > 0 && statRows && (
+        <dl className="mt-1.5">
+          {stats.map((s) => (
+            <div
+              key={s.label}
+              className="flex items-center justify-between gap-3 border-b border-[#F2EAEC] py-2.5 last:border-0"
+            >
+              <dt className="text-[13px] text-[#6E6164]">{s.label}</dt>
+              <dd className={`num text-[14.5px] font-semibold ${s.muted ? "text-muted-foreground" : ""} ${s.tone ?? ""}`}>
+                {s.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {stats && stats.length > 0 && !statRows && (
         <dl
           className={`mt-2.5 grid gap-x-2 gap-y-2 rounded-[14px] bg-[#FBF7F7] px-3 py-2.5 ${
             stats.length === 3 || stats.length > 4 ? "grid-cols-3" : "grid-cols-2"

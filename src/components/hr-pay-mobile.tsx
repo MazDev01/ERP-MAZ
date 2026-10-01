@@ -11,7 +11,8 @@
  * ระบบจะเลือกรอบนั้นให้ทั้งรอบ เพราะรอบเงินเดือนไม่ใช่เดือนปฏิทิน
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { setMobileBack } from "@/lib/mobile-back";
 import { bkkNow, thaiDate, thaiMonth, todayIso } from "@/lib/format";
 import { hrCycle } from "@/lib/hr-data";
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
@@ -178,15 +179,15 @@ function PaySheet({
   );
 }
 
-/** เลือกกลุ่มก่อนเข้ารายการ — สองช่องสี่เหลี่ยมใหญ่ กดง่ายด้วยนิ้วโป้ง */
+/** เลือกกลุ่มก่อนเข้ารายการ — สองช่องใหญ่เต็มจอ กดง่ายด้วยนิ้วโป้ง (ต้นแบบชุด 1 ต.ค. 2569) */
 export function GroupTiles({ onPick }: { onPick: (g: "month" | "daily") => void }) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:hidden">
+    <div className="grid h-[calc(100dvh-290px)] min-h-[260px] grid-cols-2 gap-3 md:hidden">
       {([["month", "พนักงาน"], ["daily", "ทดลองงาน"]] as const).map(([k, label]) => (
         <button
           key={k}
           type="button"
-          className="grid aspect-square place-items-center rounded-[24px] bg-card p-4 text-[19px] font-bold shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_24px_-20px_rgb(90_20_35/0.45)]"
+          className="grid h-full place-items-center rounded-[24px] bg-card p-4 text-[19px] font-bold shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_24px_-20px_rgb(90_20_35/0.45)]"
           onClick={() => onPick(k)}
         >
           {label}
@@ -196,18 +197,29 @@ export function GroupTiles({ onPick }: { onPick: (g: "month" | "daily") => void 
   );
 }
 
-/** แถวย้อนกลับไปเลือกกลุ่มใหม่ พร้อมจำนวนคนของกลุ่มที่เปิดอยู่ */
-export function GroupBack({ label, count, onBack }: { label: string; count: number; onBack: () => void }) {
+/*
+ * อยู่ในกลุ่มไหนอยู่ ปุ่มย้อนกลับบนแถบหัวพากลับไปหน้าเลือกกลุ่มก่อน ไม่ออกจากหน้าไปเลย
+ * (ต้นแบบชุด 1 ต.ค. 2569 เลิกใช้แถวย้อนกลับในเนื้อหา ใช้ปุ่มกลมบนหัวแทน)
+ */
+export function useGroupBack(active: boolean, onBack: () => void) {
+  const fn = useRef(onBack);
+  useEffect(() => {
+    fn.current = onBack;
+  });
+  useEffect(() => {
+    if (!active) return;
+    setMobileBack(() => fn.current());
+    return () => setMobileBack(null);
+  }, [active]);
+}
+
+/** ชื่อกลุ่มที่เปิดอยู่ พร้อมจำนวนคน — ย้อนกลับด้วยปุ่มบนแถบหัว */
+export function GroupBack({ label, count }: { label: string; count: number }) {
   return (
-    <button
-      type="button"
-      className="flex h-9 w-full items-center gap-1.5 text-left text-[16px] font-bold md:hidden"
-      onClick={onBack}
-    >
-      <ChevronLeftIcon className="size-[18px]" strokeWidth={2.4} />
+    <p className="flex h-9 items-center text-[16px] font-bold md:hidden">
       {label}
-      <small className="num ml-1 text-[12.5px] font-medium text-muted-foreground">{count} คน</small>
-    </button>
+      <small className="num ml-2 text-[12.5px] font-medium text-muted-foreground">{count} คน</small>
+    </p>
   );
 }
 

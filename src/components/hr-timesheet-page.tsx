@@ -45,6 +45,7 @@ import {
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlMonth } from "./hr-steps";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack } from "./hr-pay-mobile";
 import { usePendingInMonth, useHrTime, useMissingApproved, type MissingReq } from "@/lib/hr-link";
 import { MissingBox } from "./hr-payroll-page";
 import { PencilIcon } from "./icons";
@@ -82,6 +83,11 @@ export function HrTimesheetPage() {
   /* edit = เปิดจากปุ่มแก้ไข — กล่องจะเปิดช่องแก้รายการแรกให้เลย ไม่ต้องหาเอง */
   const [viewing, setViewing] = useState<{ id: string; edit: boolean } | null>(null);
   const [closing, setClosing] = useState(false);
+  /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ · เลือกรอบจากปฏิทินแทนดรอปดาวน์ */
+  const [mgroup, setMgroup] = useState<Tab | null>(null);
+  const [cal, setCal] = useState(false);
+  /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
+  useGroupBack(mgroup !== null, () => setMgroup(null));
 
   const period = hr.periods.find((p) => p.month === month)!;
   /* ปิดรอบทีละกลุ่ม ปุ่มและสถานะจึงอ่านจากแท็บที่เปิดอยู่ */
@@ -144,7 +150,25 @@ export function HrTimesheetPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      {/* มือถือ: ชื่อรอบ + ปุ่มปฏิทิน แทนแถบหัวเรื่องกับดรอปดาวน์เดือนของจอคอม */}
+      <PayHead title={thaiMonth(month)} onCal={() => setCal(true)} />
+
+      {cal && (
+        <CycleSheet
+          months={hr.periods.map((p) => p.month)}
+          selected={month}
+          onPick={(m) => {
+            setMonth(m);
+            setViewing(null);
+            setCal(false);
+          }}
+          onClose={() => setCal(false)}
+        />
+      )}
+
+      {mgroup === null && <GroupTiles onPick={(g) => { setTab(g); setMgroup(g); }} />}
+
+      <div className="bar max-md:hidden!">
         <div>
           <h1>สรุปเวลาทำงาน</h1>
         </div>
@@ -169,11 +193,20 @@ export function HrTimesheetPage() {
         </div>
       </div>
 
-      <HrSteps month={month} />
+      <div className={mgroup === null ? "max-md:hidden" : ""}>
+        <HrSteps month={month} />
+      </div>
 
-      <section className="panel glass flex flex-col">
+      {mgroup !== null && (
+        <GroupBack
+          label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"}
+          count={mgroup === "month" ? monthly.length : daily.length}
+        />
+      )}
+
+      <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>
         <div className="strip">
-          <div className="tabs">
+          <div className="tabs max-md:hidden!">
             <button type="button" className={tab === "month" ? "on" : ""} onClick={() => setTab("month")}>
               พนักงานรายเดือน <b>{monthly.length}</b>
             </button>
@@ -521,6 +554,7 @@ function TimeCard({
           </span>
         )
       }
+      statRows
       stats={[
         { label: "มาสาย (นาที)", value: late, muted: !late },
         /* ลาที่อนุมัติแล้ว · ใบที่ยังรออนุมัติต่อท้ายให้เห็น ยังไม่นับเป็นวันลา */
@@ -752,8 +786,16 @@ function CloseDialog({
         </>
       }
     >
-      <p className="text-[12.5px] text-muted-foreground">
-        รอบ {thaiMonth(month)} · {thaiDate(c.from)} – {thaiDate(c.to)} · กลุ่ม {GROUP_LABEL[group]}
+      {/* มือถือ: สรุปว่ากำลังปิดรอบไหน กลุ่มไหน เป็นกล่องสีชมพูอ่านง่าย (ต้นแบบ pay-dlg) */}
+      <p className="text-[12.5px] text-muted-foreground max-sm:flex max-sm:flex-col max-sm:gap-0.5 max-sm:rounded-[14px] max-sm:bg-[#FDF0F2] max-sm:px-3.5 max-sm:py-3 max-sm:text-[13px]">
+        <span className="max-sm:text-[16px] max-sm:font-bold max-sm:text-foreground">รอบ {thaiMonth(month)}</span>
+        <span className="max-sm:text-[#8A5560]">
+          <span className="max-sm:hidden"> · </span>
+          {thaiDate(c.from)} – {thaiDate(c.to)}
+        </span>
+        <span className="max-sm:font-bold max-sm:text-primary">
+          <span className="max-sm:hidden"> · </span>กลุ่ม {GROUP_LABEL[group]}
+        </span>
       </p>
       {why && (
         <p className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-destructive">
@@ -768,7 +810,7 @@ function CloseDialog({
       )}
 
         <>
-          <dl className="mt-3 grid gap-2 text-[13.5px] sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-x-4">
+          <dl className="mt-3 grid gap-2 text-[13.5px] max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-0 max-sm:rounded-[14px] max-sm:bg-[#FAF6F7] max-sm:px-3.5 max-sm:[&>dd]:border-b max-sm:[&>dd]:border-[#F0E6E8] max-sm:[&>dd]:py-2.5 max-sm:[&>dd]:text-right max-sm:[&>dd]:last-of-type:border-0 max-sm:[&>dt]:border-b max-sm:[&>dt]:border-[#F0E6E8] max-sm:[&>dt]:py-2.5 max-sm:[&>dt]:pr-3 max-sm:[&>dt]:font-normal! max-sm:[&>dt]:whitespace-nowrap max-sm:[&>dt]:last-of-type:border-0 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-x-4">
             <dt className="text-[12.5px] font-semibold text-muted-foreground">พนักงานในรอบ</dt>
             <dd className="num font-semibold">{people} คน</dd>
             <dt className="text-[12.5px] font-semibold text-muted-foreground">มาสาย</dt>
@@ -788,7 +830,7 @@ function CloseDialog({
               ถ้าอนุมัติหลังปิดรอบ ตัวเลขจะไม่ตรงกับที่ปิดไป
             </p>
           )}
-          <p className="mt-3 text-[12.5px] leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-[12.5px] leading-relaxed text-muted-foreground max-sm:rounded-[14px] max-sm:bg-[#FFF6E5] max-sm:px-3.5 max-sm:py-3 max-sm:text-[13px] max-sm:text-[#7A4A07]">
             ปิดรอบแล้วแก้ไขข้อมูลของกลุ่มนี้ไม่ได้อีก และข้อมูลจะถูกส่งไปยังการคำนวณเงินเดือน ตรวจให้ครบก่อนกดปิด
           </p>
         </>
