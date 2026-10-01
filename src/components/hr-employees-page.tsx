@@ -1,12 +1,16 @@
 "use client";
 
 /*
- * ข้อมูลพนักงาน — รายการการ์ด แยกกลุ่มตามประเภทพนักงาน (โครงใหม่ 24 ก.ย. 2569)
+ * ข้อมูลพนักงาน — ต้นแบบ dose-erp-maz ชุด "ข้อมูลพนักงาน" (1 ต.ค. 2569)
  *
- * สามกลุ่มพับได้: พนักงานประจำ · ทดลองงาน · ฝึกงาน กลุ่มที่ไม่มีคนไม่ขึ้น
- * การ์ดละคน มีรูป ชื่อ สถานะ ตำแหน่ง แผนก และชิปสรุปที่ HR ถามบ่อย (วันเริ่ม อายุงาน)
+ * รายการเดียวเรียงต่อกัน ไม่แยกกลุ่มตามประเภทแล้ว ประเภทการจ้างไปอยู่ขวาการ์ดแทน
+ * การ์ดละคน รูปวงกลมขอบขาว ชื่อ สถานะ ตำแหน่ง แผนก และบรรทัดสรุปที่ HR ถามบ่อย (วันเริ่ม อายุงาน)
  * คนที่อยู่ระหว่างทดลองงานมีวงแหวนบอกว่าผ่าน "ช่วงเวลา" ทดลองงานมาแล้วกี่ส่วน ไม่ใช่คะแนนผลงาน
  * กดที่ไหนก็ได้ในการ์ดเพื่อเปิดประวัติเต็ม
+ *
+ * มือถือ: หัวเรื่องบอกจำนวนคน ปุ่มตัวกรอง (มีจุดแดงเมื่อกรองแผนก/ตำแหน่งอยู่) ช่องค้นหาทรงแคปซูล
+ * ชิปสถานะเลื่อนแนวนอน การ์ดเป็นตาราง 2 คอลัมน์ และปุ่มกลมเพิ่มพนักงานลอยมุมขวาล่าง
+ * แผนก/ตำแหน่งย้ายไปอยู่ในแผ่นเลื่อนขึ้นจากด้านล่าง เพราะหน้าจอแคบวางสี่ช่องเรียงกันไม่ได้
  *
  * เพิ่มพนักงานใหม่จากปุ่มบนแถบหัวเรื่อง คนเข้าใหม่เริ่มที่ "ทดลองงาน" เสมอ ระบบไม่ให้เลือกเป็นอย่างอื่น
  * ผ่านทดลองงานทำจากในกล่องประวัติ และต้องระบุเงินเดือนใหม่เสมอ
@@ -53,6 +57,7 @@ import { optionsOf } from "@/lib/options";
 import { useFindParam } from "@/lib/deep-link";
 import { USERS } from "@/lib/mock-data";
 import { useRole } from "@/lib/role";
+import { CalendarIcon, ClockIcon, PlusIcon, SearchIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { EmployeeDetail, EmpPhoto, StatusPill } from "./hr-employee-detail";
 import { ThaiDatePicker } from "./thai-date-picker";
@@ -71,15 +76,11 @@ export function HrEmployeesPage() {
   const [passing, setPassing] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  /** กลุ่มไหนกางอยู่ — จำไว้ข้ามการวาดใหม่ ตั้งต้นกางทุกกลุ่ม */
-  const [open, setOpen] = useState<Record<EmpType, boolean>>({ full: true, probat: true, intern: true });
+  /** แผ่นตัวกรองแผนก/ตำแหน่งของมือถือเปิดอยู่หรือไม่ */
+  const [sheet, setSheet] = useState(false);
   /** คนที่เพิ่งเพิ่ม — รอแถวขึ้นก่อนแล้วค่อยเลื่อนไปหา */
   const justAdded = useRef<string | null>(null);
   const today = todayIso();
-  /* กำลังค้นหาหรือกรองอยู่ ให้กางทุกกลุ่มที่มีผลลัพธ์ ไม่งั้นผลลัพธ์ซ่อนอยู่ในกลุ่มที่พับไว้
-     เปลี่ยนเงื่อนไขทีไรกลุ่มเริ่มใหม่ที่กางเสมอ (ผูกกับ key ของ <details>) */
-  const filterKey = `${query.trim()}|${dept}|${pos}|${status}`;
-  const filtering = filterKey !== "|||";
 
   useEffect(() => {
     if (!justAdded.current) return;
@@ -110,12 +111,11 @@ export function HrEmployeesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="bar max-md:hidden!">
         <div>
           <h1>ข้อมูลพนักงาน</h1>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
-          {/* มือถือ: ปุ่มเพิ่มพนักงานเต็มแถวบนสุด ค้นหาเต็มแถว ตัวกรองสามช่องเรียงแถวเดียว */}
           <Field label="ค้นหา" className="max-sm:w-full">
             <Input
               type="search"
@@ -175,7 +175,7 @@ export function HrEmployeesPage() {
           </Field>
           <button
             type="button"
-            className="btn solid btn-solid max-sm:order-first max-sm:h-11! max-sm:basis-full! max-sm:text-[14px]"
+            className="btn solid btn-solid"
             style={{ height: 38 }}
             onClick={() => setAdding(true)}
           >
@@ -184,58 +184,98 @@ export function HrEmployeesPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3.5">
+      {/* ── มือถือ: หัวเรื่อง + ค้นหา + ชิปสถานะ ── */}
+      <div className="md:hidden">
+        <div className="flex items-center gap-2.5">
+          <h1 className="flex-1 text-[20px] font-bold">
+            พนักงาน
+            <small className="num ml-1.5 text-[12.5px] font-medium text-muted-foreground">{rows.length} คน</small>
+          </h1>
+          <button
+            type="button"
+            className="relative grid size-[42px] flex-none place-items-center rounded-full border border-border bg-card text-foreground shadow-[0_4px_10px_-6px_rgb(90_20_35/0.3)]"
+            onClick={() => setSheet(true)}
+            aria-label="ตัวกรองแผนกและตำแหน่ง"
+            aria-haspopup="dialog"
+          >
+            <FilterIcon className="size-[19px]" strokeWidth={2.2} />
+            {/* จุดแดงบอกว่ายังกรองแผนก/ตำแหน่งอยู่ ไม่งั้นเปิดมาเห็นคนน้อยแล้วไม่รู้ว่าทำไม */}
+            {(dept || pos) && (
+              <i className="absolute top-1.5 right-[7px] size-2 rounded-full border-2 border-white bg-primary" />
+            )}
+          </button>
+        </div>
+
+        <label className="mt-2 flex h-[46px] items-center gap-2 rounded-full border border-border bg-card px-3.5">
+          <SearchIcon className="size-[18px] flex-none text-muted-foreground" strokeWidth={2.2} />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ค้นหาชื่อ หรือชื่อเล่น"
+            aria-label="ค้นหาพนักงาน"
+            className="h-full min-w-0 flex-1 bg-transparent text-[14.5px] outline-none"
+          />
+        </label>
+
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pt-3 pb-1 [scrollbar-width:none]" role="tablist" aria-label="สถานะ">
+          {STATUS_CHIPS.map((c) => (
+            <button
+              key={c.v}
+              type="button"
+              role="tab"
+              aria-selected={status === c.v}
+              className={`h-[38px] flex-none rounded-full px-4 text-[13.5px] font-semibold ${
+                status === c.v ? "bg-primary text-white" : "bg-[#EDE8EA] text-[#6E6164]"
+              }`}
+              onClick={() => setStatus(c.v)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* รายการเดียวเรียงต่อกัน — ประเภทการจ้างอยู่ขวาการ์ด ไม่แยกกลุ่มแล้ว */}
+      <div className="flex flex-col gap-3 md:gap-3.5">
         {rows.length === 0 ? (
           <p className="px-5 py-9 text-center text-[13.5px] text-muted-foreground">
             {query ? "ไม่พบชื่อที่ค้นหา" : "ไม่มีพนักงานตามเงื่อนไขที่เลือก"}
           </p>
         ) : (
-          GROUPS.map((g) => {
-            const list = rows.filter((e) => e.type === g.type);
-            /* กลุ่มที่ไม่มีคนไม่ต้องแสดง — ไม่ต้องให้กดเปิดมาเจอกล่องเปล่า */
-            if (!list.length) return null;
-            return (
-              <details
-                key={filtering ? `${g.type}|${filterKey}` : g.type}
-                open={filtering ? true : open[g.type]}
-                onToggle={(ev) => {
-                  /* ตอนกรองอยู่ไม่ต้องจำ — พับไว้ชั่วคราวได้ แต่เปลี่ยนตัวกรองแล้วกางใหม่ */
-                  if (filtering) return;
-                  const now = ev.currentTarget.open;
-                  setOpen((v) => (v[g.type] === now ? v : { ...v, [g.type]: now }));
-                }}
-                /* ต้นแบบ: แต่ละกลุ่มเป็นการ์ดขาวมีขอบ หัวการ์ดกดพับได้ */
-                className="group overflow-hidden rounded-[16px] border border-border bg-card"
-              >
-                <summary className="flex cursor-pointer list-none items-center gap-2.5 px-5 py-4 text-[15px] font-bold hover:bg-muted/40 marker:content-none [&::-webkit-details-marker]:hidden">
-                  <i className="size-[9px] flex-none rounded-full" style={{ background: g.dot }} />
-                  {g.label}
-                  <span className="num text-[13px] font-medium text-muted-foreground">({list.length} คน)</span>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="ml-auto text-muted-foreground transition-transform group-open:rotate-180"
-                    aria-hidden="true"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </summary>
-                <div className="flex flex-col gap-3 border-t border-border px-5 pt-4 pb-5">
-                  {list.map((e) => (
-                    <EmpCard key={e.id} emp={e} query={query} today={today} onOpen={() => setViewing(e.id)} />
-                  ))}
-                </div>
-              </details>
-            );
-          })
+          rows.map((e) => (
+            <EmpCard key={e.id} emp={e} query={query} today={today} onOpen={() => setViewing(e.id)} />
+          ))
         )}
       </div>
+
+      {/* มือถือ: ปุ่มกลมเพิ่มพนักงาน ลอยเหนือแถบเมนูล่าง ชุดเดียวกับหน้าอื่น */}
+      <button
+        type="button"
+        className="btn solid btn-solid fab-mobile md:hidden!"
+        onClick={() => setAdding(true)}
+      >
+        <PlusIcon className="size-[15px]" strokeWidth={2.2} />
+        <span className="lbl">เพิ่มพนักงาน</span>
+      </button>
+
+      {sheet && (
+        <FilterSheet
+          dept={dept}
+          pos={pos}
+          posOptions={posOptions}
+          onDept={(v) => {
+            setDept(v);
+            if (v && pos && hrPos(pos as PosKey).dept !== v) setPos("");
+          }}
+          onPos={setPos}
+          onClear={() => {
+            setDept("");
+            setPos("");
+          }}
+          onClose={() => setSheet(false)}
+        />
+      )}
 
       {adding && (
         <AddDialog
@@ -243,11 +283,9 @@ export function HrEmployeesPage() {
           today={today}
           onClose={() => setAdding(false)}
           onAdded={(id) => {
-            /* ตามต้นแบบ: ล้างช่องค้นหาแล้วเลื่อนไปที่การ์ดของคนที่เพิ่งเพิ่ม
-               กางทุกกลุ่มด้วย ไม่งั้นการ์ดอาจอยู่ในกลุ่มที่พับไว้จนเลื่อนไปไม่ถึง */
+            /* ตามต้นแบบ: ล้างช่องค้นหาแล้วเลื่อนไปที่การ์ดของคนที่เพิ่งเพิ่ม */
             justAdded.current = id;
             setQuery("");
-            setOpen({ full: true, probat: true, intern: true });
           }}
         />
       )}
@@ -273,14 +311,88 @@ export function HrEmployeesPage() {
   );
 }
 
-// ─── กลุ่มและการ์ดพนักงาน ─────────────────────────────────────────
+// ─── ตัวกรองและการ์ดพนักงาน ───────────────────────────────────────
 
-/* ลำดับกลุ่มตามโครงใหม่: ประจำ (เขียว) · ทดลองงาน (ส้ม) · ฝึกงาน (น้ำเงิน) */
-const GROUPS: { type: EmpType; label: string; dot: string }[] = [
-  { type: "full", label: "พนักงานประจำ", dot: "var(--success)" },
-  { type: "probat", label: "ทดลองงาน", dot: "var(--warning)" },
-  { type: "intern", label: "ฝึกงาน", dot: "var(--info)" },
+/** ชิปสถานะบนมือถือ — ชุดเดียวกับดรอปดาวน์สถานะของจอคอม */
+const STATUS_CHIPS: { v: EmpStatus | ""; label: string }[] = [
+  { v: "", label: "ทั้งหมด" },
+  { v: "active", label: "ปฏิบัติงานอยู่" },
+  { v: "left", label: "พ้นสภาพ" },
 ];
+
+/* แผ่นตัวกรองของมือถือ — มีแค่แผนกกับตำแหน่ง เพราะค้นหากับสถานะอยู่บนหน้าแล้ว */
+function FilterSheet({
+  dept,
+  pos,
+  posOptions,
+  onDept,
+  onPos,
+  onClear,
+  onClose,
+}: {
+  dept: DeptKey | "";
+  pos: PosKey | "";
+  posOptions: { v: PosKey; label: string }[];
+  onDept: (v: DeptKey | "") => void;
+  onPos: (v: PosKey | "") => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet
+      title="ตัวกรอง"
+      onClose={onClose}
+      footer={
+        <div className="flex w-full gap-2.5">
+          <button
+            type="button"
+            className="btn glass-thin h-12 flex-1 justify-center rounded-[14px] text-[14px] font-bold"
+            onClick={onClear}
+          >
+            ล้างตัวกรอง
+          </button>
+          <button
+            type="button"
+            className="btn solid btn-solid h-12 flex-[1.4] justify-center rounded-[14px] text-[14px] font-bold"
+            onClick={onClose}
+          >
+            ดูผลลัพธ์
+          </button>
+        </div>
+      }
+    >
+      <Field label="แผนก">
+        <Select value={dept} onChange={(e) => onDept(e.target.value as DeptKey | "")} className="w-full">
+          <option value="">ทุกแผนก</option>
+          {hrDepts().map((d) => (
+            <option key={d.v} value={d.v}>
+              {d.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="ตำแหน่ง" className="mt-3">
+        <Select value={pos} onChange={(e) => onPos(e.target.value as PosKey | "")} className="w-full">
+          <option value="">ทุกตำแหน่ง</option>
+          {posOptions.map((p) => (
+            <option key={p.v} value={p.v}>
+              {p.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    </Sheet>
+  );
+}
+
+/** ไอคอนตัวกรอง — ต้นแบบใช้ขีดสามเส้นลดหลั่น ไม่ใช่กรวย */
+function FilterIcon(p: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>
+      <path d="M4 6h16M7 12h10M10 18h4" />
+    </svg>
+  );
+}
 
 /** เน้นส่วนที่ตรงกับคำค้น — แบ่งเป็นสามท่อนแล้วให้ React วาด ไม่ยัด HTML ดิบ */
 function Mark({ text, query }: { text: string; query: string }) {
@@ -330,14 +442,47 @@ function Donut({ pct }: { pct: number }) {
   );
 }
 
-function Chip({ children, tone }: { children: React.ReactNode; tone?: "warn" | "bad" }) {
+/* บรรทัดสรุปในการ์ด — ไอคอนเล็กกับข้อความ ไม่ใช่ป้ายมีพื้นตามต้นแบบชุดใหม่ */
+function Info({
+  children,
+  icon: Icon,
+  tone,
+}: {
+  children: React.ReactNode;
+  icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement;
+  tone?: "warn" | "bad";
+}) {
   const skin =
     tone === "bad"
-      ? "border-transparent bg-[var(--destructive-soft)] font-semibold text-destructive"
+      ? "font-semibold text-destructive"
       : tone === "warn"
-        ? "border-transparent bg-[var(--warning-soft)] font-semibold text-[var(--warning)]"
-        : "border-border bg-muted/60 text-muted-foreground";
-  return <span className={`rounded-[20px] border px-2.5 py-[3px] text-[11.5px] ${skin}`}>{children}</span>;
+        ? "font-semibold text-[var(--warning)]"
+        : "text-muted-foreground";
+  return (
+    <span className={`inline-flex items-center gap-[5px] text-[11.5px] max-md:text-[12px] ${skin}`}>
+      <Icon className="size-[13px] flex-none" strokeWidth={2} />
+      {children}
+    </span>
+  );
+}
+
+function FlagIcon(p: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>
+      <path d="M5 21V4" />
+      <path d="M5 4h11l-2 4 2 4H5" />
+    </svg>
+  );
+}
+
+function AlertIcon(p: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5" />
+      <path d="M12 16.2v.3" />
+    </svg>
+  );
 }
 
 function EmpCard({
@@ -357,7 +502,8 @@ function EmpCard({
   const left = onProbation ? probDaysLeft(emp.startedAt, today) : null;
 
   return (
-    /* กดที่ไหนก็ได้ในการ์ดเพื่อเปิดประวัติ — รองรับคีย์บอร์ดด้วย Enter/Space */
+    /* กดที่ไหนก็ได้ในการ์ดเพื่อเปิดประวัติ — รองรับคีย์บอร์ดด้วย Enter/Space
+       มือถือเป็นตาราง 2 คอลัมน์ รูปกินแถวซ้ายทั้งใบ ข้อมูลเรียงลงมาในคอลัมน์ขวา */
     <div
       role="button"
       tabIndex={0}
@@ -370,68 +516,70 @@ function EmpCard({
       }}
       aria-label={`ดูประวัติของ ${emp.name}`}
       data-emp-id={emp.id}
-      /* มือถือ: การ์ดตกบรรทัด รูป 64px ส่วนขวาเรียงเป็นแถวเต็มความกว้าง */
-      className={`flex cursor-pointer flex-wrap items-center gap-3.5 rounded-[18px] border border-border bg-card px-5 py-4 max-sm:items-start max-sm:gap-x-3 max-sm:gap-y-2 max-sm:rounded-[14px] max-sm:px-3.5 max-sm:py-3 transition-[box-shadow,border-color] hover:border-[#E4C7CC] hover:shadow-[0_3px_14px_rgba(28,20,45,.07)] sm:flex-nowrap sm:gap-[18px] ${
+      className={`flex cursor-pointer items-center gap-5 rounded-[14px] bg-card py-3.5 pr-[26px] pl-[18px] shadow-[0_1px_2px_rgb(31_36_48/0.04),0_6px_18px_-12px_rgb(31_36_48/0.18)] transition-shadow hover:shadow-[0_1px_2px_rgb(31_36_48/0.05),0_12px_26px_-12px_rgb(31_36_48/0.26)] max-md:grid max-md:grid-cols-[56px_minmax(0,1fr)] max-md:items-start max-md:gap-x-3.5 max-md:gap-y-0.5 max-md:pr-4 max-md:pl-3 ${
         gone ? "opacity-[.62]" : ""
       }`}
     >
-      {/* มือถือรูป 64px ยังเล็กไปสำหรับคำว่า "ยังไม่มีรูป" เหลือไว้แต่ไอคอน */}
-      <EmpPhoto className="size-16 rounded-[14px] max-sm:[&>em]:hidden max-sm:[&>svg]:mb-0 sm:size-[88px] sm:rounded-[16px]" />
+      {/* รูปวงกลมขอบขาวหนา เงานุ่ม ลอยออกจากการ์ด ยังไม่มีรูปก็เป็นวงว่าง */}
+      <EmpPhoto
+        note={false}
+        className="size-16 rounded-full border-4! border-white! bg-[#EEF0F4]! shadow-[0_8px_18px_-6px_rgb(31_36_48/0.3)] max-md:row-span-5 max-md:size-14 max-md:border-[3px]!"
+      />
 
-      <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-2.5">
-          <b className="text-base font-bold">
+      <span className="min-w-0 flex-1 max-md:contents">
+        <span className="flex items-start justify-between gap-2.5 md:items-center md:justify-start">
+          <b className="text-base font-semibold max-md:font-bold max-md:leading-snug">
             <Mark text={emp.name} query={query} />
           </b>
           <StatusPill emp={emp} />
         </span>
         {/* ตำแหน่งบรรทัดหนึ่ง แผนกตัวเล็กจางอีกบรรทัด */}
-        <span className="mt-[5px] block text-[13px]">
+        <span className="block text-[13px] md:mt-[3px] max-md:font-semibold">
           {p.label}
           {/* ควบตำแหน่งอื่นด้วย — ตำแหน่งหลักยังเป็นตัวคิดเงินเดือนและสายอนุมัติ */}
           {(emp.posMore ?? []).length > 0 && (
-            <span className="text-muted-foreground">
+            <span className="font-normal text-muted-foreground">
               {" · ควบ "}
               {(emp.posMore ?? []).map((v) => hrPos(v).label).join(" · ")}
             </span>
           )}
         </span>
-        <span className="block text-[12px] text-muted-foreground">{hrDept(p.dept).label}</span>
-        <span className="mt-[11px] flex flex-wrap gap-1.5 max-sm:mt-2">
-          <Chip>เริ่ม {thaiDate(emp.startedAt)}</Chip>
-          <Chip>
+        <span className="block text-[12px] text-muted-foreground md:mt-px">{hrDept(p.dept).label}</span>
+        <span className="mt-2 flex flex-wrap gap-x-[18px] gap-y-1 max-md:gap-x-3.5">
+          <Info icon={CalendarIcon}>เริ่ม {thaiDate(emp.startedAt)}</Info>
+          <Info icon={ClockIcon}>
             {emp.leftAt ? "ทำงานรวม" : "ทำงานมาแล้ว"} {empYears(emp.startedAt, today, emp.leftAt)}
-          </Chip>
+          </Info>
           {left !== null && (
-            <Chip tone={left < 0 ? "bad" : "warn"}>
+            <Info icon={left < 0 ? AlertIcon : FlagIcon} tone={left < 0 ? "bad" : "warn"}>
               {left < 0
                 ? `เลยกำหนดทดลองงาน ${Math.abs(left)} วัน`
                 : left === 0
                   ? "ครบกำหนดวันนี้"
                   : `ครบกำหนดอีก ${left} วัน`}
-            </Chip>
+            </Info>
           )}
-          {emp.leftAt && <Chip tone="bad">พ้นสภาพ {thaiDate(emp.leftAt)}</Chip>}
+          {emp.leftAt && (
+            <Info icon={AlertIcon} tone="bad">
+              พ้นสภาพ {thaiDate(emp.leftAt)}
+            </Info>
+          )}
         </span>
       </span>
 
-      {/* วงแหวนบอก "ช่วงเวลา" ทดลองงานที่ผ่านมาแล้ว ไม่ใช่คะแนนผลงาน */}
-      <span
-        /* มือถือ: แถวเต็มความกว้างใต้การ์ด — คนที่ไม่ได้ทดลองงานไม่ต้องขึ้น เพราะหัวกลุ่มบอกประเภทอยู่แล้ว */
-        className={`flex w-full flex-none items-center gap-2.5 sm:block sm:w-[110px] sm:text-center ${
-          onProbation ? "max-sm:mt-1 max-sm:border-t max-sm:border-border max-sm:pt-2" : "max-sm:hidden"
-        }`}
-      >
+      {/* ขวาการ์ด: วงแหวนบอก "ช่วงเวลา" ทดลองงานที่ผ่านมาแล้ว ไม่ใช่คะแนนผลงาน
+          คนที่ไม่ได้ทดลองงานขึ้นเป็นประเภทการจ้าง เพราะเลิกแยกกลุ่มตามประเภทแล้ว */}
+      <span className="flex-none md:w-[110px] md:text-center max-md:mt-1.5">
         {onProbation ? (
           <>
             <Donut pct={probPct(emp.startedAt, today)} />
-            <span className="block text-[10.5px] leading-snug text-muted-foreground sm:mt-1.5">
+            <span className="block text-[11.5px] leading-snug text-muted-foreground max-md:mt-1.5 md:mt-1.5">
               ผ่านช่วงทดลองงาน
-              <span className="max-sm:hidden"> (นับตามวัน)</span>
+              <span className="max-md:hidden"> (นับตามวัน)</span>
             </span>
           </>
         ) : (
-          <span className="block text-[11px] leading-snug text-muted-foreground">
+          <span className="block text-[11.5px] leading-snug text-muted-foreground max-md:text-[12px]">
             {HR_EMPTYPE[emp.type].label}
           </span>
         )}
@@ -439,6 +587,7 @@ function EmpCard({
     </div>
   );
 }
+
 
 // ─── แก้ไขข้อมูลพนักงาน ──────────────────────────────────────────
 
