@@ -7,7 +7,7 @@ import { AccountLocked, type LockReason } from "./account-locked";
 import { LoginScene } from "./login-scene";
 import { DownloadIcon, EyeIcon, EyeOffIcon, LockIcon, UserIcon } from "./icons";
 import { homeOf, navItems } from "@/lib/nav";
-import { accountOf, markLogin } from "@/lib/accounts";
+import { accountKey, accountOf, markLogin } from "@/lib/accounts";
 import { useHr } from "@/lib/hr-store";
 import { accountRoles } from "@/lib/hr-data";
 import { bkkStamp } from "@/lib/format";
@@ -119,12 +119,14 @@ export function LoginForm() {
     /* ไม่กรอกอะไรเลย = เข้าด้วยบทบาทที่เลือกทันที ไม่ต้องใช้รหัส (ผู้ใช้สั่ง 22 ก.ย. 2569 · ยังไม่มีหลังบ้าน)
        กรอกชื่อผู้ใช้เมื่อไร ตรวจรหัสผ่านและนับครั้งที่ผิดตามต้นแบบ login.html */
     if (!user && !password) {
-      const account = accountOf(role);
+      /* บัญชีเก็บตามคน — พนักงานใช้รหัสของคนที่เลือกไว้ในดรอปดาวน์ */
+      const key = accountKey(role, who);
+      const account = accountOf(key);
       if (account.suspended) return setLocked("admin");
       if (role === "staff") setStaffEmployee(who);
       setRole(role);
       keepDevice("");
-      markLogin(role, bkkStamp());
+      markLogin(key, bkkStamp());
       setBusy(true);
       /* ไม่ถามตั้งรหัสผ่านใหม่ เพราะทางนี้ไม่ได้ใช้รหัสผ่านเลย */
       router.replace(homeAfterLogin(role));
@@ -171,7 +173,8 @@ export function LoginForm() {
       if (person?.account?.status === "suspended") return setLocked("admin");
       const roles = accountRoles(person?.account);
       const r: Role = roles.length && !roles.includes(role) ? roles[0] : role;
-      const account = accountOf(r);
+      const key = person?.id ?? accountKey(r, who);
+      const account = accountOf(key);
       if (!person && account.suspended) return setLocked("admin");
       const mustReset = person ? Boolean(person.account?.mustChange) : account.mustResetPassword;
       setFails(0);
@@ -179,7 +182,7 @@ export function LoginForm() {
       if (r === "staff") setStaffEmployee(person?.id ?? who);
       setRole(r);
       keepDevice(user);
-      markLogin(r, bkkStamp());
+      markLogin(key, bkkStamp());
       setBusy(true);
       router.replace(mustReset ? "/set-password" : homeAfterLogin(r));
     }, 1600);

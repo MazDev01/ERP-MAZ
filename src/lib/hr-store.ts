@@ -262,15 +262,6 @@ function editEmp(id: string, fn: (e: Employee) => Employee) {
   store.update((s) => ({ ...s, emp: s.emp.map((e) => (e.id === id ? fn(e) : e)) }));
 }
 
-/*
- * บัญชีเป็นของพนักงานรายคน (ERD: user_account ผูกกับ employee หนึ่งต่อหนึ่ง)
- * สถานะในหน้าเข้าสู่ระบบยังเก็บตามบทบาท (accounts.ts) เพราะตอนนี้หนึ่งบทบาทคือหนึ่งคนที่ล็อกอินได้ (ROLE_EMPLOYEE)
- * จึงแตะสถานะของบทบาทได้เฉพาะเมื่อพนักงานคนนี้คือคนที่ล็อกอินในบทบาทนั้นจริง
- * ไม่งั้นระงับพนักงานใหม่ที่ได้บทบาท "พนักงาน" จะไประงับกมลชนก (E05) ที่ใช้บทบาทนั้นอยู่ไปด้วย
- */
-function ownRoles(id: string, roles: Role[]) {
-  return roles.filter((r) => ROLE_EMPLOYEE[r] === id);
-}
 
 export function createAccount(id: string, user: string, today: string, roles: Role[]) {
   editEmp(id, (e) =>
@@ -278,8 +269,8 @@ export function createAccount(id: string, user: string, today: string, roles: Ro
       ? e
       : { ...e, account: { user, roles, status: "active", mustChange: true, createdAt: today } },
   );
-  /* บทบาทที่เพิ่งได้บัญชี ต้องตั้งรหัสเองตอนเข้าระบบครั้งแรก */
-  for (const r of ownRoles(id, roles)) requirePasswordReset(r, true);
+  /* คนที่เพิ่งได้บัญชี ต้องตั้งรหัสเองตอนเข้าระบบครั้งแรก */
+  requirePasswordReset(id, true);
 }
 
 /** ตั้งรหัสใหม่ให้พนักงาน — เปลี่ยนชื่อผู้ใช้ไปพร้อมกันได้ และบังคับตั้งรหัสเองตอนเข้าระบบ */
@@ -287,7 +278,7 @@ export function resetAccount(id: string, user: string, roles: Role[]) {
   editEmp(id, (e) =>
     e.account ? { ...e, account: { ...e.account, user, roles, mustChange: true } } : e,
   );
-  for (const r of ownRoles(id, roles)) requirePasswordReset(r, true);
+  requirePasswordReset(id, true);
 }
 
 /**
@@ -297,8 +288,7 @@ export function resetAccount(id: string, user: string, roles: Role[]) {
  * คืนสิทธิ์ให้บทบาทที่เคยถูกระงับด้วย ไม่งั้นบัญชีใหม่ของบทบาทนั้นจะเข้าไม่ได้
  */
 export function deleteAccount(id: string) {
-  const emp = store.get().emp.find((e) => e.id === id);
-  for (const r of ownRoles(id, accountRoles(emp?.account))) restoreAccount(r);
+  restoreAccount(id);
   editEmp(id, (e) => {
     if (!e.account) return e;
     const next = { ...e };
@@ -328,11 +318,9 @@ export function setAccountRoles(id: string, roles: Role[]) {
 export function setAccountStatus(id: string, status: "active" | "suspended", at = "") {
   const emp = store.get().emp.find((e) => e.id === id);
   editEmp(id, (e) => (e.account ? { ...e, account: { ...e.account, status } } : e));
-  /* ระงับบัญชีต้องมีผลที่หน้าเข้าสู่ระบบด้วย — ระงับทุกบทบาทที่บัญชีนี้ควบอยู่ */
-  for (const r of ownRoles(id, accountRoles(emp?.account))) {
-    if (status === "suspended") suspendAccount(r, `ฝ่ายบุคคลระงับบัญชีของ ${emp?.name ?? id}`, at);
-    else restoreAccount(r);
-  }
+  /* ระงับบัญชีต้องมีผลที่หน้าเข้าสู่ระบบด้วย — เก็บตามคน คนอื่นในบทบาทเดียวกันไม่โดนด้วย */
+  if (status === "suspended") suspendAccount(id, `ฝ่ายบุคคลระงับบัญชีของ ${emp?.name ?? id}`, at);
+  else restoreAccount(id);
 }
 
 export type EmpProfile = Pick<

@@ -4,8 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CheckIcon, EyeIcon, EyeOffIcon, LockIcon } from "./icons";
 import { checkPassword, passwordOk, PASSWORD_HINT } from "@/lib/password-rule";
-import { requirePasswordReset } from "@/lib/accounts";
+import { accountKey, requirePasswordReset } from "@/lib/accounts";
 import { currentRole } from "@/lib/role";
+import { staffEmployeeId } from "@/lib/staff-identity";
 
 /**
  * ตั้งรหัสผ่านใหม่ — ใช้ทั้งตอนเข้าใช้ครั้งแรกและตอนฝ่ายบุคคลรีเซ็ตให้
@@ -35,7 +36,8 @@ export function SetPasswordPage() {
     setTried(true);
     if (!strong || !matched || busy) return;
     /* ตั้งรหัสใหม่แล้ว ผู้ดูแลระบบไม่ต้องบังคับอีก */
-    requirePasswordReset(currentRole(), false);
+    /* บัญชีเก็บตามคน — ปลดธง "ต้องตั้งรหัสใหม่" ของคนที่ล็อกอินอยู่เท่านั้น */
+    requirePasswordReset(accountKey(currentRole(), staffEmployeeId()), false);
     setBusy(true);
     setTimeout(() => router.push("/login"), 500);
   }

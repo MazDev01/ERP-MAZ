@@ -17,6 +17,7 @@ import { AdminLeavePage } from "./admin-leave-page";
 import { AdminHolidaysPage } from "./admin-holidays-page";
 import { AdminAttendancePage } from "./admin-attendance-page";
 import { AdminRatesPage } from "./admin-rates-page";
+import { AdminBotnavPage } from "./admin-botnav-page";
 import { AdminCompanyPage } from "./admin-company-page";
 
 /* ไอคอนของแต่ละหัวข้อตามต้นแบบ hr-settings.html */
@@ -30,6 +31,7 @@ const SEC_ICON: Record<string, IconName> = {
   payroll: "commission",
   wht: "tax",
   issuer: "receipt",
+  botnav: "pin",
 };
 
 type SecKey =
@@ -41,7 +43,8 @@ type SecKey =
   | "attendance"
   | "payroll"
   | "wht"
-  | "issuer";
+  | "issuer"
+  | "botnav";
 
 const GROUPS: { title: string; items: { key: SecKey; label: string }[] }[] = [
   {
@@ -50,6 +53,7 @@ const GROUPS: { title: string; items: { key: SecKey; label: string }[] }[] = [
       { key: "master", label: "ข้อมูลหลัก" },
       { key: "positions", label: "ตำแหน่งและสายอนุมัติ" },
       { key: "services", label: "บริการ" },
+      { key: "botnav", label: "แถบเมนูล่างบนมือถือ" },
     ],
   },
   {
@@ -90,6 +94,8 @@ function Section({ sec }: { sec: SecKey }) {
       return <AdminOptionsPage only="whtTypes" />;
     case "issuer":
       return <AdminCompanyPage />;
+    case "botnav":
+      return <AdminBotnavPage />;
   }
 }
 
