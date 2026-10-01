@@ -164,9 +164,10 @@ export function LeavePage() {
               <ChevronRightIcon className="size-[15px]" strokeWidth={2.4} />
             </button>
           </div>
+          {/* มือถือ: ปุ่มลอยเหนือแถบเมนูล่าง แบบเดียวกับหน้าโอที (เจ้าของสั่ง 1 ต.ค. 2569) */}
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile shrink-0"
+            className="btn solid btn-solid btn-block-mobile shrink-0 max-md:fixed max-md:inset-x-4 max-md:bottom-[calc(104px+env(safe-area-inset-bottom))] max-md:z-40 max-md:h-[50px] max-md:w-auto! max-md:justify-center max-md:rounded-[16px] max-md:shadow-[0_14px_24px_-12px_rgb(208_2_27/0.9)]"
             onClick={() => setDialogOpen(true)}
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
@@ -286,7 +287,7 @@ export function LeavePage() {
       </div>
 
       {/* ── รายการใบลา ── */}
-      <section className="panel glass flex flex-col">
+      <section className="panel glass flex flex-col max-md:mb-[120px] max-md:border-0! max-md:bg-transparent! max-md:shadow-none!">
         <div className="strip">
           <div className="tabs">
             {TABS.map((t) => {
@@ -346,9 +347,9 @@ export function LeavePage() {
           </table>
         </div>
 
-        <ul className="divide-y divide-border md:hidden">
+        <ul className="flex flex-col gap-2.5 pt-2.5 md:hidden">
           {list.length === 0 ? (
-            <li className="px-5 py-12 text-center text-muted-foreground">
+            <li className="rounded-[22px] border border-white/95 bg-white/72 px-5 py-10 text-center text-muted-foreground shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px]">
               ไม่มีรายการในหมวดนี้
             </li>
           ) : (
@@ -358,7 +359,8 @@ export function LeavePage() {
           )}
         </ul>
 
-        <div className="foot flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
+        {/* มือถือไม่ต้องมีแถบสรุปท้ายรายการ — สิทธิ์คงเหลืออยู่ในแถวด้านบนแล้ว และปุ่มลอยจะทับพอดี */}
+        <div className="foot flex-col items-stretch gap-3 text-center max-md:hidden! sm:flex-row sm:items-center sm:text-left">
           <span>
             {scoped.length === 0
               ? "แสดง 0 รายการ"
@@ -507,7 +509,11 @@ function MobileLeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?
       : null;
 
   return (
-    <li className={`px-5 py-4 ${hit ? "ring-2 ring-primary ring-inset" : ""}`}>
+    <li
+      className={`rounded-[22px] border border-white/95 bg-white/72 p-3.5 shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] ${
+        hit ? "ring-2 ring-primary ring-inset" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <b className="block text-[15px] font-semibold">{row.type}</b>
