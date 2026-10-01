@@ -1155,9 +1155,14 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .data-table.cards-sm { min-width: 0 !important; display: block; }
   .data-table.cards-sm > thead { display: none; }
   .data-table.cards-sm > tbody { display: block; }
+  /* การ์ดต่อแถวใช้ผิวกระจกชุดเดียวกับหน้าหลักบนมือถือ (ต้นแบบชุดใหม่ 1 ต.ค. 2569) */
   .data-table.cards-sm > tbody > tr {
-    display: block; margin: 10px 14px; padding: 6px 2px;
-    border: 1px solid var(--border); border-radius: 13px; background: var(--card-solid);
+    display: block; margin: 10px 0; padding: 7px 2px;
+    border: 1px solid rgba(255, 255, 255, 0.95); border-radius: 22px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 12px 30px -22px rgb(140 20 40 / 0.45);
   }
   .data-table.cards-sm > tbody > tr > td {
     display: flex; align-items: flex-start; justify-content: space-between;

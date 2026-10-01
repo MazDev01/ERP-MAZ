@@ -127,7 +127,7 @@ export function PresalesWorkPage() {
       </div>
       <ReadOnlyNote owner="ทีมก่อนการขาย" />
 
-      <section className="panel glass flex flex-col">
+      <section className="panel glass flex flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
         <div className="strip">
           <div className="tabs">
             {TABS.map((t) => (
@@ -144,9 +144,11 @@ export function PresalesWorkPage() {
         </div>
 
         {/* มือถือ — แสดงเป็นการ์ดทีละใบ กดทั้งใบเพื่อเปิดงาน ไม่ต้องเลื่อนตารางไปด้านข้าง */}
-        <ul className="divide-y divide-border sm:hidden">
+        <ul className="flex flex-col gap-2.5 pt-2.5 sm:hidden">
           {rows.length === 0 ? (
-            <li className="py-7 text-center text-[13.5px] text-muted-foreground">ไม่มีงานในแท็บนี้</li>
+            <li className="rounded-[22px] border border-white/95 bg-white/72 px-5 py-10 text-center text-[13.5px] text-muted-foreground shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px]">
+              ไม่มีงานในแท็บนี้
+            </li>
           ) : (
             rows.map((r) => {
               const late = r.due < today && bucket(r) !== "done";
@@ -155,7 +157,7 @@ export function PresalesWorkPage() {
                   <button
                     type="button"
                     onClick={() => setOpen(r.no)}
-                    className="block w-full px-4 py-3.5 text-left active:bg-black/[0.03]"
+                    className="block w-full rounded-[22px] border border-white/95 bg-white/72 p-3.5 text-left shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] active:bg-white/90"
                   >
                     <span className="flex items-start justify-between gap-2.5">
                       <b className="min-w-0 text-[14.5px] font-semibold">

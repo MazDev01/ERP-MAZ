@@ -296,12 +296,14 @@ export function ApprovalsPage() {
         </div>
       </div>
 
-      {/* มือถือ: แถวละคำขอ กดทั้งแถวเปิดรายละเอียด ชื่อผู้ขอกับเรื่องที่ขออยู่ซ้าย รอมากี่วันอยู่ขวา */}
-      <section className="panel glass sm:hidden">
+      {/* มือถือ: การ์ดละคำขอ ตามดีไซน์ชุดใหม่ (30 ก.ย. 2569) กดการ์ดเปิดรายละเอียด */}
+      <section className="sm:hidden">
         {rows.length === 0 ? (
-          <p className="py-[30px] text-center text-[13px] text-muted-foreground">ไม่มีคำขอตามเงื่อนไขที่เลือก</p>
+          <p className="rounded-[22px] border border-white/95 bg-white/72 px-5 py-10 text-center text-[13px] text-muted-foreground shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px]">
+            ไม่มีคำขอตามเงื่อนไขที่เลือก
+          </p>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="flex flex-col gap-2.5">
             {rows.map((item) => {
               const wait = daysBetween(item.at.split(" ")[0], today);
               const hot = wait >= WAIT_HOT && item.status === "pending";
@@ -312,14 +314,14 @@ export function ApprovalsPage() {
                     type="button"
                     aria-label={`เปิดคำขอของ ${item.name}`}
                     onClick={() => setViewing(item)}
-                    className={`flex min-h-[64px] w-full items-center gap-3 px-4 py-3 text-left active:bg-muted ${
+                    className={`flex min-h-[64px] w-full items-center gap-3 rounded-[22px] border border-white/95 bg-white/72 p-3.5 text-left shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] active:bg-white/90 ${
                       hit ? "ring-2 ring-primary ring-inset" : ""
                     }`}
                   >
                     <span className="min-w-0 flex-1">
                       <b className="block truncate text-[14px] font-semibold">{item.name}</b>
                       <span className="block truncate text-[11.5px] text-muted-foreground">{item.sub}</span>
-                      <span className="mt-1 block text-[13px] leading-snug">
+                      <span className="mt-1.5 block rounded-[12px] bg-muted/60 px-2.5 py-1.5 text-[13px] leading-snug">
                         {item.topic}
                         {cutHours(item) != null && (
                           <span className="text-[11.5px] text-muted-foreground"> · อนุมัติ {cutHours(item)?.toFixed(2)} ชม.</span>
