@@ -130,7 +130,6 @@ export function AdminSettingsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>ตั้งค่าระบบ</h1>
           <p>ข้อมูลหลักและค่าที่ใช้คำนวณทั้งระบบ</p>
         </div>
       </div>

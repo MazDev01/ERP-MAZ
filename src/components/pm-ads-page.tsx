@@ -154,7 +154,6 @@ function Head({ children }: { children?: React.ReactNode }) {
   return (
     <div className="bar">
       <div>
-        <h1>โฆษณาและรายงาน</h1>
         <p>แผนสื่อ การสั่งรันโฆษณา และผลที่ได้ ของงาน Digital Marketing</p>
       </div>
       {children && <div className="tools w-full sm:w-auto">{children}</div>}

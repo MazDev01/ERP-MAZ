@@ -151,7 +151,6 @@ export function GmCalendarPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>ตารางงาน</h1>
           <p>ปฏิทินของทั้งบริษัท · วันลาทุกคน กำหนดส่งมอบโปรเจค และนัดหมาย</p>
         </div>
         <div className="tools">

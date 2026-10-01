@@ -11,8 +11,7 @@ import {
   useDashCards,
 } from "@/lib/dashboard-cards";
 import { downloadCsv, reportCsv } from "@/lib/report-export";
-import { bkkNow, greetNow, thaiDate, toIsoDate, todayIso } from "@/lib/format";
-import { CURRENT_USER } from "@/lib/mock-data";
+import { bkkNow, thaiDate, toIsoDate, todayIso } from "@/lib/format";
 import {
   AGENDA_COLOR,
   AGENDA_LABEL,
@@ -85,8 +84,6 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
   const showCompare = cardOn(cards, "compare");
   const showRank = cardOn(cards, "rank");
   const [range, setRange] = useState<RangeKey>("m");
-  /* คำทักทายตามช่วงเวลาจริงของวัน — ใช้ตัวช่วยกลางร่วมกับแดชบอร์ดหน้าอื่น */
-  const hello = `${greetNow()}, ${CURRENT_USER.name.split(" ")[0]}`;
   const [breakdown, setBreakdown] = useState<"status" | "source" | "lost">("status");
 
   // ตัวเลขทั้งหน้าคิดจากดีล ใบเสนอราคา และการติดต่อชุดเดียวกับหน้าอื่น
@@ -166,10 +163,6 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
 
       {/* ── หัวเรื่องแบบตัวอย่าง: คำทักทายซ้าย เครื่องมืออยู่ขวา ── */}
       <div className="bar gap-3 max-md:hidden!">
-        <div>
-          <h1>{hello}</h1>
-          <p>มาดูภาพรวมการขายของคุณกัน</p>
-        </div>
         <div ref={pickerRef} className="relative ml-auto hidden sm:block">
           <button
             type="button"

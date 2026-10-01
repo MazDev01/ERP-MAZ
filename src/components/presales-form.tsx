@@ -51,7 +51,6 @@ function PresalesNewBody() {
             <ChevronLeftIcon className="size-3.5" strokeWidth={2.4} />
             คำขอก่อนการขาย
           </Link>
-          <h1>ส่งคำขอก่อนการขาย</h1>
           <p>ส่งใบงานให้ BD หรือ SA จัดทำข้อเสนอ</p>
         </div>
       </div>

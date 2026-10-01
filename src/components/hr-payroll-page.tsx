@@ -226,7 +226,6 @@ export function HrPayrollPage() {
 
       <div className="bar max-md:hidden!">
         <div>
-          <h1>คำนวณเงินเดือน</h1>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="ตั้งแต่วันที่" className="w-full sm:w-[158px]">

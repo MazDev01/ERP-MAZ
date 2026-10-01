@@ -72,12 +72,6 @@ export function AccReceiptsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
-        <div>
-          <h1>ใบเสร็จ / ใบกำกับภาษี</h1>
-        </div>
-      </div>
-
       {/* มือถือ: การ์ดลอยบนพื้นหน้า ไม่มีแผงครอบ (ต้นแบบ billing.html) */}
       <section className="panel plain-mobile glass flex flex-col">
         <div className="strip">

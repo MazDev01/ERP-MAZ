@@ -170,7 +170,6 @@ export function HrTimesheetPage() {
 
       <div className="bar max-md:hidden!">
         <div>
-          <h1>สรุปเวลาทำงาน</h1>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="รอบเดือน">

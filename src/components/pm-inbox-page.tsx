@@ -69,7 +69,6 @@ export function PmInboxPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>งานเข้าใหม่</h1>
           <p>งานที่รอ PM รับงาน</p>
         </div>
         <div className="tools">

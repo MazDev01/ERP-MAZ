@@ -102,7 +102,6 @@ export function LeadsPage() {
 
       <div className="bar">
         <div>
-          <h1>ผู้สนใจ</h1>
           <p>พบ {tab === "log" ? logs.length : rows.length} รายการ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">

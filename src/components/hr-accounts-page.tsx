@@ -79,7 +79,6 @@ export function HrAccountsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>จัดการบัญชีผู้ใช้</h1>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="ค้นหา" className="max-sm:w-full">

@@ -137,7 +137,6 @@ export function LeavePage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>การลาของฉัน</h1>
           <ApproverNote kind="leave" />
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">

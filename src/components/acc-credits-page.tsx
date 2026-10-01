@@ -136,7 +136,6 @@ export function AccCreditsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>ใบลดหนี้ / คืนเงิน</h1>
           <p>
             ใบลดหนี้ลดยอดวางบิลและยอดค้างชำระ · การคืนเงินคือเงินที่ออกจากบริษัทจริง แยกกันคนละรายการ
           </p>

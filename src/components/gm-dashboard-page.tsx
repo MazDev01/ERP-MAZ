@@ -118,7 +118,6 @@ export function GmDashboardPage() {
 
       <div className="bar max-md:hidden!">
         <div>
-          <h1>แดชบอร์ด</h1>
           <p>{USERS.gm.name} · ผู้จัดการทั่วไป</p>
         </div>
       </div>

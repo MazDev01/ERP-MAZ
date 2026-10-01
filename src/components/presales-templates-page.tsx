@@ -78,7 +78,6 @@ export function PresalesTemplatesPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>คลังเทมเพลต</h1>
           <p>เทมเพลตข้อเสนอที่ใช้ซ้ำได้ {list.length} รายการ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto sm:flex-nowrap">

@@ -116,7 +116,6 @@ export function ExpensePage() {
 
       <div className="bar no-print max-md:hidden!">
         <div>
-          <h1>เบิกค่าใช้จ่าย</h1>
           <ApproverNote kind="expense" />
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">

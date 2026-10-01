@@ -66,7 +66,6 @@ export function PmReviewsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>งานรอตรวจ</h1>
           <p>งานที่ทีมส่งมาให้ตรวจก่อนปิดงาน</p>
         </div>
       </div>

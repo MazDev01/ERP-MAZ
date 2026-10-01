@@ -118,7 +118,6 @@ export function PmSchedulePage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>ตารางงาน</h1>
           <p>
             {canEdit
               ? "นัดหมายและกิจกรรมของผู้จัดการโครงการ กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น"

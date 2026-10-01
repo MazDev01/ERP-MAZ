@@ -165,7 +165,6 @@ export function AccDashboardPage() {
 
       <div className="bar max-md:hidden!">
         <div>
-          <h1>แดชบอร์ดบัญชี</h1>
           <p>{rangeNote(range, now)}</p>
         </div>
         <div className="tools">

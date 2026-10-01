@@ -328,7 +328,6 @@ export function CeoApprovalsPage() {
         <div className="bar">
           <div>
             {/* ต้นแบบมีวันที่ครั้งเดียวที่หัวหน้า (ceo-approvals.html · tk-head) — แถบบนของแอปแสดงให้แล้ว ไม่ซ้ำอีกที่นี่ */}
-            <h1>คำขออนุมัติ</h1>
           </div>
         </div>
       </div>

@@ -247,7 +247,6 @@ export function QuotationsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>ใบเสนอราคา</h1>
           <p>พบ {rows.length} ฉบับ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">

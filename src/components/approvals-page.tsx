@@ -230,7 +230,6 @@ export function ApprovalsPage() {
   if (duties.length === 0 && all.length === 0) {
     return (
       <div className="space-y-4">
-        <Head />
         <section className="panel glass px-5 py-12 text-center text-[13.5px] text-muted-foreground">
           บทบาท{myRoles.map(roleLabel).join(" และ ")}ไม่ได้เป็นผู้อนุมัติของใคร
         </section>
@@ -260,7 +259,6 @@ export function ApprovalsPage() {
 
   return (
     <div className="space-y-4">
-      <Head />
 
       {/* แถบแท็บและตัวกรองอยู่นอกการ์ดตาราง ตามต้นแบบ (.apbar) */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -421,16 +419,6 @@ export function ApprovalsPage() {
       </section>
 
       {viewing && <RequestDialog item={viewing} onClose={() => setViewing(null)} />}
-    </div>
-  );
-}
-
-function Head() {
-  return (
-    <div className="bar">
-      <div>
-        <h1>คำขออนุมัติ</h1>
-      </div>
     </div>
   );
 }

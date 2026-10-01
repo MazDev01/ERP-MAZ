@@ -140,7 +140,6 @@ export function PmDashboardPage() {
 
       <div className="bar max-md:hidden!">
         <div>
-          <h1>แดชบอร์ด</h1>
           <p>ภาพรวมงานที่ต้องดูแล</p>
         </div>
       </div>

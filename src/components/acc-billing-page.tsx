@@ -171,9 +171,6 @@ export function AccBillingPage() {
   return (
     <div className="space-y-4">
       <div className="bar">
-        <div>
-          <h1>วางบิล</h1>
-        </div>
         <div className="tools w-full sm:w-auto">
           {/* มือถือ: ปุ่มปฏิทินเลือกวันแทนแถบเลือกเดือน (ต้นแบบ billing.html 1 ต.ค. 2569)
              วันที่ที่มีจุดเปลี่ยนตามแท็บ — รอวางบิลใช้วันที่ส่งใบเสนอราคา ใบแจ้งหนี้ใช้วันที่วางบิล ค้างชำระใช้วันครบกำหนด */}

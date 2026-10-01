@@ -157,7 +157,6 @@ export function PresalesSchedulePage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>ตารางงาน</h1>
           <p>{ME.full} · กำหนดส่งข้อเสนอ งานในโปรเจค และวันลา</p>
         </div>
       </div>

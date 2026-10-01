@@ -118,7 +118,6 @@ export function PresalesWorkPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>งานก่อนการขาย</h1>
           <p>คำขอ SA และ BD ที่แสดงอยู่ {rows.length} รายการ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">

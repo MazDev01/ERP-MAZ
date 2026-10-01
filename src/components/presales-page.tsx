@@ -140,7 +140,6 @@ export function PresalesPage() {
 
       <div className="bar">
         <div>
-          <h1>คำขอก่อนการขาย</h1>
           <p>พบ {rows.length} ใบงาน</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">

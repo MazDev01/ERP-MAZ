@@ -78,12 +78,6 @@ export function MyPayslipPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
-        <div>
-          <h1>สลิปเงินเดือนของฉัน</h1>
-        </div>
-      </div>
-
       <section className="panel glass flex flex-col">
         <div className="scroll-stable min-h-0 flex-1 overflow-auto">
           <table className="data-table cards-sm min-w-[940px]">

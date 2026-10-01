@@ -51,7 +51,6 @@ export function AccWhtPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>ยื่นภาษี</h1>
           <p>รายจ่ายที่บริษัทหักภาษีจากผู้รับเงิน แล้วนำส่งกรมสรรพากร</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">

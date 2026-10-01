@@ -122,7 +122,6 @@ function NewPageBody() {
             <ChevronLeftIcon className="size-3.5" strokeWidth={2.4} />
             ใบเสนอราคา
           </Link>
-          <h1>สร้างใบเสนอราคา</h1>
           <p>บันทึกเป็นร่างไว้ก่อนได้ เลขที่เอกสารออกเมื่อกด “ออกเลขที่เอกสาร”</p>
           {!fresh && <FromLine mode={mode} ps={ps} />}
         </div>

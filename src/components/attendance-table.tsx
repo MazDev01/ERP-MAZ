@@ -160,9 +160,6 @@ export function AttendanceTable() {
     <div className="space-y-4">
       {/* ── หัวเรื่อง + เครื่องมือ ── */}
       <div className="bar">
-        <div>
-          <h1>บันทึกเวลาของฉัน</h1>
-        </div>
         <div className="tools">
           <div className="mo glass-thin">
             <button

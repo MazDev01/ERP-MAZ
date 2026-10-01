@@ -149,7 +149,6 @@ export function HrDashboardPage() {
 
       <div className="bar max-md:hidden!">
         <div>
-          <h1>แดชบอร์ดฝ่ายบุคคล</h1>
           <p>ภาพรวมกำลังคนและงานที่ต้องดำเนินการ</p>
         </div>
         <div className="tools">

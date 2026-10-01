@@ -314,7 +314,6 @@ export function PmPlanPage() {
     <div className={`space-y-3.5 ${ro ? "" : "max-sm:pb-[72px]"}`}>
       <div className="bar">
         <div>
-          <h1>จัดคิวงาน</h1>
         </div>
         <div className="tools w-full flex-wrap items-center sm:w-auto sm:flex-nowrap">
           <Select
@@ -724,7 +723,6 @@ function PageBar() {
   return (
     <div className="bar">
       <div>
-        <h1>จัดคิวงาน</h1>
       </div>
       <div className="tools">
         <Link href="/pm/projects" className="btn glass-thin">

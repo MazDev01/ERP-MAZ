@@ -82,7 +82,6 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>ดีล</h1>
           <p>พบ {rows.length} ดีล</p>
         </div>
         <div className="tools w-full sm:w-auto">

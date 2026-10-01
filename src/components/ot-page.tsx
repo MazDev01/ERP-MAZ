@@ -103,7 +103,6 @@ export function OtPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>โอทีของฉัน</h1>
           <ApproverNote kind="ot" />
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">

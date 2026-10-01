@@ -94,7 +94,6 @@ export function PmProjectsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <h1>{mine ? "โปรเจคที่รับโอน" : "โปรเจค"}</h1>
           <p>
             {mine
               ? "โปรเจคที่ PM โอนมาให้ดูแล ดูแผนงาน ความคืบหน้า และพูดคุยกันในทีม"

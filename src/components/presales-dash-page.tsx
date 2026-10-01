@@ -100,7 +100,6 @@ export function PresalesDashPage() {
 
       <div className="bar max-md:hidden!">
         <div>
-          <h1>แดชบอร์ด</h1>
           {/* กล่องเดียวรวมทั้ง SA และ BD — คำขอต้องมีคนเห็นเสมอ (ดู psMine) */}
           <p>
             {ME.full} ({ME.kind}) · ดูแลคำขอทั้ง SA และ BD

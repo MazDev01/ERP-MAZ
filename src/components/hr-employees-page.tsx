@@ -115,7 +115,6 @@ export function HrEmployeesPage() {
     <div className="space-y-4">
       <div className="bar max-md:hidden!">
         <div>
-          <h1>ข้อมูลพนักงาน</h1>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="ค้นหา" className="max-sm:w-full">
