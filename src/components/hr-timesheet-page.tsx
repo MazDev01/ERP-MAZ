@@ -709,11 +709,11 @@ function DayDetail({
       {/* มือถือ: รายการที่ต้องตรวจขึ้นก่อน เพราะเป็นงานที่ต้องทำ ส่วนวันที่มีรายการเป็นข้อมูลอ่านอย่างเดียว
           (ต้นแบบ ts-detail ชุด 1 ต.ค. 2569) */}
       <div className="max-sm:flex max-sm:flex-col max-sm:gap-3.5">
+      {/* ผู้ใช้สั่ง 1 ต.ค. 2569 — กล่องนี้แสดงตัวเลขกับข้อมูลพอ หัวข้อไหนไม่มีของก็ไม่ต้องขึ้น */}
+      {days.length > 0 && (
       <section>
         <h3 className="mb-2.5 text-[12.5px] font-bold text-primary max-sm:text-[14px] max-sm:text-foreground">วันที่มีรายการ</h3>
-        {days.length === 0 ? (
-          <p className="text-[12.5px] text-muted-foreground">ไม่มีวันที่ผิดจากปกติ</p>
-        ) : (
+        {(
           days.map((d) => (
             <div key={d} className={`border-t border-border py-3 first:border-t-0 first:pt-1 max-sm:mb-2 ${PANEL_DAY}`}>
               <p className={`num text-[12px] font-semibold text-muted-foreground ${PANEL_DT}`}>{thaiDate(d)}</p>
@@ -721,15 +721,13 @@ function DayDetail({
             </div>
           ))
         )}
-        {/* มาสายและโอทีแสดงอย่างเดียว ถ้าผิดต้องแก้ที่ต้นทาง (บันทึกเวลา / ใบขอโอที) */}
-        {locked && <p className="mt-2.5 text-[12.5px] text-muted-foreground">รอบนี้ปิดแล้ว</p>}
       </section>
+      )}
 
+      {rec.issues.length > 0 && (
       <section className="mt-5 border-t border-border pt-4 max-sm:order-first max-sm:mt-0 max-sm:border-0 max-sm:pt-0">
         <h3 className="mb-2.5 text-[12.5px] font-bold text-primary max-sm:text-[14px]">รายการที่ต้องตรวจ</h3>
-        {rec.issues.length === 0 ? (
-          <p className="text-[12.5px] text-muted-foreground">ไม่มีรายการที่ต้องตรวจ</p>
-        ) : (
+        {(
           rec.issues.map((x) => (
             /* รายการที่ยังไม่ได้บันทึกเหตุผล ขึ้นกรอบชมพูให้สะดุดตา */
             <div
@@ -771,6 +769,12 @@ function DayDetail({
           ))
         )}
       </section>
+      )}
+
+      {/* ไม่มีอะไรผิดปกติเลย ต้องบอกสั้น ๆ ไม่ใช่ปล่อยกล่องว่าง */}
+      {days.length === 0 && rec.issues.length === 0 && (
+        <p className="text-[12.5px] text-muted-foreground">ไม่มีวันที่ผิดจากปกติในรอบนี้</p>
+      )}
       </div>
     </Sheet>
   );

@@ -27,7 +27,6 @@ import { baht, bkkStamp, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/
 import {
   COMMISSION_SOURCE,
   hrCommission,
-  HR_OT_DIVISOR,
   HR_OT_LABEL,
   hrOtRate,
   otKindAt,
@@ -922,21 +921,13 @@ function PayDetail({
           )}
           <Row k="ค่าจ้างรายชั่วโมง" v={`${baht(hourly(full))} บาท`} num />
         </Kv>
-        <Note>
-          ค่าจ้างรายชั่วโมงคิดจาก เงินเดือนเต็มเดือน ÷ {HR_OT_DIVISOR.days} วัน ÷ {HR_OT_DIVISOR.hours}{" "}
-          ชั่วโมง
-          {daily
-            ? " · พนักงานทดลองงานจ่ายค่าจ้างรายวันตามวันที่มาทำงานจริง"
-            : pr.days < pr.total
-              ? " · จ่ายตามสัดส่วนวันที่อยู่จริง"
-              : ""}
-        </Note>
       </Sect>
 
+      {/* ผู้ใช้สั่ง 1 ต.ค. 2569 — กล่องนี้เอาไว้ดูตัวเลข หัวข้อไหนไม่มีของก็ไม่ต้องขึ้น
+          และไม่ต้องมีคำอธิบายวิธีคิด เพราะเป็นกติกาของระบบ ไม่ใช่ข้อมูลของคนนี้ */}
+      {r.ot.length > 0 && (
       <Sect title="ค่าล่วงเวลา">
-        {r.ot.length === 0 ? (
-          <Note>ไม่มีชั่วโมงล่วงเวลาที่อนุมัติในรอบนี้</Note>
-        ) : (
+        {(
           <div className="scroll-stable overflow-x-auto">
             <table className="data-table min-w-[460px] text-[12.5px]">
               <thead>
@@ -971,32 +962,33 @@ function PayDetail({
           </div>
         )}
       </Sect>
+      )}
 
+      {Boolean(comRate) && (
       <Sect title="ค่าคอมมิชชั่น">
-        {comRate ? (
+        {(
           <Kv>
             <Row k="ยอดที่ใช้คิด" v={`${baht(commissionBase(emp, range, src))} บาท`} num />
             <Row k="ที่มาของยอด" v={COMMISSION_SOURCE[emp.pos] ?? "—"} />
-            <Row k="อัตราตามตำแหน่ง" v={`${comRate * 100}% (${hrPos(emp.pos).label})`} />
+            <Row k="อัตราตามตำแหน่ง" v={`${(comRate ?? 0) * 100}% (${hrPos(emp.pos).label})`} />
             <Row k="เป็นเงิน" v={`${baht(c.com)} บาท`} num />
           </Kv>
-        ) : (
-          <Note>ตำแหน่งนี้ไม่ได้รับค่าคอมมิชชั่น</Note>
         )}
       </Sect>
+      )}
 
+      {(x.incentive > 0 || x.allowance > 0) && (
       <Sect title="ค่าตอบแทนที่ CEO พิจารณา">
         <Kv>
-          <Row k="Incentive" v={`${baht(x.incentive)} บาท`} num />
-          <Row k="ค่าตำแหน่ง" v={`${baht(x.allowance)} บาท`} num />
+          {x.incentive > 0 && <Row k="Incentive" v={`${baht(x.incentive)} บาท`} num />}
+          {x.allowance > 0 && <Row k="ค่าตำแหน่ง" v={`${baht(x.allowance)} บาท`} num />}
         </Kv>
-        <Note>BR-03 สองรายการนี้ไม่มีสูตร ขึ้นกับการพิจารณาของ CEO ฝ่ายบุคคลเป็นผู้บันทึก</Note>
       </Sect>
+      )}
 
+      {x.adjust.length > 0 && (
       <Sect title="รายการปรับปรุงด้วยมือ">
-        {x.adjust.length === 0 ? (
-          <Note>ไม่มีรายการปรับปรุง</Note>
-        ) : (
+        {(
           <ul className="text-[12.5px]">
             {x.adjust.map((a) => (
               <li
@@ -1013,12 +1005,12 @@ function PayDetail({
           </ul>
         )}
       </Sect>
+      )}
 
       {/* ค่าใช้จ่ายคืน ไม่ใช่รายได้ ไม่คิดประกันสังคม บวกเข้ายอดโอนอย่างเดียว (ต้นแบบ) */}
+      {rbl.length > 0 && (
       <Sect title="ค่าใช้จ่ายคืน">
-        {rbl.length === 0 ? (
-          <Note>ไม่มีใบเบิกที่อนุมัติในรอบนี้</Note>
-        ) : (
+        {(
           <>
             <ul className="text-[12.5px]">
               {rbl.map((b, i) => (
@@ -1033,10 +1025,10 @@ function PayDetail({
                 </li>
               ))}
             </ul>
-            <Note>ใบเบิกที่อนุมัติในรอบนี้ ไม่นับเป็นรายได้ และไม่นำไปคิดประกันสังคม</Note>
           </>
         )}
       </Sect>
+      )}
 
       <Sect title="รายการหัก">
         <Kv>
@@ -1045,17 +1037,11 @@ function PayDetail({
           <Row k={`ประกันสังคม ${settings().rates.socialSecurity}%`} v={`${baht(c.ss)} บาท`} num />
           {c.lateMin > 0 && <Row k={`หักมาสาย ${c.lateMin} นาที`} v={`${baht(c.late)} บาท`} num />}
         </Kv>
-        <Note>
-          บริษัทสมทบเท่ากับที่ลูกจ้างถูกหัก · {lateRuleText()} · ขาดงานโดยไม่มีใบลายังไม่หักเงิน รอทีมยืนยันเกณฑ์
-        </Note>
       </Sect>
 
       <Sect title="สรุป">
-        {snapped && (
-          <Note>
-            รอบนี้ปิดแล้ว ตัวเลขที่แสดงคือยอดที่บันทึกไว้ ณ วันปิดรอบ ไม่ได้คำนวณใหม่
-          </Note>
-        )}
+        {/* สถานะของตัวเลข ไม่ใช่คำอธิบายวิธีคิด — ต้องรู้ว่ากำลังดูยอดที่ปิดไว้แล้ว */}
+        {snapped && <Note>รอบนี้ปิดแล้ว · ยอดที่บันทึกไว้ ณ วันปิดรอบ</Note>}
         {/* บรรทัดชุดเดียวกับสลิปเป๊ะ ๆ — รายการหักสามบรรทัดขึ้นครบเสมอแม้เป็นศูนย์
             รายการปรับปรุงอยู่ฝั่งรายการหัก รวมรายได้จึงไม่รวมปรับปรุง เหมือนกับที่สลิปพิมพ์ */}
         <Kv>
@@ -1379,10 +1365,3 @@ function CeoTag({ ap, drifted }: { ap: ReturnType<typeof payApproval>; drifted: 
   );
 }
 
-/** กติกาหักมาสายที่ผู้ดูแลระบบเลือกไว้ (/admin/schedule) เป็นข้อความสั้น */
-function lateRuleText() {
-  const r = settings().rates;
-  return r.lateMode === "fixed"
-    ? `มาสายหักนาทีละ ${baht(r.latePerMinute)} บาท`
-    : "มาสายหักตามนาทีจากฐานเงินเดือน";
-}
