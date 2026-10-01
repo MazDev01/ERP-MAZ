@@ -191,7 +191,7 @@ export function OtPage() {
         ))}
       </div>
 
-      <section className="panel glass flex flex-col max-md:mb-24 max-md:border-0! max-md:bg-transparent! max-md:shadow-none!">
+      <section className="panel glass flex flex-col max-md:mb-[120px] max-md:border-0! max-md:bg-transparent! max-md:shadow-none!">
         <div className="strip">
           <div className="tabs">
             {TABS.map((t) => {
@@ -268,7 +268,7 @@ export function OtPage() {
             ชั่วโมงที่อนุมัติแล้วรวม<b>{totalPaid.toFixed(2)}</b> ชั่วโมง
           </span>
           {/* หน้าเดียวไม่ต้องมีแถบเลขหน้าบนมือถือ — กินที่เปล่า ๆ */}
-          <div className={`pages justify-center sm:justify-start ${maxPage <= 1 ? "max-md:hidden" : ""}`}>
+          <div className={`pages justify-center sm:justify-start ${maxPage <= 1 ? "max-md:hidden!" : ""}`}>
             <button
               type="button"
               className="glass-thin"
