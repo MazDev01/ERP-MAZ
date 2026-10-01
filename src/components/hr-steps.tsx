@@ -23,28 +23,22 @@ export function HrSteps({ month }: { month?: string }) {
   return (
     <nav
       aria-label="ขั้นตอนของรอบเงินเดือน"
-      /* มือถือ: สี่ขั้นแบ่งเต็มแถวเท่า ๆ กัน มีเลขขั้นกำกับ ชื่อขั้นตัดบรรทัดได้ ไม่ต้องปัดข้างหาขั้นสุดท้าย */
-      className="flex w-fit max-w-full overflow-x-auto rounded-[12px] border border-border bg-muted/50 max-sm:grid max-sm:w-full max-sm:grid-cols-4"
+      /* มือถือ: เป็นเม็ดยาเลื่อนแนวนอน ขั้นที่เปิดอยู่พื้นเข้ม (ต้นแบบชุด 1 ต.ค. 2569) */
+      className="flex w-fit max-w-full overflow-x-auto rounded-[12px] border border-border bg-muted/50 max-md:-mx-4 max-md:w-auto max-md:gap-2 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-4 max-md:[scrollbar-width:none]"
     >
-      {STEPS.map((s, i) => {
+      {STEPS.map((s) => {
         const on = here === s.href;
         return (
           <Link
             key={s.href}
             href={month ? `${s.href}?m=${month}` : s.href}
             aria-current={on ? "page" : undefined}
-            className={`flex h-11 flex-none items-center px-4 text-[14px] font-semibold whitespace-nowrap transition-colors sm:px-6 max-sm:h-auto max-sm:min-h-[56px] max-sm:min-w-0 max-sm:flex-col max-sm:justify-center max-sm:gap-0.5 max-sm:px-1 max-sm:py-1.5 max-sm:text-center max-sm:text-[11.5px] max-sm:leading-tight max-sm:whitespace-normal ${
-              on ? "bg-card text-primary" : "text-muted-foreground hover:text-primary"
+            className={`flex h-11 flex-none items-center px-4 text-[14px] font-semibold whitespace-nowrap transition-colors sm:px-6 max-md:h-9 max-md:rounded-full max-md:border-0! max-md:px-3.5 max-md:text-[13px] ${
+              on
+                ? "bg-card text-primary max-md:bg-[#2A1F22]! max-md:text-white!"
+                : "text-muted-foreground hover:text-primary max-md:bg-[#EDE8EA]! max-md:text-[#6E6164]!"
             } ${s.href === "/hr/timesheet" ? "" : "border-l border-border"}`}
           >
-            <span
-              aria-hidden
-              className={`num grid size-5 place-items-center rounded-full text-[10.5px] font-bold sm:hidden ${
-                on ? "bg-primary text-white" : "bg-border/70 text-muted-foreground"
-              }`}
-            >
-              {i + 1}
-            </span>
             {s.label}
           </Link>
         );

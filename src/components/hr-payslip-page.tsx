@@ -55,6 +55,7 @@ import {
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlMonth } from "./hr-steps";
+import { CycleSheet, GroupBack, GroupTiles, PayHead } from "./hr-pay-mobile";
 import { useComSource, useHrTime } from "@/lib/hr-link";
 import {
   BanIcon,
@@ -105,6 +106,9 @@ export function HrPayslipPage() {
   const [tab, setTab] = useState<PayGroup>("month");
   const [viewing, setViewing] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ · เลือกรอบจากปฏิทินแทนแถบเลื่อนเดือน */
+  const [mgroup, setMgroup] = useState<PayGroup | null>(null);
+  const [cal, setCal] = useState(false);
 
   const payrun = hr.payruns.find((p) => p.month === month);
   const slip = hr.slips.find((s) => s.month === month);
@@ -159,7 +163,25 @@ export function HrPayslipPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      {/* มือถือ: ชื่อรอบ + ปุ่มปฏิทิน แทนแถบเลื่อนเดือนของจอคอม */}
+      <PayHead title={thaiMonth(month)} onCal={() => setCal(true)} />
+
+      {cal && (
+        <CycleSheet
+          months={months}
+          selected={month}
+          mode="month"
+          onPick={(m) => {
+            switchMonth(m);
+            setCal(false);
+          }}
+          onClose={() => setCal(false)}
+        />
+      )}
+
+      {mgroup === null && <GroupTiles onPick={(g) => { const k = g === "month" ? "month" : "day"; setTab(k); setMgroup(k); }} />}
+
+      <div className="bar max-md:hidden!">
         <div />
         <div className="tools">
           {/* เลื่อนรอบทีละเดือนตามต้นแบบ — ไปได้เฉพาะรอบที่มีในระบบ */}
@@ -185,11 +207,21 @@ export function HrPayslipPage() {
         </div>
       </div>
 
-      <HrSteps month={month} />
+      <div className={mgroup === null ? "max-md:hidden" : ""}>
+        <HrSteps month={month} />
+      </div>
 
-      <section className="panel glass flex flex-col">
+      {mgroup !== null && (
+        <GroupBack
+          label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"}
+          count={mgroup === "month" ? monthlyCount : dailyCount}
+          onBack={() => setMgroup(null)}
+        />
+      )}
+
+      <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>
         <div className="strip">
-          <div className="tabs">
+          <div className="tabs max-md:hidden!">
             <button
               type="button"
               className={tab === "month" ? "on" : ""}

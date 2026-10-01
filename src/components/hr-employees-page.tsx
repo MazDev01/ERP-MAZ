@@ -753,10 +753,10 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
             <Field label="นามสกุล (ไทย)" required>
               <Input value={f.last} onChange={set("last")} aria-label="นามสกุลภาษาไทย" />
             </Field>
-            <Field label="ชื่อ-สกุล ภาษาอังกฤษ" hint="ใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j">
+            <Field label="ชื่อ-สกุล ภาษาอังกฤษ">
               <span className="flex gap-2">
-                <Input value={f.firstEn} onChange={set("firstEn")} aria-label="ชื่อภาษาอังกฤษ" />
-                <Input value={f.lastEn} onChange={set("lastEn")} aria-label="นามสกุลภาษาอังกฤษ" />
+                <Input value={f.firstEn} onChange={set("firstEn")} placeholder="เช่น Somchai" aria-label="ชื่อภาษาอังกฤษ" />
+                <Input value={f.lastEn} onChange={set("lastEn")} placeholder="เช่น Jaidee" aria-label="นามสกุลภาษาอังกฤษ" />
               </span>
             </Field>
             <Field label="ชื่อเล่น">
@@ -1270,12 +1270,12 @@ function AddDialog({
             <Field label="นามสกุล (ไทย)" required>
               <Input value={f.last} onChange={set("last")} placeholder="เช่น ใจดี" aria-label="นามสกุลภาษาไทย" />
             </Field>
-            {/* ชื่ออังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j (เจ้าของสั่ง 29 ก.ย. 2569) */}
-            <Field label="First name (EN)" required hint="ใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี เช่น somchai.j">
-              <Input value={f.firstEn} onChange={set("firstEn")} aria-label="ชื่อภาษาอังกฤษ" />
+            {/* ชื่ออังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี ตัวอย่างอยู่ในช่องเหมือนช่องภาษาไทย (เจ้าของสั่ง 1 ต.ค. 2569) */}
+            <Field label="First name (EN)" required>
+              <Input value={f.firstEn} onChange={set("firstEn")} placeholder="เช่น Somchai" aria-label="ชื่อภาษาอังกฤษ" />
             </Field>
             <Field label="Last name (EN)" required>
-              <Input value={f.lastEn} onChange={set("lastEn")} aria-label="นามสกุลภาษาอังกฤษ" />
+              <Input value={f.lastEn} onChange={set("lastEn")} placeholder="เช่น Jaidee" aria-label="นามสกุลภาษาอังกฤษ" />
             </Field>
             <Field label="ชื่อเล่น">
               <Input value={f.nick} onChange={set("nick")} placeholder="เช่น ชาย" aria-label="ชื่อเล่น" />

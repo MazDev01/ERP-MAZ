@@ -20,6 +20,7 @@
  */
 
 import { settings } from "@/lib/system-settings";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, cycleTitle } from "./hr-pay-mobile";
 import Link from "next/link";
 import { useState } from "react";
 import { baht, bkkStamp, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
@@ -97,6 +98,10 @@ export function HrPayrollPage() {
   const [editing, setEditing] = useState<string | null>(null);
   /* ตัวเลือกวันเปิดได้ทีละช่อง กดที่อื่นในหน้า = ปิด */
   const [pick, setPick] = useState<"from" | "to" | null>(null);
+  /* มือถือ: เลือกกลุ่มก่อน (null = ยังอยู่หน้าเลือกกลุ่ม) แล้วค่อยเห็นขั้นตอนกับรายการ
+     และเลือกรอบจากปฏิทินแทนช่องวันที่สองช่อง (ต้นแบบชุด 1 ต.ค. 2569) */
+  const [mgroup, setMgroup] = useState<Tab | null>(null);
+  const [cal, setCal] = useState(false);
 
   /* ตรงกับรอบเดือนไหนพอดีหรือเปล่า — ตัวนี้เป็นตัวตัดสินว่าปิดรอบได้ไหม */
   const month = cycleMonthOf(range, months);
@@ -200,7 +205,25 @@ export function HrPayrollPage() {
 
   return (
     <div className="space-y-4" onClick={() => setPick(null)}>
-      <div className="bar">
+      {/* มือถือ: ชื่อรอบ + ปุ่มปฏิทิน แทนแถบหัวเรื่องกับช่องวันที่ของจอคอม */}
+      <PayHead title={cycleTitle(month ?? null, range.from, range.to)} onCal={() => setCal(true)} />
+
+      {cal && (
+        <CycleSheet
+          months={months}
+          selected={month ?? ""}
+          onPick={(m) => {
+            setRange(hrCycle(m));
+            setViewing(null);
+            setCal(false);
+          }}
+          onClose={() => setCal(false)}
+        />
+      )}
+
+      {mgroup === null && <GroupTiles onPick={(g) => { setTab(g); setMgroup(g); }} />}
+
+      <div className="bar max-md:hidden!">
         <div>
           <h1>คำนวณเงินเดือน</h1>
         </div>
@@ -252,11 +275,21 @@ export function HrPayrollPage() {
         </div>
       </div>
 
-      <HrSteps month={month ?? undefined} />
+      <div className={mgroup === null ? "max-md:hidden" : ""}>
+        <HrSteps month={month ?? undefined} />
+      </div>
 
-      <section className="panel glass flex flex-col">
+      {mgroup !== null && (
+        <GroupBack
+          label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"}
+          count={mgroup === "month" ? monthly.length : daily.length}
+          onBack={() => setMgroup(null)}
+        />
+      )}
+
+      <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>
         <div className="strip">
-          <div className="tabs">
+          <div className="tabs max-md:hidden!">
             <button type="button" className={tab === "month" ? "on" : ""} onClick={() => setTab("month")}>
               คำนวณเงินเดือน <b>{monthly.length}</b>
             </button>
