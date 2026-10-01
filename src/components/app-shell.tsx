@@ -10,6 +10,7 @@ import { useMyEmpType } from "@/lib/leave-policy";
 import { thaiDate, todayIso } from "@/lib/format";
 import { useHydrated } from "@/lib/pwa";
 import { lockScroll } from "@/lib/scroll-lock";
+import { runMobileBack } from "@/lib/mobile-back";
 import { roleLabel, useApprovalRoute, useRole, type Role } from "@/lib/role";
 import {
   AccBoardIcon,
@@ -340,12 +341,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ขวาเว้นไว้ให้กระดิ่ง ทั้งสามช่องกว้างเท่ากัน ชื่อหน้าจึงอยู่กลางจริง
             */
             <div className="grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)_44px] items-center md:hidden">
-              {/* มือถือ: ปุ่มนี้กลับ "หน้าหลัก" การ์ดเมนูเสมอ (ผู้ใช้สั่ง 23 ก.ย. 2569)
-                  กลับไปหน้าก่อนหน้าให้ใช้ลิงก์ในหน้า เช่น "กลับไปหน้าโปรเจค" หรือเส้นทางด้านบน */}
+              {/* มือถือ: ปุ่มนี้กลับ "หน้าหลัก" การ์ดเมนู (ผู้ใช้สั่ง 23 ก.ย. 2569)
+                  ยกเว้นหน้าที่มีหน้าซ้อนอยู่ข้างใน (เช่นโปรไฟล์) ให้กลับทีละชั้นก่อน
+                  จะได้ไม่ต้องมีปุ่มย้อนกลับสองอันในจอเดียว (เจ้าของสั่ง 1 ต.ค. 2569) */}
               <button
                 type="button"
                 aria-label="ย้อนกลับ"
-                onClick={() => router.push(tabHome.href)}
+                onClick={() => {
+                  if (!runMobileBack()) router.push(tabHome.href);
+                }}
                 className="grid size-11 flex-none place-items-center rounded-full bg-card text-foreground shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-18px_rgba(120,20,35,.3)] active:bg-muted"
               >
                 <ChevronLeftIcon className="size-5" strokeWidth={2.4} />

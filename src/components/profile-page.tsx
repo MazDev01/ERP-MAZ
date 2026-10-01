@@ -3,7 +3,7 @@
 import { optionsOf } from "@/lib/options";
 import { bkkNow, parseIsoDate, todayIso } from "@/lib/format";
 
-import { cloneElement, isValidElement, useId, useRef, useState } from "react";
+import { cloneElement, isValidElement, useEffect, useId, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { saveProfile, useProfile } from "@/lib/profile-data";
 import {
@@ -14,12 +14,12 @@ import {
   type NotifySettings,
 } from "@/lib/notify-settings";
 import { setProfilePhoto, useProfilePhoto } from "@/lib/profile-store";
+import { setMobileBack } from "@/lib/mobile-back";
 import Link from "next/link";
 import {
   BellIcon,
   CameraIcon,
   CheckIcon,
-  ChevronLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
   LockIcon,
@@ -69,6 +69,16 @@ export function ProfilePage() {
    */
   const [open, setOpen] = useState<Pane | null>(params.get("tab") ? initial : null);
 
+  /* เปิดเรื่องย่อยอยู่ — ปุ่มย้อนกลับบนแถบหัวพากลับมาหน้ารวมโปรไฟล์ ไม่ใช่ออกไปหน้าหลักเลย */
+  useEffect(() => {
+    if (open === null) return;
+    setMobileBack(() => {
+      setOpen(null);
+      setSaved(null);
+    });
+    return () => setMobileBack(null);
+  }, [open]);
+
   return (
     <>
       {/* ── มือถือ ── */}
@@ -77,19 +87,8 @@ export function ProfilePage() {
           <ProfileHub panes={panes} onPane={setOpen} />
         ) : (
           <div>
-            {/* ปุ่มย้อนกลับของเปลือกแอปพาออกจากหน้าโปรไฟล์ไปเลย ตรงนี้จึงเป็นทางกลับไป "หน้ารวมโปรไฟล์"
-               เขียนเป็นข้อความ ไม่ใช่ลูกศรอีกอัน จะได้ไม่ซ้ำกับปุ่มบนแถบหัว (30 ก.ย. 2569) */}
-            <div className="mb-3 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => { setOpen(null); setSaved(null); }}
-                className="glass flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold"
-              >
-                <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
-                โปรไฟล์
-              </button>
-              <b className="text-[17px] font-bold">{panes.find((x) => x.key === open)?.label}</b>
-            </div>
+            {/* ปุ่มย้อนกลับมีอันเดียว คือปุ่มบนแถบหัว — กดแล้วกลับมาหน้ารวมโปรไฟล์ก่อน
+               (เจ้าของสั่ง 1 ต.ค. 2569 ว่าอย่าให้มีปุ่มย้อนกลับสองอัน) ตรงนี้เหลือแค่ชื่อเรื่อง */}
             {saved && (
               <p className="mb-[18px] flex items-center gap-[11px] rounded-[14px] bg-[var(--success-soft)] px-[17px] py-3 text-[13.5px] font-medium text-[var(--success)]">
                 <CheckIcon className="size-[18px] shrink-0" strokeWidth={2.4} />
