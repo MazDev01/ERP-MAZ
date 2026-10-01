@@ -23,6 +23,17 @@ import { ProposalPreview, QuotationPreview } from "./pm-docs";
 import { SearchBox } from "./sales-ui";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 import { ThaiDatePicker } from "./thai-date-picker";
+import { FileIcon } from "./icons";
+
+/** ไอคอนกล่องงานเข้าในการ์ดมือถือ — ชุดเดียวกับไอคอนเมนู "งานเข้าใหม่" */
+function InboxGlyph() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 13h5l2 3h4l2-3h5" />
+      <path d="M5 5h14l2 8v6H3v-6z" />
+    </svg>
+  );
+}
 
 /** ขั้นของงานตอนนี้ — ลิงก์ที่เจาะมาต้องบอกได้ว่างานนั้นไปถึงไหนแล้ว */
 function stageText(j: InboxJob) {
@@ -68,7 +79,7 @@ export function PmInboxPage() {
   return (
     <div className="space-y-4">
       <div className="bar">
-        <div>
+        <div className="max-sm:hidden">
           <p>งานที่รอ PM รับงาน</p>
         </div>
         <div className="tools">
@@ -127,30 +138,57 @@ export function PmInboxPage() {
           </li>
         ) : (
           rows.map((j) => (
-            <li key={j.deal} className="glass rounded-[18px] px-4 py-3.5">
-              <div className="flex items-start gap-2">
-                {!j.seen && (
-                  <i className="mt-[7px] size-2 flex-none rounded-full bg-primary" aria-label="ยังไม่ได้เปิดดู" />
-                )}
-                <b className="min-w-0 flex-1 text-[14.5px] leading-snug font-bold">{j.scope}</b>
+            <li
+              key={j.deal}
+              /* ต้นแบบ pm-inbox.html บล็อก ib-mobile (1 ต.ค. 2569): ไอคอนกลม ชื่อลูกค้าเล็กบนชื่องาน
+                 ป้ายบริการ เส้นประคั่น แล้วแหล่งที่มา/วันที่เข้า คู่กับปุ่มรับงานด้านขวา */
+              className="rounded-[20px] bg-card p-3.5 shadow-[0_1px_2px_rgb(40_20_25/0.04)]"
+            >
+              <div className="flex gap-3">
+                <span className="grid size-10 flex-none place-items-center rounded-full bg-[#FCE3E7] text-primary">
+                  <InboxGlyph />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] text-muted-foreground">{j.cus}</p>
+                  <b className="mt-0.5 flex items-start gap-1.5 text-[15.5px] leading-snug font-bold">
+                    {!j.seen && (
+                      <i className="mt-[7px] size-2 flex-none rounded-full bg-primary" aria-label="ยังไม่ได้เปิดดู" />
+                    )}
+                    <span className="min-w-0">{j.scope}</span>
+                  </b>
+                  <span className="mt-1 inline-block rounded-full bg-[#F3EEF0] px-2.5 py-[3px] text-[12px] font-semibold text-[#6E6164]">
+                    {serviceLabel(j.service)}
+                  </span>
+                </div>
               </div>
-              <p className="mt-1 text-[12.5px] leading-snug">
-                {j.cus} · <span className="text-muted-foreground">{serviceLabel(j.service)}</span>
-              </p>
-              <p className="mt-0.5 flex flex-wrap gap-x-2 text-[11.5px] leading-snug text-muted-foreground">
-                <span>{j.proposal?.no ? `Proposal ${j.proposal.no}` : `ใบเสนอราคา ${j.quo}`}</span>
-                <span className="num">เข้า {thaiDate(j.sentAt)}</span>
-              </p>
-              <p className="mt-1 text-[11.5px] font-semibold text-muted-foreground">{stageText(j)}</p>
-              {!ro && j.stage === "new" && (
-                <button
-                  type="button"
-                  className="btn solid btn-solid mt-3 h-11 w-full justify-center"
-                  onClick={() => open(j)}
-                >
-                  รับงาน
-                </button>
-              )}
+
+              <div className="my-3 border-t border-dashed border-[#ECE3E5]" />
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#6E6164]">
+                    <FileIcon className="size-[14px] flex-none" strokeWidth={2.2} />
+                    <span className="truncate">
+                      {j.proposal?.no ? `Proposal ${j.proposal.no}` : `ใบเสนอราคา ${j.quo}`}
+                    </span>
+                  </p>
+                  <p className="num mt-0.5 pl-[19px] text-[12px] text-muted-foreground">
+                    เข้า {thaiDate(j.sentAt)}
+                  </p>
+                  <p className="mt-0.5 pl-[19px] text-[11.5px] font-semibold text-muted-foreground">
+                    {stageText(j)}
+                  </p>
+                </div>
+                {!ro && j.stage === "new" && (
+                  <button
+                    type="button"
+                    className="btn solid btn-solid h-[38px]! flex-none justify-center rounded-[12px]! px-4! text-[13.5px]!"
+                    onClick={() => open(j)}
+                  >
+                    รับงาน
+                  </button>
+                )}
+              </div>
             </li>
           ))
         )}

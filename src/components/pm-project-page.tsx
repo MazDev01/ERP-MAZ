@@ -87,6 +87,15 @@ export function PmProjectPage({ deal }: { deal: string }) {
   return <Detail project={project} />;
 }
 
+/** ไอคอนปุ่มแชทลอยบนมือถือ */
+function ChatGlyph() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" />
+    </svg>
+  );
+}
+
 function Detail({ project }: { project: Project }) {
   const today = todayIso();
   /* ร่างแผนของโปรเจคนี้ที่ PM ยังไม่ได้ยืนยัน — คนอื่นที่เปิดโปรเจคต้องเห็นว่ามีร่างค้างอยู่ */
@@ -97,6 +106,9 @@ function Detail({ project }: { project: Project }) {
   const left = hasDue ? daysBetween(today, project.due) : 0;
   const late = hasDue && project.status === "running" && left < 0;
 
+  /* มือถือ: แชทโปรเจคเป็นปุ่มลอยมุมขวาล่าง กดแล้วเปิดหน้าต่างแชท
+     (ต้นแบบ pm-project.html บล็อก pd-chat 1 ต.ค. 2569) — จอแคบมีที่ไม่พอให้แชทยาวอยู่ในหน้า */
+  const [chatOpen, setChatOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const title = projName(project);
   /* GM เปิดดูได้อย่างเดียว — ซ่อนปุ่มแก้ชื่อและช่องแชท (ต้นแบบ pm-project.html?as=gm) */
@@ -245,7 +257,9 @@ function Detail({ project }: { project: Project }) {
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-5">
           <Tasks project={project} today={today} count={pr.all} />
-          <Chat project={project} today={today} />
+          <div className="max-sm:hidden">
+            <Chat project={project} today={today} />
+          </div>
         </div>
         <aside className="min-w-0 space-y-5">
           <SalesDocs project={project} />
@@ -253,6 +267,43 @@ function Detail({ project }: { project: Project }) {
           <RecentActs project={project} />
         </aside>
       </div>
+
+      {/* ปุ่มลอยเปิดแชท + หน้าต่างแชทบนมือถือ */}
+      <button
+        type="button"
+        aria-label="เปิดแชทโปรเจค"
+        aria-expanded={chatOpen}
+        onClick={() => setChatOpen((v) => !v)}
+        className="fixed right-[18px] bottom-[calc(var(--botbar,86px)+22px)] z-60 grid size-[58px] place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_14px_24px_-10px_rgb(200_16_46/0.9)] sm:hidden"
+      >
+        <ChatGlyph />
+      </button>
+
+      {chatOpen && (
+        <div
+          role="dialog"
+          aria-label="แชทโปรเจค"
+          className="fixed inset-x-2.5 bottom-[calc(var(--botbar,86px)+22px)] z-70 flex h-[min(70vh,560px)] flex-col overflow-hidden rounded-[22px] bg-card shadow-[0_24px_50px_-16px_rgb(40_20_25/0.45)] sm:hidden"
+        >
+          <div className="flex flex-none items-center gap-2.5 bg-primary px-3.5 py-3 text-primary-foreground">
+            <b className="min-w-0 flex-1 text-[15.5px]">
+              แชทโปรเจค
+              <small className="block text-[12px] font-medium opacity-85">{projName(project)}</small>
+            </b>
+            <button
+              type="button"
+              aria-label="ปิดแชท"
+              onClick={() => setChatOpen(false)}
+              className="grid size-[34px] flex-none place-items-center rounded-full bg-white/20"
+            >
+              <CloseIcon className="size-[18px]" strokeWidth={2.4} />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[#FAF6F7] p-2.5 [&_section>p:first-child]:hidden">
+            <Chat project={project} today={today} />
+          </div>
+        </div>
+      )}
 
       {renaming && <RenameDialog project={project} onClose={() => setRenaming(false)} />}
       {transferring && <TransferDialog project={project} onClose={() => setTransferring(false)} />}

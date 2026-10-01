@@ -93,7 +93,7 @@ export function PmProjectsPage() {
   return (
     <div className="space-y-4">
       <div className="bar">
-        <div>
+        <div className="max-sm:hidden">
           <p>
             {mine
               ? "โปรเจคที่ PM โอนมาให้ดูแล ดูแผนงาน ความคืบหน้า และพูดคุยกันในทีม"
@@ -119,7 +119,8 @@ export function PmProjectsPage() {
       {/* ตัวกรองสถานะขึ้นบรรทัดใหม่เมื่อไม่พอ — ไม่ปัดข้าง (เจ้าของสั่ง 25 ก.ย. 2569)
           ตัวกรองที่อยู่นอกจอเท่ากับไม่มี เพราะไม่มีอะไรบอกว่าเลื่อนต่อได้ */}
       <div
-        className="flex flex-wrap gap-2"
+        /* มือถือ: ชิปแถวเดียวเลื่อนข้าง (ต้นแบบ pm-projects.html บล็อก pj-mobile 1 ต.ค. 2569) */
+        className="chip-scroll flex gap-2 max-sm:-mx-4 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 sm:flex-wrap"
         role="group"
         aria-label="กรองตามสถานะโปรเจค"
       >
@@ -131,10 +132,10 @@ export function PmProjectsPage() {
               type="button"
               aria-pressed={on}
               onClick={() => setFolder(f.key)}
-              className={`inline-flex h-[34px] items-center gap-2 rounded-[20px] border px-[15px] text-[13px] font-semibold max-sm:h-10 max-sm:flex-none max-sm:whitespace-nowrap ${
+              className={`inline-flex h-[34px] items-center gap-2 rounded-[20px] border px-[15px] text-[13px] font-semibold max-sm:h-[38px] max-sm:flex-none max-sm:border-0! max-sm:whitespace-nowrap ${
                 on
-                  ? "border-primary bg-accent text-primary"
-                  : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
+                  ? "border-primary bg-accent text-primary max-sm:bg-primary! max-sm:text-primary-foreground!"
+                  : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary max-sm:bg-[#EDE8EA]! max-sm:text-[#6E6164]!"
               }`}
             >
               {f.name}
@@ -147,7 +148,7 @@ export function PmProjectsPage() {
       </div>
 
       <section>
-        <p className="mb-3 flex items-center gap-2.5 text-[15px] font-bold">
+        <p className="mb-3 flex items-center gap-2.5 text-[15px] font-bold max-sm:hidden">
           โปรเจค (นับเป็นโปรเจค ไม่ใช่ใบงานย่อย)
           <b className="num rounded-[20px] bg-muted px-2.5 py-0.5 text-[11px] font-bold text-muted-foreground">
             {rows.length}
@@ -156,7 +157,7 @@ export function PmProjectsPage() {
         {rows.length === 0 ? (
           <p className="p-10 text-center text-[13px] text-muted-foreground">ไม่พบโปรเจคที่ตรงกับเงื่อนไข</p>
         ) : (
-          <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))]">
+          <div className="grid gap-2.5 max-sm:grid-cols-1! [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))]">
             {rows.map((x) =>
               x.kind === "project" ? (
                 <Folder key={x.p.deal} project={x.p} today={today} late={late(x)} left={openLeft(x.p)} />
@@ -198,8 +199,32 @@ function Folder({
     <Link
       href={`/pm/projects?deal=${encodeURIComponent(p.deal)}`}
       title={`${projName(p)} · ${p.cus}`}
-      className="flex flex-col items-center gap-0.5 rounded-[14px] px-2.5 pt-[18px] pb-4 text-center transition-colors hover:bg-black/[.045] max-sm:border max-sm:border-border max-sm:bg-card max-sm:pt-3.5 max-sm:active:bg-muted"
+      className="flex flex-col items-center gap-0.5 rounded-[14px] px-2.5 pt-[18px] pb-4 text-center transition-colors hover:bg-black/[.045] max-sm:block max-sm:rounded-[20px] max-sm:bg-card max-sm:p-3.5 max-sm:text-left max-sm:shadow-[0_1px_2px_rgb(40_20_25/0.04)] max-sm:active:bg-muted"
     >
+      <PhoneRow
+        name={projName(p)}
+        cus={p.cus}
+        status={status}
+        foot={
+          p.status === "cancelled" ? (
+            <em className="text-[12.5px] text-muted-foreground not-italic">{p.cancelled?.why || "ยกเลิกแล้ว"}</em>
+          ) : (
+            <>
+              <span className="block h-2 w-full overflow-hidden rounded-full bg-muted">
+                <i className="block h-full rounded-full bg-primary" style={{ width: `${pr.pct}%` }} />
+              </span>
+              <em className="num flex justify-between text-[12.5px] text-muted-foreground not-italic">
+                <span>{pr.pct}%</span>
+                <span>
+                  {pr.done} จาก {pr.all} งาน
+                </span>
+              </em>
+            </>
+          )
+        }
+      />
+
+      <span className="contents max-sm:hidden">
       <FolderIcon tone={tone} />
       {/* ชื่อโปรเจคเป็นหัว ลูกค้าเป็นบรรทัดรอง (PM-BR-03) */}
       <b className="mt-[9px] line-clamp-2 max-w-full text-[13.5px] leading-snug font-bold">{projName(p)}</b>
@@ -223,7 +248,52 @@ function Folder({
           </em>
         </span>
       )}
+      </span>
     </Link>
+  );
+}
+
+/*
+ * การ์ดบนมือถือ — ไอคอนกลม ชื่อโปรเจค ลูกค้า ป้ายสถานะขวา เส้นประคั่น แล้วแถบความคืบหน้าเต็มกว้าง
+ * (ต้นแบบ pm-projects.html บล็อก pj-mobile 1 ต.ค. 2569)
+ */
+function PhoneRow({
+  name,
+  cus,
+  status,
+  foot,
+}: {
+  name: string;
+  cus: string;
+  status: { text: string; dot: string };
+  foot: React.ReactNode;
+}) {
+  return (
+    <span className="block sm:hidden">
+      <span className="flex items-start gap-3">
+        <span className="grid size-10 flex-none place-items-center rounded-full bg-[#E8F0FC] text-[#1A5DB5]">
+          <FolderGlyph />
+        </span>
+        <span className="min-w-0 flex-1">
+          <b className="block text-[15px] leading-snug font-bold">{name}</b>
+          <em className="block truncate text-[12.5px] text-muted-foreground not-italic">{cus}</em>
+        </span>
+        <span className="flex flex-none items-center gap-1.5 rounded-full bg-[#F3EEF0] px-2.5 py-[3px] text-[11.5px] font-bold whitespace-nowrap text-[#6E6164]">
+          <i className="inline-block size-1.5 flex-none rounded-full" style={{ background: status.dot }} />
+          {status.text}
+        </span>
+      </span>
+      <span className="my-3 block border-t border-dashed border-[#ECE3E5]" />
+      <span className="flex flex-col gap-1.5">{foot}</span>
+    </span>
+  );
+}
+
+function FolderGlyph() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
   );
 }
 
@@ -233,8 +303,20 @@ function PlanFolder({ job: j, draft }: { job: InboxJob; draft?: PlanDraft }) {
     <Link
       href={`/pm/plan?deal=${encodeURIComponent(j.deal)}`}
       title={`${projName(j)} · ${j.cus}`}
-      className="flex flex-col items-center gap-0.5 rounded-[14px] px-2.5 pt-[18px] pb-4 text-center transition-colors hover:bg-black/[.045] max-sm:border max-sm:border-border max-sm:bg-card max-sm:pt-3.5 max-sm:active:bg-muted"
+      className="flex flex-col items-center gap-0.5 rounded-[14px] px-2.5 pt-[18px] pb-4 text-center transition-colors hover:bg-black/[.045] max-sm:block max-sm:rounded-[20px] max-sm:bg-card max-sm:p-3.5 max-sm:text-left max-sm:shadow-[0_1px_2px_rgb(40_20_25/0.04)] max-sm:active:bg-muted"
     >
+      <PhoneRow
+        name={projName(j)}
+        cus={j.cus}
+        status={{ text: j.phases.length ? "ยังไม่ยืนยันแผน" : "ยังไม่มีแผนงาน", dot: "var(--warning)" }}
+        foot={
+          <em className="text-[12.5px] font-semibold text-primary not-italic">
+            {draft ? `มีร่างแผน · แก้ล่าสุด ${thaiStamp(draft.at)}` : "กดเพื่อไปวางแผนงาน"}
+          </em>
+        }
+      />
+
+      <span className="contents max-sm:hidden">
       <FolderIcon tone={FOLDER_TONE.d} />
       <b className="mt-[9px] line-clamp-2 max-w-full text-[13.5px] leading-snug font-bold">{projName(j)}</b>
       <em className="max-w-full truncate text-[11px] text-muted-foreground not-italic">{j.cus}</em>
@@ -250,6 +332,7 @@ function PlanFolder({ job: j, draft }: { job: InboxJob; draft?: PlanDraft }) {
       ) : (
         <em className="mt-[7px] text-[10.5px] font-semibold text-primary not-italic">กดเพื่อไปวางแผนงาน</em>
       )}
+      </span>
     </Link>
   );
 }
