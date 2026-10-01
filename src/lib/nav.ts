@@ -481,7 +481,7 @@ function matchIn(items: NavItem[], pathname: string) {
 }
 
 /** หน้าที่ทุกบทบาทเปิดได้ นอกจากเมนูของตัวเอง */
-const SHARED_PAGES = ["/profile"];
+const SHARED_PAGES = ["/profile", "/notifications"];
 
 /** หน้านอกเมนูที่เป็นของบทบาทใดบทบาทหนึ่ง */
 const EXTRA_OWNER: Record<string, Role | Role[]> = {
@@ -529,7 +529,15 @@ export function findItem(pathname: string, role: Role): NavItem | undefined {
 }
 
 /** ชื่อบนแถบบน — ใช้ชื่อหน้าย่อยถ้ามี */
+/* หน้าที่ไม่ได้อยู่ในเมนูแต่มีชื่อของตัวเอง (เปิดจากกระดิ่งหรือเมนูผู้ใช้) */
+const PAGE_NAME: Record<string, string> = {
+  "/notifications": "แจ้งเตือน",
+  "/profile": "โปรไฟล์ของฉัน",
+};
+
 export function pageTitle(pathname: string, role: Role) {
+  const named = PAGE_NAME[pathname];
+  if (named) return named;
   const item = findItem(pathname, role);
   if (!item) return "ERP MAZ";
   const sub = item.sub?.find((s) => s.href === pathname);

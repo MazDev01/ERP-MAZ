@@ -27,13 +27,17 @@ import { leaveUsage, useLeaveRecords } from "@/lib/leave-store";
 import { useMyLeavePolicy } from "@/lib/leave-policy";
 import { useProfile } from "@/lib/profile-data";
 import { useProfilePhoto } from "@/lib/profile-store";
-import { roleLabel, useRole } from "@/lib/role";
+import { roleLabel, useRole, type Role } from "@/lib/role";
+import { useCrm } from "@/lib/crm-store";
+import { useAcc } from "@/lib/acc-store";
+import { usePm } from "@/lib/pm-store";
+import { useHr } from "@/lib/hr-store";
 import { expectedInMinutes, formatMinutesOfDay } from "@/lib/work-schedule";
 import type { NavItem } from "@/lib/nav";
 import type { Notice } from "@/lib/notifications";
 import { ICONS } from "./app-shell";
-import { ChevronRightIcon, ClockIcon, HomeIcon, LeaveIcon, ReceiptIcon, SearchIcon } from "./icons";
-import { NotificationMenu } from "./notification-menu";
+import { BellIcon, ChevronRightIcon, ClockIcon, HomeIcon, LeaveIcon, ReceiptIcon, SearchIcon } from "./icons";
+import { useReadNotices } from "@/lib/notification-store";
 
 /* สีไอคอนเมนูตามต้นแบบ — ไล่สีคนละชุดเรียงกันไป ไม่ได้ผูกกับเมนูใดเมนูหนึ่ง */
 const TILE = [
@@ -53,6 +57,75 @@ const CARD_BG: Record<Notice["level"], string> = {
 
 const CARD = "bg-white/72 backdrop-blur-[18px] border border-white/95 shadow-[0_12px_30px_-20px_rgb(140_20_40/0.45)]";
 
+/*
+ * สรุปสั้น ๆ สี่ช่องในการ์ดทักทาย (ต้นแบบ home-glass.html 1 ต.ค. 2569)
+ * ตัวเลขต่างกันตามบทบาท — เอาเรื่องที่คนบทบาทนั้นดูทุกวันขึ้นก่อน
+ * ช่องสุดท้ายเป็น "วันลาคงเหลือ" ของตัวเองทุกบทบาทที่มีสิทธิ์ลา
+ */
+function useHomeStats(role: Role): { k: string; v: string; u?: string; href: string }[] {
+  const crm = useCrm();
+  const acc = useAcc();
+  const pm = usePm();
+  const hr = useHr();
+  const leaveRecords = useLeaveRecords();
+  const policy = useMyLeavePolicy();
+  const me = useProfile();
+
+  const period = currentPeriod();
+  /* นับเฉพาะวันลาที่วางแผนใช้เองได้ — ลาป่วยกับลาไม่รับค่าจ้างไม่ใช่โควตาที่คนวางแผนล่วงหน้า
+     (ต้นแบบ home-glass.html แสดง 9 วัน = พักร้อน + ลากิจ) */
+  const PLANNED = ["ลาพักร้อน", "ลากิจ"];
+  const leaveLeft = policy.quota
+    ? leaveTypes()
+        .filter((t) => PLANNED.includes(t) && entitlementDays(t, period) > 0)
+        .reduce((sum, t) => sum + leaveUsage(leaveRecords, t, period).remaining, 0)
+    : 0;
+  const mine = { k: "วันลาคงเหลือ", v: String(Math.round(leaveLeft * 10) / 10), u: "วัน", href: "/leave" };
+
+  const money = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}K` : String(Math.round(n)));
+  const open = acc.invoices.filter((v) => v.status !== "cancelled" && v.outstanding > 0);
+  const paid = acc.receipts.reduce((sum, r) => sum + r.total, 0);
+  const running = pm.projects.filter((p) => p.status === "running");
+  const active = hr.emp.filter((e) => e.status === "active");
+  const myTasks = pm.projects.flatMap((p) => p.tasks.filter((t) => t.whos.includes(me.employeeId)));
+
+  if (role === "acc" || role === "ceo")
+    return [
+      { k: "รับชำระแล้ว", v: money(paid), u: "฿", href: "/acc/receipts" },
+      { k: "ลูกหนี้คงเหลือ", v: money(open.reduce((a, v) => a + v.outstanding, 0)), u: "฿", href: "/acc/billing" },
+      { k: "รอวางบิล", v: String(acc.deals.filter((d) => !d.plan.length).length), u: "ดีล", href: "/acc/billing" },
+      role === "ceo" ? { k: "พนักงาน", v: String(active.length), u: "คน", href: "/ceo/hr" } : mine,
+    ];
+  if (role === "hr")
+    return [
+      { k: "พนักงาน", v: String(active.length), u: "คน", href: "/hr/employees" },
+      { k: "ทดลองงาน", v: String(active.filter((e) => e.type === "probat").length), u: "คน", href: "/hr/employees" },
+      { k: "ฝึกงาน", v: String(active.filter((e) => e.type === "intern").length), u: "คน", href: "/hr/employees" },
+      mine,
+    ];
+  if (role === "sales")
+    return [
+      { k: "ผู้สนใจ", v: String(crm.customers.length), u: "ราย", href: "/leads" },
+      { k: "ใบเสนอราคา", v: String(crm.quotations.length), u: "ใบ", href: "/quotations" },
+      { k: "ดีล", v: String(crm.deals.length), u: "ดีล", href: "/deals" },
+      mine,
+    ];
+  if (role === "pm" || role === "gm")
+    return [
+      { k: "โปรเจคที่ทำอยู่", v: String(running.length), u: "งาน", href: "/pm/projects" },
+      { k: "งานเข้าใหม่", v: String(pm.inbox.length), u: "งาน", href: "/pm/inbox" },
+      { k: "งานรอตรวจ", v: String(running.flatMap((p) => p.tasks).filter((t) => t.status === "sent").length), u: "งาน", href: "/pm/reviews" },
+      mine,
+    ];
+  /* พนักงานและทีมก่อนการขาย — งานของตัวเองเป็นหลัก */
+  return [
+    { k: "งานที่ได้รับ", v: String(myTasks.filter((t) => t.status !== "done").length), u: "งาน", href: "/my-tasks" },
+    { k: "รอตรวจ", v: String(myTasks.filter((t) => t.status === "sent").length), u: "งาน", href: "/my-tasks" },
+    { k: "เสร็จแล้ว", v: String(myTasks.filter((t) => t.status === "done").length), u: "งาน", href: "/my-tasks" },
+    mine,
+  ];
+}
+
 export function MobileHome({
   items,
   notices,
@@ -70,6 +143,9 @@ export function MobileHome({
   const photo = useProfilePhoto();
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
+  /* จุดแดงบนกระดิ่ง — นับเรื่องที่ยังไม่ได้อ่าน */
+  const readIds = useReadNotices();
+  const unread = notices.filter((n) => !readIds.includes(n.id)).length;
 
   /* เมนูงานของบทบาท — ตัดกลุ่ม "ของฉัน" ออก เพราะมีแถวของตัวเองอยู่ท้ายหน้าแล้ว */
   const work = useMemo(() => items.filter((i) => i.group !== "ของฉัน"), [items]);
@@ -79,6 +155,7 @@ export function MobileHome({
   }, [items, q]);
 
   const initials = me.name.split(" ").slice(0, 2).map((w) => w[0]).join("");
+  const stats = useHomeStats(role);
 
   return (
     <div className="-mx-4 -mt-[18px] min-h-full px-0 pb-24">
@@ -109,7 +186,19 @@ export function MobileHome({
             >
               <SearchIcon className="size-5" strokeWidth={2} />
             </button>
-            <NotificationMenu />
+            {/* กระดิ่งบนหน้าหลักพาไปหน้าแจ้งเตือนเต็มจอ (ต้นแบบ notifications.html 1 ต.ค. 2569) */}
+            <Link
+              href="/notifications"
+              aria-label={unread > 0 ? `แจ้งเตือน ${unread} เรื่องใหม่` : "แจ้งเตือน"}
+              className={`relative grid size-[46px] place-items-center rounded-full ${CARD}`}
+            >
+              <BellIcon className="size-5" strokeWidth={2} />
+              {unread > 0 && (
+                <span className="num absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-primary px-1 text-[11px] font-bold text-white">
+                  {unread}
+                </span>
+              )}
+            </Link>
           </span>
         </header>
 
@@ -151,8 +240,9 @@ export function MobileHome({
           </div>
         )}
 
-        {/* ── การ์ดทักทาย ── */}
-        <section className={`mx-4 flex items-center gap-3 rounded-[28px] p-4 ${CARD}`}>
+        {/* ── การ์ดทักทาย + สรุปสั้น ๆ ── */}
+        <section className={`mx-4 flex flex-col gap-4 rounded-[28px] p-4 ${CARD}`}>
+          <div className="flex items-center gap-3">
           <span className="grid size-[52px] flex-none place-items-center overflow-hidden rounded-full bg-[#FCE3E7] text-[17px] font-bold text-primary shadow-[0_0_0_2.5px_#fff,0_0_0_4.5px_rgb(200_16_46/0.35)]">
             {photo ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -166,6 +256,26 @@ export function MobileHome({
             <b className="truncate text-[17px] font-bold">{hello}</b>
             <em className="text-[12px] text-muted-foreground not-italic">{roleLabel(role)}</em>
           </span>
+          </div>
+
+          {/* แถวสรุปสี่ช่อง — กดแล้วไปหน้าของเรื่องนั้น */}
+          <nav aria-label="สรุปของฉัน" className="flex rounded-[16px] border border-[#E3D3D7] bg-[rgb(250_244_245/0.9)] py-3">
+            {stats.map((c, i) => (
+              <Link
+                key={c.k}
+                href={c.href}
+                className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 text-foreground ${
+                  i < stats.length - 1 ? "border-r border-[#D9C8CC]" : ""
+                }`}
+              >
+                <span className="num text-[17px] font-bold whitespace-nowrap">
+                  {c.v}
+                  {c.u && <span className="ml-0.5 text-[11px] font-semibold text-muted-foreground">{c.u}</span>}
+                </span>
+                <span className="truncate text-[11px] text-muted-foreground">{c.k}</span>
+              </Link>
+            ))}
+          </nav>
         </section>
 
         {/* ── เมนู ── */}
@@ -195,7 +305,7 @@ export function MobileHome({
         {notices.length > 0 && (
           <>
             <div className="flex items-center gap-2 px-5">
-              <h2 className="text-[16px] font-bold">ต้องทำ</h2>
+              <h2 className="text-[16px] font-bold">สิ่งที่ต้องทำวันนี้</h2>
               <span className="num rounded-[6px] bg-primary px-1.5 py-px text-[11px] font-bold text-white">
                 {String(notices.length).padStart(2, "0")}
               </span>
