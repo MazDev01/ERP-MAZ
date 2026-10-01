@@ -82,7 +82,8 @@ export function Sheet({
         {/* กล่องที่วางปุ่มไว้ในเนื้อหาเอง (เช่นการ์ดงานย่อย) ส่ง footer เป็น null
             จะได้ไม่มีแถบท้ายเปล่า ๆ ค้างอยู่ใต้กล่อง */}
         {footer != null && footer !== false && (
-          <div className="flex flex-none items-center gap-2.5 border-t border-border px-4 py-3.5 pb-[max(14px,env(safe-area-inset-bottom))] sm:justify-end sm:px-5">
+          /* มือถือ: ปุ่มท้ายกล่องเต็มความกว้าง สูง 48px ปุ่มหลักกว้างกว่า ตามต้นแบบชุดมือถือทุกหน้า */
+          <div className="flex flex-none items-center gap-2.5 border-t border-border px-[18px] py-3 pb-[max(16px,env(safe-area-inset-bottom))] max-sm:[&>.btn]:h-12! max-sm:[&>.btn]:flex-1 max-sm:[&>.btn]:justify-center max-sm:[&>.btn]:rounded-[14px]! max-sm:[&>.btn:last-child]:grow-[1.4] sm:justify-end sm:px-5 sm:py-3.5">
             {footer}
           </div>
         )}
