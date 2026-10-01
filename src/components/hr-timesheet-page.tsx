@@ -608,7 +608,7 @@ function TimeCard({
       }
     >
       {/* บอกว่าแตะได้ ไม่งั้นการ์ดที่พับอยู่ดูเหมือนไม่มีอะไรข้างใน */}
-      <p className="mt-2 flex items-center justify-center gap-1 text-[12px] text-[#9A8E91]">
+      <p className="mt-1.5 flex items-center gap-1 text-[12px] whitespace-nowrap text-[#9A8E91]">
         {open ? "ซ่อนรายละเอียด" : "แตะเพื่อดูรายละเอียด"}
         <ChevronDownIcon className={`size-3.5 ${open ? "rotate-180" : ""}`} strokeWidth={2.4} />
       </p>
@@ -706,14 +706,17 @@ function DayDetail({
         </button>
       }
     >
+      {/* มือถือ: รายการที่ต้องตรวจขึ้นก่อน เพราะเป็นงานที่ต้องทำ ส่วนวันที่มีรายการเป็นข้อมูลอ่านอย่างเดียว
+          (ต้นแบบ ts-detail ชุด 1 ต.ค. 2569) */}
+      <div className="max-sm:flex max-sm:flex-col max-sm:gap-3.5">
       <section>
-        <h3 className="mb-2.5 text-[12.5px] font-bold text-primary">วันที่มีรายการ</h3>
+        <h3 className="mb-2.5 text-[12.5px] font-bold text-primary max-sm:text-[14px] max-sm:text-foreground">วันที่มีรายการ</h3>
         {days.length === 0 ? (
           <p className="text-[12.5px] text-muted-foreground">ไม่มีวันที่ผิดจากปกติ</p>
         ) : (
           days.map((d) => (
-            <div key={d} className="border-t border-border py-3 first:border-t-0 first:pt-1">
-              <p className="num text-[12px] font-semibold text-muted-foreground">{thaiDate(d)}</p>
+            <div key={d} className={`border-t border-border py-3 first:border-t-0 first:pt-1 max-sm:mb-2 ${PANEL_DAY}`}>
+              <p className={`num text-[12px] font-semibold text-muted-foreground ${PANEL_DT}`}>{thaiDate(d)}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2.5">{byDay.get(d)}</div>
             </div>
           ))
@@ -722,14 +725,20 @@ function DayDetail({
         {locked && <p className="mt-2.5 text-[12.5px] text-muted-foreground">รอบนี้ปิดแล้ว</p>}
       </section>
 
-      <section className="mt-5 border-t border-border pt-4">
-        <h3 className="mb-2.5 text-[12.5px] font-bold text-primary">รายการที่ต้องตรวจ</h3>
+      <section className="mt-5 border-t border-border pt-4 max-sm:order-first max-sm:mt-0 max-sm:border-0 max-sm:pt-0">
+        <h3 className="mb-2.5 text-[12.5px] font-bold text-primary max-sm:text-[14px]">รายการที่ต้องตรวจ</h3>
         {rec.issues.length === 0 ? (
           <p className="text-[12.5px] text-muted-foreground">ไม่มีรายการที่ต้องตรวจ</p>
         ) : (
           rec.issues.map((x) => (
-            <div key={x.d} className="border-t border-border py-3 first:border-t-0 first:pt-1">
-              <p className="num text-[12px] font-semibold text-muted-foreground">{thaiDate(x.d)}</p>
+            /* รายการที่ยังไม่ได้บันทึกเหตุผล ขึ้นกรอบชมพูให้สะดุดตา */
+            <div
+              key={x.d}
+              className={`border-t border-border py-3 first:border-t-0 first:pt-1 max-sm:mb-2 ${PANEL_DAY} ${
+                x.note || locked ? "" : "max-sm:border-[1.5px]! max-sm:border-[#F4D3D9]! max-sm:bg-card!"
+              }`}
+            >
+              <p className={`num text-[12px] font-semibold text-muted-foreground ${PANEL_DT}`}>{thaiDate(x.d)}</p>
               <span className={`tag mt-2 ${x.note ? "t-early" : "t-late"}`}>
                 <i />
                 {HR_ISSUE_LABEL[x.kind]}
@@ -739,18 +748,18 @@ function DayDetail({
               ) : locked ? (
                 <p className="mt-2 text-[12.5px] text-muted-foreground">รอบนี้ปิดแล้ว</p>
               ) : (
-                <div className="mt-2.5 flex items-center gap-2">
+                <div className="mt-2.5 flex items-center gap-2 max-sm:w-full max-sm:flex-col max-sm:items-stretch">
                   <input
                     value={notes[x.d] ?? ""}
                     onChange={(e) => setNotes((v) => ({ ...v, [x.d]: e.target.value }))}
                     placeholder="ระบุเหตุผลหรือผลการตรวจสอบ"
                     aria-label={`เหตุผลของวันที่ ${thaiDate(x.d)}`}
                     style={{ height: 36 }}
-                    className="field-control min-w-0 flex-1 rounded-[10px] px-3 text-[13px]"
+                    className="field-control min-w-0 flex-1 rounded-[10px] px-3 text-[13px] max-sm:h-[46px]! max-sm:w-full max-sm:rounded-[12px] max-sm:text-[14.5px]"
                   />
                   <button
                     type="button"
-                    className="btn solid btn-solid flex-none disabled:opacity-45"
+                    className="btn solid btn-solid flex-none disabled:opacity-45 max-sm:h-[46px]! max-sm:w-full max-sm:justify-center max-sm:rounded-[12px]!"
                     disabled={!(notes[x.d] ?? "").trim()}
                     onClick={() => noteIssue(emp.id, x.d, (notes[x.d] ?? "").trim())}
                   >
@@ -762,9 +771,15 @@ function DayDetail({
           ))
         )}
       </section>
+      </div>
     </Sheet>
   );
 }
+
+/* มือถือ: แต่ละวันในกล่องรายละเอียดเป็นการ์ด ไม่ใช่แถวคั่นเส้น (ต้นแบบ ts-detail) */
+const PANEL_DAY =
+  "max-sm:flex max-sm:flex-col max-sm:items-start max-sm:gap-2 max-sm:rounded-[14px] max-sm:border-0! max-sm:bg-[#FAF6F7] max-sm:px-3.5 max-sm:py-3 max-sm:first:pt-3";
+const PANEL_DT = "max-sm:text-[14px] max-sm:font-bold max-sm:text-foreground";
 
 /* ปิดรอบต้องเคลียร์ทั้งสองแท็บ บอกบนแท็บเลยว่าค้างอยู่ฝั่งไหน ไม่งั้นต้องสลับไปหาเอง */
 function issuesOf(list: { r: Parameters<typeof openIssues>[0] }[]) {
