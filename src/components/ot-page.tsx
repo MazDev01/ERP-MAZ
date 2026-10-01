@@ -13,7 +13,8 @@ import {
   type OtStatus,
 } from "@/lib/ot-data";
 import { cancelOtRequest, useOtRecords } from "@/lib/ot-store";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon , PlusIcon } from "./icons";
+import { CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, PlusIcon } from "./icons";
+import { DaySheet } from "./acc-ui";
 import { ApproverNote } from "./approver-note";
 import { OtDialog } from "./ot-dialog";
 
@@ -55,6 +56,9 @@ export function OtPage() {
     return new Date(y, m - 1, 1);
   });
   const [tab, setTab] = useState<"all" | OtStatus>("all");
+  /* มือถือกรองเป็นรายวันด้วยปฏิทินแทนแถบเลือกเดือน (ต้นแบบ attendance.html ชุดแก้ 30 ก.ย. 2569) */
+  const [day, setDay] = useState("");
+  const [cal, setCal] = useState(false);
   const [page, setPage] = useState(1);
   /* หน้าบันทึกเวลาส่งลิงก์ ?new=1&date=... มาเปิดฟอร์มพร้อมวันที่ให้เลย */
   const params = useSearchParams();
@@ -78,9 +82,10 @@ export function OtPage() {
   }, [records, view]);
 
   const scoped = useMemo(() => {
-    const list = tab === "all" ? inMonth : inMonth.filter((r) => r.status === tab);
+    let list = tab === "all" ? inMonth : inMonth.filter((r) => r.status === tab);
+    if (day) list = list.filter((r) => r.date === day);
     return [...list].sort((a, b) => b.date.localeCompare(a.date));
-  }, [inMonth, tab]);
+  }, [inMonth, tab, day]);
 
   const maxPage = Math.max(1, Math.ceil(scoped.length / PER_PAGE));
   const safePage = Math.min(page, maxPage);
@@ -102,7 +107,7 @@ export function OtPage() {
           <ApproverNote kind="ot" />
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
-          <div className="mo glass-thin w-full justify-center sm:w-auto">
+          <div className="mo glass-thin w-full justify-center max-md:hidden! sm:w-auto">
             <button
               type="button"
               onClick={() => {
@@ -147,26 +152,59 @@ export function OtPage() {
         </p>
       )}
 
-      {/* ── ชั่วโมงที่อนุมัติแล้วแยกตามเรต ── */}
-      {/* มือถือ: แถวเดียวอ่านรวดเดียวจบ ไม่เอาการ์ดตัวเลขใหญ่ (เจ้าของสั่ง 30 ก.ย. 2569) */}
-      <section className="glass rounded-[20px] px-4 py-3.5 sm:hidden">
-        <div className="flex items-baseline justify-between gap-3">
-          <b className="text-[13.5px] font-bold">โอทีที่อนุมัติแล้วเดือนนี้</b>
-          <em className="num text-[11.5px] text-muted-foreground not-italic">
-            รวม {(Object.keys(OT_KIND) as OtKind[]).reduce((a, k) => a + hoursOfKind(k), 0).toFixed(2)} ชม.
-          </em>
+      {/* ── มือถือ: หัวเรื่องใหญ่ + จำนวนรายการ + ปุ่มปฏิทินกรองรายวัน ── */}
+      <div className="md:hidden">
+        <div className="flex items-end gap-2.5">
+          <h1 className="text-[26px] leading-none font-bold">โอที</h1>
+          <span className="num flex-1 pb-[2px] text-[13px] text-muted-foreground">{scoped.length} รายการ</span>
+          <button
+            type="button"
+            className="grid size-[42px] flex-none place-items-center rounded-full border border-border bg-card text-foreground shadow-[0_4px_10px_-6px_rgb(90_20_35/0.3)]"
+            onClick={() => setCal(true)}
+            aria-label="เลือกวันที่"
+            aria-haspopup="dialog"
+          >
+            <CalendarIcon className="size-5" strokeWidth={2.2} />
+          </button>
         </div>
-        <ul className="mt-2.5 flex list-none gap-2 p-0">
-          {(Object.keys(OT_KIND) as OtKind[]).map((kind) => (
-            <li key={kind} className="flex flex-1 flex-col items-center rounded-[14px] bg-muted/60 px-2 py-2">
-              <span className="truncate text-[11px] text-muted-foreground">{OT_KIND[kind].label}</span>
-              <b className="num text-[18px] leading-tight font-bold text-primary">{hoursOfKind(kind).toFixed(2)}</b>
-              <em className="num text-[10.5px] text-muted-foreground not-italic">{OT_KIND[kind].rate}x</em>
-            </li>
-          ))}
-        </ul>
-      </section>
+        {day && (
+          <span className="mt-2.5 flex h-9 w-fit items-center gap-2 rounded-full bg-[var(--primary-soft,#FDECEE)] pr-1.5 pl-3.5 text-[13px] font-bold text-primary">
+            {thaiDate(day)}
+            <button
+              type="button"
+              className="grid size-[26px] place-items-center rounded-full bg-white text-primary"
+              onClick={() => setDay("")}
+              aria-label="ล้างวันที่ที่เลือก"
+            >
+              <CloseIcon className="size-3.5" strokeWidth={2.6} />
+            </button>
+          </span>
+        )}
+      </div>
 
+      {cal && (
+        <DaySheet
+          day={day}
+          dates={inMonth.map((r) => r.date)}
+          month={`${view.getFullYear()}-${pad(view.getMonth() + 1)}`}
+          onPick={(iso) => {
+            /* เลือกวันข้ามเดือน ให้เลื่อนเดือนที่กำลังดูตามไปด้วย ไม่งั้นกรองแล้วว่าง */
+            const [y, m] = iso.split("-").map(Number);
+            setView(new Date(y, m - 1, 1));
+            setDay(iso);
+            setPage(1);
+            setCal(false);
+          }}
+          onAll={() => {
+            setDay("");
+            setPage(1);
+            setCal(false);
+          }}
+          onClose={() => setCal(false)}
+        />
+      )}
+
+      {/* ── ชั่วโมงที่อนุมัติแล้วแยกตามเรต — จอคอมเท่านั้น ต้นแบบซ่อนบนมือถือ ── */}
       <div className="hidden gap-3.5 sm:grid sm:grid-cols-3">
         {(Object.keys(OT_KIND) as OtKind[]).map((kind) => (
           <div key={kind} className="glass rounded-2xl px-[17px] py-[15px]">
@@ -203,13 +241,18 @@ export function OtPage() {
                 <button
                   key={t.key}
                   type="button"
-                  className={tab === t.key ? "on" : ""}
+                  /* มือถือ: เม็ดยาพื้นเทา เลือกอยู่เป็นแดง (ต้นแบบชุดแก้ 30 ก.ย. 2569) */
+                  className={`max-md:h-[38px]! max-md:rounded-full! max-md:border-0! max-md:px-4! max-md:font-semibold! max-md:shadow-none! ${
+                    tab === t.key
+                      ? "on max-md:bg-primary! max-md:text-white!"
+                      : "max-md:bg-[#EDE8EA]! max-md:text-[#6E6164]!"
+                  }`}
                   onClick={() => {
                     setTab(t.key);
                     setPage(1);
                   }}
                 >
-                  {t.label} <b>{count}</b>
+                  {t.label} <b className="max-md:bg-transparent! max-md:text-inherit! max-md:opacity-80">{count}</b>
                 </button>
               );
             })}
@@ -389,6 +432,9 @@ function Row({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit: () =>
  * การ์ดคำขอโอทีบนมือถือ — ต้นแบบ dose-erp-maz/mobile/attendance.html (30 ก.ย. 2569)
  * วันที่กับสถานะอยู่แถวบน · ช่วงเวลากับชั่วโมงเป็นกล่องนุ่มมีป้ายกำกับ · งานที่ปฏิบัติอยู่ล่าง
  */
+/* การ์ดคำขอโอทีบนมือถือ — ต้นแบบ attendance.html ชุดแก้ 30 ก.ย. 2569
+   วงกลมไอคอนซ้าย วันที่กับชั่วโมงบรรทัดบน งานที่ทำบรรทัดถัดมา
+   เส้นประคั่น แล้วแถวล่างเป็น ช่วงเวลา · สถานะ · เลขที่คำขอ */
 function MobileRow({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit: () => void }) {
   const adjusted =
     row.status === "อนุมัติแล้ว" &&
@@ -397,50 +443,43 @@ function MobileRow({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit:
 
   return (
     <li
-      className={`rounded-[22px] border border-white/95 bg-white/72 p-3.5 shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] ${
+      className={`rounded-[20px] bg-card p-3.5 shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_28px_-18px_rgb(120_20_35/0.3)] ${
         hit ? "ring-2 ring-primary ring-inset" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link
-            href={`/records?month=${row.date.slice(0, 7)}`}
-            className="block text-[15px] font-bold hover:text-primary hover:underline"
-          >
-            {thaiDate(row.date)}
-          </Link>
-          <span className="num block text-[11.5px] text-muted-foreground">
-            {row.id} · โอที{OT_KIND[otKindOf(row.date)].label}
-          </span>
-        </div>
+      <div className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1">
+        <span className="row-span-2 grid size-10 place-items-center rounded-full bg-[#F4EEEF] text-primary">
+          <ClockIcon className="size-5" strokeWidth={2} />
+        </span>
+        <Link href={`/records?month=${row.date.slice(0, 7)}`} className="text-[15px] font-bold hover:text-primary">
+          {thaiDate(row.date)}
+        </Link>
+        <b className="num text-right text-[15px] font-bold whitespace-nowrap">
+          {row.hours.toFixed(2)} <span className="text-[13px] font-semibold">ชม.</span>
+        </b>
+        <p className="col-span-2 text-[13px] leading-relaxed break-words text-muted-foreground">{row.reason}</p>
+      </div>
+
+      {adjusted && (
+        <p className="num mt-1 text-right text-[11.5px] font-semibold text-[var(--warning)]">
+          อนุมัติจริง {row.approvedHours?.toFixed(2)} ชม.
+        </p>
+      )}
+      {row.comment && <p className="mt-1 text-[12px] text-muted-foreground">หัวหน้า: {row.comment}</p>}
+
+      <hr className="my-2.5 border-0 border-t-[1.5px] border-dashed border-[#ECE3E5]" />
+
+      <div className="flex items-center gap-2.5">
+        <span className="num flex items-center gap-1.5 text-[12.5px] font-semibold text-muted-foreground">
+          <ClockIcon className="size-3.5 flex-none" strokeWidth={2.2} />
+          {hhmm(row.startMin)}–{hhmm(row.endMin)}
+        </span>
         <span className={`tag shrink-0 ${STATUS_CLASS[row.status]}`}>
           <i />
           {row.status}
         </span>
+        <span className="num ml-auto text-[12px] whitespace-nowrap text-muted-foreground">{row.id}</span>
       </div>
-
-      <div className="mt-2.5 grid grid-cols-2 gap-2">
-        <span className="rounded-[14px] bg-muted/60 px-2.5 py-2">
-          <small className="block text-[11px] font-semibold text-muted-foreground">ช่วงเวลา</small>
-          <b className="num text-[15px] font-bold">
-            {hhmm(row.startMin)}–{hhmm(row.endMin)}
-          </b>
-        </span>
-        <span className="rounded-[14px] bg-muted/60 px-2.5 py-2">
-          <small className="block text-[11px] font-semibold text-muted-foreground">ชั่วโมง</small>
-          <b className="num text-[15px] font-bold text-primary">{row.hours.toFixed(2)}</b>
-          {adjusted && (
-            <em className="num block text-[11px] font-semibold text-[var(--warning)] not-italic">
-              อนุมัติจริง {row.approvedHours?.toFixed(2)}
-            </em>
-          )}
-        </span>
-      </div>
-
-      <p className="mt-2 text-[13px] break-words">{row.reason}</p>
-      {row.comment && (
-        <p className="mt-1 text-[12px] text-muted-foreground">หัวหน้า: {row.comment}</p>
-      )}
 
       {row.status === "รออนุมัติ" && (
         <span className="mt-2.5 flex items-center justify-end gap-3">

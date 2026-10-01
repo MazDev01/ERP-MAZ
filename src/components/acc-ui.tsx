@@ -196,20 +196,27 @@ export function AccDayFilter({
   );
 }
 
-function DaySheet({
+export function DaySheet({
   day,
   dates,
+  month,
   onPick,
   onAll,
   onClose,
 }: {
   day: string;
   dates: string[];
+  /** เดือนที่หน้านั้นกำลังดูอยู่ (YYYY-MM) — เปิดปฏิทินมาที่เดือนนั้น ไม่ใช่เดือนปัจจุบันเสมอ */
+  month?: string;
   onPick: (iso: string) => void;
   onAll: () => void;
   onClose: () => void;
 }) {
-  const start = day ? new Date(`${day}T00:00:00`) : bkkNow();
+  const start = day
+    ? new Date(`${day}T00:00:00`)
+    : month
+      ? new Date(`${month}-01T00:00:00`)
+      : bkkNow();
   const [view, setView] = useState(new Date(start.getFullYear(), start.getMonth(), 1));
   const has = new Set(dates);
   const today = todayIso();
