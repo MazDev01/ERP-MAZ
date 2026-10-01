@@ -20,6 +20,7 @@ import {
   dealPaid,
   invoiceDue,
   invoiceOf,
+  receiptsOf,
   invoiceStatus,
   issueInvoice,
   logCollection,
@@ -34,11 +35,14 @@ import {
 import { baht, bkkNow, daysBetween, round2, thaiDate, todayIso, commaInput } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFindParam } from "@/lib/deep-link";
-import { PlusIcon, TrashIcon } from "./icons";
+import { DownloadIcon, PencilIcon, PlusIcon, ReceiptIcon, TrashIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { AccDayFilter, AccFilters, MonthNav, NewDot, useAccFilter } from "./acc-ui";
 import { Field, Textarea } from "./ui";
 import { PhoneCard, PhoneList } from "./acchr-phone";
+import { IssueDialog, receiptHref, seqsOf } from "./acc-receipts-page";
+import { taxInvoiceBuyer } from "@/lib/crm-data";
+import { customerOfDeal } from "@/lib/crm-store";
 
 import { DateField } from "./thai-date-picker";
 import { CancelDealDialog } from "./cancel-deal-dialog";
@@ -116,6 +120,8 @@ export function AccBillingPage() {
 
   /* ดีลที่กางงวดอยู่บนมือถือ — ว่าง = ยังไม่กางใบไหน */
   const [openPlan, setOpenPlan] = useState("");
+  /* ออกใบเสร็จจากการ์ดงวดบนมือถือได้เลย ไม่ต้องข้ามไปหน้าใบเสร็จ (ต้นแบบ billing.html 1 ต.ค. 2569) */
+  const [receipting, setReceipting] = useState<Invoice | null>(null);
   /* ดีลใหม่ที่ยังไม่ได้เปิดดู (AC-BR-01) — เปิดแท็บรอวางบิลอยู่ ให้จุดแดงค้างไว้ครู่หนึ่งพอให้เห็น แล้วถือว่าเปิดดูแล้ว */
   const newDeals = unseenDeals(acc).filter((d) => todo.some((t) => t.no === d.no)).length;
   const hasUnseen = unseenDeals(acc).length > 0;
@@ -132,6 +138,24 @@ export function AccBillingPage() {
       : tab === "inv"
         ? acc.invoices.map((v) => v.issue)
         : acc.invoices.map((v) => v.due);
+
+  /*
+   * รายการของมือถือ — ไม่แยกแท็บ จึงรวมทุกดีลที่ยังมีงานค้างไว้ที่เดียว
+   * ดีลที่ชำระครบแล้วยังอยู่ต่อจนจบเดือนที่ออกใบเสร็จงวดสุดท้าย เผื่อต้องเปิดเอกสารย้อนหลัง
+   */
+  const phoneDeals = acc.deals.filter((d) => {
+    if (d.cancelled) return false;
+    if (!hit(d.cus, d.quo, d.no)) return false;
+    if (!inRange(d.quoDate)) return false;
+    if (d.plan.length === 0) return true;
+    if (d.plan.some((p) => seqStatus(acc, d.no, p.seq) !== "paid")) return true;
+    const last = acc.receipts
+      .filter((r) => r.deal === d.no)
+      .map((r) => r.date)
+      .sort()
+      .pop();
+    return Boolean(last && last.slice(0, 7) === today.slice(0, 7));
+  });
 
   function pickTab(k: TabKey) {
     setTab(k);
@@ -163,7 +187,8 @@ export function AccBillingPage() {
       {/* มือถือ: การ์ดแต่ละใบลอยบนพื้นหน้า ไม่ต้องมีแผงครอบอีกชั้น (ต้นแบบ billing.html) */}
       <section className="panel plain-mobile glass flex flex-col">
         <div className="strip">
-          <div className="tabs">
+          {/* มือถือจบในหน้าเดียว ไม่ต้องสลับแท็บ (ต้นแบบ billing.html) */}
+          <div className="tabs max-sm:hidden!">
             <Tab on={tab === "todo"} onClick={() => pickTab("todo")} count={todo.length} dot={newDeals > 0 ? "มีดีลใหม่รอวางบิล" : ""}>
               รอวางบิล
             </Tab>
@@ -413,51 +438,68 @@ export function AccBillingPage() {
           )}
         </div>
 
-        {/* มือถือ: การ์ดย่อ ลูกค้า + ยอดเงินขึ้นก่อน ปุ่มงานหลักของแต่ละแท็บเป็นปุ่มใหญ่ท้ายการ์ด */}
-        {tab === "todo" && (
-          <PhoneList empty={todo.length === 0 ? "ไม่มีดีลที่รอวางบิล" : undefined}>
-            {todo.map((d) => {
-              const has = d.plan.length > 0;
-              const waiting = d.plan.filter((p) => seqStatus(acc, d.no, p.seq) === "pending").length;
-              return (
-                <PhoneCard
-                  key={d.no}
-                  title={d.cus}
-                  sub={
+        {/* ── มือถือ: วางบิลจบในหน้าเดียว (ต้นแบบ billing.html 1 ต.ค. 2569) ──
+           ไม่มีแท็บ — หนึ่งการ์ดคือหนึ่งดีล แตะแล้วกางงวดทั้งหมดของดีลนั้น
+           แต่ละงวดบอกสถานะของตัวเอง (ยังไม่ออกใบ · ออกใบแล้วรอชำระ · ชำระแล้ว)
+           พร้อมปุ่มของงวดนั้นเอง จึงไม่ต้องสลับไปแท็บใบแจ้งหนี้หรือค้างชำระอีก */}
+        <PhoneList empty={phoneDeals.length === 0 ? "ไม่มีดีลที่ต้องวางบิล" : undefined}>
+          {phoneDeals.map((d) => {
+            const has = d.plan.length > 0;
+            const isOpen = openPlan === d.no;
+            const waiting = d.plan.filter((p) => seqStatus(acc, d.no, p.seq) === "pending").length;
+            const allPaid = has && d.plan.every((p) => seqStatus(acc, d.no, p.seq) === "paid");
+            return (
+              <PhoneCard
+                key={d.no}
+                title={d.cus}
+                sub={
+                  <>
+                    ใบเสนอราคา <span className="num">{d.quo}</span> ·{" "}
+                    <span className="whitespace-nowrap">ส่ง {thaiDate(d.quoDate)}</span>
+                  </>
+                }
+                amount={baht(d.net)}
+                amountNote="ยอดสุทธิ (บาท)"
+                onOpen={has ? () => setOpenPlan(isOpen ? "" : d.no) : undefined}
+                openLabel={isOpen ? `ซ่อนงวดของ ${d.cus}` : `ดูงวดของ ${d.cus}`}
+                badge={
+                  <span className={`tag ${!has ? "t-miss" : waiting ? "t-early" : allPaid ? "t-ok" : "t-pend"}`}>
+                    <i />
+                    {!has
+                      ? "ยังไม่ได้แบ่งงวด"
+                      : waiting
+                        ? `รอออกใบแจ้งหนี้ ${waiting} งวด`
+                        : allPaid
+                          ? "ชำระครบทุกงวดแล้ว"
+                          : "ออกใบแจ้งหนี้ครบทุกงวดแล้ว"}
+                  </span>
+                }
+                /* กางงวดอยู่ไม่ต้องมีปุ่มด้านบน แตะการ์ดเพื่อย่อได้ (ต้นแบบ #bx-one) */
+                actions={
+                  isOpen ? undefined : (
                     <>
-                      ใบเสนอราคา <span className="num">{d.quo}</span> · <span className="whitespace-nowrap">ส่ง {thaiDate(d.quoDate)}</span>
-                    </>
-                  }
-                  amount={baht(d.net)}
-                  amountNote="ยอดสุทธิ (บาท)"
-                  badge={
-                    <span className={`tag ${has ? "t-early" : "t-miss"}`}>
-                      <i />
-                      {has ? `รอออกใบแจ้งหนี้ ${waiting} งวด` : "ยังไม่ได้แบ่งงวด"}
-                    </span>
-                  }
-                  actions={
-                    <>
-                      <button type="button" className="btn glass-thin" data-ceo-hide onClick={() => setPlanning(d)}>
+                      <button
+                        type="button"
+                        className={has ? "btn glass-thin" : "btn solid btn-solid"}
+                        data-ceo-hide
+                        onClick={() => setPlanning(d)}
+                      >
                         {has ? "แก้งวด" : "แบ่งงวด"}
                       </button>
-                      {/* ต้นแบบมือถือ: ปุ่มหลักคือ "ออกใบแจ้งหนี้" กดแล้วค่อยกางงวดให้เลือก
-                         (dose-erp-maz/mobile/billing-mobile-preview.html · 30 ก.ย. 2569) */}
                       {has && (
                         <button
                           type="button"
                           className="btn solid btn-solid"
                           data-ceo-hide
-                          aria-expanded={openPlan === d.no}
-                          onClick={() => setOpenPlan(openPlan === d.no ? "" : d.no)}
+                          onClick={() => setOpenPlan(d.no)}
                         >
-                          {openPlan === d.no ? "ซ่อนงวด" : "ออกใบแจ้งหนี้"}
+                          ดูงวด
                         </button>
                       )}
                       {canCancel(d.no) && (
                         <button
                           type="button"
-                          className="btn text-destructive! basis-full! border-0! bg-transparent! shadow-none!"
+                          className="btn basis-full! border-0! bg-transparent! text-destructive! shadow-none!"
                           data-ceo-hide
                           onClick={() => openCancel(d.no)}
                         >
@@ -465,116 +507,50 @@ export function AccBillingPage() {
                         </button>
                       )}
                     </>
-                  }
-                >
-                  {/* งวดกางเมื่อกด "ออกใบแจ้งหนี้" ตามต้นแบบมือถือ */}
-                  {has && openPlan === d.no && (
-                    <PlanPhone acc={acc} deal={d} onBill={(item) => setBilling({ deal: d, item })} />
-                  )}
-                </PhoneCard>
-              );
-            })}
-          </PhoneList>
-        )}
-        {tab === "inv" && (
-          <PhoneList empty={invoices.length === 0 ? "ไม่มีใบแจ้งหนี้ที่รอชำระ" : undefined}>
-            {invoices.map((v) => (
-              <PhoneCard
-                key={v.no}
-                title={v.cus}
-                sub={
-                  <>
-                    <span className="num">{v.no}</span> · งวดที่ {v.seq}
-                  </>
+                  )
                 }
-                amount={baht(invoiceDue(v))}
-                amountNote="ยอดคงเหลือ (บาท)"
-                onOpen={() => router.push(invoiceHref(v.no))}
-                openLabel={`เปิดใบแจ้งหนี้ ${v.no}`}
-                badge={
-                  <>
-                    <InvoiceTag acc={acc} invoice={v} />
-                    <span className="text-[11.5px]">
-                      <DueBadge invoice={v} today={today} />
-                    </span>
-                  </>
-                }
-                stats={[
-                  { label: "วันที่วางบิล", value: thaiDate(v.issue) },
-                  { label: "ครบกำหนดชำระ", value: thaiDate(v.due) },
-                  { label: "ยอดที่ต้องชำระ", value: baht(v.total) },
-                ]}
-                actions={
-                  <>
-                    <button type="button" className="btn glass-thin" onClick={() => router.push(invoiceHref(v.no))}>
-                      เปิดใบแจ้งหนี้
-                    </button>
-                    {invoiceDue(v) > 0 && canCancel(v.deal) && (
-                      <button
-                        type="button"
-                        className="btn glass-thin text-destructive!"
-                        data-ceo-hide
-                        onClick={() => openCancel(v.deal)}
-                      >
-                        ยกเลิกดีล
-                      </button>
-                    )}
-                  </>
-                }
-              />
-            ))}
-          </PhoneList>
-        )}
-        {tab === "due" && (
-          <PhoneList empty={overdue.length === 0 ? "ไม่มีใบแจ้งหนี้ที่เกินกำหนด" : undefined}>
-            {overdue.map((v) => {
-              const last = v.col[v.col.length - 1];
-              return (
-                <PhoneCard
-                  key={v.no}
-                  title={v.cus}
-                  sub={
-                    <>
-                      <span className="num">{v.no}</span> · ครบกำหนด {thaiDate(v.due)}
-                    </>
-                  }
-                  amount={baht(invoiceDue(v))}
-                  amountNote="ยอดคงเหลือ (บาท)"
-                  alert
-                  badge={
-                    <span className="tag t-late">
-                      <i />
-                      เกินกำหนด {daysBetween(v.due, today)} วัน
-                    </span>
-                  }
-                  actions={
-                    <button type="button" className="btn solid btn-solid" data-ceo-hide onClick={() => setCollecting(v)}>
-                      บันทึกติดตาม
-                    </button>
-                  }
-                >
-                  <div className="mt-2.5 rounded-[10px] bg-muted/50 px-3 py-2.5 text-[12.5px]">
-                    <p className="text-[11px] text-muted-foreground">ติดตามล่าสุด</p>
-                    {last ? (
-                      <>
-                        <p className="mt-0.5 font-semibold">{last.result}</p>
-                        <p className="text-[11.5px] text-muted-foreground">
-                          {thaiDate(last.date)} · {last.channel}
-                          {last.next && ` · นัดอีกครั้ง ${thaiDate(last.next)}`}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="mt-0.5 text-muted-foreground">ยังไม่เคยติดตาม</p>
+              >
+                {has && isOpen && (
+                  <div className="mt-3 border-t-[1.5px] border-dashed border-[#ECE3E5] pt-3">
+                    <ul className="flex list-none flex-col gap-2 p-0">
+                      {d.plan.map((p, i) => (
+                        <PhoneSeq
+                          key={p.seq}
+                          acc={acc}
+                          deal={d}
+                          item={p}
+                          index={i}
+                          today={today}
+                          onPlan={() => setPlanning(d)}
+                          onBill={() => setBilling({ deal: d, item: p })}
+                          onReceipt={(v) => setReceipting(v)}
+                          onCollect={(v) => setCollecting(v)}
+                          onOpenDoc={(href) => router.push(href)}
+                        />
+                      ))}
+                    </ul>
+                    {canCancel(d.no) && (
+                      <div className="mt-3 flex justify-center">
+                        <button
+                          type="button"
+                          className="lnk text-destructive"
+                          data-ceo-hide
+                          onClick={() => openCancel(d.no)}
+                        >
+                          ยกเลิกดีล
+                        </button>
+                      </div>
                     )}
                   </div>
-                </PhoneCard>
-              );
-            })}
-          </PhoneList>
-        )}
+                )}
+              </PhoneCard>
+            );
+          })}
+        </PhoneList>
 
-        {/* ท้ายรายการ: มือถือเป็นการ์ดขาวกลางจอ บอกยอดรวมอย่างเดียว (ต้นแบบ billing.html) */}
-        <div className="foot flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
+
+        {/* มือถือจบในหน้าเดียวแล้ว ยอดรวมท้ายรายการจึงไม่ต้องมี (ต้นแบบ billing.html) */}
+        <div className="foot flex-col items-stretch gap-3 text-center max-sm:hidden! sm:flex-row sm:items-center sm:text-left">
           <Foot tab={tab} acc={acc} invoices={invoices} todo={todo} overdue={overdue} />
         </div>
       </section>
@@ -604,6 +580,24 @@ export function AccBillingPage() {
           }}
         />
       )}
+      {receipting && (
+        <IssueDialog
+          invoice={receipting}
+          seqs={seqsOf(acc, receipting.deal)}
+          first={receiptsOf(acc, receipting.no).length === 0}
+          buyer={taxInvoiceBuyer(
+            customerOfDeal(
+              crm,
+              receipting.deal,
+              acc.deals.find((d) => d.no === receipting.deal)?.quo ?? "",
+              receipting.cus,
+            ),
+          )}
+          today={today}
+          onClose={() => setReceipting(null)}
+          onDone={() => setReceipting(null)}
+        />
+      )}
       {collecting && (
         <CollectDialog invoice={collecting} today={today} onClose={() => setCollecting(null)} />
       )}
@@ -619,6 +613,132 @@ export function AccBillingPage() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * งวดหนึ่งงวดในการ์ดบนมือถือ — บอกสถานะของงวดนั้นและมีปุ่มของงวดนั้นในตัว
+ * ยังไม่ออกใบ → ออกใบแจ้งหนี้ · ออกใบแล้ว → เปิดใบแจ้งหนี้ / ออกใบเสร็จ · ชำระแล้ว → เปิดใบเสร็จ
+ * เกินกำหนดแล้วยังไม่ชำระ จะมีปุ่มบันทึกติดตามต่อท้าย (ต้นแบบ billing.html 1 ต.ค. 2569)
+ */
+function PhoneSeq({
+  acc,
+  deal,
+  item,
+  index,
+  today,
+  onPlan,
+  onBill,
+  onReceipt,
+  onCollect,
+  onOpenDoc,
+}: {
+  acc: AccState;
+  deal: AccDeal;
+  item: Installment;
+  index: number;
+  today: string;
+  onPlan: () => void;
+  onBill: () => void;
+  onReceipt: (v: Invoice) => void;
+  onCollect: (v: Invoice) => void;
+  onOpenDoc: (href: string) => void;
+}) {
+  const st = seqStatus(acc, deal.no, item.seq);
+  const inv = invoiceOf(acc, deal.no, item.seq);
+  const receipt = inv ? receiptsOf(acc, inv.no)[0] : null;
+  const late = inv ? daysBetween(inv.due, today) : 0;
+
+  return (
+    <li className="rounded-[14px] bg-[#FAF6F7] p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <b className="text-[13px] font-bold">งวดที่ {item.seq}</b>
+          <p className="num mt-0.5 text-[12.5px] text-[#6E6164]">
+            {item.pct}% · <b className="font-bold text-foreground">{baht(item.amount)} ฿</b>
+          </p>
+        </div>
+        {/* แก้งวดนี้ — งวดที่ออกใบแล้วกล่องแบ่งงวดจะล็อกให้เอง */}
+        <button
+          type="button"
+          className="grid size-8 flex-none place-items-center rounded-full text-[#8A7E81]"
+          aria-label={`แก้ไขงวดที่ ${item.seq}`}
+          data-ceo-hide
+          onClick={onPlan}
+        >
+          <PencilIcon className="size-[17px]" strokeWidth={2.1} />
+        </button>
+      </div>
+
+      {st === "pending" ? (
+        canBill(acc, deal, index) ? (
+          <button
+            type="button"
+            className="btn solid btn-solid mt-2 h-9 w-full justify-center rounded-[11px] text-[13px]"
+            data-ceo-hide
+            onClick={onBill}
+          >
+            ออกใบแจ้งหนี้
+          </button>
+        ) : (
+          <p className="mt-2 text-center text-[12px] text-muted-foreground">รอชำระงวดก่อนหน้า</p>
+        )
+      ) : (
+        inv && (
+          <div className="mt-2 border-t border-dashed border-[#ECE3E5] pt-2">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <b className="num text-[12.5px] font-bold">{inv.no}</b>
+              {invoiceDue(inv) <= 0 ? (
+                <span className="text-[11.5px] text-muted-foreground">ชำระแล้ว</span>
+              ) : late > 0 ? (
+                <span className="late">เกินกำหนด {late} วัน</span>
+              ) : (
+                <span className="text-[11.5px] text-muted-foreground">ครบกำหนด {thaiDate(inv.due)}</span>
+              )}
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                className="btn glass-thin h-9 justify-center rounded-[10px] text-[12.5px]"
+                onClick={() => onOpenDoc(invoiceHref(inv.no))}
+              >
+                <DownloadIcon className="size-[15px]" strokeWidth={2.2} />
+                ใบแจ้งหนี้
+              </button>
+              {receipt ? (
+                <button
+                  type="button"
+                  className="btn glass-thin h-9 justify-center rounded-[10px] text-[12.5px]"
+                  onClick={() => onOpenDoc(receiptHref(receipt.no))}
+                >
+                  <ReceiptIcon className="size-[15px]" strokeWidth={2.2} />
+                  ใบเสร็จ
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn solid btn-solid h-9 justify-center rounded-[10px] text-[12.5px]"
+                  data-ceo-hide
+                  onClick={() => onReceipt(inv)}
+                >
+                  ออกใบเสร็จ
+                </button>
+              )}
+              {invoiceDue(inv) > 0 && late > 0 && (
+                <button
+                  type="button"
+                  className="btn glass-thin col-span-2 h-9 justify-center rounded-[10px] text-[12.5px]"
+                  data-ceo-hide
+                  onClick={() => onCollect(inv)}
+                >
+                  บันทึกติดตาม
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      )}
+    </li>
   );
 }
 
@@ -834,54 +954,6 @@ function SeqBilled({ acc, deal, seq, no }: { acc: AccState; deal: string; seq: n
         </Link>
       )}
     </span>
-  );
-}
-
-/** งวดชำระในการ์ดมือถือ — เงื่อนไขเดียวกับ PlanRows ปุ่มออกใบแจ้งหนี้ใหญ่พอให้นิ้วกด */
-function PlanPhone({
-  acc,
-  deal,
-  onBill,
-}: {
-  acc: AccState;
-  deal: AccDeal;
-  onBill: (item: Installment) => void;
-}) {
-  return (
-    <ul className="mt-2.5 divide-y divide-border rounded-[10px] border border-border">
-      {deal.plan.map((p, i) => {
-        const inv = invoiceOf(acc, deal.no, p.seq);
-        return (
-          <li key={p.seq} className="flex items-center gap-3 px-3 py-2.5">
-            <span className="min-w-0 flex-1">
-              <b className="num block text-[13px] font-semibold">
-                งวดที่ {p.seq} · {p.pct}%
-              </b>
-              <span className="num text-[12.5px] text-muted-foreground">{baht(p.amount)} บาท</span>
-            </span>
-            {seqStatus(acc, deal.no, p.seq) === "pending" ? (
-              canBill(acc, deal, i) ? (
-                <button
-                  type="button"
-                  className="btn solid btn-solid flex-none"
-                  style={{ height: 40 }}
-                  data-ceo-hide
-                  onClick={() => onBill(p)}
-                >
-                  ออกใบแจ้งหนี้
-                </button>
-              ) : (
-                <span className="why flex-none text-right">ต้องออกใบเสร็จงวดก่อนหน้าก่อน</span>
-              )
-            ) : (
-              <span className="flex-none text-right">
-                <SeqBilled acc={acc} deal={deal.no} seq={p.seq} no={inv?.no ?? ""} />
-              </span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 

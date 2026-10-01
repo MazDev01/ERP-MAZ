@@ -36,7 +36,7 @@ export function receiptHref(no: string) {
 }
 
 /** จำนวนงวดของดีล — ใช้บอก "งวดสุดท้าย" หรือ "ชำระครั้งเดียว" */
-function seqsOf(acc: AccState, deal: string) {
+export function seqsOf(acc: AccState, deal: string) {
   return acc.deals.find((d) => d.no === deal)?.plan.length ?? 0;
 }
 
@@ -338,7 +338,8 @@ export function AccReceiptsPage() {
  * พร้อมบรรทัดภาษีที่ถูกหักและหมายเหตุว่ายังรอหนังสือรับรอง ไม่งั้นใบเสร็จระบุเงินเกินที่ได้รับจริง
  * ยอดไม่ตรงกับที่ตกลงไว้เมื่อไร ต้องให้คนกดยืนยันก่อน จะได้ไม่พลาดเพราะพิมพ์ผิด
  */
-function IssueDialog({
+/** ใช้ที่หน้าวางบิลด้วย — มือถือออกใบเสร็จได้จากการ์ดงวดเลย (ต้นแบบ billing.html 1 ต.ค. 2569) */
+export function IssueDialog({
   invoice,
   seqs,
   first,
