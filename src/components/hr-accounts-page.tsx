@@ -328,7 +328,7 @@ function AccountRow({
         {a ? (
           <span className="flex flex-wrap justify-center gap-1.5">
             <button type="button" className="btn glass-thin btn-mini" onClick={onRoles}>
-              ตำแหน่งในระบบ
+              ตำแหน่ง
             </button>
             <button type="button" className="btn glass-thin btn-mini" onClick={onReset}>
               รีเซ็ตรหัสผ่าน
@@ -466,10 +466,9 @@ function AccountDialog({
 export type { EmpAccount };
 
 /*
- * ตำแหน่งในระบบของบัญชีผู้ใช้ — "บทบาทคือตำแหน่งงาน" (เจ้าของกำหนด 30 ก.ย. 2569)
- * จึงเลือกจากรายการตำแหน่งจริงของบริษัท ไม่ใช่ชื่อบทบาทภายในระบบ
- * เลือกได้ทุกตำแหน่ง (CEO ไม่อยู่ในรายการ เพราะไม่ใช่พนักงานในทะเบียน)
- * ติ๊กตำแหน่งไหน ระบบเปิดเมนูของตำแหน่งนั้นให้ และบันทึกเป็นตำแหน่งควบของคนนั้นด้วย
+ * ตำแหน่งของบัญชีผู้ใช้ — "บทบาทคือตำแหน่งงาน" (เจ้าของกำหนด 30 ก.ย. 2569)
+ * จอนี้ให้เลือกตำแหน่งอย่างเดียว ไม่ต้องอธิบายเรื่องเมนู (เจ้าของสั่ง 1 ต.ค. 2569)
+ * ติ๊กตำแหน่งไหน ระบบเปิดเมนูของตำแหน่งนั้นให้เอง และบันทึกเป็นตำแหน่งควบของคนนั้นด้วย
  */
 function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
   const [picked, setPicked] = useState<PosKey[]>(posOf(emp));
@@ -490,7 +489,7 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
 
   return (
     <Sheet
-      title="ตำแหน่งในระบบของบัญชีนี้"
+      title="ตำแหน่งของบัญชีนี้"
       onClose={onClose}
       footer={
         <>
@@ -501,8 +500,7 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
             type="button"
             className="btn solid btn-solid"
             onClick={() => {
-              if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งตำแหน่ง ไม่งั้นบัญชีนี้เข้าหน้าไหนไม่ได้เลย");
-              if (!roles.length) return setWarn("ตำแหน่งที่เลือกยังไม่มีเมนูในระบบ เลือกตำแหน่งอื่นเพิ่ม");
+              if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งตำแหน่ง");
               /* บันทึกทั้งตำแหน่งควบของคนนั้น และเมนูที่บัญชีเปิดได้ ให้ตรงกันเสมอ */
               setEmpPositions(emp.id, picked);
               setAccountRoles(emp.id, roles);
@@ -532,7 +530,7 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
                 {list.map((x) => (
                   <label
                     key={x.v}
-                    className={`flex cursor-pointer items-start gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
+                    className={`flex cursor-pointer items-center gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
                       picked.includes(x.v) ? "border-primary bg-primary/5" : "border-border bg-card"
                     }`}
                   >
@@ -540,14 +538,9 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
                       type="checkbox"
                       checked={picked.includes(x.v)}
                       onChange={() => toggle(x.v)}
-                      className="mt-0.5 size-4 accent-[var(--primary)]"
+                      className="size-4 accent-[var(--primary)]"
                     />
-                    <span className="min-w-0">
-                      <b className="block text-[13.5px] font-semibold">{x.label}</b>
-                      <span className="block text-[12px] text-muted-foreground">
-                        เมนู: {rolesOfPosition(x.v).map(roleLabel).join(" + ") || "ไม่มีเมนูของตัวเอง"}
-                      </span>
-                    </span>
+                    <span className="min-w-0 text-[13.5px] font-semibold">{x.label}</span>
                   </label>
                 ))}
               </div>
