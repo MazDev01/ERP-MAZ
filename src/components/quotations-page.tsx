@@ -259,9 +259,9 @@ export function QuotationsPage() {
             }}
             placeholder="ค้นหาเลขที่เอกสารหรือชื่อผู้สนใจ"
           />
-          <Link href="/quotations/new" className="btn solid btn-solid btn-block-mobile shrink-0">
+          <Link href="/quotations/new" className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0">
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            สร้างใบเสนอราคา
+            <span className="lbl">สร้างใบเสนอราคา</span>
           </Link>
         </div>
       </div>

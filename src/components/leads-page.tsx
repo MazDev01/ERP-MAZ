@@ -117,10 +117,10 @@ export function LeadsPage() {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="btn solid btn-solid btn-block-mobile shrink-0"
+            className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0"
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            เพิ่มผู้สนใจ
+            <span className="lbl">เพิ่มผู้สนใจ</span>
           </button>
         </div>
       </div>

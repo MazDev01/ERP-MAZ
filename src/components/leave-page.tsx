@@ -172,13 +172,11 @@ export function LeavePage() {
           {/* มือถือ: ปุ่มลอยเหนือแถบเมนูล่าง แบบเดียวกับหน้าโอที (เจ้าของสั่ง 1 ต.ค. 2569) */}
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile shrink-0 max-md:fixed max-md:right-[18px] max-md:bottom-[calc(100px+env(safe-area-inset-bottom))] max-md:z-40 max-md:h-[58px]! max-md:w-[58px]! max-md:justify-center max-md:rounded-full! max-md:p-0! max-md:shadow-[0_14px_24px_-10px_rgb(200_16_46/0.9)]"
+            className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0"
             onClick={() => setDialogOpen(true)}
-            aria-label="ยื่นใบลา"
           >
-            <PlusIcon className="size-[15px] max-md:size-6" strokeWidth={2.2} />
-            {/* มือถือเป็นปุ่มกลมไอคอนเดียว ตามต้นแบบ leave.html (1 ต.ค. 2569) */}
-            <span className="max-md:hidden">ยื่นใบลา</span>
+            <PlusIcon className="size-[15px]" strokeWidth={2.2} />
+            <span className="lbl">ยื่นใบลา</span>
           </button>
         </div>
       </div>

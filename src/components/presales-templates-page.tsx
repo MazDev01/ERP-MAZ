@@ -99,10 +99,10 @@ export function PresalesTemplatesPage() {
           <button
             type="button"
             onClick={() => setEditing("new")}
-            className="btn solid btn-solid btn-block-mobile shrink-0"
+            className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0"
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            เพิ่มเทมเพลต
+            <span className="lbl">เพิ่มเทมเพลต</span>
           </button>
         </div>
       </div>

@@ -58,11 +58,11 @@ export function AccWhtPage() {
           <MonthNav view={view} onChange={setView} />
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile shrink-0"
+            className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0"
             onClick={() => setEditing("new")}
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            เพิ่มรายการ
+            <span className="lbl">เพิ่มรายการ</span>
           </button>
         </div>
       </div>

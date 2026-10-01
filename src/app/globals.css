@@ -1530,3 +1530,31 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     box-shadow: 0 1px 2px rgb(120 20 35 / 0.05), 0 12px 28px -18px rgb(120 20 35 / 0.3);
   }
 }
+
+/* ─── มือถือ: ปุ่มงานหลักของหน้าเป็นปุ่มกลมมุมขวาล่าง (ต้นแบบ leave.html · เจ้าของสั่ง 1 ต.ค. 2569) ───
+   เดิมเป็นแถบแดงเต็มความกว้างกินที่ในหน้ารายการ เปลี่ยนเป็นวงกลมลอยเหนือแถบเมนูล่างทุกหน้า
+   ข้อความยังอยู่ในปุ่ม (.lbl) แต่ซ่อนจากสายตา โปรแกรมอ่านหน้าจอจึงยังอ่านชื่อปุ่มได้
+   ต้องอยู่ท้ายไฟล์ เพราะต้องทับ .btn.btn-block-mobile ที่กว้างเต็มแถว */
+@media (max-width: 767px) {
+  .btn.fab-mobile {
+    position: fixed;
+    right: 18px;
+    bottom: calc(100px + env(safe-area-inset-bottom));
+    z-index: 40;
+    width: 58px;
+    height: 58px;
+    padding: 0;
+    border-radius: 50%;
+    justify-content: center;
+    box-shadow: 0 14px 24px -10px rgb(200 16 46 / 0.9);
+  }
+  .btn.fab-mobile svg { width: 24px; height: 24px; }
+  .btn.fab-mobile .lbl {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

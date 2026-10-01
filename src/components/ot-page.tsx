@@ -131,11 +131,11 @@ export function OtPage() {
              (ต้นแบบ dose-erp-maz/mobile/attendance.html · 30 ก.ย. 2569) */}
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile shrink-0 max-md:fixed max-md:inset-x-4 max-md:w-auto! max-md:bottom-[calc(104px+env(safe-area-inset-bottom))] max-md:z-40 max-md:h-[50px] max-md:justify-center max-md:rounded-[16px] max-md:shadow-[0_14px_24px_-12px_rgb(208_2_27/0.9)]"
+            className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0"
             onClick={() => setDialogOpen(true)}
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            ขอทำล่วงเวลา
+            <span className="lbl">ขอทำล่วงเวลา</span>
           </button>
         </div>
       </div>

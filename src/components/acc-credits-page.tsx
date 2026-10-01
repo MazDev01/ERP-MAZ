@@ -145,11 +145,11 @@ export function AccCreditsPage() {
           <div className="tools w-full sm:w-auto">
             <button
               type="button"
-              className="btn solid btn-solid btn-block-mobile"
+              className="btn solid btn-solid btn-block-mobile fab-mobile"
               data-ceo-hide
               onClick={() => setAsking("")}
             >
-              ขอออกใบลดหนี้
+              <span className="lbl">ขอออกใบลดหนี้</span>
             </button>
           </div>
         )}

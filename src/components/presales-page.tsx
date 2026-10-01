@@ -152,9 +152,9 @@ export function PresalesPage() {
             }}
             placeholder="ค้นหาเลขที่ใบงาน ผู้สนใจ หรือโจทย์"
           />
-          <Link href="/presales/new" className="btn solid btn-solid btn-block-mobile shrink-0">
+          <Link href="/presales/new" className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0">
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            ส่งคำขอใหม่
+            <span className="lbl">ส่งคำขอใหม่</span>
           </Link>
         </div>
       </div>
