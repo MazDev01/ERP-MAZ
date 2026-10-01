@@ -71,6 +71,13 @@ const CARD_BG: Record<Notice["level"], string> = {
   info: "linear-gradient(160deg,#9CBCEA,#1A3E8C)",
 };
 
+/* สีแถวเด่นในภาพจำลอง ให้เข้ากับระดับความเร่งด่วนของการ์ด */
+const ROW_ACCENT: Record<Notice["level"], string> = {
+  late: "rgb(192 18 31 / 0.55)",
+  soon: "rgb(180 99 11 / 0.55)",
+  info: "rgb(26 93 181 / 0.5)",
+};
+
 const CARD = "bg-white/72 backdrop-blur-[18px] border border-white/95 shadow-[0_12px_30px_-20px_rgb(140_20_40/0.45)]";
 
 /*
@@ -336,14 +343,36 @@ export function MobileHome({
                     className="relative h-[184px] w-[150px] flex-none overflow-hidden rounded-[24px] text-white shadow-[0_14px_28px_-18px_rgb(60_10_20/0.7)]"
                     style={{ background: CARD_BG[n.level] }}
                   >
+                    {/* ภาพจำลองหน้าปลายทางแบบเบลอ ตามต้นแบบ home-glass.html
+                       ต้นแบบใช้ภาพหน้าจอจริง ของเราวาดเป็นแถวรายการจาง ๆ แทน จะได้ไม่ต้องเก็บภาพทุกหน้า */}
+                    <span aria-hidden="true" className="absolute inset-0 overflow-hidden">
+                      <span className="absolute inset-x-2 top-2 bottom-6 flex flex-col gap-1.5 rounded-[18px] bg-white/80 p-2 blur-[1.5px]">
+                        {[0, 1, 2, 3].map((i) => (
+                          <span key={i} className="flex items-center gap-1.5 rounded-[9px] bg-white/85 px-1.5 py-1.5">
+                            <span
+                              className="size-[13px] flex-none rounded-[5px]"
+                              style={{ background: i === 1 ? ROW_ACCENT[n.level] : "rgb(140 120 125 / 0.35)" }}
+                            />
+                            <span className="flex min-w-0 flex-1 flex-col gap-1">
+                              <span className="h-[5px] w-[70%] rounded-full bg-[rgb(90_70_75/0.35)]" />
+                              <span className="h-[5px] w-[45%] rounded-full bg-[rgb(90_70_75/0.2)]" />
+                            </span>
+                            {i === 1 && (
+                              <span className="h-[6px] w-[22px] flex-none rounded-full" style={{ background: ROW_ACCENT[n.level] }} />
+                            )}
+                          </span>
+                        ))}
+                      </span>
+                    </span>
                     <span
                       aria-hidden="true"
                       className="absolute inset-0"
                       style={{ background: "linear-gradient(to top, rgba(38,16,22,.92) 0%, rgba(38,16,22,.5) 45%, rgba(38,16,22,.05) 75%)" }}
                     />
                     {/* ป้ายมุมบน = เรื่องที่ค้าง · ท้ายการ์ด = หน้าที่จะพาไป (ต้นแบบ home-glass.html) */}
-                    <span className="absolute top-2.5 right-2.5 flex h-7 max-w-[86%] items-center truncate rounded-full border border-white/45 bg-white/28 px-2.5 text-[11.5px] font-bold whitespace-nowrap backdrop-blur-[10px]">
-                      {n.group}
+                    <span className="absolute top-2.5 right-2.5 left-2.5 flex h-7 items-center gap-1 rounded-full bg-white/85 px-2.5 text-[11.5px] font-bold text-[#4A2B31] shadow-[0_4px_10px_-6px_rgb(60_10_20/0.6)]">
+                      <Icon className="size-3 flex-none" strokeWidth={2.2} />
+                      <span className="min-w-0 truncate">{n.group}</span>
                     </span>
                     <span className="absolute inset-x-3 bottom-3 flex flex-col gap-2">
                       <span className="line-clamp-3 text-[15px] leading-tight font-bold">{n.title}</span>
