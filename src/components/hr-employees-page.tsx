@@ -57,7 +57,7 @@ import { optionsOf } from "@/lib/options";
 import { useFindParam } from "@/lib/deep-link";
 import { USERS } from "@/lib/mock-data";
 import { useRole } from "@/lib/role";
-import { CalendarIcon, ClockIcon, PlusIcon, SearchIcon } from "./icons";
+import { ClockIcon, PlusIcon, SearchIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { EmployeeDetail, EmpPhoto, StatusPill } from "./hr-employee-detail";
 import { ThaiDatePicker } from "./thai-date-picker";
@@ -72,11 +72,12 @@ export function HrEmployeesPage() {
   const [dept, setDept] = useState<DeptKey | "">("");
   const [pos, setPos] = useState<PosKey | "">("");
   const [status, setStatus] = useState<EmpStatus | "">("");
+  const [etype, setEtype] = useState<EmpType | "">("");
   const [viewing, setViewing] = useState<string | null>(null);
   const [passing, setPassing] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  /** แผ่นตัวกรองแผนก/ตำแหน่งของมือถือเปิดอยู่หรือไม่ */
+  /** แผ่นตัวกรองสถานะ/แผนก/ตำแหน่งของมือถือเปิดอยู่หรือไม่ */
   const [sheet, setSheet] = useState(false);
   /** คนที่เพิ่งเพิ่ม — รอแถวขึ้นก่อนแล้วค่อยเลื่อนไปหา */
   const justAdded = useRef<string | null>(null);
@@ -100,10 +101,11 @@ export function HrEmployeesPage() {
       if (dept && !posOf(e).some((v) => hrPos(v).dept === dept)) return false;
       if (pos && !holdsPos(e, pos as PosKey)) return false;
       if (status && e.status !== status) return false;
+      if (etype && e.type !== etype) return false;
       if (q && !`${e.name} ${e.nick}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [hr.emp, query, dept, pos, status]);
+  }, [hr.emp, query, dept, pos, status, etype]);
 
   const current = viewing ? hr.emp.find((e) => e.id === viewing) : undefined;
   const passEmp = passing ? hr.emp.find((e) => e.id === passing) : undefined;
@@ -173,6 +175,21 @@ export function HrEmployeesPage() {
               <option value="left">พ้นสภาพ</option>
             </Select>
           </Field>
+          <Field label="ประเภท">
+            <Select
+              value={etype}
+              onChange={(e) => setEtype(e.target.value as EmpType | "")}
+              aria-label="กรองตามประเภทการจ้าง"
+              className="w-auto min-w-[150px]"
+            >
+              <option value="">ทุกประเภท</option>
+              {(Object.keys(HR_EMPTYPE) as EmpType[]).map((t) => (
+                <option key={t} value={t}>
+                  {HR_EMPTYPE[t].label}
+                </option>
+              ))}
+            </Select>
+          </Field>
           <button
             type="button"
             className="btn solid btn-solid"
@@ -195,12 +212,12 @@ export function HrEmployeesPage() {
             type="button"
             className="relative grid size-[42px] flex-none place-items-center rounded-full border border-border bg-card text-foreground shadow-[0_4px_10px_-6px_rgb(90_20_35/0.3)]"
             onClick={() => setSheet(true)}
-            aria-label="ตัวกรองแผนกและตำแหน่ง"
+            aria-label="ตัวกรองสถานะ แผนก และตำแหน่ง"
             aria-haspopup="dialog"
           >
             <FilterIcon className="size-[19px]" strokeWidth={2.2} />
-            {/* จุดแดงบอกว่ายังกรองแผนก/ตำแหน่งอยู่ ไม่งั้นเปิดมาเห็นคนน้อยแล้วไม่รู้ว่าทำไม */}
-            {(dept || pos) && (
+            {/* จุดแดงบอกว่ายังกรองอยู่ ไม่งั้นเปิดมาเห็นคนน้อยแล้วไม่รู้ว่าทำไม */}
+            {(status || dept || pos) && (
               <i className="absolute top-1.5 right-[7px] size-2 rounded-full border-2 border-white bg-primary" />
             )}
           </button>
@@ -218,17 +235,21 @@ export function HrEmployeesPage() {
           />
         </label>
 
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pt-3 pb-1 [scrollbar-width:none]" role="tablist" aria-label="สถานะ">
-          {STATUS_CHIPS.map((c) => (
+        <div
+          className="-mx-4 flex gap-2 overflow-x-auto px-4 pt-3 pb-1 [scrollbar-width:none]"
+          role="tablist"
+          aria-label="ประเภทการจ้าง"
+        >
+          {TYPE_CHIPS.map((c) => (
             <button
               key={c.v}
               type="button"
               role="tab"
-              aria-selected={status === c.v}
+              aria-selected={etype === c.v}
               className={`h-[38px] flex-none rounded-full px-4 text-[13.5px] font-semibold ${
-                status === c.v ? "bg-primary text-white" : "bg-[#EDE8EA] text-[#6E6164]"
+                etype === c.v ? "bg-primary text-white" : "bg-[#EDE8EA] text-[#6E6164]"
               }`}
-              onClick={() => setStatus(c.v)}
+              onClick={() => setEtype(c.v)}
             >
               {c.label}
             </button>
@@ -261,17 +282,22 @@ export function HrEmployeesPage() {
 
       {sheet && (
         <FilterSheet
+          status={status}
           dept={dept}
           pos={pos}
           posOptions={posOptions}
+          onStatus={setStatus}
           onDept={(v) => {
             setDept(v);
             if (v && pos && hrPos(pos as PosKey).dept !== v) setPos("");
           }}
           onPos={setPos}
           onClear={() => {
+            /* ต้นแบบ: ล้างแล้วปิดแผ่นเลย ไม่ต้องกดดูผลลัพธ์ซ้ำ */
+            setStatus("");
             setDept("");
             setPos("");
+            setSheet(false);
           }}
           onClose={() => setSheet(false)}
         />
@@ -313,26 +339,36 @@ export function HrEmployeesPage() {
 
 // ─── ตัวกรองและการ์ดพนักงาน ───────────────────────────────────────
 
-/** ชิปสถานะบนมือถือ — ชุดเดียวกับดรอปดาวน์สถานะของจอคอม */
-const STATUS_CHIPS: { v: EmpStatus | ""; label: string }[] = [
+/** ชิปประเภทการจ้างบนมือถือ — ชุดเดียวกับดรอปดาวน์ประเภทของจอคอม */
+const TYPE_CHIPS: { v: EmpType | ""; label: string }[] = [
   { v: "", label: "ทั้งหมด" },
-  { v: "active", label: "ปฏิบัติงานอยู่" },
-  { v: "left", label: "พ้นสภาพ" },
+  ...(Object.keys(HR_EMPTYPE) as EmpType[]).map((t) => ({ v: t, label: HR_EMPTYPE[t].label })),
 ];
 
-/* แผ่นตัวกรองของมือถือ — มีแค่แผนกกับตำแหน่ง เพราะค้นหากับสถานะอยู่บนหน้าแล้ว */
+/** สีกรอบการ์ดตามประเภทการจ้าง — ประจำแดงเข้ม ทดลองงานแดงอ่อน ฝึกงานเทาจาง */
+const TYPE_EDGE: Record<EmpType, string> = {
+  full: "var(--primary-deep, #8E0012)",
+  probat: "#F3A0AA",
+  intern: "#E1E4EA",
+};
+
+/* แผ่นตัวกรองของมือถือ — สถานะ แผนก ตำแหน่ง (ค้นหากับประเภทการจ้างอยู่บนหน้าแล้ว) */
 function FilterSheet({
+  status,
   dept,
   pos,
   posOptions,
+  onStatus,
   onDept,
   onPos,
   onClear,
   onClose,
 }: {
+  status: EmpStatus | "";
   dept: DeptKey | "";
   pos: PosKey | "";
   posOptions: { v: PosKey; label: string }[];
+  onStatus: (v: EmpStatus | "") => void;
   onDept: (v: DeptKey | "") => void;
   onPos: (v: PosKey | "") => void;
   onClear: () => void;
@@ -361,7 +397,14 @@ function FilterSheet({
         </div>
       }
     >
-      <Field label="แผนก">
+      <Field label="สถานะ">
+        <Select value={status} onChange={(e) => onStatus(e.target.value as EmpStatus | "")} className="w-full">
+          <option value="">ทุกสถานะ</option>
+          <option value="active">ปฏิบัติงานอยู่</option>
+          <option value="left">พ้นสภาพ</option>
+        </Select>
+      </Field>
+      <Field label="แผนก" className="mt-3">
         <Select value={dept} onChange={(e) => onDept(e.target.value as DeptKey | "")} className="w-full">
           <option value="">ทุกแผนก</option>
           {hrDepts().map((d) => (
@@ -409,36 +452,34 @@ function Mark({ text, query }: { text: string; query: string }) {
   );
 }
 
-function Donut({ pct }: { pct: number }) {
-  const r = 23;
+/* วงแหวนรอบรูป บอกช่วงเวลาทดลองงานที่ผ่านไปแล้ว ไม่ใช่คะแนนผลงาน
+   (ระบบยังไม่เก็บคะแนนผลงานของใคร) */
+function ProbRing({ pct }: { pct: number }) {
+  const r = 47;
   const c = 2 * Math.PI * r;
   const on = (c * pct) / 100;
   const col = probColor(pct);
   return (
-    <span
-      className="relative block size-14 sm:mx-auto"
+    <svg
+      viewBox="0 0 100 100"
+      className="pointer-events-none absolute -inset-[7px] size-[calc(100%+14px)] -rotate-90"
       role="img"
-      aria-label={`ผ่านช่วงเวลาทดลองงานแล้ว ${pct} เปอร์เซ็นต์ (นับจากวันที่ ไม่ใช่คะแนนผลงาน)`}
+      aria-label={`ทดลองงานไปแล้ว ${pct} เปอร์เซ็นต์ของระยะทดลองงาน (นับตามวัน ไม่ใช่คะแนนผลงาน)`}
     >
-      <svg width="56" height="56" viewBox="0 0 56 56" className="block -rotate-90">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="#DFE3EA" strokeWidth="5" />
-        {pct > 0 && (
-          <circle
-            cx="28"
-            cy="28"
-            r={r}
-            fill="none"
-            stroke={col}
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeDasharray={`${on.toFixed(2)} ${(c - on).toFixed(2)}`}
-          />
-        )}
-      </svg>
-      <b className="num absolute inset-0 flex items-center justify-center text-xs font-extrabold" style={{ color: col }}>
-        {pct}%
-      </b>
-    </span>
+      <circle cx="50" cy="50" r={r} fill="none" stroke="#E6E9EF" strokeWidth="4" />
+      {pct > 0 && (
+        <circle
+          cx="50"
+          cy="50"
+          r={r}
+          fill="none"
+          stroke={col}
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={`${on.toFixed(2)} ${(c - on).toFixed(2)}`}
+        />
+      )}
+    </svg>
   );
 }
 
@@ -447,10 +488,13 @@ function Info({
   children,
   icon: Icon,
   tone,
+  big,
 }: {
   children: React.ReactNode;
   icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement;
   tone?: "warn" | "bad";
+  /** บรรทัดในคอลัมน์ขวา ตัวโตกว่าบรรทัดสรุปนิดหนึ่งตามต้นแบบ */
+  big?: boolean;
 }) {
   const skin =
     tone === "bad"
@@ -459,8 +503,12 @@ function Info({
         ? "font-semibold text-[var(--warning)]"
         : "text-muted-foreground";
   return (
-    <span className={`inline-flex items-center gap-[5px] text-[11.5px] max-md:text-[12px] ${skin}`}>
-      <Icon className="size-[13px] flex-none" strokeWidth={2} />
+    <span
+      className={`inline-flex items-start gap-[5px] leading-[1.35] ${
+        big ? "text-[12px] max-md:text-[11.5px]" : "text-[11.5px] max-md:text-[12px]"
+      } ${skin}`}
+    >
+      <Icon className="mt-[2px] size-[13px] flex-none" strokeWidth={2} />
       {children}
     </span>
   );
@@ -503,7 +551,7 @@ function EmpCard({
 
   return (
     /* กดที่ไหนก็ได้ในการ์ดเพื่อเปิดประวัติ — รองรับคีย์บอร์ดด้วย Enter/Space
-       มือถือเป็นตาราง 2 คอลัมน์ รูปกินแถวซ้ายทั้งใบ ข้อมูลเรียงลงมาในคอลัมน์ขวา */
+       มือถือเป็นตาราง 3 คอลัมน์ รูปซ้าย ข้อมูลกลาง สถานะขวา */
     <div
       role="button"
       tabIndex={0}
@@ -516,25 +564,26 @@ function EmpCard({
       }}
       aria-label={`ดูประวัติของ ${emp.name}`}
       data-emp-id={emp.id}
-      className={`flex cursor-pointer items-center gap-5 rounded-[14px] bg-card py-3.5 pr-[26px] pl-[18px] shadow-[0_1px_2px_rgb(31_36_48/0.04),0_6px_18px_-12px_rgb(31_36_48/0.18)] transition-shadow hover:shadow-[0_1px_2px_rgb(31_36_48/0.05),0_12px_26px_-12px_rgb(31_36_48/0.26)] max-md:grid max-md:grid-cols-[56px_minmax(0,1fr)] max-md:items-start max-md:gap-x-3.5 max-md:gap-y-0.5 max-md:pr-4 max-md:pl-3 ${
+      /* กรอบการ์ดบอกประเภทการจ้าง แทนการแยกกลุ่มแบบเดิม */
+      style={{ borderColor: TYPE_EDGE[emp.type] }}
+      className={`flex cursor-pointer items-center gap-5 rounded-[14px] border-2 bg-card py-3.5 pr-[26px] pl-[18px] shadow-[0_1px_2px_rgb(31_36_48/0.04),0_6px_18px_-12px_rgb(31_36_48/0.18)] transition-shadow hover:shadow-[0_1px_2px_rgb(31_36_48/0.05),0_12px_26px_-12px_rgb(31_36_48/0.26)] max-md:grid max-md:grid-cols-[68px_minmax(0,1fr)_auto] max-md:items-start max-md:gap-x-3 max-md:gap-y-0.5 max-md:py-3.5 max-md:pr-4 max-md:pl-3 ${
         gone ? "opacity-[.62]" : ""
       }`}
     >
-      {/* รูปวงกลมขอบขาวหนา เงานุ่ม ลอยออกจากการ์ด ยังไม่มีรูปก็เป็นวงว่าง */}
-      <EmpPhoto
-        note={false}
-        className="size-16 rounded-full border-4! border-white! bg-[#EEF0F4]! shadow-[0_8px_18px_-6px_rgb(31_36_48/0.3)] max-md:row-span-5 max-md:size-14 max-md:border-[3px]!"
-      />
+      {/* รูปวงกลมขอบขาว คนทดลองงานมีวงแหวนรอบรูปบอกช่วงเวลาที่ผ่านไปแล้ว (ไม่ใช่คะแนนผลงาน) */}
+      <span className="relative block flex-none leading-none max-md:mt-1.5 max-md:ml-1.5 max-md:[grid-area:1/1/4/2]">
+        <EmpPhoto
+          note={false}
+          className="size-16 rounded-full border-4! border-white! bg-[#EEF0F4]! shadow-[0_8px_18px_-6px_rgb(31_36_48/0.3)] max-md:size-14 max-md:border-[3px]!"
+        />
+        {onProbation && <ProbRing pct={probPct(emp.startedAt, today)} />}
+      </span>
 
       <span className="min-w-0 flex-1 max-md:contents">
-        <span className="flex items-start justify-between gap-2.5 md:items-center md:justify-start">
-          <b className="text-base font-semibold max-md:font-bold max-md:leading-snug">
-            <Mark text={emp.name} query={query} />
-          </b>
-          <StatusPill emp={emp} />
-        </span>
-        {/* ตำแหน่งบรรทัดหนึ่ง แผนกตัวเล็กจางอีกบรรทัด */}
-        <span className="block text-[13px] md:mt-[3px] max-md:font-semibold">
+        <b className="block text-base font-semibold max-md:[grid-area:1/2/2/3] max-md:font-bold max-md:leading-snug">
+          <Mark text={emp.name} query={query} />
+        </b>
+        <span className="block text-[13px] md:mt-[3px] max-md:[grid-area:2/2/3/3] max-md:font-semibold">
           {p.label}
           {/* ควบตำแหน่งอื่นด้วย — ตำแหน่งหลักยังเป็นตัวคิดเงินเดือนและสายอนุมัติ */}
           {(emp.posMore ?? []).length > 0 && (
@@ -544,21 +593,10 @@ function EmpCard({
             </span>
           )}
         </span>
-        <span className="block text-[12px] text-muted-foreground md:mt-px">{hrDept(p.dept).label}</span>
-        <span className="mt-2 flex flex-wrap gap-x-[18px] gap-y-1 max-md:gap-x-3.5">
-          <Info icon={CalendarIcon}>เริ่ม {thaiDate(emp.startedAt)}</Info>
+        <span className="mt-2 flex flex-wrap gap-x-[18px] gap-y-1 max-md:[grid-area:3/2/4/4] max-md:gap-x-3.5">
           <Info icon={ClockIcon}>
             {emp.leftAt ? "ทำงานรวม" : "ทำงานมาแล้ว"} {empYears(emp.startedAt, today, emp.leftAt)}
           </Info>
-          {left !== null && (
-            <Info icon={left < 0 ? AlertIcon : FlagIcon} tone={left < 0 ? "bad" : "warn"}>
-              {left < 0
-                ? `เลยกำหนดทดลองงาน ${Math.abs(left)} วัน`
-                : left === 0
-                  ? "ครบกำหนดวันนี้"
-                  : `ครบกำหนดอีก ${left} วัน`}
-            </Info>
-          )}
           {emp.leftAt && (
             <Info icon={AlertIcon} tone="bad">
               พ้นสภาพ {thaiDate(emp.leftAt)}
@@ -567,21 +605,17 @@ function EmpCard({
         </span>
       </span>
 
-      {/* ขวาการ์ด: วงแหวนบอก "ช่วงเวลา" ทดลองงานที่ผ่านมาแล้ว ไม่ใช่คะแนนผลงาน
-          คนที่ไม่ได้ทดลองงานขึ้นเป็นประเภทการจ้าง เพราะเลิกแยกกลุ่มตามประเภทแล้ว */}
-      <span className="flex-none md:w-[110px] md:text-center max-md:mt-1.5">
-        {onProbation ? (
-          <>
-            <Donut pct={probPct(emp.startedAt, today)} />
-            <span className="block text-[11.5px] leading-snug text-muted-foreground max-md:mt-1.5 md:mt-1.5">
-              ผ่านช่วงทดลองงาน
-              <span className="max-md:hidden"> (นับตามวัน)</span>
-            </span>
-          </>
-        ) : (
-          <span className="block text-[11.5px] leading-snug text-muted-foreground max-md:text-[12px]">
-            {HR_EMPTYPE[emp.type].label}
-          </span>
+      {/* คอลัมน์ขวา: สถานะ และกำหนดครบทดลองงานใต้สถานะ */}
+      <span className="flex flex-none flex-col items-end gap-[7px] text-right max-md:max-w-[140px] max-md:[grid-area:1/3/3/4]">
+        <StatusPill emp={emp} />
+        {left !== null && (
+          <Info icon={left < 0 ? AlertIcon : FlagIcon} tone={left < 0 ? "bad" : "warn"} big>
+            {left < 0
+              ? `เลยกำหนดทดลองงาน ${Math.abs(left)} วัน`
+              : left === 0
+                ? "ครบกำหนดวันนี้"
+                : `ครบกำหนดอีก ${left} วัน`}
+          </Info>
         )}
       </span>
     </div>
