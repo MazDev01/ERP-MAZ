@@ -323,15 +323,21 @@ export function HrPayrollPage() {
           ) : (
             /* มือถือ: ป้ายสถานะ CEO เต็มแถว ตัดบรรทัดได้ ปุ่มแบ่งกันเต็มแถวใต้ป้าย */
             <div className="my-2 ml-auto flex flex-wrap items-center gap-2 max-sm:ml-0 max-sm:w-full max-sm:[&>.btn]:h-10! max-sm:[&>.btn]:flex-1 max-sm:[&>.btn]:justify-center max-sm:[&>.tag]:order-first max-sm:[&>.tag]:whitespace-normal!">
+              {/* มือถือ: ปุ่มย้ายไปท้ายรายการ ป้ายสถานะ CEO ยังอยู่ด้านบน (ต้นแบบ pay-bottom) */}
               {canSend && (
-                <button type="button" className="btn glass-thin" style={{ height: 38 }} onClick={sendToCeo}>
+                <button
+                  type="button"
+                  className="btn glass-thin max-md:hidden!"
+                  style={{ height: 38 }}
+                  onClick={sendToCeo}
+                >
                   ส่งให้ CEO อนุมัติ
                 </button>
               )}
               <CeoTag ap={ap} drifted={drifted} />
               <button
                 type="button"
-                className="btn solid btn-solid disabled:opacity-45"
+                className="btn solid btn-solid disabled:opacity-45 max-md:hidden!"
                 style={{ height: 38 }}
                 disabled={Boolean(payCloseWhy)}
                 title={payCloseWhy || undefined}
@@ -595,6 +601,25 @@ export function HrPayrollPage() {
             />
           ))}
         </PhoneList>
+
+        {/* มือถือ: ปุ่มของรอบอยู่ท้ายรายการ ให้ไล่ดูตัวเลขก่อนแล้วค่อยตัดสิน (ต้นแบบ pay-bottom) */}
+        {!payClosed && (
+          <div className="flex flex-col gap-2 px-4 pt-3.5 md:hidden [&>.btn]:h-[50px]! [&>.btn]:w-full [&>.btn]:justify-center [&>.btn]:rounded-[14px]! [&>.btn]:text-[15px]">
+            {canSend && (
+              <button type="button" className="btn glass-thin" onClick={sendToCeo}>
+                ส่งให้ CEO อนุมัติ
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn solid btn-solid disabled:opacity-45"
+              disabled={Boolean(payCloseWhy)}
+              onClick={() => setClosing(true)}
+            >
+              ปิดรอบเงินเดือน
+            </button>
+          </div>
+        )}
 
         {/* แถบท้ายมีเฉพาะแท็บรายวัน — รายเดือนมีแถวรวมท้ายตารางแล้ว (ต้นแบบ) */}
         {blocked || tab === "month" ? null : (
@@ -1089,6 +1114,17 @@ function Note({ children }: { children: React.ReactNode }) {
 
 // ─── ปิดรอบเงินเดือน ──────────────────────────────────────────────
 
+/*
+ * สไตล์กล่องยืนยันบนมือถือ (ต้นแบบ pay-dlg ชุด 1 ต.ค. 2569)
+ * สรุปรอบเป็นกล่องชมพู · ตัวเลขเป็นแถว ชื่อซ้ายค่าขวา · คำเตือนเป็นกล่องเหลือง
+ */
+const PAY_DLG_HEAD =
+  "max-sm:flex max-sm:flex-col max-sm:gap-0.5 max-sm:rounded-[14px] max-sm:bg-[#FDF0F2] max-sm:px-3.5 max-sm:py-3 max-sm:text-[13px]";
+const PAY_DLG_KV =
+  "max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-0 max-sm:rounded-[14px] max-sm:bg-[#FAF6F7] max-sm:px-3.5 max-sm:[&>dd]:border-b max-sm:[&>dd]:border-[#F0E6E8] max-sm:[&>dd]:py-2.5 max-sm:[&>dd]:text-right max-sm:[&>dd]:last-of-type:border-0 max-sm:[&>dt]:border-b max-sm:[&>dt]:border-[#F0E6E8] max-sm:[&>dt]:py-2.5 max-sm:[&>dt]:pr-3 max-sm:[&>dt]:font-normal! max-sm:[&>dt]:whitespace-nowrap max-sm:[&>dt]:last-of-type:border-0";
+const PAY_DLG_NOTE =
+  "max-sm:rounded-[14px] max-sm:bg-[#FFF6E5] max-sm:px-3.5 max-sm:py-3 max-sm:text-[13px] max-sm:text-[#7A4A07]";
+
 function CloseDialog({
   month,
   group,
@@ -1145,8 +1181,15 @@ function CloseDialog({
         </>
       }
     >
-      <p className="text-[12.5px] text-muted-foreground">
-        รอบ {thaiMonth(month)} · {thaiDate(c.from)} – {thaiDate(c.to)} · กลุ่ม {GROUP_LABEL[group]}
+      {/* มือถือ: สรุปรอบเป็นกล่องชมพู ชื่อรอบเด่น (ต้นแบบ pay-dlg) */}
+      <p className={`text-[12.5px] text-muted-foreground ${PAY_DLG_HEAD}`}>
+        <span className="max-sm:text-[16px] max-sm:font-bold max-sm:text-foreground">รอบ {thaiMonth(month)}</span>
+        <span className="max-sm:hidden"> · </span>
+        <span>
+          {thaiDate(c.from)} – {thaiDate(c.to)}
+        </span>
+        <span className="max-sm:hidden"> · </span>
+        <span className="max-sm:font-bold max-sm:text-primary">กลุ่ม {GROUP_LABEL[group]}</span>
       </p>
 
       {/* ขาดใบไหนต้องเห็นตรงนี้ด้วย คนกดยืนยันกับคนอ่านหน้าจออาจไม่ใช่คนเดียวกัน */}
@@ -1157,7 +1200,7 @@ function CloseDialog({
       )}
 
         <>
-          <dl className="mt-3 grid gap-2 text-[13.5px] sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-x-4">
+          <dl className={`mt-3 grid gap-2 text-[13.5px] sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-x-4 ${PAY_DLG_KV}`}>
             <dt className="text-[12.5px] font-semibold text-muted-foreground">พนักงานในรอบ</dt>
             <dd className="num font-semibold">{people} คน</dd>
             <dt className="text-[12.5px] font-semibold text-muted-foreground">ยอดจ่ายสุทธิ</dt>
@@ -1165,7 +1208,7 @@ function CloseDialog({
             <dt className="text-[12.5px] font-semibold text-muted-foreground">นำส่งประกันสังคม</dt>
             <dd className="num font-semibold">{baht(ss * 2)} บาท</dd>
           </dl>
-          <p className="mt-3 text-[12.5px] leading-relaxed text-muted-foreground">
+          <p className={`mt-3 text-[12.5px] leading-relaxed text-muted-foreground ${PAY_DLG_NOTE}`}>
             ปิดรอบแล้วแก้ไขไม่ได้อีก และข้อมูลจะถูกส่งไปออกสลิปเงินเดือน ตรวจให้ครบก่อนกดปิด
           </p>
         </>
@@ -1224,8 +1267,12 @@ function ReopenDialog({
         </>
       }
     >
-      <p className="text-[12.5px] text-muted-foreground">
-        รอบ {thaiMonth(month)} · {thaiDate(c.from)} – {thaiDate(c.to)}
+      <p className={`text-[12.5px] text-muted-foreground ${PAY_DLG_HEAD}`}>
+        <span className="max-sm:text-[16px] max-sm:font-bold max-sm:text-foreground">รอบ {thaiMonth(month)}</span>
+        <span className="max-sm:hidden"> · </span>
+        <span>
+          {thaiDate(c.from)} – {thaiDate(c.to)}
+        </span>
       </p>
 
       <div className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-3 text-[12.5px] leading-relaxed text-destructive">

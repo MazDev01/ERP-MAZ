@@ -274,6 +274,14 @@ export function HrPayslipPage() {
           </span>
         </div>
 
+        {/* มือถือ: กด "สร้างสลิป" ไม่ได้เพราะสร้างไปแล้ว ต้องบอกบนหน้าจอ ชี้ค้างบนปุ่มไม่มีบนมือถือ
+            (ต้นแบบ ps-hint ชุด 1 ต.ค. 2569) ส่วนกรณียังไม่ปิดรอบ รายการด้านล่างบอกพร้อมลิงก์ไว้แล้ว */}
+        {payClosed && state !== "none" && (
+          <p className="px-4 pt-0.5 text-center text-[12.5px] text-muted-foreground md:hidden">
+            สร้างสลิปของรอบนี้แล้ว
+          </p>
+        )}
+
         {/* ปิดรอบแล้วต้องอ่านออกทันทีว่าทำไมทุกช่องแก้ไม่ได้ ไม่ใช่ให้ไปเดาเอาจากปุ่มที่กดไม่ลง */}
         {payClosed && (
           <p className="mx-3 mt-3 rounded-[11px] bg-muted/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">

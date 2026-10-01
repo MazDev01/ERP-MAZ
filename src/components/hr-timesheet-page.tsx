@@ -48,7 +48,7 @@ import { HrSteps, useUrlMonth } from "./hr-steps";
 import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack } from "./hr-pay-mobile";
 import { usePendingInMonth, useHrTime, useMissingApproved, type MissingReq } from "@/lib/hr-link";
 import { MissingBox } from "./hr-payroll-page";
-import { PencilIcon } from "./icons";
+import { ChevronDownIcon, PencilIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { Field, Select } from "./ui";
 import { PhoneCard, PhoneList } from "./acchr-phone";
@@ -221,9 +221,10 @@ export function HrTimesheetPage() {
               ปิดรอบแล้ว {thaiDate(closedAt)}
             </span>
           ) : (
+            /* มือถือ: ปุ่มปิดรอบย้ายไปท้ายรายการ ให้ไล่ดูข้อมูลก่อน (ต้นแบบ pay-bottom) */
             <button
               type="button"
-              className="btn solid btn-solid my-2 ml-auto disabled:opacity-45"
+              className="btn solid btn-solid my-2 ml-auto disabled:opacity-45 max-md:hidden!"
               style={{ height: 38 }}
               /* ปิดรอบไม่ได้ถ้ายังไม่ถึงวันตัดรอบ หรือยังมีรายการค้างตรวจ
                  กันตรงนี้ ไม่ใช่ไปเตือนตอนกดยืนยัน */
@@ -312,6 +313,20 @@ export function HrTimesheetPage() {
             />
           ))}
         </PhoneList>
+
+        {/* มือถือ: ปุ่มปิดรอบอยู่ท้ายรายการ เต็มความกว้าง (ต้นแบบ pay-bottom ชุด 1 ต.ค. 2569) */}
+        {!locked && (
+          <div className="px-4 pt-3.5 md:hidden">
+            <button
+              type="button"
+              className="btn solid btn-solid h-[50px]! w-full justify-center rounded-[14px]! text-[15px] disabled:opacity-45"
+              disabled={Boolean(closeWhy)}
+              onClick={() => setClosing(true)}
+            >
+              ปิดรอบ
+            </button>
+          </div>
+        )}
 
         {/* แถบท้ายมีเฉพาะแท็บรายวัน ตามต้นแบบ */}
         {tab === "month" ? null : (
@@ -516,61 +531,88 @@ function TimeCard({
   onOpen: () => void;
   onEdit: () => void;
 }) {
-  const open = openIssues(r).length;
-  const fixed = r.issues.length - open;
+  /*
+   * ต้นแบบชุด 1 ต.ค. 2569 (บล็อก ts-collapse) พับการ์ดไว้ก่อน
+   * เห็นแค่ชื่อ ตำแหน่ง และสถานะต้องตรวจ แตะแล้วค่อยกางตัวเลขของรอบ
+   * รอบหนึ่งมีสิบกว่าคน ถ้ากางหมดตั้งแต่แรกต้องปัดยาวกว่าจะเจอคนที่ติดปัญหา
+   */
+  const [open, setOpen] = useState(false);
+  const issues = openIssues(r).length;
+  const fixed = r.issues.length - issues;
   const late = lateMin(r);
   const lv = leaveDays(r);
   const otW = otHours(r, "after_work");
   const otH = otHours(r, "holiday") + otHours(r, "public");
+  const badge =
+    issues > 0 ? (
+      <span className="tag t-late">
+        <i />
+        ต้องตรวจ {issues}
+      </span>
+    ) : fixed > 0 ? (
+      <span className="tag t-early">
+        <i />
+        บันทึกเหตุผลแล้ว
+      </span>
+    ) : waitDocs > 0 ? (
+      <span className="tag t-early">
+        <i />
+        รออนุมัติ {waitDocs} ใบ
+      </span>
+    ) : (
+      <span className="tag t-ok">
+        <i />
+        ครบถ้วน
+      </span>
+    );
   return (
     <PhoneCard
       title={e.name}
       sub={hrPos(e.pos).label}
-      alert={open > 0}
-      onOpen={onOpen}
-      openLabel={`ดูรายละเอียดรายวันของ ${e.name}`}
-      amount={`${days} วัน`}
-      amountNote={dayLabel}
-      badge={
-        open > 0 ? (
-          <span className="tag t-late">
-            <i />
-            ต้องตรวจ {open}
-          </span>
-        ) : fixed > 0 ? (
-          <span className="tag t-early">
-            <i />
-            บันทึกเหตุผลแล้ว
-          </span>
-        ) : waitDocs > 0 ? (
-          <span className="tag t-early">
-            <i />
-            รออนุมัติ {waitDocs} ใบ
-          </span>
-        ) : (
-          <span className="tag t-ok">
-            <i />
-            ครบถ้วน
-          </span>
-        )
-      }
+      alert={issues > 0}
+      /* สถานะอยู่ขวาชื่อ เห็นได้ทั้งตอนพับและตอนกาง */
+      amount={badge}
+      onOpen={() => setOpen(!open)}
+      openLabel={`${open ? "ซ่อน" : "ดู"}รายละเอียดของ ${e.name}`}
       statRows
-      stats={[
-        { label: "มาสาย (นาที)", value: late, muted: !late },
-        /* ลาที่อนุมัติแล้ว · ใบที่ยังรออนุมัติต่อท้ายให้เห็น ยังไม่นับเป็นวันลา */
-        { label: "ลา (วัน)", value: waitDays > 0 ? `${lv} (รอ ${waitDays})` : lv, muted: !lv && !waitDays },
-        { label: "โอทีวันธรรมดา", value: `${otW.toFixed(2)} ชม.`, muted: !otW },
-        { label: "โอทีวันหยุด", value: `${otH.toFixed(2)} ชม.`, muted: !otH },
-      ]}
-      actions={
-        locked || r.issues.length === 0 ? undefined : (
-          <button type="button" className="btn glass-thin" onClick={onEdit}>
-            <PencilIcon className="size-4" strokeWidth={1.9} />
-            แก้ไขรายการที่ต้องตรวจ
-          </button>
-        )
+      stats={
+        open
+          ? [
+              { label: dayLabel, value: `${days} วัน` },
+              { label: "มาสาย (นาที)", value: late, muted: !late },
+              /* ลาที่อนุมัติแล้ว · ใบที่ยังรออนุมัติต่อท้ายให้เห็น ยังไม่นับเป็นวันลา */
+              { label: "ลา (วัน)", value: waitDays > 0 ? `${lv} (รอ ${waitDays})` : lv, muted: !lv && !waitDays },
+              { label: "โอทีวันธรรมดา", value: `${otW.toFixed(2)} ชม.`, muted: !otW },
+              { label: "โอทีวันหยุด", value: `${otH.toFixed(2)} ชม.`, muted: !otH },
+            ]
+          : undefined
       }
-    />
+      actions={
+        open ? (
+          <>
+            <button
+              type="button"
+              className="btn border-0! bg-[#FAF6F7]! font-bold text-primary!"
+              onClick={onOpen}
+            >
+              ดูรายละเอียดรายวัน
+            </button>
+            {!locked && r.issues.length > 0 && (
+              <button type="button" className="btn glass-thin" onClick={onEdit}>
+                <PencilIcon className="size-4" strokeWidth={1.9} />
+                แก้ไขรายการที่ต้องตรวจ
+              </button>
+            )}
+          </>
+        ) : undefined
+      }
+    >
+      {/* บอกว่าแตะได้ ไม่งั้นการ์ดที่พับอยู่ดูเหมือนไม่มีอะไรข้างใน */}
+      <p className="mt-2 flex items-center justify-center gap-1 text-[12px] text-[#9A8E91]">
+        {open ? "ซ่อนรายละเอียด" : "แตะเพื่อดูรายละเอียด"}
+        <ChevronDownIcon className={`size-3.5 ${open ? "rotate-180" : ""}`} strokeWidth={2.4} />
+      </p>
+    </PhoneCard>
   );
 }
 
