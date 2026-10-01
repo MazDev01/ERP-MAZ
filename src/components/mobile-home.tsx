@@ -33,7 +33,7 @@ import { useAcc } from "@/lib/acc-store";
 import { usePm } from "@/lib/pm-store";
 import { useHr } from "@/lib/hr-store";
 import { expectedInMinutes, formatMinutesOfDay } from "@/lib/work-schedule";
-import type { NavItem } from "@/lib/nav";
+import { pageTitle, type NavItem } from "@/lib/nav";
 import type { Notice } from "@/lib/notifications";
 import { ICONS } from "./app-shell";
 import { BellIcon, ChevronRightIcon, ClockIcon, HomeIcon, LeaveIcon, ReceiptIcon, SearchIcon } from "./icons";
@@ -47,6 +47,22 @@ const TILE = [
   "linear-gradient(150deg,#5A9BF0,#1F63C4)",
   "linear-gradient(150deg,#EE5A6F,#B0101F)",
 ];
+
+/** ไอคอนของหน้าปลายทาง — ใช้ชุดเดียวกับเมนู */
+function iconKeyOf(href: string): keyof typeof ICONS {
+  const path = href.split("?")[0];
+  if (path.startsWith("/acc/billing")) return "billing";
+  if (path.startsWith("/acc/receipts")) return "receipt";
+  if (path.startsWith("/leave") || path.startsWith("/approvals")) return "leave";
+  if (path.startsWith("/ot")) return "ot";
+  if (path.startsWith("/hr")) return "team";
+  if (path.startsWith("/pm") || path.startsWith("/my-tasks")) return "tasks";
+  if (path.startsWith("/quotations")) return "quotation";
+  if (path.startsWith("/leads")) return "leads";
+  if (path.startsWith("/presales")) return "presales";
+  if (path.startsWith("/deals")) return "deals";
+  return "home";
+}
 
 /* พื้นหลังการ์ด "ต้องทำ" — ไล่สีตามระดับความเร่งด่วนของเรื่องนั้น */
 const CARD_BG: Record<Notice["level"], string> = {
@@ -311,27 +327,36 @@ export function MobileHome({
               </span>
             </div>
             <div className="flex gap-3 overflow-x-auto pl-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {notices.slice(0, 6).map((n) => (
-                <Link
-                  key={n.id}
-                  href={n.href}
-                  className="relative h-[184px] w-[150px] flex-none overflow-hidden rounded-[24px] text-white shadow-[0_14px_28px_-18px_rgb(60_10_20/0.7)]"
-                  style={{ background: CARD_BG[n.level] }}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0"
-                    style={{ background: "linear-gradient(to top, rgba(38,16,22,.92) 0%, rgba(38,16,22,.5) 45%, rgba(38,16,22,.05) 75%)" }}
-                  />
-                  <span className="absolute top-2.5 right-2.5 flex h-7 max-w-[86%] items-center truncate rounded-full border border-white/45 bg-white/28 px-2.5 text-[11.5px] font-bold whitespace-nowrap backdrop-blur-[10px]">
-                    {n.group}
-                  </span>
-                  <span className="absolute inset-x-3 bottom-3 flex flex-col gap-2">
-                    <span className="line-clamp-3 text-[15px] leading-tight font-bold">{n.title}</span>
-                    <span className="line-clamp-2 text-[11.5px] text-white/85">{n.detail}</span>
-                  </span>
-                </Link>
-              ))}
+              {notices.slice(0, 6).map((n) => {
+                const Icon = ICONS[iconKeyOf(n.href)] ?? HomeIcon;
+                return (
+                  <Link
+                    key={n.id}
+                    href={n.href}
+                    className="relative h-[184px] w-[150px] flex-none overflow-hidden rounded-[24px] text-white shadow-[0_14px_28px_-18px_rgb(60_10_20/0.7)]"
+                    style={{ background: CARD_BG[n.level] }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0"
+                      style={{ background: "linear-gradient(to top, rgba(38,16,22,.92) 0%, rgba(38,16,22,.5) 45%, rgba(38,16,22,.05) 75%)" }}
+                    />
+                    {/* ป้ายมุมบน = เรื่องที่ค้าง · ท้ายการ์ด = หน้าที่จะพาไป (ต้นแบบ home-glass.html) */}
+                    <span className="absolute top-2.5 right-2.5 flex h-7 max-w-[86%] items-center truncate rounded-full border border-white/45 bg-white/28 px-2.5 text-[11.5px] font-bold whitespace-nowrap backdrop-blur-[10px]">
+                      {n.group}
+                    </span>
+                    <span className="absolute inset-x-3 bottom-3 flex flex-col gap-2">
+                      <span className="line-clamp-3 text-[15px] leading-tight font-bold">{n.title}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="grid size-[22px] flex-none place-items-center rounded-full bg-white/90 text-primary">
+                          <Icon className="size-3" strokeWidth={2.2} />
+                        </span>
+                        <span className="truncate text-[11.5px] text-white/85">{pageTitle(n.href.split("?")[0], role)}</span>
+                      </span>
+                    </span>
+                  </Link>
+                );
+              })}
               <span className="w-2 flex-none" />
             </div>
           </>
