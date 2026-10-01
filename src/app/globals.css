@@ -978,13 +978,18 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 @media (max-width: 767.98px) {
   /* บนมือถือแท็บขึ้นบรรทัดใหม่ได้ เส้นใต้จึงใช้ไม่ได้ — แท็บแถวบนจะมีเส้น แถวล่างไม่มี
      เปลี่ยนเป็นปุ่มเม็ดยาแทน อันที่เลือกอยู่เป็นสีแดงทึบ มองออกทันทีไม่ว่าจะตกไปบรรทัดไหน */
+  /* แท็บมากกว่าสามอันเลื่อนแนวนอนแถวเดียว ไม่ตกบรรทัดจนกินพื้นที่ครึ่งจอ
+     (ต้นแบบมือถือชุดใหม่ attendance.html · เจ้าของแจ้ง 30 ก.ย. 2569) */
   .tabs {
-    flex-wrap: wrap;
-    overflow-x: visible;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
     row-gap: 8px;
     gap: 8px;
     padding: 10px 0;
   }
+  .tabs::-webkit-scrollbar { display: none }
+  .tabs button { flex: none }
   .tabs button {
     /* ยืดเต็มความกว้างแถว ไม่ปล่อยที่ว่างท้ายบรรทัด (เจ้าของสั่ง 29 ก.ย. 2569) */
     flex: 1 1 auto;

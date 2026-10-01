@@ -191,7 +191,7 @@ export function OtPage() {
         ))}
       </div>
 
-      <section className="panel glass flex flex-col max-md:mb-20 max-md:border-0! max-md:bg-transparent! max-md:shadow-none!">
+      <section className="panel glass flex flex-col max-md:mb-24 max-md:border-0! max-md:bg-transparent! max-md:shadow-none!">
         <div className="strip">
           <div className="tabs">
             {TABS.map((t) => {
@@ -250,7 +250,7 @@ export function OtPage() {
 
         <ul className="flex flex-col gap-2.5 pt-2.5 md:hidden">
           {list.length === 0 ? (
-            <li className="px-5 py-12 text-center text-muted-foreground">
+            <li className="rounded-[22px] border border-white/95 bg-white/72 px-5 py-10 text-center text-muted-foreground shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px]">
               ไม่มีรายการในเดือนนี้
             </li>
           ) : (
@@ -267,7 +267,8 @@ export function OtPage() {
           <span className="sum">
             ชั่วโมงที่อนุมัติแล้วรวม<b>{totalPaid.toFixed(2)}</b> ชั่วโมง
           </span>
-          <div className="pages justify-center sm:justify-start">
+          {/* หน้าเดียวไม่ต้องมีแถบเลขหน้าบนมือถือ — กินที่เปล่า ๆ */}
+          <div className={`pages justify-center sm:justify-start ${maxPage <= 1 ? "max-md:hidden" : ""}`}>
             <button
               type="button"
               className="glass-thin"

@@ -373,11 +373,26 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         */}
         {viewIsToday ? (
           <div className="relative flex justify-center py-3">
+            {/* วงแหวนกระเพื่อมรอบปุ่ม — ต้นแบบมือถือ (30 ก.ย. 2569) พร้อมแสงฟุ้งด้านหลัง
+               กระเพื่อมเฉพาะตอนที่ยังกดได้ ไม่งั้นจะกวนสายตาตอนทำงานอยู่ */}
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 left-1/2 size-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-              style={{ background: "radial-gradient(circle, rgba(208,2,27,.16) 0%, rgba(208,2,27,0) 62%)" }}
+              className="pointer-events-none absolute top-1/2 left-1/2 size-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(208,2,27,.18) 0%, rgba(208,2,27,0) 62%)" }}
             />
+            {!isWorking && now && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="animate-punch-ping pointer-events-none absolute top-1/2 left-1/2 size-[236px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/25"
+                />
+                <span
+                  aria-hidden="true"
+                  className="animate-punch-ping pointer-events-none absolute top-1/2 left-1/2 size-[236px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20"
+                  style={{ animationDelay: "1.1s" }}
+                />
+              </>
+            )}
             <button
               type="button"
               disabled={!now}
