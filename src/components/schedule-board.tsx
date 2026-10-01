@@ -444,9 +444,67 @@ export function ScheduleBoard<T>({
           )}
         </div>
 
-        {/* จอแคบให้ปฏิทินหดพอดีจอ ไม่ต้องเลื่อนข้าง — ของเดิมบังคับ 640px
-            ทำให้บนมือถือเห็นแค่ 4 วันจาก 7 วัน มองไม่เห็นทั้งเดือน */}
-        <div className="overflow-x-auto">
+        {/* ── มือถือ: ปฏิทินแบบจุด (ชุดเดียวกับปฏิทินในหน้าวางบิลและหน้าการลา · 1 ต.ค. 2569) ──
+           ตารางแถบหลายชั้นบีบลงจอแคบแล้วอ่านไม่ออก เหลือเลขวันกับจุดสีบอกว่าวันนั้นมีอะไร
+           แตะวันแล้วเปิดรายการของวันนั้นเป็นแผ่นเลื่อนขึ้นมา (ป็อปอัพเดิม) */}
+        <div className="sm:hidden">
+          <div className="grid grid-cols-7 text-center text-[12px] text-muted-foreground">
+            {DW.map((d) => (
+              <span key={d} className="py-1">{d}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {weeks
+              .flatMap((ws) => Array.from({ length: 7 }, (_, i) => shift(ws, i)))
+              .map((d) => {
+                const day = toIsoDate(d);
+                const outside = view === "month" && d.getMonth() !== cursor.getMonth();
+                /* จุดสีบอกชนิดของรายการในวันนั้น ไม่เกินสามจุด เกินกว่านั้นแตะเข้าไปดูในรายการ */
+                const dots = [
+                  ...new Set(
+                    liveRows.filter((e) => e.start <= day && e.end >= day).map((e) => e.dot),
+                  ),
+                ].slice(0, 3);
+                const hol = holidaysBetween(day, day).length > 0;
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => {
+                      nav.pickDay(day);
+                      setDaySheet(true);
+                    }}
+                    className="flex h-[52px] flex-col items-center justify-center gap-1"
+                    aria-label={`ดูนัดหมายวันที่ ${thaiDate(day)}`}
+                  >
+                    <b
+                      className={`grid size-[34px] place-items-center rounded-full text-[14px] font-semibold ${
+                        day === sel
+                          ? "bg-primary text-white"
+                          : day === todayKey
+                            ? "text-primary"
+                            : outside
+                              ? "text-muted-foreground/50"
+                              : hol
+                                ? "text-destructive"
+                                : ""
+                      }`}
+                    >
+                      {d.getDate()}
+                    </b>
+                    <span className="flex h-[5px] items-center gap-[3px]">
+                      {dots.map((c) => (
+                        <i key={c} className="size-[5px] rounded-full" style={{ background: c }} />
+                      ))}
+                    </span>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+
+        {/* จอกว้าง: ตารางแถบเต็มรูปแบบเหมือนเดิม */}
+        <div className="overflow-x-auto max-sm:hidden">
           <div className="sm:min-w-[640px]">
             <div className="grid grid-cols-7">
               {DW.map((d) => (
