@@ -125,7 +125,7 @@ export function HrEmployeesPage() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="ชื่อ หรือชื่อเล่น"
               aria-label="ค้นหาพนักงาน"
-              className="w-full sm:w-[230px]"
+              className="w-full sm:w-[196px]"
             />
           </Field>
           <Field label="แผนก" className="max-sm:min-w-0 max-sm:flex-1">
@@ -138,7 +138,7 @@ export function HrEmployeesPage() {
                 if (next && pos && hrPos(pos as PosKey).dept !== next) setPos("");
               }}
               aria-label="กรองตามแผนก"
-              className="w-auto min-w-[150px] max-sm:w-full max-sm:min-w-0"
+              className="w-full sm:w-[136px]"
             >
               <option value="">ทุกแผนก</option>
               {hrDepts().map((d) => (
@@ -153,7 +153,7 @@ export function HrEmployeesPage() {
               value={pos}
               onChange={(e) => setPos(e.target.value as PosKey | "")}
               aria-label="กรองตามตำแหน่ง"
-              className="w-auto min-w-[150px] max-sm:w-full max-sm:min-w-0"
+              className="w-full sm:w-[136px]"
             >
               <option value="">ทุกตำแหน่ง</option>
               {posOptions.map((p) => (
@@ -168,7 +168,7 @@ export function HrEmployeesPage() {
               value={status}
               onChange={(e) => setStatus(e.target.value as EmpStatus | "")}
               aria-label="กรองตามสถานะ"
-              className="w-auto min-w-[150px] max-sm:w-full max-sm:min-w-0"
+              className="w-full sm:w-[136px]"
             >
               <option value="">ทุกสถานะ</option>
               <option value="active">ปฏิบัติงานอยู่</option>
@@ -180,7 +180,7 @@ export function HrEmployeesPage() {
               value={etype}
               onChange={(e) => setEtype(e.target.value as EmpType | "")}
               aria-label="กรองตามประเภทการจ้าง"
-              className="w-auto min-w-[150px]"
+              className="w-full sm:w-[136px]"
             >
               <option value="">ทุกประเภท</option>
               {(Object.keys(HR_EMPTYPE) as EmpType[]).map((t) => (
