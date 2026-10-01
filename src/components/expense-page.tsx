@@ -47,6 +47,7 @@ import {
   TrashIcon,
 } from "./icons";
 import { ApproverNote } from "./approver-note";
+import { ExpenseMobile } from "./expense-mobile";
 
 import { DateField } from "./thai-date-picker";
 /*
@@ -109,7 +110,11 @@ export function ExpensePage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar no-print">
+      {/* มือถือใช้จอของตัวเอง (ต้นแบบ expense.html · 1 ต.ค. 2569) — รายการใบเบิก → เลือกประเภท → กรอกแล้วส่ง
+         ของเดิมเป็นแบบฟอร์มเต็มใบเหมือนกระดาษ ซึ่งกรอกบนมือถือยากมาก */}
+      <ExpenseMobile />
+
+      <div className="bar no-print max-md:hidden!">
         <div>
           <h1>เบิกค่าใช้จ่าย</h1>
           <ApproverNote kind="expense" />
@@ -166,7 +171,7 @@ export function ExpensePage() {
       </div>
 
       {claim.status === "ไม่อนุมัติ" && claim.comment && (
-        <p className="no-print rounded-xl border border-destructive/20 bg-[var(--destructive-soft)] px-4 py-3 text-sm text-destructive">
+        <p className="no-print max-md:hidden max-md:hidden rounded-xl border border-destructive/20 bg-[var(--destructive-soft)] px-4 py-3 text-sm text-destructive">
           ผู้อนุมัติตีกลับ: {claim.comment} — แก้ไขแล้วยื่นใหม่ได้
         </p>
       )}
@@ -181,7 +186,7 @@ export function ExpensePage() {
       {tried && reasons.length > 0 && (
         <div
           ref={alertRef}
-          className="no-print rounded-xl border border-destructive/20 bg-[var(--destructive-soft)] px-4 py-3 text-sm text-destructive"
+          className="no-print max-md:hidden rounded-xl border border-destructive/20 bg-[var(--destructive-soft)] px-4 py-3 text-sm text-destructive"
           role="alert"
         >
           <b className="font-semibold">ยังยื่นไม่ได้ — ต้องแก้ {reasons.length} จุด</b>
@@ -193,7 +198,7 @@ export function ExpensePage() {
         </div>
       )}
 
-      <section className="panel glass flex flex-col">
+      <section className="panel glass flex flex-col max-md:hidden!">
         <div className="strip no-print">
           <div className="tabs">
             <button type="button" className="on">
@@ -297,7 +302,9 @@ export function ExpensePage() {
       </section>
 
       {/* ค่าใช้จ่ายอื่นนอกจากค่าน้ำมัน (Full Proposal · M6) — ประเภทมาจากข้อมูลหลัก */}
-      <OtherCard rows={claim.other ?? []} month={month} locked={locked} tried={tried} total={otherSum} />
+      <div className="max-md:hidden">
+        <OtherCard rows={claim.other ?? []} month={month} locked={locked} tried={tried} total={otherSum} />
+      </div>
 
     </div>
   );
