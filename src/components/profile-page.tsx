@@ -50,7 +50,8 @@ export function ProfilePage() {
    */
   const panes = PANES;
   const fallback: Pane = "profile";
-  const initial = (params.get("tab") as Pane) || fallback;
+  const tabParam = params.get("tab");
+  const initial = (tabParam as Pane) || fallback;
   const [pane, setPane] = useState<Pane>(initial);
   /*
    * แผงที่เปิดอยู่จริง — บทบาทอ่านจาก localStorage จึงรู้หลัง hydrate
@@ -67,7 +68,22 @@ export function ProfilePage() {
    * มือถือ: หน้ารวมก่อน แล้วค่อยเข้าไปทีละเรื่อง (ต้นแบบ mobile/profile-glass.html 30 ก.ย. 2569)
    * เดิมยัดทุกแผงไว้หน้าเดียวจนต้องเลื่อนยาวมาก · จอกว้างยังเป็นสองคอลัมน์เหมือนเดิม
    */
-  const [open, setOpen] = useState<Pane | null>(params.get("tab") ? initial : null);
+  const [open, setOpen] = useState<Pane | null>(tabParam ? initial : null);
+
+  /*
+   * มาจากลิงก์ ?tab=... เช่น "เปลี่ยนรหัสผ่าน" ในเมนูบัญชี
+   * ตอนอยู่หน้า /profile อยู่แล้ว Next เปลี่ยนแค่ค่าในที่อยู่เว็บ ไม่ได้สร้างคอมโพเนนต์ใหม่
+   * ถ้าอ่าน ?tab= แค่ตอนเรนเดอร์แรก กดแล้วจะค้างอยู่แผงเดิม (เจ้าของแจ้ง 1 ต.ค. 2569)
+   * จึงปรับสถานะตอนที่ค่าในที่อยู่เว็บเปลี่ยน ไม่ใช่ใน useEffect (กันวาดซ้ำซ้อน)
+   */
+  const [seenTab, setSeenTab] = useState(tabParam);
+  if (tabParam !== seenTab) {
+    setSeenTab(tabParam);
+    if (tabParam && panes.some((p) => p.key === tabParam)) {
+      setPane(tabParam as Pane);
+      setOpen(tabParam as Pane);
+    }
+  }
 
   /* เปิดเรื่องย่อยอยู่ — ปุ่มย้อนกลับบนแถบหัวพากลับมาหน้ารวมโปรไฟล์ ไม่ใช่ออกไปหน้าหลักเลย */
   useEffect(() => {
