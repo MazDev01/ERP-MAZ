@@ -149,7 +149,7 @@ export function GmCalendarPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="bar max-sm:hidden!">
         <div>
           <p>ปฏิทินของทั้งบริษัท · วันลาทุกคน กำหนดส่งมอบโปรเจค และนัดหมาย</p>
         </div>

@@ -114,18 +114,8 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
   /** การ์ดที่กำลังเปิดคุยกับ PM เรื่องงานใบนั้น */
   const [talking, setTalking] = useState<Row | null>(null);
   const [toast, setToast] = useState("");
-  const listRef = useRef<HTMLDivElement>(null);
-
-  /* จอมือถือ: กดการ์ดสรุปแล้วเลื่อนลงไปที่รายการงาน ตามต้นแบบ (scrollToList)
-     จอกว้างเห็นรายการอยู่แล้ว ไม่ต้องเลื่อน */
-  function toList() {
-    const el = listRef.current;
-    if (!el || !window.matchMedia("(max-width: 639px)").matches) return;
-    /* รายการสั้นเลื่อนขึ้นไม่ถึงใต้หัวหน้า ให้พื้นที่รายการสูงอย่างน้อยเท่าจอที่เหลือ */
-    el.style.minHeight = `${Math.max(0, window.innerHeight - 180)}px`;
-    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    requestAnimationFrame(() => el.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" }));
-  }
+  /* เคยเลื่อนหน้าลงไปที่รายการเองตอนกดชิปขั้นของงาน — ผู้ใช้แจ้ง 1 ต.ค. 2569 ว่ากดแล้วหน้าเลื่อนเอง
+     ชิปอยู่ติดกับรายการอยู่แล้ว ไม่ต้องเลื่อนให้ */
 
   /* งานของตัวเองเท่านั้น — จับคู่ด้วยรหัสพนักงานที่อยู่ในทีมของโปรเจค */
   const mine = useMemo<Row[]>(
@@ -201,15 +191,12 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
             stage={k}
             n={counts[k]}
             on={stage === k}
-            onClick={() => {
-              setStage(k);
-              toList();
-            }}
+            onClick={() => setStage(k)}
           />
         ))}
       </div>
 
-      <div ref={listRef} className="flex scroll-mt-20 flex-col gap-3.5">
+      <div className="flex flex-col gap-3.5">
         {rows.length === 0 ? (
           <p className="glass rounded-[18px] px-5 py-14 text-center text-[13.5px] text-muted-foreground">
             {query.trim() ? "ไม่พบงานที่ค้นหา" : "ไม่มีงานในกลุ่มนี้"}

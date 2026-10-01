@@ -116,7 +116,7 @@ export function PmSchedulePage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="bar max-sm:hidden!">
         <div>
           <p>
             {canEdit

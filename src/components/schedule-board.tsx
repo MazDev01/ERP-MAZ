@@ -38,6 +38,11 @@ const MAX_LANES = { month: 3, week: 12 };
 
 
 const DW = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+const DW_FULL = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+/* เส้นเวลาของมุมมองสัปดาห์บนมือถือ 08:00–19:00 ชั่วโมงละ 64px (ต้นแบบ ms-mobile) */
+const H0 = 8;
+const H1 = 19;
+const HPX = 64;
 const MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const MON_FULL = [
   "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -162,6 +167,76 @@ export function boardOn<T>(all: BoardEvent<T>[], day: string) {
     .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
 }
 
+/** นาที จาก HH:mm */
+function minOf(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + (m || 0);
+}
+
+/** ไอคอนเมนูสามขีด (ปุ่มเลือกมุมมองบนมือถือ) */
+function MenuGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+/** หนึ่งรายการในรายการนัดของวัน (มือถือ) — ไอคอนกลมสีของประเภท ชื่อ และช่วงเวลา */
+function PhoneRow<T>({
+  e,
+  kind,
+  onOpen,
+}: {
+  e: BoardEvent<T>;
+  kind?: BoardKind;
+  onOpen?: (e: BoardEvent<T>) => void;
+}) {
+  const inner = (
+    <>
+      <span
+        className="grid size-[34px] flex-none place-items-center rounded-full"
+        style={{ color: e.dot, background: `color-mix(in srgb, ${e.dot} 10%, transparent)` }}
+        aria-hidden="true"
+      >
+        <CalGlyph />
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <small className="text-[11.5px] text-muted-foreground">{kind?.label}</small>
+        <b className={`text-[14.5px] leading-snug font-bold ${e.cancelled ? "text-muted-foreground line-through" : ""}`}>
+          {e.title}
+        </b>
+        <span className="num text-[12.5px] text-muted-foreground">
+          {e.time ? `${e.time}${e.timeEnd ? ` – ${e.timeEnd}` : ""} น.` : "ทั้งวัน"}
+        </span>
+      </span>
+    </>
+  );
+  const cls = "flex w-full items-start gap-3 py-3.5 text-left";
+  if (e.href) {
+    return (
+      <Link href={e.href} className={cls}>
+        {inner}
+      </Link>
+    );
+  }
+  if (e.inert || !onOpen) return <div className={cls}>{inner}</div>;
+  return (
+    <button type="button" className={cls} onClick={() => onOpen(e)}>
+      {inner}
+    </button>
+  );
+}
+
+function CalGlyph() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2.5" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
 export function ScheduleBoard<T>({
   nav,
   events,
@@ -193,6 +268,8 @@ export function ScheduleBoard<T>({
    * จอกว้างไม่เปิดป็อปอัพ เพราะรายการอยู่คอลัมน์ซ้ายให้เห็นอยู่แล้ว
    */
   const [daySheet, setDaySheet] = useState(false);
+  /* เมนูเลือกมุมมองบนมือถือ (รายเดือน / รายสัปดาห์) */
+  const [vmenu, setVmenu] = useState(false);
   const phone = () => window.matchMedia("(max-width: 1099.98px)").matches;
   /* นัดที่ยกเลิกแล้วไม่ลงปฏิทิน แต่ยังอยู่ในรายการของวันที่เลือก */
   const liveRows = rows.filter((e) => !e.cancelled);
@@ -362,6 +439,20 @@ export function ScheduleBoard<T>({
         </section>
       </aside>
 
+      {/* มือถือ: ปุ่มกลมเพิ่มนัดของวันที่เลือก มุมขวาล่าง (ต้นแบบ ms-fab) */}
+      {onAdd && (
+        <button
+          type="button"
+          aria-label="เพิ่มนัดหมาย"
+          onClick={() => onAdd(sel)}
+          className="fixed right-[18px] bottom-[calc(var(--botbar,86px)+22px)] z-40 grid size-[58px] place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_14px_24px_-10px_rgb(200_16_46/0.9)] sm:hidden"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      )}
+
       {/* ป็อปอัพรายการนัดของวันที่เลือก — เฉพาะจอแคบ */}
       {daySheet && (
         <Sheet
@@ -393,7 +484,63 @@ export function ScheduleBoard<T>({
       )}
 
       <section className="glass order-1 min-w-0 rounded-[16px] p-[18px_20px] max-sm:p-[14px_12px] min-[1100px]:order-none">
-        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5">
+        {/* มือถือ: หัวแบบแอปปฏิทิน — วันที่ที่เลือกตัวใหญ่ ปุ่มกลมเลื่อนช่วง และเมนูเลือกมุมมอง
+            (ต้นแบบ pm-schedule.html บล็อก ms-mobile · ms-red 1 ต.ค. 2569) */}
+        <div className="mb-3 flex items-center gap-2.5 sm:hidden">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-muted-foreground">ตารางงาน</p>
+            <h2 className="num mt-0.5 text-[20px] font-bold">
+              {thaiDate(sel)}
+              <span className="ml-1.5 text-[15px] font-medium text-muted-foreground">
+                วัน{DW_FULL[new Date(`${sel}T00:00:00`).getDay()]}
+              </span>
+            </h2>
+          </div>
+          <button type="button" className="iconbtn glass-thin size-9 rounded-full" aria-label="ก่อนหน้า" onClick={() => nav.step(-1)}>
+            <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
+          </button>
+          <button type="button" className="iconbtn glass-thin size-9 rounded-full" aria-label="ถัดไป" onClick={() => nav.step(1)}>
+            <ChevronRightIcon className="size-4" strokeWidth={2.4} />
+          </button>
+          <span className="relative flex-none">
+            <button
+              type="button"
+              className="iconbtn glass-thin size-9 rounded-full"
+              aria-label="เลือกมุมมองปฏิทิน"
+              aria-haspopup="true"
+              aria-expanded={vmenu}
+              onClick={() => setVmenu((v) => !v)}
+            >
+              <MenuGlyph />
+            </button>
+            {vmenu && (
+              <span
+                role="menu"
+                className="absolute top-11 right-0 z-30 flex min-w-[150px] flex-col rounded-[16px] border border-border bg-card p-1.5 shadow-[0_16px_30px_-14px_rgb(90_20_35/0.35)]"
+              >
+                {VIEWS.map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={view === v.key}
+                    onClick={() => {
+                      nav.setView(v.key);
+                      setVmenu(false);
+                    }}
+                    className={`h-[42px] rounded-[10px] px-3 text-left text-[14px] font-semibold ${
+                      view === v.key ? "bg-accent text-primary" : ""
+                    }`}
+                  >
+                    {v.key === "month" ? "รายเดือน" : "รายสัปดาห์"}
+                  </button>
+                ))}
+              </span>
+            )}
+          </span>
+        </div>
+
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5 max-sm:hidden">
           <div className="flex items-center gap-2.5">
             <button type="button" className="iconbtn glass-thin" aria-label="ก่อนหน้า" onClick={() => nav.step(-1)}>
               <ChevronLeftIcon className="size-3.5" strokeWidth={2.4} />
@@ -425,7 +572,7 @@ export function ScheduleBoard<T>({
           </div>
         </div>
 
-        <div className="holstrip">
+        <div className="holstrip max-sm:hidden!">
           <b>วันหยุดเดือนนี้</b>
           {monthHols.length === 0 ? (
             <span className="none">ไม่มีวันหยุดบริษัท</span>
@@ -444,63 +591,118 @@ export function ScheduleBoard<T>({
           )}
         </div>
 
-        {/* ── มือถือ: ปฏิทินแบบจุด (ชุดเดียวกับปฏิทินในหน้าวางบิลและหน้าการลา · 1 ต.ค. 2569) ──
-           ตารางแถบหลายชั้นบีบลงจอแคบแล้วอ่านไม่ออก เหลือเลขวันกับจุดสีบอกว่าวันนั้นมีอะไร
-           แตะวันแล้วเปิดรายการของวันนั้นเป็นแผ่นเลื่อนขึ้นมา (ป็อปอัพเดิม) */}
+        {/* ── มือถือ: ปฏิทินการ์ดแดง แตะวันแล้วรายการของวันนั้นขึ้นใต้ปฏิทินทันที
+             มุมมองสัปดาห์เป็นเส้นเวลารายชั่วโมง (ต้นแบบ pm-schedule.html บล็อก ms-mobile · ms-red) ── */}
         <div className="sm:hidden">
-          <div className="grid grid-cols-7 text-center text-[12px] text-muted-foreground">
-            {DW.map((d) => (
-              <span key={d} className="py-1">{d}</span>
-            ))}
+          <div className="overflow-hidden rounded-[22px] bg-primary px-2 pt-3 pb-3 text-white shadow-[0_14px_26px_-18px_rgb(200_16_46/0.9)]">
+            <div className="grid grid-cols-7 text-center text-[12px] text-white/75">
+              {DW.map((d) => (
+                <span key={d} className="py-1">{d}</span>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {(view === "week" ? [weekStart] : weeks)
+                .flatMap((ws) => Array.from({ length: 7 }, (_, i) => shift(ws, i)))
+                .map((d) => {
+                  const day = toIsoDate(d);
+                  const outside = view === "month" && d.getMonth() !== cursor.getMonth();
+                  /* จุดสีบอกว่าวันนั้นมีรายการ ไม่เกินสามจุด เกินกว่านั้นดูในรายการข้างล่าง */
+                  const dots = [
+                    ...new Set(liveRows.filter((e) => e.start <= day && e.end >= day).map((e) => e.dot)),
+                  ].slice(0, 3);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => nav.pickDay(day)}
+                      aria-pressed={day === sel}
+                      className="flex h-[52px] flex-col items-center justify-center gap-1"
+                      aria-label={`ดูนัดหมายวันที่ ${thaiDate(day)}`}
+                    >
+                      <b
+                        className={`grid size-[34px] place-items-center rounded-full text-[14px] font-semibold ${
+                          day === sel
+                            ? "bg-white text-primary shadow-[0_6px_12px_-6px_rgb(60_0_10/0.6)]"
+                            : day === todayKey
+                              ? "ring-[1.5px] ring-white/80 ring-inset"
+                              : outside
+                                ? "text-white/45"
+                                : ""
+                        }`}
+                      >
+                        {d.getDate()}
+                      </b>
+                      <span className="flex h-[5px] items-center gap-[3px]">
+                        {dots.map((c) => (
+                          <i key={c} className="size-[5px] rounded-full bg-white/90" />
+                        ))}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
           </div>
-          <div className="grid grid-cols-7">
-            {weeks
-              .flatMap((ws) => Array.from({ length: 7 }, (_, i) => shift(ws, i)))
-              .map((d) => {
-                const day = toIsoDate(d);
-                const outside = view === "month" && d.getMonth() !== cursor.getMonth();
-                /* จุดสีบอกชนิดของรายการในวันนั้น ไม่เกินสามจุด เกินกว่านั้นแตะเข้าไปดูในรายการ */
-                const dots = [
-                  ...new Set(
-                    liveRows.filter((e) => e.start <= day && e.end >= day).map((e) => e.dot),
-                  ),
-                ].slice(0, 3);
-                const hol = holidaysBetween(day, day).length > 0;
+
+          {view === "month" ? (
+            /* รายการนัดของวันที่เลือก — อยู่ใต้ปฏิทินเลย ไม่ต้องเปิดแผ่นซ้อน */
+            <>
+              <div className="mt-4 flex items-center justify-between">
+                <h3 className="text-[17px] font-bold">
+                  {sel === todayKey ? "นัดหมายวันนี้" : `นัดหมาย ${thaiDate(sel)}`}
+                </h3>
+                {dayRows.length > 0 && (
+                  <span className="num text-[12.5px] text-muted-foreground">{dayRows.length} รายการ</span>
+                )}
+              </div>
+              <ul className="mt-1 border-t border-border">
+                {dayRows.length === 0 ? (
+                  <li className="py-7 text-center text-[13.5px] text-muted-foreground">ไม่มีนัดหมาย</li>
+                ) : (
+                  dayRows.map((e) => (
+                    <li key={e.id} className="border-b border-border">
+                      <PhoneRow e={e} kind={dotOf[e.kind]} onOpen={onOpen} />
+                    </li>
+                  ))
+                )}
+              </ul>
+            </>
+          ) : (
+            /* มุมมองสัปดาห์: เส้นเวลารายชั่วโมงของวันที่เลือก */
+            <div className="relative mt-4">
+              {Array.from({ length: H1 - H0 + 1 }, (_, i) => (
+                <div key={i} className="grid h-16 grid-cols-[44px_1fr]">
+                  <span className="num -translate-y-1.5 text-[11.5px] leading-none text-muted-foreground">
+                    {String(H0 + i).padStart(2, "0")}:00
+                  </span>
+                  <i className="border-t border-border" />
+                </div>
+              ))}
+              {dayRows.map((e) => {
+                const from = Math.max(minOf(e.time ?? `${H0}:00`), H0 * 60);
+                const to = Math.min(minOf(e.timeEnd ?? `${H1}:00`), (H1 + 1) * 60);
+                const top = ((from - H0 * 60) / 60) * HPX;
+                const h = Math.max(46, ((to - from) / 60) * HPX - 4);
                 return (
                   <button
-                    key={day}
+                    key={e.id}
                     type="button"
-                    onClick={() => {
-                      nav.pickDay(day);
-                      setDaySheet(true);
-                    }}
-                    className="flex h-[52px] flex-col items-center justify-center gap-1"
-                    aria-label={`ดูนัดหมายวันที่ ${thaiDate(day)}`}
+                    onClick={() => onOpen?.(e)}
+                    style={{ top, height: h, background: `color-mix(in srgb, ${e.dot} 12%, transparent)` }}
+                    className="absolute right-0 left-[52px] flex flex-col gap-0.5 overflow-hidden rounded-[14px] px-3 py-2 text-left shadow-[0_6px_14px_-10px_rgb(40_20_25/0.4)]"
                   >
-                    <b
-                      className={`grid size-[34px] place-items-center rounded-full text-[14px] font-semibold ${
-                        day === sel
-                          ? "bg-primary text-white"
-                          : day === todayKey
-                            ? "text-primary"
-                            : outside
-                              ? "text-muted-foreground/50"
-                              : hol
-                                ? "text-destructive"
-                                : ""
-                      }`}
-                    >
-                      {d.getDate()}
-                    </b>
-                    <span className="flex h-[5px] items-center gap-[3px]">
-                      {dots.map((c) => (
-                        <i key={c} className="size-[5px] rounded-full" style={{ background: c }} />
-                      ))}
-                    </span>
+                    <b className="text-[13.5px] leading-tight font-bold">{e.title}</b>
+                    <small className="text-[11.5px] text-muted-foreground">{dotOf[e.kind]?.label}</small>
+                    {h > 70 && e.time && (
+                      <span className="num mt-auto text-[11.5px] text-muted-foreground">
+                        {e.time}
+                        {e.timeEnd ? ` – ${e.timeEnd}` : ""} น.
+                      </span>
+                    )}
                   </button>
                 );
               })}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* จอกว้าง: ตารางแถบเต็มรูปแบบเหมือนเดิม */}
