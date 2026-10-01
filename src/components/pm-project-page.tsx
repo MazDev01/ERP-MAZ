@@ -87,6 +87,17 @@ export function PmProjectPage({ deal }: { deal: string }) {
   return <Detail project={project} />;
 }
 
+/** รูปกลุ่มบนหัวหน้าแชท */
+function TeamGlyph() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="8" r="3.4" />
+      <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+      <path d="M16 4.5a3.4 3.4 0 0 1 0 6.6M18 14.8c1.8.7 3 2.5 3 5.2" />
+    </svg>
+  );
+}
+
 /** ไอคอนปุ่มแชทลอยบนมือถือ */
 function ChatGlyph() {
   return (
@@ -109,6 +120,7 @@ function Detail({ project }: { project: Project }) {
   /* มือถือ: แชทโปรเจคเป็นปุ่มลอยมุมขวาล่าง กดแล้วเปิดหน้าต่างแชท
      (ต้นแบบ pm-project.html บล็อก pd-chat 1 ต.ค. 2569) — จอแคบมีที่ไม่พอให้แชทยาวอยู่ในหน้า */
   const [chatOpen, setChatOpen] = useState(false);
+  const memberCount = new Set(project.tasks.flatMap((t) => t.whos)).size;
   const [renaming, setRenaming] = useState(false);
   const title = projName(project);
   /* GM เปิดดูได้อย่างเดียว — ซ่อนปุ่มแก้ชื่อและช่องแชท (ต้นแบบ pm-project.html?as=gm) */
@@ -283,25 +295,29 @@ function Detail({ project }: { project: Project }) {
         <div
           role="dialog"
           aria-label="แชทโปรเจค"
-          className="fixed inset-x-2.5 bottom-[calc(var(--botbar,86px)+22px)] z-70 flex h-[min(70vh,560px)] flex-col overflow-hidden rounded-[22px] bg-card shadow-[0_24px_50px_-16px_rgb(40_20_25/0.45)] sm:hidden"
+          className="fixed inset-0 z-100 flex flex-col bg-[#F3EFF0] sm:hidden"
         >
-          <div className="flex flex-none items-center gap-2.5 bg-primary px-3.5 py-3 text-primary-foreground">
-            <b className="min-w-0 flex-1 text-[15.5px]">
-              แชทโปรเจค
-              <small className="block text-[12px] font-medium opacity-85">{projName(project)}</small>
-            </b>
+          {/* หัวแบบแอปแชท: ปุ่มย้อนกลับ รูปกลุ่ม ชื่อโปรเจค และจำนวนสมาชิก */}
+          <div className="flex flex-none items-center gap-2.5 border-b border-border bg-card px-3 pt-[max(10px,env(safe-area-inset-top))] pb-2.5">
             <button
               type="button"
-              aria-label="ปิดแชท"
+              aria-label="กลับ"
               onClick={() => setChatOpen(false)}
-              className="grid size-[34px] flex-none place-items-center rounded-full bg-white/20"
+              className="grid size-10 flex-none place-items-center rounded-full"
             >
-              <CloseIcon className="size-[18px]" strokeWidth={2.4} />
+              <ChevronLeftIcon className="size-[22px]" strokeWidth={2.4} />
             </button>
+            <span aria-hidden className="grid size-[38px] flex-none place-items-center rounded-full bg-[#FCE3E7] text-primary">
+              <TeamGlyph />
+            </span>
+            <b className="min-w-0 flex-1 text-[15.5px] leading-tight">
+              <span className="block truncate">{projName(project)}</span>
+              <small className="block text-[12px] font-medium text-muted-foreground">
+                สมาชิก {memberCount} คน
+              </small>
+            </b>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[#FAF6F7] p-2.5 [&_section>p:first-child]:hidden">
-            <Chat project={project} today={today} />
-          </div>
+          <Chat project={project} today={today} fill />
         </div>
       )}
 
@@ -1038,7 +1054,17 @@ function sizeOf(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function Chat({ project, today }: { project: Project; today: string }) {
+function Chat({
+  project,
+  today,
+  /* โหมดเต็มจอบนมือถือ — ไม่มีหัวข้อ กล่องไม่มีขอบ และรายการข้อความยืดเต็มที่ว่าง
+     (ต้นแบบ pm-project.html บล็อก pd-chat ชุด 1 ต.ค. 2569 แชทเป็นหน้าเต็มแบบแอปแชท) */
+  fill,
+}: {
+  project: Project;
+  today: string;
+  fill?: boolean;
+}) {
   const [draft, setDraft] = useState("");
   /* ไฟล์ที่เลือกไว้แต่ยังไม่ได้ส่ง เอาออกได้ก่อนกดส่ง */
   const [pick, setPick] = useState<{ n: string; sz: string }[]>([]);
@@ -1084,8 +1110,8 @@ function Chat({ project, today }: { project: Project; today: string }) {
   }
 
   return (
-    <section>
-      <BlockTitle>แชทโปรเจค</BlockTitle>
+    <section className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
+      {!fill && <BlockTitle>แชทโปรเจค</BlockTitle>}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -1099,11 +1125,18 @@ function Chat({ project, today }: { project: Project; today: string }) {
           setDropping(false);
           take(e.dataTransfer.files);
         }}
-        className={`flex flex-col rounded-[14px] border bg-card p-3.5 ${
-          dropping ? "border-primary ring-2 ring-primary/20" : "border-border"
+        className={`flex flex-col ${
+          fill
+            ? "min-h-0 flex-1 bg-transparent p-0"
+            : `rounded-[14px] border bg-card p-3.5 ${dropping ? "border-primary ring-2 ring-primary/20" : "border-border"}`
         }`}
       >
-        <div ref={listRef} className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto">
+        <div
+          ref={listRef}
+          className={`flex flex-col gap-1.5 overflow-y-auto ${
+            fill ? "min-h-0 flex-1 px-3 pt-3 pb-1.5" : "max-h-[360px]"
+          }`}
+        >
           {rows.length === 0 && (
             <p className="w-full py-8 text-center text-[12.5px] text-muted-foreground">
               ยังไม่มีข้อความในโปรเจคนี้
@@ -1189,7 +1222,11 @@ function Chat({ project, today }: { project: Project; today: string }) {
 
         <form
           data-ro-hide
-          className="mt-[13px] flex gap-[9px] border-t border-border pt-[13px]"
+          className={`flex gap-[9px] border-t border-border ${
+            fill
+              ? "flex-none bg-card px-2.5 pt-2.5 pb-[max(10px,env(safe-area-inset-bottom))]"
+              : "mt-[13px] pt-[13px]"
+          }`}
           onSubmit={(e) => {
             e.preventDefault();
             send();
