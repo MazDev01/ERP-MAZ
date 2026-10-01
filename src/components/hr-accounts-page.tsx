@@ -17,18 +17,14 @@ import {
   HR_ACC_STATUS,
   HR_EMPTYPE,
   accountRoles,
-  hrActivePositions,
-  hrDepts,
   hrPos,
   posOf,
-  rolesOfPosition,
   type EmpAccount,
   type Employee,
-  type PosKey,
 } from "@/lib/hr-data";
-import { HR_ME, createAccount, deleteAccount, resetAccount, setAccountRoles, setAccountStatus, setEmpPositions, useHr } from "@/lib/hr-store";
+import { HR_ME, createAccount, deleteAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
 import { rolesOfEmployee, suggestUserOf } from "@/lib/hr-data";
-import { roleLabel, type Role } from "@/lib/role";
+import { ROLES, roleLabel, type Role } from "@/lib/role";
 import { ConfirmDialog } from "./confirm-dialog";
 import { Sheet } from "./lead-dialogs";
 import { Field, Input, Select } from "./ui";
@@ -328,7 +324,7 @@ function AccountRow({
         {a ? (
           <span className="flex flex-wrap justify-center gap-1.5">
             <button type="button" className="btn glass-thin btn-mini" onClick={onRoles}>
-              ตำแหน่ง
+              บทบาท
             </button>
             <button type="button" className="btn glass-thin btn-mini" onClick={onReset}>
               รีเซ็ตรหัสผ่าน
@@ -466,30 +462,24 @@ function AccountDialog({
 export type { EmpAccount };
 
 /*
- * ตำแหน่งของบัญชีผู้ใช้ — "บทบาทคือตำแหน่งงาน" (เจ้าของกำหนด 30 ก.ย. 2569)
- * จอนี้ให้เลือกตำแหน่งอย่างเดียว ไม่ต้องอธิบายเรื่องเมนู (เจ้าของสั่ง 1 ต.ค. 2569)
- * ติ๊กตำแหน่งไหน ระบบเปิดเมนูของตำแหน่งนั้นให้เอง และบันทึกเป็นตำแหน่งควบของคนนั้นด้วย
+ * บทบาทของบัญชีผู้ใช้ — จอนี้ให้เลือก "บทบาท" อย่างเดียว (เจ้าของสั่ง 1 ต.ค. 2569)
+ * บทบาทคือเมนูที่บัญชีนี้เปิดได้ ส่วนตำแหน่งงานแก้ที่หน้าข้อมูลพนักงาน
+ * บัญชีใหม่ระบบตั้งบทบาทให้ตามตำแหน่งอยู่แล้ว จอนี้ไว้แก้เป็นรายคน
  */
 function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
-  const [picked, setPicked] = useState<PosKey[]>(posOf(emp));
+  const [picked, setPicked] = useState<Role[]>(
+    accountRoles(emp.account).length ? accountRoles(emp.account) : rolesOfEmployee(emp),
+  );
   const [warn, setWarn] = useState("");
-  /* เมนูที่จะได้จากตำแหน่งที่ติ๊กไว้ — บอกให้เห็นก่อนกดบันทึก */
-  /* ติ๊กกี่ตำแหน่งก็ได้ เมนูของทุกตำแหน่งต่อกันหมด (เจ้าของกำหนด 30 ก.ย. 2569)
-     ไม่ตัดทิ้งเงียบ ๆ เหมือนเดิม ไม่งั้นติ๊กแล้วไม่ได้เมนูที่ตั้งใจ */
-  const roles = useMemo(() => {
-    const out: Role[] = [];
-    for (const v of picked) for (const r of rolesOfPosition(v)) if (!out.includes(r)) out.push(r);
-    return out;
-  }, [picked]);
 
-  function toggle(v: PosKey) {
+  function toggle(r: Role) {
     setWarn("");
-    setPicked((list) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]));
+    setPicked((list) => (list.includes(r) ? list.filter((x) => x !== r) : [...list, r]));
   }
 
   return (
     <Sheet
-      title="ตำแหน่งของบัญชีนี้"
+      title="บทบาทของบัญชีนี้"
       onClose={onClose}
       footer={
         <>
@@ -500,10 +490,8 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
             type="button"
             className="btn solid btn-solid"
             onClick={() => {
-              if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งตำแหน่ง");
-              /* บันทึกทั้งตำแหน่งควบของคนนั้น และเมนูที่บัญชีเปิดได้ ให้ตรงกันเสมอ */
-              setEmpPositions(emp.id, picked);
-              setAccountRoles(emp.id, roles);
+              if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งบทบาท");
+              setAccountRoles(emp.id, picked);
               onClose();
             }}
           >
@@ -519,34 +507,24 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
         </p>
       </Field>
 
+      {/* CEO ไม่อยู่ในรายการ — ไม่ใช่บัญชีพนักงานในทะเบียน */}
       <div className="mt-4 grid gap-2">
-        {hrDepts().map((d) => {
-          const list = hrActivePositions().filter((x) => x.dept === d.v);
-          if (!list.length) return null;
-          return (
-            <div key={d.v}>
-              <p className="mt-1.5 mb-1 px-1 text-[11.5px] font-bold text-muted-foreground">{d.label}</p>
-              <div className="grid gap-2">
-                {list.map((x) => (
-                  <label
-                    key={x.v}
-                    className={`flex cursor-pointer items-center gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
-                      picked.includes(x.v) ? "border-primary bg-primary/5" : "border-border bg-card"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={picked.includes(x.v)}
-                      onChange={() => toggle(x.v)}
-                      className="size-4 accent-[var(--primary)]"
-                    />
-                    <span className="min-w-0 text-[13.5px] font-semibold">{x.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+        {ROLES.filter((r) => r.key !== "ceo").map((r) => (
+          <label
+            key={r.key}
+            className={`flex cursor-pointer items-center gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
+              picked.includes(r.key) ? "border-primary bg-primary/5" : "border-border bg-card"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={picked.includes(r.key)}
+              onChange={() => toggle(r.key)}
+              className="size-4 accent-[var(--primary)]"
+            />
+            <span className="min-w-0 text-[13.5px] font-semibold">{r.label}</span>
+          </label>
+        ))}
       </div>
       {warn && <p className="mt-3 text-[12.5px] font-semibold text-destructive">{warn}</p>}
     </Sheet>
