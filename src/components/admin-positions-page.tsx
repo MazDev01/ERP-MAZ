@@ -17,7 +17,6 @@ import type { Catalog, PosRoute } from "@/lib/system-settings";
 import {
   BUILTIN_HR_DEPT,
   BUILTIN_HR_POSITION,
-  HR_MAX_ROLES,
   defaultRolesOfPosition,
   holdsPos,
   hrDept,
@@ -454,16 +453,12 @@ function PosSheet({
   const [label, setLabel] = useState(initial?.label ?? "");
   const [dept, setDept] = useState(initial?.dept ?? depts[0]?.v ?? "");
   const [appr, setAppr] = useState<Partial<Record<RequestKind, string>>>(route);
-  /* ตำแหน่งในระบบของตำแหน่งงานนี้ — ว่างไว้ = ใช้ค่าตั้งต้น (ตำแหน่งใหม่คือพนักงาน) */
-  const [roles, setRoles] = useState<string[]>(initial?.roles ?? []);
+  /* ต้นแบบ: ฟอร์มนี้มีแค่ชื่อตำแหน่ง แผนก และผู้อนุมัติ ไม่มีให้เลือกบทบาท (เจ้าของสั่ง 1 ต.ค. 2569)
+     เมนูที่ตำแหน่งได้จึงใช้ค่าของระบบ · ตำแหน่งที่เพิ่มใหม่ได้เมนูของพนักงาน
+     ค่าที่เคยตั้งไว้ของตำแหน่งเดิมยังเก็บไว้เหมือนเดิม ไม่ถูกล้างตอนบันทึก */
+  const roles = initial?.roles ?? [];
   const bad = !label.trim() ? "ใส่ชื่อตำแหน่ง" : "";
   const pos = initial?.v ?? "";
-  const roleNow = roleKeysOf(pos, roles);
-  const full = roles.length >= HR_MAX_ROLES;
-
-  function toggleRole(key: Role) {
-    setRoles((v) => (v.includes(key) ? v.filter((x) => x !== key) : v.length >= HR_MAX_ROLES ? v : [...v, key]));
-  }
 
   return (
     <Sheet
@@ -500,31 +495,6 @@ function PosSheet({
             </select>
           </Input2>
         </div>
-
-        <p className="mt-1 text-[12.5px] font-bold text-muted-foreground">ตำแหน่งในระบบที่ได้ (เลือกได้ไม่เกิน {HR_MAX_ROLES})</p>
-        <div className="flex flex-wrap gap-2">
-          {ROLES.filter((r) => r.key !== "ceo").map((r) => {
-            const on = roles.includes(r.key);
-            return (
-              <button
-                key={r.key}
-                type="button"
-                aria-pressed={on}
-                disabled={!on && full}
-                onClick={() => toggleRole(r.key)}
-                className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold disabled:opacity-40 ${
-                  on ? "bg-primary text-white" : "glass-thin text-muted-foreground"
-                }`}
-              >
-                {r.label}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-[12px] leading-relaxed text-muted-foreground">
-          ไม่เลือกเลย = ใช้ค่าตั้งต้นของระบบ ({roleNames(pos, [])}) · ตอนนี้ตำแหน่งนี้จะได้เมนูของ{" "}
-          {roleNow.map(roleLabel).join(" · ")}
-        </p>
 
         <p className="mt-1 text-[12.5px] font-bold text-muted-foreground">ผู้อนุมัติของคำขอแต่ละประเภท</p>
         <div className="grid gap-3 sm:grid-cols-3">
