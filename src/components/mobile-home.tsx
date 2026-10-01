@@ -21,7 +21,7 @@ import {
   getRecordsSnapshot,
   subscribeRecords,
 } from "@/lib/attendance-store";
-import { bkkNow, greetNow, thaiMonth, todayIso } from "@/lib/format";
+import { bkkNow, daysBetween, greetNow, thaiMonth, todayIso } from "@/lib/format";
 import { currentPeriod, entitlementDays, leaveTypes } from "@/lib/leave-data";
 import { leaveUsage, useLeaveRecords } from "@/lib/leave-store";
 import { useMyLeavePolicy } from "@/lib/leave-policy";
@@ -126,13 +126,33 @@ function useHomeStats(role: Role): { k: string; v: string; u?: string; href: str
       { k: "ฝึกงาน", v: String(active.filter((e) => e.type === "intern").length), u: "คน", href: "/hr/employees" },
       mine,
     ];
-  if (role === "sales")
+  /*
+   * ฝ่ายขาย — สรุปผลการขาย ไม่ใช่จำนวนรายการ (ต้นแบบ home-sales.html 1 ต.ค. 2569)
+   *   ปิดการขาย = ยอดดีลที่ปิดได้ในเดือนนี้
+   *   ผู้สนใจใหม่ = รายที่ยังรอนัดหมาย
+   *   อัตราปิด   = ดีลที่ปิดได้ ÷ ใบเสนอราคาที่ออกเลขแล้ว
+   *   ปิดเฉลี่ย   = วันจากวันที่ออกใบเสนอราคาถึงวันปิดการขาย
+   */
+  if (role === "sales") {
+    const month = todayIso().slice(0, 7);
+    const closed = crm.deals.filter((d) => d.status === "ปิดการขาย");
+    const won = closed.filter((d) => d.closedAt.startsWith(month)).reduce((a, d) => a + d.total, 0);
+    const issued = crm.quotations.filter((q) => q.no);
+    const rate = issued.length ? Math.round((closed.length / issued.length) * 100) : 0;
+    const spans = closed
+      .map((d) => {
+        const q = crm.quotations.find((x) => x.no === d.quotationNo);
+        return q && d.closedAt ? daysBetween(q.issued, d.closedAt) : null;
+      })
+      .filter((n): n is number => n !== null && n >= 0);
+    const avg = spans.length ? Math.round(spans.reduce((a, n) => a + n, 0) / spans.length) : 0;
     return [
-      { k: "ผู้สนใจ", v: String(crm.customers.length), u: "ราย", href: "/leads" },
-      { k: "ใบเสนอราคา", v: String(crm.quotations.length), u: "ใบ", href: "/quotations" },
-      { k: "ดีล", v: String(crm.deals.length), u: "ดีล", href: "/deals" },
-      mine,
+      { k: "ปิดการขาย", v: money(won), u: "฿", href: "/deals" },
+      { k: "ผู้สนใจใหม่", v: String(crm.customers.filter((c) => c.status === "รอนัดหมาย").length), u: "ราย", href: "/leads" },
+      { k: "อัตราปิด", v: String(rate), u: "%", href: "/deals" },
+      { k: "ปิดเฉลี่ย", v: String(avg), u: "วัน", href: "/deals" },
     ];
+  }
   if (role === "pm" || role === "gm")
     return [
       { k: "โปรเจคที่ทำอยู่", v: String(running.length), u: "งาน", href: "/pm/projects" },
@@ -287,7 +307,7 @@ export function MobileHome({
           </div>
 
           {/* แถวสรุปสี่ช่อง — กดแล้วไปหน้าของเรื่องนั้น */}
-          <nav aria-label="สรุปของฉัน" className="flex rounded-[16px] border border-[#E3D3D7] bg-[rgb(250_244_245/0.9)] py-3">
+          <nav aria-label={role === "sales" ? "สรุปการขายเดือนนี้" : "สรุปของฉัน"} className="flex rounded-[16px] border border-[#E3D3D7] bg-[rgb(250_244_245/0.9)] py-3">
             {stats.map((c, i) => (
               <Link
                 key={c.k}

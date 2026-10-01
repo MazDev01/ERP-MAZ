@@ -1125,13 +1125,14 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .botnav > .botnav-slot > button.on > span { font-weight: 700; }
 
   /* ปุ่มกลางยกนูน — หน้าที่ใช้ทุกวันคือลงเวลา จึงอยู่ตรงที่นิ้วโป้งถึงง่ายที่สุด (ตามแบบ .fab) */
-  .botnav > .bn-mid { gap: 14px; color: var(--muted-foreground); }
+  .botnav > .bn-mid { color: var(--muted-foreground); }
   .botnav > .bn-mid > i {
     display: grid;
     place-items: center;
     width: 58px;
     height: 58px;
-    margin-top: -42px;
+    /* ยกขึ้นเท่าต้นแบบ home-sales.html — วงชมพูโผล่พ้นแถบประมาณครึ่งวง ไม่ลอยสูงเกิน */
+    margin-top: -25px;
     border-radius: 50%;
     background: #c8102e;
     color: #ffffff;

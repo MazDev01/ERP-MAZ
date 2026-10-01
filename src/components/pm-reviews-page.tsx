@@ -18,6 +18,7 @@ import { roleLabel } from "@/lib/pm-data";
 import { hrPos } from "@/lib/hr-data";
 import { useHr } from "@/lib/hr-store";
 import { Field, Sheet } from "./lead-dialogs";
+import { ApproveIcon, ClockIcon } from "./icons";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 
 /** รอเกินกี่วันถึงขึ้นเตือนว่าค้างนาน — ตรงกับต้นแบบ */
@@ -71,14 +72,16 @@ export function PmReviewsPage() {
       </div>
       <ReadOnlyNote />
 
-      <section className="panel glass flex min-w-0 flex-col">
-        <div className="strip">
+      {/* มือถือ: การ์ดวางบนพื้นหน้าเลย ไม่มีกรอบขาวครอบอีกชั้น (ต้นแบบ pm-reviews.html) */}
+      <section className="panel glass flex min-w-0 flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
+        <div className="strip max-sm:hidden!">
           <h2 className="py-2.5 text-[14.5px] font-bold">
             งานรอตรวจ {rows.length ? `${rows.length} งาน` : ""}
           </h2>
         </div>
-        {/* มือถือ: การ์ดทั้งใบกดเปิดกล่องตรวจงาน (เหมือนกดทั้งแถวบนจอใหญ่) ชื่องานเด่น ผู้ส่งกับโปรเจคอยู่บรรทัดรอง */}
-        <ul className="space-y-2.5 px-3.5 py-3.5 sm:hidden">
+        {/* มือถือ: การ์ดงานที่ทีมส่งมา (ต้นแบบ pm-reviews.html 1 ต.ค. 2569)
+            วงกลมไอคอนซ้าย · โปรเจค-ชื่องาน-ผู้ส่ง เรียงลงมา · เส้นประคั่น · วันที่ส่งกับปุ่มตรวจงานแถวล่าง */}
+        <ul className="flex flex-col gap-2.5 sm:hidden">
           {rows.length === 0 ? (
             <li className="py-9 text-center text-[13px] text-muted-foreground">ไม่มีงานรอตรวจ</li>
           ) : (
@@ -92,31 +95,42 @@ export function PmReviewsPage() {
                   <button
                     type="button"
                     onClick={() => setOpen({ p, t })}
-                    className="block w-full rounded-[13px] border border-border bg-card px-3.5 py-3 text-left"
+                    className="block w-full rounded-[20px] bg-card p-3.5 text-left shadow-[0_1px_2px_rgb(40_20_25/0.04)]"
                   >
-                    <b className="block text-[14px] leading-snug font-bold">{t.name}</b>
-                    <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">{projName(p)}</span>
-                    <span className="mt-2.5 flex items-end gap-3">
-                      <span className="min-w-0 flex-1">
-                        <b className="block text-[12.5px] leading-snug font-semibold">{memberName(who)}</b>
-                        <em className="block text-[11px] leading-snug text-muted-foreground not-italic">
-                          {position(who)}
-                        </em>
+                    <span className="flex gap-3">
+                      <span className="grid size-10 flex-none place-items-center rounded-full bg-[#FDEDD6] text-[#94500A]">
+                        <ApproveIcon className="size-5" strokeWidth={2} />
                       </span>
-                      <span className="flex-none text-right">
-                        <span className="num block text-[11.5px] text-muted-foreground">
-                          {day ? `ส่ง ${agoText(day, today)}` : "—"}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[12px] text-muted-foreground">{projName(p)}</span>
+                        <b className="mt-px block text-[15.5px] leading-snug font-bold">{t.name}</b>
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <b className="text-[13px] font-semibold text-[#6E6164]">{memberName(who)}</b>
+                          {position(who) && (
+                            <em className="rounded-full bg-[#F3EEF0] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#6E6164] not-italic">
+                              {position(who)}
+                            </em>
+                          )}
                         </span>
-                        {waited >= WAITED_HOT && (
-                          <em className="block text-[11px] font-semibold text-destructive not-italic">
-                            รอมาแล้ว {waited} วัน
-                          </em>
-                        )}
                       </span>
                     </span>
-                    {!ro && (
-                      <span className="btn glass-thin mt-3 h-10 w-full justify-center">ตรวจงาน</span>
-                    )}
+                    <span className="mt-2 block border-t border-dashed border-[#ECE3E5]" />
+                    <span className="mt-2.5 flex items-center gap-3">
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[12.5px] font-semibold text-[#6E6164]">
+                        <ClockIcon className="size-3.5 flex-none text-muted-foreground" strokeWidth={2.2} />
+                        <span className="num truncate">
+                          {day ? agoText(day, today) : "—"}
+                          {waited >= WAITED_HOT && (
+                            <em className="ml-1.5 font-semibold text-destructive not-italic">รอ {waited} วัน</em>
+                          )}
+                        </span>
+                      </span>
+                      {!ro && (
+                        <span className="grid h-[38px] flex-none place-items-center rounded-xl bg-primary px-4 text-[13.5px] font-bold text-primary-foreground">
+                          ตรวจงาน
+                        </span>
+                      )}
+                    </span>
                   </button>
                 </li>
               );

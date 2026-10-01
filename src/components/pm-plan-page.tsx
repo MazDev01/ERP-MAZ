@@ -181,7 +181,6 @@ export function PmPlanPage() {
   const [phaseEdit, setPhaseEdit] = useState<number | null>(null);
   const [adding, setAdding] = useState<number | null>(null);
   /* เฟสที่กำลังดูอยู่บนมือถือ — จอกว้างเห็นทุกเฟสพร้อมกันอยู่แล้ว ค่านี้จึงไม่มีผล */
-  const [showPhase, setShowPhase] = useState(0);
   /* ลากการ์ดเพื่อสลับลำดับ — ลากได้เฉพาะในเฟสเดียวกัน เพราะงานย่อยผูกกับเฟสของมัน */
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -310,8 +309,7 @@ export function PmPlanPage() {
   }
 
   return (
-    /* มือถือเว้นท้ายหน้าไว้ให้ปุ่มยืนยันแผนที่ลอยอยู่เหนือแถบล่าง จะได้ไม่บังการ์ดใบสุดท้าย */
-    <div className={`space-y-3.5 ${ro ? "" : "max-sm:pb-[72px]"}`}>
+    <div className="space-y-3.5">
       <div className="bar">
         <div>
         </div>
@@ -324,7 +322,7 @@ export function PmPlanPage() {
               setOpen(null);
             }}
             aria-label="เลือกงานที่จะวางแผน"
-            className="h-9 w-full font-semibold max-sm:h-11 sm:w-[300px]"
+            className="h-9 w-full font-semibold max-sm:h-[46px] max-sm:rounded-full! sm:w-[300px]"
           >
             {targets.map((t) => (
               <option key={t.deal} value={t.deal}>
@@ -338,7 +336,8 @@ export function PmPlanPage() {
             title={problems.length ? problems.join("\n") : "ส่งแผนงานให้ทีม"}
             onClick={confirm}
             /* มือถือ: ปุ่มหลักของหน้าลอยเต็มความกว้างเหนือแถบล่าง กดได้ทุกเมื่อไม่ต้องเลื่อนกลับขึ้นไปหา */
-            className="btn solid btn-solid shrink-0 whitespace-nowrap max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[calc(var(--botbar)+10px)] max-sm:z-30 max-sm:h-12 max-sm:justify-center max-sm:shadow-[0_6px_20px_-6px_rgba(0,0,0,.35)] disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-card disabled:bg-none disabled:text-muted-foreground disabled:shadow-none"
+            /* มือถือ: ปุ่มนี้ซ่อน แล้วไปโผล่เต็มความกว้างท้ายหน้าแทน PM จะได้ไล่ดูทุกเฟสก่อนกด (ต้นแบบ pm-plan.html) */
+            className="btn solid btn-solid shrink-0 whitespace-nowrap max-sm:hidden! disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-card disabled:bg-none disabled:text-muted-foreground disabled:shadow-none"
           >
             <span>{job.project ? "บันทึกแผนงาน" : "ยืนยันแผนงาน"}</span>
             {problems.length > 0 && left > 0 && (
@@ -361,7 +360,7 @@ export function PmPlanPage() {
         <span className="flex gap-2 max-sm:w-full">
           <button
             type="button"
-            className="btn glass-thin disabled:opacity-45 max-sm:h-10 max-sm:flex-1 max-sm:justify-center"
+            className="btn glass-thin disabled:opacity-45 max-sm:h-9 max-sm:flex-1 max-sm:justify-center max-sm:rounded-full!"
             disabled={!docs}
             title={docs ? undefined : "โปรเจคนี้ไม่มีเอกสารแนบในระบบ"}
             onClick={() => setDoc("quo")}
@@ -371,7 +370,7 @@ export function PmPlanPage() {
           </button>
           <button
             type="button"
-            className="btn glass-thin disabled:opacity-45 max-sm:h-10 max-sm:flex-1 max-sm:justify-center"
+            className="btn glass-thin disabled:opacity-45 max-sm:h-9 max-sm:flex-1 max-sm:justify-center max-sm:rounded-full!"
             disabled={!docs?.proposal}
             title={docs?.proposal ? undefined : "งานนี้ไม่มีข้อเสนอ"}
             onClick={() => setDoc("prop")}
@@ -380,8 +379,14 @@ export function PmPlanPage() {
             Proposal
           </button>
         </span>
-        {/* มือถือ: กรอบเวลาขึ้นบรรทัดของตัวเองชิดซ้าย ไม่ล้นขอบจอ */}
-        <span className="ml-auto flex items-start gap-[22px] text-[12.5px] max-sm:ml-0 max-sm:w-full max-sm:gap-3.5">
+        {/* มือถือ: กรอบเวลาเป็นแคปซูลชมพูบรรทัดเดียว (ต้นแบบ pm-plan.html) */}
+        <span className="ml-auto flex items-center gap-2 rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-semibold text-primary sm:hidden">
+          <span className="num">
+            {phases.length === 0 ? thaiDate(job.firstDay) : `${thaiDate(span.s)} – ${thaiDate(span.e)}`}
+          </span>
+          <span className="num">{phases.length === 0 ? "ยังไม่มีเฟส" : `${phases.length} เฟส`}</span>
+        </span>
+        <span className="ml-auto flex items-start gap-[22px] text-[12.5px] max-sm:hidden">
           <span className="grid size-6 flex-none place-items-center rounded-full bg-muted text-muted-foreground">
             <LockIcon className="size-3.5" />
           </span>
@@ -470,38 +475,8 @@ export function PmPlanPage() {
         </section>
       ) : (
         <>
-        {/*
-          มือถือ: เลือกเฟสจากชิป แล้วแสดงทีละเฟสเต็มจอ (เจ้าของสั่ง 25 ก.ย. 2569)
-          เดิมเป็นกระดานปัดซ้ายขวา เฟสที่อยู่นอกจอไม่มีอะไรบอกว่ามีอยู่
-          ชิปขึ้นบรรทัดใหม่เมื่อไม่พอ ไม่ปัดข้างเหมือนกัน
-        */}
-        <div className="flex flex-wrap gap-2 sm:hidden">
-          {phases.map((ph, pi) => {
-            const on = pi === showPhase;
-            return (
-              <button
-                key={`chip-${pi}-${ph.name}`}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setShowPhase(pi)}
-                className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold ${
-                  on ? "border-transparent text-white" : "border-border bg-card"
-                }`}
-                style={on ? { background: phaseColor(pi) } : undefined}
-              >
-                <i
-                  className="size-2 flex-none rounded-full"
-                  style={{ background: on ? "rgba(255,255,255,.85)" : phaseColor(pi) }}
-                />
-                {ph.name}
-                <span className={`num ${on ? "text-white/80" : "text-muted-foreground"}`}>
-                  {(plan[pi] ?? []).length}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {/* จอกว้างเรียงทุกเฟสเป็นกระดาน · มือถือแสดงเฉพาะเฟสที่เลือก แล้วต่อด้วยปุ่มเพิ่มเฟส */}
+        {/* จอกว้างเรียงทุกเฟสเป็นกระดานปัดข้าง · มือถือเรียงทุกเฟสลงมาเป็นการ์ด (ต้นแบบ pm-plan.html 1 ต.ค. 2569)
+            เลิกใช้ชิปเลือกทีละเฟสแล้ว เพราะต้นแบบใหม่ให้ไล่ดูทุกเฟสรวดเดียวก่อนยืนยันแผน */}
         <div className="flex items-stretch gap-3 overflow-x-auto pb-2 max-sm:flex-col max-sm:overflow-x-visible">
           {phases.map((ph, pi) => {
             const list = plan[pi] ?? [];
@@ -511,9 +486,7 @@ export function PmPlanPage() {
               <section
                 key={`${pi}-${ph.name}`}
                 id={`plan-ph-${pi}`}
-                className={`flex max-h-[560px] w-[276px] flex-none flex-col overflow-hidden rounded-[14px] border border-border bg-card max-sm:max-h-[calc(100dvh-230px)] max-sm:min-h-[320px] max-sm:w-full ${
-                  pi === showPhase ? "" : "max-sm:hidden"
-                }`}
+                className="flex max-h-[560px] w-[276px] flex-none flex-col overflow-hidden rounded-[14px] border border-border bg-card max-sm:max-h-none max-sm:w-full max-sm:rounded-[20px] max-sm:border-0 max-sm:shadow-[0_1px_2px_rgb(40_20_25/0.04)]"
               >
                 <header
                   className="flex items-center gap-[9px] px-3.5 py-3 text-white"
@@ -563,7 +536,7 @@ export function PmPlanPage() {
                 )}
 
                 <div
-                  className={`scroll-stable flex min-h-0 flex-1 flex-col gap-[11px] overflow-y-auto px-3.5 pt-[11px] pb-3.5 ${
+                  className={`scroll-stable flex min-h-0 flex-1 flex-col gap-[11px] overflow-y-auto px-3.5 pt-[11px] pb-3.5 max-sm:overflow-y-visible ${
                     over === pi ? "bg-primary/[.06]" : ""
                   }`}
                 >
@@ -611,6 +584,19 @@ export function PmPlanPage() {
             + เพิ่มเฟส
           </button>}
         </div>
+        {!ro && (
+          <button
+            type="button"
+            disabled={problems.length > 0}
+            onClick={confirm}
+            className="btn solid btn-solid mt-4 h-[50px] w-full justify-center rounded-[14px]! text-[15px] sm:hidden disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-card disabled:bg-none disabled:text-muted-foreground disabled:shadow-none"
+          >
+            <span>{job.project ? "บันทึกแผนงาน" : "ยืนยันแผนงาน"}</span>
+            {problems.length > 0 && left > 0 && (
+              <span className="text-[11px] font-medium">เหลืออีก {left} งาน</span>
+            )}
+          </button>
+        )}
         </>
       )}
 
@@ -654,7 +640,6 @@ export function PmPlanPage() {
             });
             /* ลำดับเฟสขยับ คีย์ที่ติ๊กไว้จึงชี้ผิดใบ ล้างทิ้งเหมือนตอนลากสลับลำดับ */
             setPicked({});
-            setShowPhase(0);
             setPhaseEdit(null);
           }}
           onSave={(v) => {

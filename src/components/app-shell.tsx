@@ -421,10 +421,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ))}
             {tabPunch && (
               <Link href={tabPunch.href} className="bn-mid" aria-label="ลงเวลา">
+                {/* ต้นแบบ home-sales.html ไม่มีคำใต้ปุ่มกลาง มีแต่วงกลม — ชื่อหน้าอยู่ที่ aria-label แล้ว */}
                 <i>
                   <ClockIcon className="size-[26px]" strokeWidth={2.3} />
                 </i>
-                <span>ลงเวลา</span>
               </Link>
             )}
             {botSlots.slice(2).map((href, i) => (
