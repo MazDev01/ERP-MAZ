@@ -67,6 +67,15 @@ const CARD = "rounded-[20px] bg-white p-3.5 shadow-[0_1px_2px_rgb(40_20_25/0.04)
 const BOX = "rounded-[18px] bg-white p-3.5";
 const INPUT = "field-control h-11 w-full rounded-[12px] px-3 text-[14.5px]";
 
+/** กล่องนี้กรอกอะไรไปแล้วหรือยัง — ว่างล้วนถือว่าไม่ได้ตั้งใจเบิก */
+function fuelFilled(r: { date: string; place: string; km: string; work: string }) {
+  return Boolean(r.date || r.place.trim() || r.km.trim() || r.work.trim());
+}
+
+function otherFilled(r: { kind: string; date: string; amount: string; note: string }) {
+  return Boolean(r.kind || r.date || r.amount.trim() || r.note.trim());
+}
+
 function rowsOf(claim: ExpenseClaim, kind: Kind) {
   return kind === "fuel" ? claim.fuel : (claim.other ?? []);
 }
@@ -261,12 +270,25 @@ function ClaimForm({
   }, [empty, month, kind]);
 
   function send() {
-    const problem = checkClaim(claim);
+    /*
+     * ทิ้งกล่องที่ยังไม่ได้กรอกอะไรเลยก่อนยื่น — รวมถึงของอีกประเภทหนึ่งด้วย
+     * ไม่งั้นกล่องเปล่าที่ระบบเปิดทิ้งไว้ให้ (ตอนเปิดฟอร์มครั้งแรก) จะกันไม่ให้ยื่น
+     * แล้วขึ้นเหตุผลของอีกประเภทที่ผู้ใช้ไม่ได้มองอยู่ งงว่าทำไมกดส่งไม่ได้
+     */
+    const keepFuel = claim.fuel.filter(fuelFilled);
+    const keepOther = (claim.other ?? []).filter(otherFilled);
+    claim.fuel.filter((r) => !fuelFilled(r)).forEach((r) => removeFuelRow(month, r.id));
+    (claim.other ?? []).filter((r) => !otherFilled(r)).forEach((r) => removeOtherRow(month, r.id));
+
+    const problem = checkClaim({ ...claim, fuel: keepFuel, other: keepOther });
     if (!problem.ok) {
       setErr(problem.reasons[0] ?? "กรอกข้อมูลยังไม่ครบ");
       return;
     }
-    submitClaim(month);
+    if (!submitClaim(month)) {
+      setErr("ยื่นไม่สำเร็จ ลองตรวจข้อมูลอีกครั้ง");
+      return;
+    }
     onSent(k.name);
     onClose();
   }
@@ -500,13 +522,14 @@ function OtherFields({
           ))}
         </Select>
       </label>
+      {/* ช่องนี้บังคับกรอก (otherRowProblem) จึงใช้ชื่อ "รายละเอียด" เหมือนจอคอม ไม่ใช่ "หมายเหตุ" ที่ฟังดูไม่ต้องกรอก */}
       <label className="mt-2.5 block">
-        <span className="mb-1 block text-[12px] text-muted-foreground">หมายเหตุ</span>
+        <span className="mb-1 block text-[12px] text-muted-foreground">รายละเอียด</span>
         <input
           className={INPUT}
           value={row.note}
           disabled={locked}
-          placeholder="—"
+          placeholder="จ่ายอะไร ที่ไหน"
           onChange={(e) => updateOtherRow(month, row.id, { note: e.target.value })}
         />
       </label>
