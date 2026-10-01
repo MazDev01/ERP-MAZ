@@ -13,7 +13,7 @@
  * ข้อมูลใช้สโตร์ชุดเดียวกับจอคอมทุกตัว ยอดและสถานะจึงตรงกันเสมอ
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CLAIM_STATUS,
   checkClaim,
@@ -80,6 +80,13 @@ export function ExpenseMobile() {
   const today = bkkNow();
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState<{ month: string; kind: Kind } | null>(null);
+  /* แถบดำบอกผลหลังส่ง (ต้นแบบ .exm-toast) — หายเองใน 2 วินาที */
+  const [toast, setToast] = useState("");
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(""), 2200);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   /* เดือนที่มีใบเบิกจริง เรียงใหม่ไปเก่า — เดือนปัจจุบันขึ้นก่อนเสมอถึงจะยังว่าง */
   const months = [...new Set([monthKey(today), ...claims.map((c) => c.month)])].sort().reverse();
@@ -93,10 +100,6 @@ export function ExpenseMobile() {
 
   return (
     <div className="md:hidden">
-      <p className="mb-3 px-1 text-[13px] text-muted-foreground">
-        ใบเบิกของฉัน กด + เพื่อเลือกประเภทและเบิกใหม่
-      </p>
-
       {cards.length === 0 ? (
         <p className={`${CARD} py-10 text-center text-[14px] text-[#9A8E91]`}>ยังไม่มีใบเบิก</p>
       ) : (
@@ -198,13 +201,39 @@ export function ExpenseMobile() {
         </Sheet>
       )}
 
-      {open && <ClaimForm month={open.month} kind={open.kind} onClose={() => setOpen(null)} />}
+      {open && (
+        <ClaimForm
+          month={open.month}
+          kind={open.kind}
+          onClose={() => setOpen(null)}
+          onSent={(name) => setToast(`ส่งขออนุมัติ${name}แล้ว`)}
+        />
+      )}
+
+      {toast && (
+        <p
+          role="status"
+          className="fixed bottom-[calc(110px+env(safe-area-inset-bottom))] left-1/2 z-90 -translate-x-1/2 rounded-[12px] bg-[#2A1F22] px-4 py-2.5 text-[13.5px] whitespace-nowrap text-white"
+        >
+          {toast}
+        </p>
+      )}
     </div>
   );
 }
 
 /** จอกรอกรายละเอียดของประเภทหนึ่ง — เต็มจอ มีแถบล่างบอกยอดรวมและปุ่มส่ง */
-function ClaimForm({ month, kind, onClose }: { month: string; kind: Kind; onClose: () => void }) {
+function ClaimForm({
+  month,
+  kind,
+  onClose,
+  onSent,
+}: {
+  month: string;
+  kind: Kind;
+  onClose: () => void;
+  onSent: (name: string) => void;
+}) {
   const claims = useExpenseClaims();
   const claim = claimOf(claims, month);
   const locked = isLocked(claim.status);
@@ -221,8 +250,13 @@ function ClaimForm({ month, kind, onClose }: { month: string; kind: Kind; onClos
   /* ยังไม่มีรายการเลย = เปิดกล่องเปล่าไว้ให้กรอกทันที ไม่ต้องกดเพิ่มก่อน
      ต้องทำใน effect ไม่ใช่ตอนวาด ไม่งั้นแก้สโตร์ระหว่างเรนเดอร์ */
   const empty = !locked && rows.length === 0;
+  /* เปิดกล่องเปล่าให้ครั้งเดียวต่อใบ — โหมดพัฒนาเรียก effect สองรอบ ถ้าไม่กันจะได้กล่องว่างสองใบ */
+  const seeded = useRef("");
   useEffect(() => {
-    if (empty) addRow();
+    const key = `${month}/${kind}`;
+    if (!empty || seeded.current === key) return;
+    seeded.current = key;
+    addRow();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empty, month, kind]);
 
@@ -233,6 +267,7 @@ function ClaimForm({ month, kind, onClose }: { month: string; kind: Kind; onClos
       return;
     }
     submitClaim(month);
+    onSent(k.name);
     onClose();
   }
 
@@ -420,29 +455,13 @@ function OtherFields({
   kinds,
 }: {
   month: string;
-  row: { id: string; kind: string; date: string; amount: string; note: string };
+  row: { id: string; kind: string; date: string; amount: string; note: string; file?: string };
   locked: boolean;
   kinds: string[];
 }) {
   return (
     <>
-      <label className="block">
-        <span className="mb-1 block text-[12px] text-muted-foreground">ประเภท</span>
-        <Select
-          value={row.kind}
-          disabled={locked}
-          className="h-11 rounded-[12px] text-[14.5px]"
-          onChange={(e) => updateOtherRow(month, row.id, { kind: e.target.value })}
-        >
-          <option value="">เลือกประเภท</option>
-          {kinds.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5">
         <label className="block">
           <span className="mb-1 block text-[12px] text-muted-foreground">วันที่</span>
           <DateField
@@ -466,15 +485,53 @@ function OtherFields({
         </label>
       </div>
       <label className="mt-2.5 block">
-        <span className="mb-1 block text-[12px] text-muted-foreground">รายละเอียด</span>
+        <span className="mb-1 block text-[12px] text-muted-foreground">รายการ</span>
+        <Select
+          value={row.kind}
+          disabled={locked}
+          className="h-11 rounded-[12px] text-[14.5px]"
+          onChange={(e) => updateOtherRow(month, row.id, { kind: e.target.value })}
+        >
+          <option value="">เช่น ค่าทางด่วน ค่าจอดรถ</option>
+          {kinds.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <label className="mt-2.5 block">
+        <span className="mb-1 block text-[12px] text-muted-foreground">หมายเหตุ</span>
         <input
           className={INPUT}
           value={row.note}
           disabled={locked}
-          placeholder="จ่ายอะไร ที่ไหน"
+          placeholder="—"
           onChange={(e) => updateOtherRow(month, row.id, { note: e.target.value })}
         />
       </label>
+
+      {/* ใบเสร็จ — ยังไม่มี backend จึงเก็บแค่ชื่อไฟล์ให้ผู้อนุมัติเห็นว่าแนบอะไรมา */}
+      <label className="relative mt-2.5 block">
+        <span className="mb-1 block text-[12px] text-muted-foreground">ใบเสร็จ / หลักฐาน</span>
+        <span className="flex h-11 items-center justify-center truncate rounded-[12px] border-[1.5px] border-dashed border-[#E3D3D7] px-2.5 text-[13.5px] font-semibold text-muted-foreground">
+          {row.file || (locked ? "ไม่ได้แนบ" : "แนบไฟล์หรือถ่ายรูป")}
+        </span>
+        {!locked && (
+          <input
+            type="file"
+            accept="image/*,application/pdf"
+            aria-label="แนบใบเสร็จ"
+            className="absolute inset-x-0 bottom-0 h-11 opacity-0"
+            onChange={(e) => updateOtherRow(month, row.id, { file: e.target.files?.[0]?.name ?? "" })}
+          />
+        )}
+      </label>
+
+      <div className="mt-2.5 flex items-center justify-between rounded-[12px] bg-muted/60 px-3 py-2.5 text-[13px] text-muted-foreground">
+        <span>จำนวนเงิน</span>
+        <b className="num text-[15px] text-foreground">{baht(Number(row.amount.replace(/,/g, "")) || 0)} ฿</b>
+      </div>
     </>
   );
 }

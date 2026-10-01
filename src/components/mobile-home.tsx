@@ -170,8 +170,13 @@ export function MobileHome({
   const readIds = useReadNotices();
   const unread = notices.filter((n) => !readIds.includes(n.id)).length;
 
-  /* เมนูงานของบทบาท — ตัดกลุ่ม "ของฉัน" ออก เพราะมีแถวของตัวเองอยู่ท้ายหน้าแล้ว */
-  const work = useMemo(() => items.filter((i) => i.group !== "ของฉัน"), [items]);
+  /*
+   * เมนูของบทบาท — รวมกลุ่ม "ของฉัน" ด้วย (เจ้าของทักท้วง 1 ต.ค. 2569 ว่าหาหน้าเบิกค่าใช้จ่ายไม่เจอ)
+   * เดิมตัดกลุ่มนี้ออกเพราะคิดว่าแถบล่างกับการ์ด "วันนี้ของฉัน" พอแล้ว
+   * แต่แถบล่างมีแค่ลงเวลา/การลา ส่วนโอที เบิกค่าใช้จ่าย และสลิป ไม่มีทางกดเข้าจากหน้าหลักเลย
+   * หน้าหลักเองไม่ต้องอยู่ในเมนู เพราะยืนอยู่บนหน้านี้แล้ว
+   */
+  const work = useMemo(() => items.filter((i) => i.href !== "/"), [items]);
   const hits = useMemo(() => {
     const key = q.trim().toLowerCase();
     return key ? items.filter((i) => i.label.toLowerCase().includes(key)) : [];
