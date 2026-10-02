@@ -23,7 +23,7 @@ import {
   type PwaResult,
 } from "@/lib/pwa";
 
-type RowState = "ok" | "no" | "wait";
+export type RowState = "ok" | "no" | "wait";
 
 export function InstallPage() {
   const pwa = usePwa();
@@ -240,7 +240,7 @@ function NotifyRow({ state }: { state: NotifyState }) {
   return <Row state={r.s} title={r.title} detail={r.detail} />;
 }
 
-function Row({
+export function Row({
   state,
   title,
   detail,

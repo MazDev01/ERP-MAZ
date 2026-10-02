@@ -7,7 +7,8 @@
     "dev:https": "next dev --experimental-https -H 26.224.66.120",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "push:sender": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/push-sender.mjs"
   },
   "dependencies": {
     "@prisma/client": "^7.10.0",
@@ -26,6 +27,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "web-push": "^3.6.7"
   }
 }

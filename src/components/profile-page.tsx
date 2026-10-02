@@ -27,6 +27,7 @@ import {
   PencilIcon,
   UserIcon,
 } from "./icons";
+import { DevicePushCard } from "./device-push-card";
 import { FileDrop, type PickedFile } from "./file-drop";
 import { PhotoCropper } from "./photo-cropper";
 
@@ -756,6 +757,9 @@ function NotifyPane({ onSaved }: { onSaved: (m: string) => void }) {
         </span>
         <Switch on={on} onToggle={() => setOn(!on)} label="เปิดการแจ้งเตือน" />
       </div>
+
+      {/* เปิดรับแจ้งเตือนบนเครื่องนี้ (Web Push) — ต้องลงทะเบียนเครื่องก่อน ถึงจะเตือนตอนปิดแอปได้ */}
+      <DevicePushCard />
 
       <div className={on ? "" : "pointer-events-none opacity-40"}>
         <div className="mt-5 grid grid-cols-[minmax(0,1fr)_44px_44px_44px] sm:grid-cols-[minmax(0,1fr)_60px_60px_60px] gap-2.5 border-b border-border pb-2.5">

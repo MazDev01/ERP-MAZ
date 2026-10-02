@@ -43,3 +43,6 @@ next-env.d.ts
 
 # ใบรับรอง HTTPS ของ next dev --experimental-https
 certificates
+
+# กุญแจ VAPID และรายชื่อเครื่องของตัวส่งแจ้งเตือนทดสอบ — ห้ามขึ้น git
+/.data/
