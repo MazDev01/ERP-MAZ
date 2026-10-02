@@ -484,7 +484,8 @@ function matchIn(items: NavItem[], pathname: string) {
 }
 
 /** หน้าที่ทุกบทบาทเปิดได้ นอกจากเมนูของตัวเอง */
-const SHARED_PAGES = ["/profile", "/notifications"];
+/* /notify-test = หน้าทดสอบแจ้งเตือนบนมือถือ เปิดได้ทุกบทบาทโดยไม่ต้องอยู่ในเมนู (ชุดทดสอบ 2 ต.ค. 2569) */
+const SHARED_PAGES = ["/profile", "/notifications", "/notify-test"];
 
 /** หน้านอกเมนูที่เป็นของบทบาทใดบทบาทหนึ่ง */
 const EXTRA_OWNER: Record<string, Role | Role[]> = {
@@ -535,6 +536,7 @@ export function findItem(pathname: string, role: Role): NavItem | undefined {
 /* หน้าที่ไม่ได้อยู่ในเมนูแต่มีชื่อของตัวเอง (เปิดจากกระดิ่งหรือเมนูผู้ใช้) */
 const PAGE_NAME: Record<string, string> = {
   "/notifications": "แจ้งเตือน",
+  "/notify-test": "ทดสอบแจ้งเตือน",
   "/profile": "โปรไฟล์ของฉัน",
 };
 
