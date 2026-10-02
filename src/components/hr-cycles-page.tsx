@@ -21,7 +21,7 @@ import {
   type Period,
 } from "@/lib/hr-data";
 import { useHr } from "@/lib/hr-store";
-import { HrSteps } from "./hr-steps";
+import { HrSteps, useUrlGroup } from "./hr-steps";
 import { Sheet } from "./lead-dialogs";
 import { CheckCircleIcon } from "./icons";
 import { PhoneCard, PhoneList } from "./acchr-phone";
@@ -31,11 +31,12 @@ type Row = { period: Period; sum: CycleSum | null; at: string; by: string };
 
 export function HrCyclesPage() {
   const hr = useHr();
-  const [tab, setTab] = useState<PayGroup>("month");
+  const urlGroup = useUrlGroup();
+  const [tab, setTab] = useState<PayGroup>(urlGroup || "month");
   const [open, setOpen] = useState<{ month: string; group: PayGroup } | null>(null);
   /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ — ชุดเดียวกับหน้าอื่นในสายรอบเงินเดือน
      (ต้นแบบ hr-cycles.html บล็อก pay-tiles 1 ต.ค. 2569) */
-  const [mgroup, setMgroup] = useState<PayGroup | null>(null);
+  const [mgroup, setMgroup] = useState<PayGroup | null>(urlGroup || null);
   useGroupBack(mgroup !== null, () => setMgroup(null));
 
   const day = tab === "day";
@@ -72,7 +73,7 @@ export function HrCyclesPage() {
       )}
 
       <div className={mgroup === null ? "max-md:hidden" : ""}>
-        <HrSteps month={stepMonth} />
+        <HrSteps month={stepMonth} group={tab} />
       </div>
 
       {mgroup !== null && (

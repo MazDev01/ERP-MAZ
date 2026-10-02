@@ -60,7 +60,7 @@ import {
 } from "@/lib/hr-data";
 import { reopenPayrunWithReason, sendPayrollToCeo, useHr } from "@/lib/hr-store";
 import { closePayrunFlow } from "@/lib/flow";
-import { HrSteps, useUrlMonth } from "./hr-steps";
+import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
 import { useComSource, useHrTime, useMissingApproved, usePayrollVoidWatch, type MissingReq } from "@/lib/hr-link";
 import type { Role } from "@/lib/role";
 import { EyeIcon, PencilIcon } from "./icons";
@@ -96,7 +96,8 @@ export function HrPayrollPage() {
   /* มาจากขั้นก่อนหน้าพร้อม ?m= ตั้งช่วงให้ตรงกับรอบนั้นเลย (ต้นแบบ urlMonth) */
   const urlMonth = useUrlMonth(months);
   const [range, setRange] = useState<Cycle>(() => hrCycle(urlMonth || months[months.length - 1]));
-  const [tab, setTab] = useState<Tab>("month");
+  const urlGroup = useUrlGroup();
+  const [tab, setTab] = useState<Tab>(urlGroup === "day" ? "daily" : "month");
   const [viewing, setViewing] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   /* เปิดรอบกลับ — ต้องพิมพ์เหตุผล และกล่องบอกผลที่ตามมาให้ครบก่อนกดยืนยัน */
@@ -107,7 +108,7 @@ export function HrPayrollPage() {
   const [pick, setPick] = useState<"from" | "to" | null>(null);
   /* มือถือ: เลือกกลุ่มก่อน (null = ยังอยู่หน้าเลือกกลุ่ม) แล้วค่อยเห็นขั้นตอนกับรายการ
      และเลือกรอบจากปฏิทินแทนช่องวันที่สองช่อง (ต้นแบบชุด 1 ต.ค. 2569) */
-  const [mgroup, setMgroup] = useState<Tab | null>(null);
+  const [mgroup, setMgroup] = useState<Tab | null>(urlGroup ? (urlGroup === "day" ? "daily" : "month") : null);
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
   useGroupBack(mgroup !== null, () => setMgroup(null));
@@ -304,7 +305,7 @@ export function HrPayrollPage() {
       </div>
 
       <div className={mgroup === null ? "max-md:hidden" : ""}>
-        <HrSteps month={month ?? undefined} />
+        <HrSteps month={month ?? undefined} group={tab === "daily" ? "day" : "month"} />
       </div>
 
       {mgroup !== null && (

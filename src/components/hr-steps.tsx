@@ -18,8 +18,10 @@ const STEPS = [
   { href: "/hr/cycles", label: "ประวัติรอบ" },
 ];
 
-export function HrSteps({ month }: { month?: string }) {
+export function HrSteps({ month, group }: { month?: string; group?: "month" | "day" }) {
   const here = usePathname();
+  /* ข้ามขั้นแล้วต้องอยู่กลุ่มเดิม ไม่ใช่กลับไปหน้าเลือกกลุ่มใหม่ทุกครั้ง (เจ้าของแจ้ง 2 ต.ค. 2569) */
+  const qs = [month ? `m=${month}` : "", group ? `g=${group}` : ""].filter(Boolean).join("&");
   return (
     <nav
       aria-label="ขั้นตอนของรอบเงินเดือน"
@@ -31,7 +33,7 @@ export function HrSteps({ month }: { month?: string }) {
         return (
           <Link
             key={s.href}
-            href={month ? `${s.href}?m=${month}` : s.href}
+            href={qs ? `${s.href}?${qs}` : s.href}
             aria-current={on ? "page" : undefined}
             className={`flex h-11 flex-none items-center px-4 text-[14px] font-semibold whitespace-nowrap transition-colors sm:px-6 max-md:h-9 max-md:rounded-full max-md:border-0! max-md:px-3.5 max-md:text-[13px] ${
               on
@@ -45,6 +47,12 @@ export function HrSteps({ month }: { month?: string }) {
       })}
     </nav>
   );
+}
+
+/** กลุ่มที่ส่งมาทาง ?g= จากขั้นก่อนหน้า — เปิดหน้ามาอยู่กลุ่มเดิมเลย */
+export function useUrlGroup(): "month" | "day" | "" {
+  const g = useSearchParams().get("g") ?? "";
+  return g === "month" || g === "day" ? g : "";
 }
 
 /**

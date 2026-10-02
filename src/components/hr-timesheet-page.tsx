@@ -44,7 +44,7 @@ import {
   noteIssue,
   useHr,
 } from "@/lib/hr-store";
-import { HrSteps, useUrlMonth } from "./hr-steps";
+import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
 import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, useGroupBack } from "./hr-pay-mobile";
 import { usePendingInMonth, useHrTime, useMissingApproved, type MissingReq } from "@/lib/hr-link";
 import { MissingBox } from "./hr-payroll-page";
@@ -75,7 +75,8 @@ export function HrTimesheetPage() {
   /* มาจากขั้นอื่นพร้อม ?m= ก็เปิดรอบนั้นเลย ไม่ต้องเลือกใหม่ (ต้นแบบ urlMonth) */
   const urlMonth = useUrlMonth(hr.periods.map((p) => p.month));
   const [month, setMonth] = useState(urlMonth || hr.periods[hr.periods.length - 1].month);
-  const [tab, setTab] = useState<Tab>("month");
+  const urlGroup = useUrlGroup();
+  const [tab, setTab] = useState<Tab>(urlGroup === "day" ? "daily" : "month");
   /* เวลาทำงานอ่านผ่านสะพาน — ใบลาใบโอทีของคนที่ผูกบทบาทไว้มาจากใบจริงในระบบ */
   const time = useHrTime();
   /* ใบที่ยังไม่ตัดสินและตกอยู่ในรอบนี้ ปิดรอบไปทั้งที่มีใบค้าง = ตัวเลขจะเปลี่ยนทีหลัง */
@@ -84,7 +85,7 @@ export function HrTimesheetPage() {
   const [viewing, setViewing] = useState<{ id: string; edit: boolean } | null>(null);
   const [closing, setClosing] = useState(false);
   /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ · เลือกรอบจากปฏิทินแทนดรอปดาวน์ */
-  const [mgroup, setMgroup] = useState<Tab | null>(null);
+  const [mgroup, setMgroup] = useState<Tab | null>(urlGroup ? (urlGroup === "day" ? "daily" : "month") : null);
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
   useGroupBack(mgroup !== null, () => setMgroup(null));
@@ -216,7 +217,7 @@ export function HrTimesheetPage() {
       </div>
 
       <div className={mgroup === null ? "max-md:hidden" : ""}>
-        <HrSteps month={month} />
+        <HrSteps month={month} group={tab === "daily" ? "day" : "month"} />
       </div>
 
       {mgroup !== null && (

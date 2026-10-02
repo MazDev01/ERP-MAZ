@@ -54,7 +54,7 @@ import {
   unpublishSlips,
   useHr,
 } from "@/lib/hr-store";
-import { HrSteps, useUrlMonth } from "./hr-steps";
+import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
 import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack } from "./hr-pay-mobile";
 import { useComSource, useHrTime } from "@/lib/hr-link";
 import {
@@ -103,11 +103,12 @@ export function HrPayslipPage() {
       .sort((a, b) => b.month.localeCompare(a.month))[0]?.month ??
       months[months.length - 1]);
   const monthIdx = months.indexOf(month);
-  const [tab, setTab] = useState<PayGroup>("month");
+  const urlGroup = useUrlGroup();
+  const [tab, setTab] = useState<PayGroup>(urlGroup || "month");
   const [viewing, setViewing] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ · เลือกรอบจากปฏิทินแทนแถบเลื่อนเดือน */
-  const [mgroup, setMgroup] = useState<PayGroup | null>(null);
+  const [mgroup, setMgroup] = useState<PayGroup | null>(urlGroup || null);
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
   useGroupBack(mgroup !== null, () => setMgroup(null));
@@ -216,7 +217,7 @@ export function HrPayslipPage() {
       </div>
 
       <div className={mgroup === null ? "max-md:hidden" : ""}>
-        <HrSteps month={month} />
+        <HrSteps month={month} group={tab} />
       </div>
 
       {mgroup !== null && (
