@@ -719,6 +719,91 @@ body{background:radial-gradient(60% 320px at 15% 0%, #FFFFFF 0%, rgba(255,255,25
 #pane-ot .panel{margin-bottom:80px!important}
 .tabbar2{left:12px!important;right:12px!important;bottom:calc(24px + env(safe-area-inset-bottom,0px))!important;height:72px;box-sizing:border-box;border-radius:30px!important;padding:0 6px!important;background:rgba(255,255,255,.72)!important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95)!important;box-shadow:0 12px 30px -22px rgba(140,20,40,.45)!important}.tabbar2 .in{height:100%;max-width:none!important;align-items:center!important}.tabbar2 a{font-size:11px!important}.tabbar2 a:has(> .fab){gap:14px!important}.tabbar2{background:rgba(255,255,255,.94)!important}.tabbar2 .fab{width:58px!important;height:58px!important;margin-top:-42px!important;border:0!important;background:#C8102E!important;box-shadow:0 0 0 9px rgba(253,227,231,.85),0 12px 22px -10px rgba(200,16,46,.9)!important}
 }
+
+/* แถบเมนูล่างติดขอบล่างจอ ไม่ลอย */
+.tabbar2{left:0!important;right:0!important;bottom:0!important;height:auto!important;border-radius:24px 24px 0 0!important;border-left:0!important;border-right:0!important;border-bottom:0!important;padding:6px 6px calc(10px + env(safe-area-inset-bottom,0px))!important;background:rgba(255,255,255,.97)!important;box-shadow:0 -8px 24px -16px rgba(90,20,35,.35)!important}
+.tabbar2 .in{height:62px!important}
+#ot-newBtn{bottom:calc(96px + env(safe-area-inset-bottom,0px))!important}
+</style>
+<style id="att-ref">
+/* ===== มือถือ: หน้าโอทีตามภาพอ้างอิง (หัวข้อใหญ่ + จำนวน / ชิปตัวกรอง / การ์ดรายการ / ปุ่ม + กลม) ===== */
+@media (max-width:760px){
+  body{background:#F7F5F6!important}
+  .m-att-head{display:flex!important;align-items:center;gap:12px;padding:18px 16px 2px!important}
+  .m-att-head a[href="checkin.html"]{display:none!important}
+  .m-att-head a{width:38px!important;height:38px!important}
+  .m-att-head h1{text-align:left!important;font-size:26px!important;font-weight:700}
+  .m-att-count{font-size:13px;color:#8A7E81;margin-left:-4px;align-self:flex-end;padding-bottom:6px}
+  #pane-ot .bar .mo{background:#FFFFFF!important;border-radius:999px!important;height:48px;padding:0 6px!important}
+  #ot-cards{display:none!important}   /* ไม่แสดงกล่องสรุปชั่วโมงบนมือถือ */
+  #ot-cards .card{background:#FFFFFF!important;border-radius:18px!important;padding:12px 14px!important}
+  /* จอ 641–760px: ตารางยังไม่ถูกแปลงเป็นการ์ดโดยธีมเดิม จึงแปลงเอง */
+  #pane-ot .scroll{overflow:visible!important}
+  #pane-ot table{display:block!important;min-width:0!important;width:100%!important}
+  #pane-ot thead{display:none!important}
+  #pane-ot tbody#ot-rows{display:flex!important;flex-direction:column;width:100%;box-sizing:border-box}
+  #ot-rows > tr{width:100%;box-sizing:border-box}
+  /* ชิปตัวกรอง */
+  #pane-ot .strip .tabs{gap:8px!important;padding:2px 0 4px!important}
+  #pane-ot .strip .tabs button{height:38px!important;padding:0 16px!important;border-radius:999px!important;background:#EDE8EA!important;color:#6E6164!important;box-shadow:none!important;font-weight:600!important}
+  #pane-ot .strip .tabs button.on{background:#C8102E!important;color:#FFFFFF!important}
+  #pane-ot .strip .tabs button b{background:transparent!important;color:inherit!important;opacity:.8}
+  /* การ์ดคำขอ */
+  #ot-rows > tr{display:grid!important;grid-template-columns:40px minmax(0,1fr) auto auto!important;column-gap:10px!important;row-gap:6px!important;padding:14px!important;border-radius:20px!important;background:#FFFFFF!important;
+    box-shadow:0 1px 2px rgba(40,20,25,.04)!important;border:0!important;
+    grid-template-areas:"ico dt dt hr" "ico wk wk wk" "line line line line" "tm tm st no" "ac ac ac ac"!important}
+  #ot-rows > tr::before{content:"";grid-area:ico;width:40px;height:40px;border-radius:50%;background:#F4EEEF url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23C8102E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") center/20px no-repeat;align-self:start}
+  #ot-rows > tr::after{content:"";grid-area:line;border-top:1.5px dashed #ECE3E5;margin:6px 0 4px}
+  #ot-rows > tr:has(td[colspan])::before,#ot-rows > tr:has(td[colspan])::after{display:none}
+  #ot-rows > tr > td{background:none!important;padding:0!important;border-radius:0!important}
+  #ot-rows > tr > td::before{content:none!important}
+  #ot-rows > tr > td:nth-child(2){grid-area:dt;font-size:15px!important;font-weight:700!important;align-self:center}
+  #ot-rows > tr > td:nth-child(4){grid-area:hr;font-size:15px!important;font-weight:700!important;justify-self:end;align-self:center;white-space:nowrap}
+  #ot-rows > tr > td:nth-child(4)::after{content:" ชม.";font-weight:600}
+  #ot-rows > tr > td:nth-child(5){grid-area:wk;font-size:13px!important;color:#6E6164!important;line-height:1.45}
+  #ot-rows > tr > td:nth-child(3){grid-area:tm;font-size:12.5px!important;font-weight:600!important;color:#6E6164;display:flex!important;align-items:center;gap:5px;white-space:nowrap;justify-content:flex-start!important;text-align:left!important}
+  #ot-rows > tr > td:nth-child(3)::before{content:""!important;display:inline-block!important;width:14px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238A7E81' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") center/14px no-repeat;margin:0!important}
+  #ot-rows > tr > td:nth-child(6){grid-area:st;justify-self:start!important;align-self:center!important}
+  #ot-rows > tr > td:nth-child(1){grid-area:no;justify-self:end;align-self:center;font-size:12px!important;color:#9A8E91!important;white-space:nowrap}
+  #ot-rows > tr > td:nth-child(7){grid-area:ac;justify-self:end!important}
+  #ot-rows > tr > td:nth-child(7):empty{display:none!important}
+  #ot-rows > tr > td:nth-child(7):not(:has(button,a)){display:none!important}
+  /* เอากล่องพื้นหลังและป้ายหัวข้อเดิมของช่องเวลา/ชั่วโมงออก */
+  #ot-rows > tr > td:nth-child(3),#ot-rows > tr > td:nth-child(4){background:none!important;padding:0!important;border-radius:0!important}
+  #ot-rows > tr > td:nth-child(4)::before{content:none!important;display:none!important}
+  /* ปุ่ม + กลมแทนปุ่มยาว */
+  #ot-newBtn{left:auto!important;right:18px!important;width:58px!important;height:58px!important;padding:0!important;border-radius:50%!important;font-size:0!important;gap:0!important;justify-content:center!important;
+    bottom:calc(100px + env(safe-area-inset-bottom,0px))!important;box-shadow:0 14px 24px -10px rgba(200,16,46,.9)!important}
+  #ot-newBtn svg{width:24px!important;height:24px!important}
+}
+</style>
+<style id="att-otcal">
+/* ===== มือถือ: ปุ่มปฏิทินกรองวันที่ แทนแถบเลือกเดือน ===== */
+.m-ot-calbtn,.m-ot-filter,.m-ot-sheet{display:none}
+@media (max-width:760px){
+  #pane-ot .bar .mo{display:none!important}
+  #pane-ot .foot .sum{display:none!important}   /* ไม่แสดงชั่วโมงที่อนุมัติแล้วรวมบนมือถือ */
+  .m-ot-calbtn{display:flex;margin-left:auto;width:42px;height:42px;border-radius:50%;border:1px solid #EFE3E5;background:#FFFFFF;color:#2A1F22;align-items:center;justify-content:center;padding:0;box-shadow:0 4px 10px -6px rgba(90,20,35,.3)}
+  .m-ot-filter:not([hidden]){display:flex;align-items:center;gap:8px;align-self:flex-start;margin:10px 16px 0;height:36px;padding:0 6px 0 14px;border-radius:999px;background:#FDECEE;color:#B0101F;font-size:13px;font-weight:700}
+  .m-ot-filter button{width:26px;height:26px;border-radius:50%;border:0;background:#FFFFFF;color:#B0101F;display:flex;align-items:center;justify-content:center;padding:0}
+  .m-ot-sheet:not([hidden]){display:flex;position:fixed;inset:0;z-index:90;background:rgba(40,20,25,.4);align-items:flex-end}
+  .m-ot-panel{width:100%;box-sizing:border-box;background:#FFFFFF;border-radius:26px 26px 0 0;padding:10px 18px calc(22px + env(safe-area-inset-bottom,0px))}
+  .m-ot-grab{width:40px;height:4px;border-radius:4px;background:#E8DDE0;margin:0 auto 12px}
+  .m-ot-calhead{display:flex;align-items:center;justify-content:space-between}
+  .m-ot-calhead h2{margin:0;font-size:17px;font-weight:700}
+  .m-ot-calhead button{width:38px;height:38px;border-radius:50%;border:1px solid #EFE3E5;background:#FFFFFF;display:flex;align-items:center;justify-content:center;padding:0;color:#2A1F22}
+  .m-ot-calhead button:disabled{opacity:.35}
+  .m-ot-wk,.m-ot-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}
+  .m-ot-wk{margin-top:12px}.m-ot-wk span{font-size:12px;color:#9A8E91;padding:4px 0}
+  .m-ot-grid button,.m-ot-grid span{height:46px;border:0;background:none;font:inherit;display:flex;flex-direction:column;align-items:center;gap:3px;padding:0;color:#2A1F22}
+  .m-ot-grid b{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
+  .m-ot-grid i{width:5px;height:5px;border-radius:50%;background:transparent}
+  .m-ot-grid .has i{background:#C8102E}
+  .m-ot-grid .today b{color:#C8102E}
+  .m-ot-grid .sel b{background:#C8102E;color:#FFFFFF}
+  .m-ot-grid button:disabled{opacity:.35}
+  .m-ot-all{width:100%;height:48px;margin-top:10px;border:0;border-radius:14px;background:#F6F0F1;font:inherit;font-size:14px;font-weight:700;color:#2A1F22}
+}
 </style>
 </head>
 <body>
@@ -743,9 +828,19 @@ body{background:radial-gradient(60% 320px at 15% 0%, #FFFFFF 0%, rgba(255,255,25
 <main class="main">
   <header class="m-att-head">
     <a href="home.html" aria-label="กลับหน้าหลัก"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></a>
-    <h1>โอที</h1>
-    <a href="checkin.html" aria-label="ไปหน้าลงเวลา"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></a>
+    <h1>โอที</h1><span class="m-att-count" id="mOtCount"></span>
+    <button type="button" class="m-ot-calbtn" id="mOtCalBtn" aria-label="เลือกวันที่" aria-haspopup="dialog"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
   </header>
+  <div class="m-ot-filter" id="mOtFilter" hidden><span id="mOtFilterTx">—</span><button type="button" id="mOtFilterX" aria-label="ล้างวันที่ที่เลือก"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+  <div class="m-ot-sheet" id="mOtSheet" hidden role="dialog" aria-modal="true" aria-labelledby="mOtCalT">
+    <div class="m-ot-panel">
+      <div class="m-ot-grab"></div>
+      <div class="m-ot-calhead"><button type="button" id="mOtPrev" aria-label="เดือนก่อนหน้า"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><h2 id="mOtCalT">—</h2><button type="button" id="mOtNext" aria-label="เดือนถัดไป"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
+      <div class="m-ot-wk" aria-hidden="true"><span>อา</span><span>จ</span><span>อ</span><span>พ</span><span>พฤ</span><span>ศ</span><span>ส</span></div>
+      <div class="m-ot-grid" id="mOtGrid"></div>
+      <button type="button" class="m-ot-all" id="mOtAll">ดูทั้งเดือน</button>
+    </div>
+  </div>
 
   <header class="appbar">
     <p class="where"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>เวลาทำงาน</p>
@@ -884,11 +979,11 @@ body{background:radial-gradient(60% 320px at 15% 0%, #FFFFFF 0%, rgba(255,255,25
 
 </main>
 <nav class="tabbar2" aria-label="เมนูล่าง"><div class="in">
-  <a href="home.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/></svg>หน้าหลัก</a>
-  <a href="my-schedule.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3M8 17h6"/></svg>ตารางงาน</a>
+  <a href="home-glass.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/></svg>หน้าหลัก</a>
+  <a href="leave.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>การลา</a>
   <a href="checkin.html" class="mid"><span class="fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>ลงเวลา</a>
-  <a href="leave.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>การลา</a>
-  <a href="profile.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>โปรไฟล์</a>
+  <a href="expense.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>เบิกค่าใช้จ่าย</a>
+  <a href="profile-glass.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>โปรไฟล์</a>
 </div></nav>
 <script>
 (function(){
@@ -1288,7 +1383,7 @@ body{background:radial-gradient(60% 320px at 15% 0%, #FFFFFF 0%, rgba(255,255,25
   function inMonth(r){
     var s=viewYear+'-'+pad(viewMonth+1)+'-01';
     var e=viewYear+'-'+pad(viewMonth+1)+'-'+pad(new Date(viewYear, viewMonth+1, 0).getDate());
-    return r.date>=s && r.date<=e;
+    return r.date>=s && r.date<=e && (!window.__otDay || r.date===window.__otDay);   /* วันที่ที่เลือกจากปฏิทิน (มือถือ) */
   }
   // ชั่วโมงที่นำไปคำนวณค่าตอบแทนต้องผ่านการอนุมัติแล้วเท่านั้น (BR-01)
   function paidHours(r){ return r.status==='approved' ? (r.approved==null ? r.hours : r.approved) : 0; }
@@ -1397,6 +1492,7 @@ body{background:radial-gradient(60% 320px at 15% 0%, #FFFFFF 0%, rgba(255,255,25
     page=1; render(); syncMonthBtns();
   }
   document.getElementById('ot-prevMo').addEventListener('click',function(){ shiftMonth(-1); });
+  window.__ot={ reqs:function(){ return REQS; }, month:function(){ return [viewYear,viewMonth]; }, go:function(y,m){ viewYear=y; viewMonth=m; page=1; render(); syncMonthBtns(); }, redraw:function(){ page=1; render(); } };
   document.getElementById('ot-nextMo').addEventListener('click',function(){ shiftMonth(1); });
   function syncMonthBtns(){
     document.getElementById('ot-nextMo').disabled =
@@ -1765,5 +1861,56 @@ body{background:radial-gradient(60% 320px at 15% 0%, #FFFFFF 0%, rgba(255,255,25
 })();
 </script>
 
+<script>
+(function(){
+  /* จำนวนคำขอทั้งหมดของเดือนที่เลือก แสดงข้างหัวข้อ "โอที" */
+  var tabs=document.getElementById('ot-tabs'), out=document.getElementById('mOtCount');
+  function sync(){ var b=tabs.querySelector('button b'); out.textContent=b?b.textContent.replace(/\s/g,'')+' คำขอ':''; }
+  if(window.MutationObserver) new MutationObserver(sync).observe(tabs,{childList:true,subtree:true,characterData:true});
+  sync();
+})();
+</script>
+<script>
+(function(){
+  /* มือถือ: ปุ่มปฏิทินเลือกวันที่ -> กรองคำขอโอทีเฉพาะวันนั้น, "ดูทั้งเดือน" ล้างตัวกรอง */
+  if(!window.__ot) return;
+  var MONF=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var MON=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var TODAY=new Date(2026,8,7);   /* วันนี้ของต้นแบบ ตรงกับหน้าอื่น */
+  function pad(n){ return n<10?'0'+n:''+n; }
+  var sheet=document.getElementById('mOtSheet'), ym=null;
+  function draw(){
+    var y=ym[0], m=ym[1], first=new Date(y,m,1).getDay(), dim=new Date(y,m+1,0).getDate(), h='';
+    var has={}; window.__ot.reqs().forEach(function(r){ has[r.date]=1; });
+    document.getElementById('mOtCalT').textContent=MONF[m]+' '+(y+543);
+    for(var i=0;i<first;i++) h+='<span></span>';
+    for(var d=1;d<=dim;d++){
+      var iso=y+'-'+pad(m+1)+'-'+pad(d), fut=new Date(y,m,d)>TODAY;
+      var cls=(has[iso]?'has ':'')+(iso===window.__otDay?'sel ':'')+(y===TODAY.getFullYear()&&m===TODAY.getMonth()&&d===TODAY.getDate()?'today':'');
+      h+='<button type="button" class="'+cls+'" data-d="'+iso+'"'+(fut?' disabled':'')+'><b>'+d+'</b><i></i></button>';
+    }
+    document.getElementById('mOtGrid').innerHTML=h;
+    document.getElementById('mOtNext').disabled=(y>TODAY.getFullYear())||(y===TODAY.getFullYear()&&m>=TODAY.getMonth());
+  }
+  function label(){
+    var f=document.getElementById('mOtFilter');
+    if(window.__otDay){ var p=window.__otDay.split('-'); document.getElementById('mOtFilterTx').textContent=(+p[2])+' '+MON[+p[1]-1]+' '+(+p[0]+543); f.hidden=false; }
+    else f.hidden=true;
+  }
+  function open(){ ym=window.__ot.month(); draw(); sheet.hidden=false; }
+  function close(){ sheet.hidden=true; }
+  document.getElementById('mOtCalBtn').addEventListener('click',open);
+  sheet.addEventListener('click',function(e){ if(e.target===sheet) close(); });
+  document.getElementById('mOtPrev').addEventListener('click',function(){ var d=new Date(ym[0],ym[1]-1,1); ym=[d.getFullYear(),d.getMonth()]; draw(); });
+  document.getElementById('mOtNext').addEventListener('click',function(){ var d=new Date(ym[0],ym[1]+1,1); ym=[d.getFullYear(),d.getMonth()]; draw(); });
+  document.getElementById('mOtGrid').addEventListener('click',function(e){
+    var b=e.target.closest('button[data-d]'); if(!b||b.disabled) return;
+    window.__otDay=b.getAttribute('data-d'); window.__ot.go(ym[0],ym[1]); label(); close();
+  });
+  document.getElementById('mOtAll').addEventListener('click',function(){ window.__otDay=null; window.__ot.go(ym[0],ym[1]); label(); close(); });
+  document.getElementById('mOtFilterX').addEventListener('click',function(){ window.__otDay=null; window.__ot.redraw(); label(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&!sheet.hidden) close(); });
+})();
+</script>
 </body>
 </html>

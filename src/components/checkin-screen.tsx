@@ -31,7 +31,7 @@ import { useRole } from "@/lib/role";
 import { expectedInMinutes, expectedOutMinutes, formatMinutes, formatMinutesOfDay, leaveWindowOf, looksForgotten, minutesOfTime, requiredMinutes } from "@/lib/work-schedule";
 import { popupOn, useNotifySettings } from "@/lib/notify-settings";
 import { areaSettings, freshFix, judge, locate, meters, useLiveGeo, type LiveGeo, type PunchGeo } from "@/lib/work-area";
-import { ChevronLeftIcon, ChevronRightIcon, ClockIcon, LeaveIcon, PinIcon, PlusIcon, PowerIcon } from "./icons";
+import { ChevronLeftIcon, ChevronRightIcon, ClockIcon, LeaveIcon, LoginIcon, PinIcon, PlusIcon, PowerIcon } from "./icons";
 
 const DOW_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
@@ -435,9 +435,9 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
 
         {/* สามช่องนี้เปลี่ยนตามวันที่เลือกในแถบสัปดาห์ ไม่ได้ผูกกับวันนี้อย่างเดียว */}
         <div className="grid grid-cols-3 gap-2.5">
-          <MobStat tone="peach" label="เวลาเข้างาน" value={viewIn ? formatClock(new Date(viewIn.at)) : null} />
-          <MobStat tone="rose" label="เวลาออกงาน" value={viewOut ? formatClock(new Date(viewOut.at)) : null} />
-          <MobStat tone="lilac" label="รวมชั่วโมง" value={viewWorked ? formatMinutes(viewWorked) : null} />
+          <MobStat tone="peach" icon="in" label="เวลาเข้างาน" value={viewIn ? formatClock(new Date(viewIn.at)) : null} />
+          <MobStat tone="rose" icon="out" label="เวลาออกงาน" value={viewOut ? formatClock(new Date(viewOut.at)) : null} />
+          <MobStat tone="lilac" icon="clock" label="รวมชั่วโมง" value={viewWorked ? formatMinutes(viewWorked) : null} />
         </div>
 
 
@@ -811,10 +811,13 @@ function MobStat({
   tone,
   label,
   value,
+  icon,
 }: {
   tone: "peach" | "rose" | "lilac";
   label: string;
   value: string | null;
+  /* ไอคอนตามต้นแบบ checkin.html — เข้างานเป็นลูกศรเข้า ออกงานเป็นลูกศรออก รวมชั่วโมงเป็นนาฬิกา */
+  icon: "in" | "out" | "clock";
 }) {
   const skin = {
     peach: "bg-[var(--warning-soft)] text-[var(--warning)]",
@@ -824,7 +827,11 @@ function MobStat({
   return (
     <div className="glass flex min-h-[98px] flex-col justify-between rounded-[18px] p-3">
       <span className={`grid size-[30px] place-items-center rounded-[10px] ${skin}`}>
-        <ClockIcon className="size-4" strokeWidth={2.2} />
+        {icon === "clock" ? (
+          <ClockIcon className="size-4" strokeWidth={2.2} />
+        ) : (
+          <LoginIcon className={`size-4 ${icon === "out" ? "rotate-180" : ""}`} strokeWidth={2.2} />
+        )}
       </span>
       <b className={`num mt-2 text-[20px] leading-none font-bold ${value ? "" : "text-muted-foreground"}`}>
         {value ?? "--:--"}

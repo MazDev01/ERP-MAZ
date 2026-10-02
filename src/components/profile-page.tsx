@@ -38,7 +38,7 @@ type Pane = "profile" | "notify" | "security";
 const PANES: { key: Pane; label: string; icon: React.ReactNode }[] = [
   { key: "profile", label: "ข้อมูลส่วนตัว", icon: <UserIcon className="size-4" /> },
   { key: "notify", label: "การแจ้งเตือน", icon: <BellIcon className="size-4" /> },
-  { key: "security", label: "รหัสผ่าน", icon: <LockIcon className="size-4" /> },
+  { key: "security", label: "เปลี่ยนรหัสผ่าน", icon: <LockIcon className="size-4" /> },
   /* แถบเมนูล่างย้ายไปให้ฝ่ายบุคคลตั้งที่หน้าตั้งค่าระบบ (เจ้าของสั่ง 1 ต.ค. 2569) */
 ];
 

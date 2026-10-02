@@ -296,8 +296,9 @@ export function LeadDetailPage({ code }: { code: string }) {
             </div>
 
             {pane === "timeline" ? (
-              <div className="relative pl-[26px]">
-                <span className="absolute top-1.5 bottom-1.5 left-1.5 w-0.5 bg-border" />
+              /* มือถือ: ไทม์ไลน์เป็นแนวนอน เลื่อนซ้ายขวา เก่าอยู่ซ้าย ใหม่/นัดถัดไปอยู่ขวา (ต้นแบบ lead-detail.html) */
+              <div className="relative pl-[26px] max-sm:flex max-sm:flex-row-reverse max-sm:justify-end max-sm:overflow-x-auto max-sm:pl-0 max-sm:[-ms-overflow-style:none] max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
+                <span className="absolute top-1.5 bottom-1.5 left-1.5 w-0.5 bg-border max-sm:hidden" />
                 {nextFollow && (
                   <Event
                     tone="next"
@@ -551,17 +552,19 @@ function Event({
         ? "border-[var(--success)]"
         : "border-[var(--info)]";
   return (
-    <div className="relative pb-[18px]">
+    <div className="relative pb-[18px] max-sm:w-[min(220px,62vw)] max-sm:flex-none max-sm:pt-[26px] max-sm:pr-3 max-sm:pb-0">
+      {/* เส้นเวลาแนวนอนของมือถือ — ต่อกันทุกใบจนเป็นเส้นเดียว */}
+      <span aria-hidden="true" className="absolute top-[7px] right-0 left-0 hidden h-0.5 bg-[#E9DEE1] max-sm:block" />
       <span
-        className={`absolute top-1 -left-[26px] size-3.5 rounded-full border-[3px] bg-white ${dot}`}
+        className={`absolute top-1 -left-[26px] size-3.5 rounded-full border-[3px] bg-white ${dot} max-sm:top-[1px] max-sm:left-0 max-sm:border-0 max-sm:bg-primary max-sm:ring-4 max-sm:ring-[#FDECEE]`}
       />
-      <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground max-sm:text-[13px] max-sm:font-bold max-sm:text-foreground">
         {when}
         {channel && (
-          <span className="glass-thin rounded-full px-2 py-px text-[11px]">{channel}</span>
+          <span className="glass-thin rounded-full px-2 py-px text-[11px] max-sm:font-semibold max-sm:text-muted-foreground">{channel}</span>
         )}
       </p>
-      <p className="mt-1.5 text-sm leading-relaxed break-words">{body}</p>
+      <p className="mt-1.5 text-sm leading-relaxed break-words max-sm:rounded-xl max-sm:bg-[#FAF6F7] max-sm:px-3 max-sm:py-2.5 max-sm:text-[13px]">{body}</p>
       {next && (
         <p className="mt-1.5 inline-block rounded-lg bg-[var(--warning-soft)] px-2.5 py-1 text-[12.5px] text-[var(--warning)]">
           สิ่งที่ต้องทำต่อ · {next}

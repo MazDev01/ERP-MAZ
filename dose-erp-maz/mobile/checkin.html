@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>เช็คอินเข้างาน — ERP MAZ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --maz-red:#D0021B; --maz-red-deep:#A50014; --maz-red-bright:#E8253C;
+  --ink:#1F2430; --ink-soft:#6B7280; --ink-faint:#9CA3AF;
+  --line:#E3E6EB; --field:#FAFBFC; --white:#FFFFFF;
+  --ok:#14875A; --ok-bg:#E7F5EE; --warn:#B4630B; --warn-bg:#FDF2E3;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:'Noto Sans Thai',system-ui,-apple-system,sans-serif;
+  color:var(--ink);background:#FBEEF0;
+  display:flex;align-items:center;justify-content:center;
+  padding:32px 20px;position:relative;overflow-x:hidden;
+}
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;
+  background:
+    radial-gradient(1100px 700px at 8% 4%, #F7D9DE 0%, transparent 58%),
+    radial-gradient(900px 900px at 96% 96%, #FCE9EC 0%, transparent 60%);
+}
+
+/* ================= home screen ================= */
+.shell{
+  position:relative;z-index:2;
+  width:100%;max-width:460px;
+  background:var(--white);border-radius:28px;overflow:hidden;
+  box-shadow:0 34px 90px -30px rgba(150,20,35,.34), 0 2px 8px rgba(20,10,15,.05);
+}
+.top{
+  position:relative;
+  background:linear-gradient(155deg, var(--maz-red-bright) 0%, var(--maz-red) 44%, var(--maz-red-deep) 100%);
+  padding:26px 28px 74px;color:var(--white);text-align:center;
+}
+.top::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.14) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.14) 0 1px, transparent 1px 44px);
+  mask-image:linear-gradient(115deg, rgba(0,0,0,1) 12%, rgba(0,0,0,.55) 85%);
+  -webkit-mask-image:linear-gradient(115deg, rgba(0,0,0,1) 12%, rgba(0,0,0,.55) 85%);
+}
+.scoop{
+  position:absolute;z-index:1;
+  bottom:0;left:50%;width:112%;height:100px;
+  transform:translate(-50%,50%);
+  background:var(--white);border-radius:50%;pointer-events:none;
+}
+.top > p{position:relative;z-index:2}
+.brand{font-size:23px;font-weight:700;letter-spacing:.06em;opacity:.9}
+.hello{margin-top:16px;font-size:15px;color:rgba(255,255,255,.82)}
+.clock{margin-top:2px;font-size:52px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15}
+.today{font-size:14px;color:rgba(255,255,255,.78)}
+
+.body{padding:64px 28px 28px;text-align:center}
+
+.zone{
+  display:inline-flex;align-items:center;gap:9px;
+  padding:9px 18px;border-radius:24px;font-size:14px;font-weight:500;
+  background:var(--ok-bg);color:var(--ok);
+}
+.zone i{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.out .zone{background:var(--warn-bg);color:var(--warn)}
+.manual{
+  margin:14px auto 0;height:44px;padding:0 26px;border-radius:22px;cursor:pointer;
+  border:1.4px solid var(--line);background:var(--white);color:var(--ink-soft);
+  font-family:inherit;font-size:14.5px;font-weight:600;display:block;
+}
+.manual:hover{border-color:var(--maz-red);color:var(--maz-red)}
+.note{margin-top:14px;font-size:14px;line-height:1.6;color:var(--ink-faint)}
+.out .note{color:var(--warn)}
+
+.log{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px;padding-top:22px;border-top:1px solid var(--line)}
+.slot{background:var(--field);border-radius:14px;padding:14px 10px}
+.slot span{display:block;font-size:12.5px;color:var(--ink-faint)}
+.slot b{display:block;margin-top:5px;font-size:21px;font-weight:600;font-variant-numeric:tabular-nums}
+.slot.empty b{color:var(--ink-faint);font-weight:400}
+
+.demo{margin-top:22px;padding-top:16px;border-top:1px dashed var(--line);display:flex;gap:8px;justify-content:center}
+.demo button{
+  font-family:inherit;font-size:12.5px;color:var(--ink-faint);
+  background:none;border:1px solid var(--line);border-radius:20px;padding:6px 14px;cursor:pointer;
+}
+.demo button:hover{color:var(--ink-soft);border-color:var(--ink-faint)}
+
+/* ================= popup ================= */
+.veil{
+  position:fixed;inset:0;z-index:50;
+  background:rgba(60,10,18,.46);
+  display:flex;align-items:center;justify-content:center;padding:22px;
+  opacity:0;visibility:hidden;transition:opacity .28s ease,visibility .28s;
+}
+.veil.on{opacity:1;visibility:visible}
+
+.pop{
+  width:100%;max-width:340px;background:var(--white);
+  border-radius:26px;padding:0 26px 28px;text-align:center;
+  transform:scale(.84) translateY(22px);opacity:0;
+  transition:transform .45s cubic-bezier(.34,1.4,.5,1),opacity .3s ease;
+}
+.veil.on .pop{transform:none;opacity:1}
+
+.art{display:flex;justify-content:center;margin-top:-58px}
+.face-late,.face-out{display:none}
+.pop.late .face-happy{display:none}
+.pop.late .face-late{display:block}
+.pop.bye .face-happy,.pop.bye .face-late{display:none}
+.pop.bye .face-out{display:block}
+.pop.bye #pop-time{display:none}
+.pop.bye .sub{margin-bottom:2px}
+.bob{animation:bob 4.4s ease-in-out infinite}
+.bob.b{animation-duration:5.6s;animation-delay:.6s}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+
+/* happy: eyes open, then squeeze shut into arcs as the smile widens */
+@keyframes eyesOpen{0%,30%{opacity:1}37%,79%{opacity:0}86%,100%{opacity:1}}
+@keyframes eyesShut{0%,30%{opacity:0}37%,79%{opacity:1}86%,100%{opacity:0}}
+@keyframes grin{0%,30%{transform:scale(1)}42%,79%{transform:scale(1.18,1.34)}88%,100%{transform:scale(1)}}
+@keyframes cheeks{0%,30%{opacity:.35}44%,79%{opacity:.8}88%,100%{opacity:.35}}
+.eo{animation:eyesOpen 3.4s ease-in-out infinite}
+.es{animation:eyesShut 3.4s ease-in-out infinite}
+.grin{transform-origin:88px 96px;animation:grin 3.4s ease-in-out infinite}
+.blush{animation:cheeks 3.4s ease-in-out infinite}
+
+/* late: frown and a slow head shake */
+@keyframes shake{0%,10%{transform:rotate(0)}24%{transform:rotate(-7deg)}40%{transform:rotate(7deg)}56%{transform:rotate(-5deg)}70%{transform:rotate(4deg)}84%,100%{transform:rotate(0)}}
+@keyframes steam{0%{opacity:0;transform:translateY(2px) scale(.6)}22%{opacity:.85}62%{opacity:.45}100%{opacity:0;transform:translateY(-26px) scale(1.3)}}
+.shake{transform-origin:88px 82px;animation:shake 2.8s ease-in-out infinite}
+.steam{animation:steam 2.2s ease-out infinite}
+.steam.s2{animation-duration:2.6s;animation-delay:.5s}
+.steam.s3{animation-duration:2.4s;animation-delay:1s}
+
+/* end of day: a tired, grateful little bow */
+@keyframes bow{0%,22%{transform:translateY(0) scaleY(1)}44%{transform:translateY(9px) scaleY(.96)}66%,100%{transform:translateY(0) scaleY(1)}}
+@keyframes exhale{0%,30%{opacity:0;transform:translate(0,0) scale(.6)}52%{opacity:.75}100%{opacity:0;transform:translate(15px,-11px) scale(1.25)}}
+.bow{transform-origin:88px 122px;animation:bow 3.6s ease-in-out infinite}
+.puff{transform-origin:126px 92px;animation:exhale 3.6s ease-in-out infinite}
+
+.pop h2{margin-top:6px;font-size:24px;font-weight:600}
+.pop .sub{margin-top:10px;font-size:15px;line-height:1.55;color:var(--ink-soft)}
+.pop .sub b{display:block;margin-top:4px;font-size:19px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+
+.row{display:flex;margin-top:26px}
+.btn{
+  flex:1;height:54px;border:none;border-radius:27px;cursor:pointer;
+  font-family:inherit;font-size:16px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  transition:transform .15s ease,filter .15s ease;
+}
+.btn:active{transform:scale(.96)}
+.btn.main{
+  color:var(--white);
+  background:linear-gradient(100deg, var(--maz-red-bright), var(--maz-red-deep));
+  box-shadow:0 10px 22px -9px rgba(208,2,27,.62);
+}
+.btn.main:hover{filter:brightness(1.06)}
+.btn:disabled{cursor:default;filter:saturate(.5);box-shadow:none}
+#c-spin{display:flex;align-items:center}
+.spinner{
+  display:block;
+  width:19px;height:19px;border-radius:50%;
+  border:2.5px solid rgba(255,255,255,.32);border-top-color:var(--white);
+  animation:spin .7s linear infinite;
+}
+
+.stage2{display:none;flex-direction:column;align-items:center;padding:0 0 2px}
+.pop.ok .stage1{display:none}
+.pop.ok .stage2{display:flex;animation:rise .4s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes ring{from{transform:scale(.4);opacity:.5}to{transform:scale(1.5);opacity:0}}
+@keyframes draw{to{stroke-dashoffset:0}}
+.mark{position:relative;width:92px;height:92px;margin-top:-48px;display:flex;align-items:center;justify-content:center}
+.halo{position:absolute;width:92px;height:92px;border-radius:50%;background:var(--ok);animation:ring .8s ease .1s both}
+.tick{stroke-dasharray:58;stroke-dashoffset:58;animation:draw .5s ease .2s forwards}
+.stage2 h2{margin-top:14px}
+.stage2 p{margin-top:8px;font-size:14.5px;color:var(--ink-soft)}
+
+:focus-visible{outline:2.5px solid var(--maz-red);outline-offset:3px}
+
+@media (min-width:900px){
+  .shell{max-width:920px;display:grid;grid-template-columns:1fr 1fr}
+  .top{
+    padding:56px 44px;display:flex;flex-direction:column;justify-content:center;
+    border-radius:28px 0 0 28px;
+  }
+  .top::before{border-radius:28px 0 0 28px}
+  .scoop{
+    top:0;bottom:auto;left:100%;
+    width:300px;height:100%;
+    transform:translateX(-50%);
+  }
+  .brand{font-size:26px}
+  .hello{margin-top:26px;font-size:16px}
+  .clock{font-size:66px}
+  .today{font-size:15px}
+  .body{
+    padding:56px 52px 56px 76px;
+    display:flex;flex-direction:column;justify-content:center;
+  }
+  .zone{align-self:center}
+  .note{font-size:14.5px}
+  .log{margin-top:28px}
+  .slot{padding:16px 12px}
+}
+@media (max-width:460px){
+  body{padding:0;align-items:stretch}
+  .shell{border-radius:0;min-height:100dvh;max-width:none;box-shadow:none}
+  .top{padding:22px 24px 66px}
+  .clock{font-size:46px}
+  .body{padding:56px 24px 26px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+
+/* แต่ละรายการอยู่คนละบรรทัด ไม่ใช้เครื่องหมายคั่น */
+.il{display:block;line-height:1.6}
+/* ================= glass theme ================= */
+body{background:#F2F3F7}
+body::before{
+  content:'';position:fixed;inset:-20%;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(38% 42% at 78% 6%,  rgba(255,64,92,.34),  transparent 68%),
+    radial-gradient(34% 40% at 12% 18%, rgba(255,140,90,.26), transparent 66%),
+    radial-gradient(42% 44% at 62% 88%, rgba(96,132,255,.28), transparent 68%),
+    radial-gradient(36% 40% at 18% 82%, rgba(120,220,200,.24),transparent 66%),
+    radial-gradient(30% 34% at 92% 60%, rgba(196,120,255,.22),transparent 66%),
+    #F4F5F9;
+  filter:blur(40px);
+}
+/* ชั้นฝ้าบางๆ ให้สีไม่จัดเกินและตัวหนังสืออ่านง่าย */
+body::after{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:rgba(255,255,255,.34);
+}
+
+/* ---- พื้นผิวกระจก ---- */
+.panel, .card, .kpi, .pcard, .revcard, .box, .edu-wrap{
+  background:rgba(255,255,255,.46);
+  backdrop-filter:blur(30px) saturate(190%);
+  -webkit-backdrop-filter:blur(30px) saturate(190%);
+  border:1px solid rgba(255,255,255,.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.85),
+    inset 0 -1px 0 rgba(255,255,255,.28),
+    0 1px 2px rgba(28,20,45,.05),
+    0 18px 40px -20px rgba(40,25,60,.30);
+}
+.appbar, .topbar{
+  background:rgba(255,255,255,.52);
+  backdrop-filter:blur(26px) saturate(190%);
+  -webkit-backdrop-filter:blur(26px) saturate(190%);
+  border-bottom:1px solid rgba(255,255,255,.55);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8), 0 8px 26px -20px rgba(40,25,60,.5);
+}
+.menu{
+  background:rgba(255,255,255,.72);
+  backdrop-filter:blur(34px) saturate(200%);
+  -webkit-backdrop-filter:blur(34px) saturate(200%);
+  border:1px solid rgba(255,255,255,.7);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 26px 54px -24px rgba(40,25,60,.45);
+}
+.search, .seg, .mo, .iconbtn, .me, .btn.ghost, .chip, .drop, .master, .opt, .pages button, .tabs, .sw{
+  background:rgba(255,255,255,.5);
+  backdrop-filter:blur(18px) saturate(170%);
+  -webkit-backdrop-filter:blur(18px) saturate(170%);
+  border-color:rgba(255,255,255,.62);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7);
+}
+.iconbtn:hover, .me:hover, .btn.ghost:hover, .chip:hover{background:rgba(255,255,255,.72)}
+.chip.on, .opt.on, .seg button.on, .pages button.on{box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+
+/* ปุ่มหลักเป็นแก้วสีแดง ไม่ใช่สีทึบ */
+.btn.solid, .add, .solid{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34), 0 12px 26px -12px rgba(208,2,27,.6);
+}
+
+/* ตารางโปร่ง เห็นชั้นสีด้านหลัง */
+thead th{background:rgba(255,255,255,.62)!important;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+tbody tr:hover{background:rgba(255,255,255,.42)}
+tr.sub td{background:rgba(255,255,255,.34)}
+table.rounds, table.revs, table.inner{background:rgba(255,255,255,.5)}
+
+/* ช่องกรอกทึบกว่าเล็กน้อยเพื่อให้อ่านง่าย */
+input, select, textarea{
+  background:rgba(255,255,255,.58);
+  border-color:rgba(255,255,255,.7);
+  box-shadow:inset 0 1px 2px rgba(40,25,60,.05);
+}
+input:hover, select:hover, textarea:hover{background:rgba(255,255,255,.72)}
+input:focus, select:focus, textarea:focus{background:rgba(255,255,255,.92)}
+input:disabled, input[readonly]{background:rgba(240,241,245,.62)}
+
+/* กระดาษเอกสารต้องทึบ เพราะต้องพิมพ์จริง */
+.paper{
+  background:#FFF;backdrop-filter:none;-webkit-backdrop-filter:none;
+  border:1px solid rgba(255,255,255,.8);
+  box-shadow:0 2px 8px rgba(28,20,45,.06), 0 30px 66px -30px rgba(40,25,60,.45);
+}
+
+@supports not (backdrop-filter: blur(2px)){
+  body::before{filter:none;opacity:.5}
+  .panel,.card,.kpi,.pcard,.revcard,.box,.edu-wrap,.menu,.appbar,.topbar{background:rgba(255,255,255,.94)}
+}
+@media print{ body::before,body::after{display:none} }
+
+/* ===== glass theme — ส่วนเพิ่ม (ใช้ร่วมทุกหน้า) ===== */
+/* บล็อกด้านบนคลุมแค่ .panel .card .menu .appbar ฯลฯ ส่วนนี้เก็บของที่ตกสำรวจ
+   ห้ามเขียน CSS ของหน้าไว้ใต้บล็อกนี้ ไม่งั้นจะไปทับธีมกระจก */
+
+/* กล่องที่ลอยทับเนื้อหา ต้องทึบกว่าการ์ดพื้นหลัง ไม่งั้นตารางด้านหลังทะลุจนอ่านไม่ออก */
+.drawer, .list, .tip, /* เมนูบัญชีลอยทับเนื้อหา ถ้าโปร่งจะเห็นข้อความข้างหลังทะลุจนอ่านยาก ต้องทึบ */
+.menu{
+  background:rgba(255,255,255,.97);
+  backdrop-filter:blur(30px) saturate(180%);
+  -webkit-backdrop-filter:blur(30px) saturate(180%);
+  border-color:rgba(31,36,48,.1);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 26px 54px -24px rgba(40,25,60,.45);
+}
+.cal, .tpop{
+  background:rgba(255,255,255,.93);
+  backdrop-filter:blur(34px) saturate(200%);
+  -webkit-backdrop-filter:blur(34px) saturate(200%);
+  border-color:rgba(255,255,255,.8);
+}
+.box{
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(36px) saturate(200%);
+  -webkit-backdrop-filter:blur(36px) saturate(200%);
+  border-color:rgba(255,255,255,.75);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 34px 70px -28px rgba(40,25,60,.5);
+}
+
+/* ปุ่มเล็กในตารางและแถบเครื่องมือ ให้เป็นแก้วระดับเดียวกับ .iconbtn */
+.act, .del, .mini, .more, .calbar button, .file .rm, .b-line, .pick, .calnav, .tcol .val{
+  background:rgba(255,255,255,.5);
+  backdrop-filter:blur(18px) saturate(170%);
+  -webkit-backdrop-filter:blur(18px) saturate(170%);
+  border-color:rgba(255,255,255,.62);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7);
+}
+/* ไม่ใส่ .del:hover เพราะหน้าใบเสนอราคากำหนดพื้นแดงอ่อนตอน hover ไว้แล้ว */
+.act:hover, .mini:hover, .more:hover, .calbar button:hover, .file .rm:hover, .b-line:hover, .pick:hover, .calnav:hover{
+  background:rgba(255,255,255,.76);
+}
+
+/* ปฏิทินไทยและตัวเลือกเวลาแบบ stepper (หน้าการลา) */
+.calgrid button:hover{background:rgba(31,36,48,.06)}
+.calgrid button.on:hover{background:var(--maz-red)}
+.tcol .step:hover:not(:disabled){background:rgba(31,36,48,.06)}
+.card .track{background:rgba(31,36,48,.13)}
+.calc{
+  background:rgba(255,255,255,.5);
+  backdrop-filter:blur(18px) saturate(170%);
+  -webkit-backdrop-filter:blur(18px) saturate(170%);
+  border-color:rgba(31,36,48,.09);
+}
+.bhead, .bfoot{border-color:rgba(31,36,48,.09)}
+
+/* กล่องไฟล์แนบ */
+.file{
+  background:rgba(255,255,255,.42);
+  backdrop-filter:blur(18px) saturate(170%);
+  -webkit-backdrop-filter:blur(18px) saturate(170%);
+  border-color:rgba(255,255,255,.6);
+}
+
+/* หน้าเข้าสู่ระบบ */
+.shell, .formside, .scoop{
+  background:rgba(255,255,255,.6);
+  backdrop-filter:blur(30px) saturate(190%);
+  -webkit-backdrop-filter:blur(30px) saturate(190%);
+}
+
+/* ตัวเครื่องในหน้าตัวอย่างสถานะบัญชี เป็นภาพจำลองมือถือ ต้องทึบ ไม่ใส่กระจก */
+
+@supports not (backdrop-filter: blur(2px)){
+  .drawer,.list,.tip,.cal,.tpop,.box{background:rgba(255,255,255,.98)}
+  .shell,.formside,.scoop{background:rgba(255,255,255,.96)}
+}
+
+/* ===== เลื่อนทั้งคอลัมน์เนื้อหาเป็นก้อนเดียว ไม่เลื่อนในตาราง (ใช้ร่วมทุกหน้า) ===== */
+/* เดิมตารางมีสกรอลล์ของตัวเองซ้อนอยู่ข้างใน เอาออกให้เลื่อนทีเดียวทั้งคอลัมน์
+   ตัวที่เลื่อนคือ .main ไม่ใช่ทั้งหน้า เมนูซ้ายเลยอยู่กับที่เสมอ ไม่ต้องพึ่ง sticky
+   (ถ้าให้ทั้งหน้ายาวแล้วใช้ sticky เมนูจะหายตอนเลื่อนในกรอบพรีวิวที่สูงเท่าเนื้อหา) */
+/* ต้องระบุ main.main เพราะมีปุ่มที่ใช้คลาส main ด้วย ถ้าเขียน .main เฉยๆ ปุ่มจะสูงเท่าจอ */
+main.main{height:100vh;overflow:auto}
+.panel{flex:none}
+.scroll, .scrollarea, .stage{flex:none;min-height:0;overflow:visible}
+/* ยกเว้นดรอปดาวน์ค้นหา ต้องเลื่อนในกล่องตัวเองเหมือนเดิม */
+.list .scrollarea{max-height:264px;overflow:auto}
+/* แถบหัวลอยอยู่บนสุดของคอลัมน์เนื้อหา และต้องทึบพอให้อ่านออกตอนเนื้อหาเลื่อนลอดใต้ */
+.appbar, .topbar{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.86)}
+/* แผงเลื่อนข้างและกล่องซ้อนยังเลื่อนในตัวเองตามเดิม */
+.drawer .body, .bbody{overflow:auto}
+@media print{ .appbar, .topbar{position:static} .main{height:auto;overflow:visible} }
+
+.twrap input.bad, .dwrap input.bad{
+  border-color:var(--late);
+  background:var(--late-bg);
+  color:var(--late);
+  font-weight:600;
+}
+.twrap input.bad ~ .clockbtn, .dwrap input.bad ~ .calbtn{color:var(--late)}
+
+/* ===== มือถือ: ตารางรายการเปลี่ยนเป็นการ์ดต่อแถว (ใช้ร่วมทุกหน้า) =====
+   จอ 640px ลงมา ตารางหลายคอลัมน์อ่านยากมากถ้าเลื่อนแนวนอน
+   จึงพับแต่ละแถวเป็นการ์ด โดยเอาชื่อคอลัมน์จาก th มาไว้หน้าเซลล์
+   ใช้เฉพาะตารางรายการ (.scroll > table) ไม่แตะตารางในเอกสาร A4 หรือตารางกรอกในฟอร์ม */
+@media (max-width:640px){
+  /* ตารางที่แปลงเป็นการ์ดจะแคบพอดีอยู่แล้ว ส่วนตารางกรอกในฟอร์มยังกว้าง ต้องเลื่อนข้างได้
+     ถ้าตั้ง visible เนื้อหาจะถูกตัดหายโดยไม่มีทางเลื่อนไปดู */
+  .scroll{overflow-x:auto}
+  .scroll > table.grid{min-width:760px}
+  .scroll > table:not(.grid){min-width:0!important;display:block;border-collapse:separate;border-spacing:0}
+  .scroll > table:not(.grid) > thead{display:none}
+  .scroll > table:not(.grid) > tbody{display:block}
+
+  .scroll > table:not(.grid) > tbody > tr{
+    display:block;margin:10px 14px;padding:6px 2px;
+    border:1px solid var(--line);border-radius:13px;background:var(--white);
+  }
+  .scroll > table:not(.grid) > tbody > tr > td{
+    display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+    width:auto;border:none;padding:7px 13px;text-align:right;
+  }
+  .scroll > table:not(.grid) > tbody > tr > td::before{
+    content:attr(data-label);flex:none;max-width:44%;
+    color:var(--ink-faint);font-size:12px;font-weight:600;text-align:left;line-height:1.5;
+  }
+  .scroll > table:not(.grid) > tbody > tr > td:not([data-label])::before{content:none}
+  .scroll > table:not(.grid) > tbody > tr > td > *{text-align:right}
+  .scroll > table:not(.grid) > tbody > tr > td .clip{white-space:normal}
+
+  /* แถวว่างและแถวที่กางรายละเอียดคร่อมทั้งแถว ให้แสดงเต็มความกว้างตามเดิม */
+  .scroll > table:not(.grid) > tbody > tr.sub{margin:0;padding:0;border:none;border-radius:0;background:none}
+  .scroll > table:not(.grid) > tbody > tr.sub > td{display:block;text-align:left;padding:0}
+  .scroll > table:not(.grid) > tbody > tr.sub > td::before{content:none}
+  .scroll > table:not(.grid) > tbody > tr > td.blank,
+  .scroll > table:not(.grid) > tbody > tr > td.empty{display:block;text-align:center}
+  .scroll > table:not(.grid) > tbody > tr > td.blank::before,
+  .scroll > table:not(.grid) > tbody > tr > td.empty::before{content:none}
+
+  /* ตารางย่อยข้างในการ์ดยังเป็นตารางปกติ แต่ให้เลื่อนข้างได้ */
+  .subwrap{overflow-x:auto}
+  table.inner{min-width:560px}
+
+
+  /* แถบหัวหน้า: ชื่อหน้ากับปุ่มเครื่องมือไม่พอในบรรทัดเดียว ต้องตกบรรทัดแทนการถูกตัดหาย */
+  .bar{flex-wrap:wrap;gap:12px}
+  .bar .tools{width:100%;flex-wrap:wrap;justify-content:flex-start;gap:9px}
+  .bar .tools .mo{flex:1 1 auto;min-width:0;justify-content:space-between}
+  .bar .tools .btn, .bar .tools .seg{flex:1 1 auto;justify-content:center}
+  .bar h1{font-size:20px}
+
+  /* กริดที่ตั้งความกว้างคอลัมน์เป็นพิกเซลตายตัวไว้ ต้องบีบให้พอดีจอ ไม่งั้นลูกล้นออกไป */
+  .shell{grid-template-columns:minmax(0,1fr)!important;max-width:100%!important}
+  .pcard, .scoop{max-width:100%!important;width:auto!important;min-width:0}
+  .profile{grid-template-columns:1fr!important}
+  .facts{grid-template-columns:1fr!important}
+  .two, .two-up, .wide-left, .moneygrid{grid-template-columns:1fr!important}
+
+  /* ตารางอื่นที่ไม่ได้อยู่ในกรอบเลื่อน ต้องมีกรอบเลื่อนของตัวเอง */
+  .pcard table, .card table{display:block;overflow-x:auto;max-width:100%}
+
+  /* ช่องค้นหาและแถวป้าย-ค่า ตั้งความกว้างตายตัวไว้ ต้องยืดหดตามจอ */
+  .search{width:100%!important;min-width:0}
+  .search input{width:100%;min-width:0}
+  .mrow{flex-wrap:wrap;gap:4px 10px}
+  .mrow > span, .mrow > label{width:auto;min-width:120px}
+  .card, .panel{min-width:0}
+
+  /* ปุ่มยาวๆ อย่างส่งออก Excel และแถวปุ่มด้านขวาให้ตกบรรทัด ไม่ดันออกนอกจอ */
+  .right, .acts, .btnrow{flex-wrap:wrap}
+  .btn{white-space:nowrap}
+  .bars .bar{max-width:100%}
+
+  /* แถบเลขหน้าและปุ่มสาธิตให้ตกบรรทัดแทนที่จะดันออกนอกจอ */
+  .pages{flex-wrap:wrap;justify-content:center}
+  .foot{flex-wrap:wrap;gap:10px}
+  .demo{flex-wrap:wrap;justify-content:center}
+
+  /* ตารางกรอกในกล่องซ้อน ให้เลื่อนข้างในกล่องแทนที่จะดันกล่องล้นจอ */
+  .bbody{overflow-x:auto}
+  .bbody table.grid{min-width:420px}
+
+  /* แท็บบนมือถือให้เลื่อนแนวนอนแทนที่จะตกบรรทัด */
+  .tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex:none}
+  .strip{flex-wrap:wrap;gap:8px}
+  .legend{display:none}
+}
+
+/* ===== แท็บเล็ต: กล่องที่ตั้งความกว้างเป็นพิกเซลตายตัวต้องยืดหดตามจอด้วย ===== */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr)!important;max-width:100%!important}
+  .pcard, .scoop{max-width:100%!important;width:auto!important;min-width:0}
+  .pcard table, .card table{display:block;overflow-x:auto;max-width:100%}
+}
+/* ===== จอแคบมาก: การ์ดสรุปเรียงลงคอลัมน์เดียว ===== */
+@media (max-width:420px){
+  .cards{grid-template-columns:minmax(0,1fr)!important}
+  .cards > *{min-width:0}
+  /* กริดหลายคอลัมน์ในแดชบอร์ดเหลือคอลัมน์เดียว ไม่งั้นคอลัมน์กว้างเกินจอ */
+  .grid, .grid2, .grid3{grid-template-columns:minmax(0,1fr)!important}
+  .grid > *, .grid2 > *, .grid3 > *{min-width:0}
+}
+
+/* ===== มือถือ: เปลี่ยนเมนูข้างเป็นแถบล่าง ===== */
+.botnav{display:none}
+.bnsheet{display:none}
+@media (max-width:640px){
+  /* ซ่อนแถบข้าง ใช้แถบล่างแทน เพราะนิ้วโป้งเอื้อมถึงง่ายกว่า */
+  .side{display:none!important}
+  main.main{margin-left:0!important;padding-bottom:calc(74px + env(safe-area-inset-bottom))}
+  body{padding-bottom:0}
+
+  .botnav{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:90;
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    background:rgba(255,255,255,.94);
+    backdrop-filter:blur(26px) saturate(180%);
+    -webkit-backdrop-filter:blur(26px) saturate(180%);
+    border-top:1px solid rgba(31,36,48,.09);
+    box-shadow:0 -6px 22px -14px rgba(40,25,60,.35);
+  }
+  .bn-i{
+    flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    padding:6px 2px;border:none;background:none;cursor:pointer;text-decoration:none;
+    font-family:inherit;color:var(--ink-faint);border-radius:12px;
+  }
+  .bn-i svg{width:21px;height:21px;flex:none}
+  .bn-i span{font-size:10.5px;font-weight:600;line-height:1.25;text-align:center;
+             max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bn-i.on{color:var(--maz-red)}
+  .bn-i.on svg{stroke-width:2.1}
+  .bn-i:active{background:rgba(208,2,27,.07)}
+
+  /* แผ่นเมนูทั้งหมด เลื่อนขึ้นจากด้านล่าง */
+  .bnsheet{
+    display:block;position:fixed;inset:0;z-index:95;
+    background:rgba(28,20,45,.42);
+    opacity:0;visibility:hidden;transition:opacity .2s,visibility .2s;
+  }
+  .bnsheet.on{opacity:1;visibility:visible}
+  .bnpanel{
+    position:absolute;left:0;right:0;bottom:0;
+    background:var(--white);border-radius:20px 20px 0 0;
+    padding:10px 16px calc(18px + env(safe-area-inset-bottom));
+    transform:translateY(14px);transition:transform .22s;
+    max-height:78vh;overflow:auto;
+  }
+  .bnsheet.on .bnpanel{transform:translateY(0)}
+  .bngrab{width:38px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 12px}
+  .bntitle{font-size:13px;font-weight:700;color:var(--ink-soft);margin-bottom:8px;padding-left:4px}
+  .bnlist{display:flex;flex-direction:column}
+  .bnrow{
+    display:flex;align-items:center;gap:13px;padding:13px 12px;border-radius:12px;
+    text-decoration:none;color:var(--ink);font-size:14.5px;font-weight:500;
+  }
+  .bnrow svg{width:19px;height:19px;flex:none;color:var(--ink-faint)}
+  .bnrow.on{background:#FEF5F6;color:var(--maz-red);font-weight:700}
+  .bnrow.on svg{color:var(--maz-red)}
+  .bnrow:active{background:var(--field)}
+}
+</style>
+<!-- ===== PWA (ใส่ร่วมทุกหน้าโดย apply_glass.py) ===== -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#D0021B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ERP MAZ">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" href="./icons/icon-192.png">
+<script src="./pwa.js" defer></script>
+<style id="checkin-v2">
+/* ================= หน้าเช็คอินแบบใหม่ (ตามภาพอ้างอิง WorkSync) ================= */
+:root{--red:#D0021B;--ink2:#6E6164;--ink3:#A3979A;--page:#FBF5F4;--line2:#F2E7E8;--shadow2:0 1px 2px rgba(120,20,35,.05),0 12px 28px -18px rgba(120,20,35,.3)}
+/* ธีมเดิมจัด body เป็น flex กึ่งกลางแนวตั้งและสูงเท่าจอพอดี เนื้อหาที่ยาวกว่าจอจึงล้นขึ้นด้านบนจนถูกตัดและเลื่อนขึ้นไปดูไม่ได้ */
+html,body{height:auto!important}
+body{display:block!important;align-items:initial!important;justify-content:initial!important}
+body{font-family:'Noto Sans Thai',Tahoma,'Leelawadee UI',sans-serif!important;background:var(--page)!important;color:var(--ink);margin:0;min-height:100vh;
+  padding:env(safe-area-inset-top,0px) 0 calc(124px + env(safe-area-inset-bottom,0px))!important}
+body::before,body::after{display:none!important}
+.ck{max-width:520px;margin:0 auto;padding:18px 18px 0;display:flex;flex-direction:column;gap:16px}
+.ck-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ck-month{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:700}
+.ck-month svg{color:var(--red)}
+.ck-sub{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.ck-req{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-radius:999px;background:#FFF;box-shadow:var(--shadow2);font-size:13.5px;font-weight:600;color:var(--ink);text-decoration:none;white-space:nowrap}
+.ck-week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.ck-day{display:flex;flex-direction:column;align-items:center;gap:1px;padding:8px 0;border-radius:16px;background:#FFF;border:1.5px solid var(--line2);font-size:15px;font-weight:600;color:var(--ink)}
+.ck-day small{font-size:10.5px;font-weight:500;color:var(--ink3)}
+.ck-day.wk{background:transparent;color:var(--ink3)}
+.ck-day.today{border-color:var(--red);box-shadow:0 8px 16px -10px rgba(208,2,27,.7)}
+.ck-day.today small{color:var(--red)}
+.ck-day{position:relative}
+.ck-day .star{position:absolute;top:-7px;right:-5px;width:20px;height:20px;display:none;filter:drop-shadow(0 2px 3px rgba(180,99,11,.35))}
+.ck-day.done .star{display:block;animation:starpop .45s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes starpop{from{transform:scale(0) rotate(-40deg)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){ .ck-day.done .star{animation:none} }
+.ck-loc{display:flex;align-items:center;gap:12px;background:#FFF;border-radius:18px;padding:12px 14px;box-shadow:var(--shadow2)}
+.ck-loc .pin{width:38px;height:38px;border-radius:12px;flex:none;display:flex;align-items:center;justify-content:center;background:#DDF2E6;color:#14875A}
+.ck-loc .tx{flex:1;min-width:0}
+.ck-loc .tx small{display:block;font-size:11.5px;color:var(--ink3)}
+.ck-loc .tx b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ck-loc .st{flex:none;font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;background:#DDF2E6;color:#14875A}
+.out .ck-loc .pin{background:#EFEBEC;color:var(--ink2)}
+.out .ck-loc .st{background:#FCE3E7;color:#C0121F}
+
+/* วงกลมหลัก */
+.ck-dial{position:relative;width:min(290px,78vw);aspect-ratio:1;margin:6px auto 0}
+.ck-dial svg.ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.ck-dial .hatch{position:absolute;inset:6%;border-radius:50%;
+  background:repeating-linear-gradient(45deg,rgba(208,2,27,.07) 0 3px,transparent 3px 9px)}
+.ck-btn{position:absolute;inset:14%;border-radius:50%;border:0;cursor:pointer;background:#FFF;
+  box-shadow:0 0 0 8px rgba(255,255,255,.9),0 24px 40px -22px rgba(142,0,18,.55),inset 0 -6px 14px rgba(208,2,27,.06);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-family:inherit;color:var(--ink);transition:transform .15s}
+.ck-btn:active{transform:scale(.97)}
+.ck-btn .big{font-size:34px;font-weight:700;color:var(--red)}
+.ck-btn .lab{font-size:12.5px;color:var(--ink2)}
+.ck-btn .dur{display:block;line-height:0;color:var(--ink)}
+.ck-btn .dur{width:100%}
+.ck-btn .dur svg{width:72%;height:auto;max-height:44px;margin:0 auto;display:block}
+.ck-btn .dur .off{opacity:.07}
+.ck-btn .chip2{margin-top:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#FCE3E7;color:#C0121F}
+.ck-btn:disabled{cursor:default}
+.ck-btn:disabled .big{color:var(--ink3)}
+.ck-btn:disabled:active{transform:none}
+
+/* สถิติ 3 ช่อง */
+.ck-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ck-stat{position:relative;overflow:hidden;background:#FFF;border-radius:18px;padding:12px;box-shadow:var(--shadow2);min-height:98px;display:flex;flex-direction:column;justify-content:space-between}
+.ck-stat::after{content:"";position:absolute;right:-6px;top:-6px;width:70px;height:70px;opacity:.5;
+  background-image:radial-gradient(rgba(208,2,27,.18) 1.2px,transparent 1.4px);background-size:9px 9px}
+.ck-stat .ic{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center}
+.ck-stat b{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:8px}
+.ck-stat.empty b{color:var(--ink3)}
+.ck-stat span{font-size:12px;color:var(--ink2)}
+
+/* แถวปุ่มล่าง */
+.ck-act{position:relative}
+.ck-hist{display:flex;align-items:center;gap:12px;background:#FFF;border-radius:18px;padding:12px 14px;box-shadow:var(--shadow2);color:var(--ink);text-decoration:none}
+.ck-hist .ic{width:38px;height:38px;border-radius:12px;flex:none;display:flex;align-items:center;justify-content:center;background:#ECE6FA;color:#5B3FBF}
+.ck-hist .tx{flex:1;min-width:0}.ck-hist b{display:block;font-size:14px;font-weight:600}.ck-hist small{display:block;font-size:12px;color:var(--ink3)}
+.ck-hist > svg{color:var(--ink3);flex:none}
+.ck-note{background:#FFF;border-radius:16px;padding:12px 14px;font-size:13px;color:var(--ink2);text-align:center;box-shadow:var(--shadow2);line-height:1.5}
+#manualBtn{display:none;width:100%;height:52px;border:0;border-radius:16px;background:var(--red);color:#FFF;font:inherit;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 12px 22px -12px rgba(208,2,27,.9)}
+#manualBtn.early{background:#FFF;color:var(--red);box-shadow:inset 0 0 0 1.5px var(--red)}
+.ck-tip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);background:#2A1F22;color:#FFF;font-size:12px;padding:6px 11px;border-radius:9px;white-space:nowrap;display:none}
+.ck-tip::after{content:"";position:absolute;left:50%;top:100%;margin-left:-5px;border:5px solid transparent;border-top-color:#2A1F22}
+.ck-tip.on{display:block}
+
+/* โหมดทดสอบ (ปุ่มจำลองเดิม) */
+.ck-demo{background:#FFF;border-radius:16px;box-shadow:var(--shadow2);padding:4px 14px}
+.ck-demo summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink2);padding:10px 0}
+.ck-demo .demo{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px;margin:0!important}
+.ck-demo .demo button{font:inherit;font-size:12px;border:0;background:#F7EFF1;color:var(--ink);padding:7px 10px;border-radius:10px;cursor:pointer}
+
+/* แถบล่าง (ชุดเดียวกับหน้าโฮม) */
+.tabbar2{position:fixed;left:0;right:0;bottom:0;z-index:50;background:#FFF;border-radius:26px 26px 0 0;box-shadow:0 -10px 30px -18px rgba(120,20,35,.45);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
+.tabbar2 .in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);align-items:end}
+.tabbar2 a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;font-size:10.5px;font-weight:600;color:var(--ink3);text-decoration:none}
+.tabbar2 .fab{width:60px;height:60px;margin-top:-30px;border-radius:50%;background:linear-gradient(160deg,#E8253C,#A00F26);color:#FFF;display:flex;align-items:center;justify-content:center;border:5px solid var(--page);box-shadow:0 12px 22px -10px rgba(208,2,27,.9)}
+.tabbar2 a.on{color:var(--red)}
+.bnav,.botnav,.bnsheet{display:none!important} /* แถบล่างเดิมของ apply_glass ไม่ใช้ในหน้านี้ */
+@media (prefers-reduced-motion:reduce){ .ck-btn{transition:none} }
+</style>
+<style id="checkin-glass">
+.ck-loc{display:none!important}
+.ck.out .ck-note{display:none!important}
+/* ระหว่างนับเวลาทำงาน: ไม่มีวงรางสีเทา มีเงาที่วงเวลา ตัวเลขอ่อนลงหนึ่งระดับ */
+.ck-dial svg.ring circle:not(#ringArc){display:none}
+.ck-dial.working .ck-btn{box-shadow:0 22px 40px -16px rgba(90,20,35,.38),0 6px 14px -6px rgba(90,20,35,.18)!important}
+.ck-dial.working .ck-btn .dur{color:#5A4B4F!important}
+.ck-dial.working .ck-btn .lab{margin-bottom:12px}
+/* ปุ่มขอโอทีและปุ่มวันที่: ขอบชัดขึ้นบนพื้นขาว */
+main.ck .ck-req,main.ck .ck-day{border:1px solid #EFE3E5!important;box-shadow:0 6px 14px -6px rgba(90,20,35,.22),0 1px 2px rgba(90,20,35,.08)!important}
+main.ck .ck-day.today{border:1.5px solid #C8102E!important;box-shadow:0 8px 16px -8px rgba(200,16,46,.45),0 1px 2px rgba(90,20,35,.08)!important}
+/* ===== สไตล์ glass ให้เข้าชุดกับหน้าโฮมและโปรไฟล์ใหม่ ===== */
+body{background:#FFFFFF!important;padding-bottom:calc(130px + env(safe-area-inset-bottom,0px))!important}
+.ck-day:not(.today),.ck-loc,.ck-stat,.ck-note,.ck-hist,.ck-demo,.ck-req{background:rgba(255,255,255,.72)!important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95)!important;box-shadow:0 12px 30px -22px rgba(140,20,40,.45)!important}
+.ck-day{border-radius:18px!important}.ck-day.wk:not(.today){background:rgba(255,255,255,.45)!important}
+.ck-day.today{background:rgba(255,255,255,.9)!important;border:1.5px solid #C8102E!important}
+.ck-loc,.ck-hist,.ck-note,.ck-demo{border-radius:22px!important}.ck-stat{border-radius:20px!important}
+.ck-req{height:44px!important}
+.ck-btn{background:#FFFFFF!important;box-shadow:0 6px 12px -8px rgba(142,0,18,.35)!important}
+.tabbar2{left:12px!important;right:12px!important;bottom:calc(24px + env(safe-area-inset-bottom,0px))!important;height:72px;box-sizing:border-box;border-radius:30px!important;padding:0 6px!important;background:rgba(255,255,255,.72)!important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95)!important;box-shadow:0 12px 30px -22px rgba(140,20,40,.45)!important}.tabbar2 .in{height:100%;max-width:none!important;align-items:center!important}.tabbar2 a{font-size:11px!important}.tabbar2 a:has(> .fab){gap:14px!important}.tabbar2{background:rgba(255,255,255,.94)!important}.tabbar2 .fab{width:58px!important;height:58px!important;margin-top:-42px!important;border:0!important;background:#C8102E!important;box-shadow:0 0 0 9px rgba(253,227,231,.85),0 12px 22px -10px rgba(200,16,46,.9)!important}
+
+/* ===== ปุ่มเช็คอิน: ค้นหาพื้นที่แบบเรดาร์ เจอแล้วเป็นปุ่มแดง ===== */
+.ck-pulse{position:absolute;inset:-20%;border-radius:50%;opacity:0;transform:scale(.3);pointer-events:none;z-index:-1;background:radial-gradient(circle closest-side, rgba(200,16,46,.9) 0%, rgba(200,16,46,.7) 45%, rgba(200,16,46,.4) 64%, rgba(200,16,46,.14) 84%, rgba(200,16,46,0) 100%);will-change:transform,opacity}
+.ck-dial.searching .ck-pulse{animation:ckPing 2.4s cubic-bezier(.25,.55,.45,1) infinite}
+.ck-dial.searching .ck-pulse:nth-child(2){animation-delay:.8s}
+.ck-dial.searching .ck-pulse:nth-child(3){animation-delay:1.6s}
+@keyframes ckPing{0%{transform:scale(.3);opacity:1}65%{opacity:.5}100%{transform:scale(1);opacity:0}}
+.ck-dial:not(.working) svg.ring{display:none}
+.ck-btn{transition:background .45s ease,box-shadow .45s ease,transform .15s}
+.ck-btn .big,.ck-btn .lab{transition:color .45s ease}
+.ck-dial.found .ck-btn{background:#C8102E!important;box-shadow:0 0 0 12px rgba(200,16,46,.14),0 0 0 26px rgba(200,16,46,.07),0 26px 44px -18px rgba(200,16,46,.85)!important}
+.ck-dial.found .ck-btn .big,.ck-dial.found .ck-btn .lab{color:#FFFFFF!important}
+.ck-dial.found .ck-btn .lab{opacity:.9}
+@media (prefers-reduced-motion:reduce){
+  .ck-dial.searching .ck-pulse{animation-duration:4.8s}
+}
+
+/* ===== แถบสัปดาห์กดได้ + ดูข้อมูลวันก่อนหน้า ===== */
+.ck-mrow{display:flex;align-items:center;gap:8px}
+.ck-wnav{display:flex;gap:4px}
+.ck-wnav button{width:30px;height:30px;border-radius:50%;border:1px solid #EFE3E5;background:#FFFFFF;color:#2A1F22;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;box-shadow:0 3px 8px -4px rgba(90,20,35,.25)}
+.ck-wnav button:disabled{opacity:.35;cursor:default}
+button.ck-day{font:inherit;cursor:pointer;padding:8px 0}
+button.ck-day:disabled{opacity:.45;cursor:default}
+main.ck .ck-day.sel{border:1.5px solid #C8102E!important;background:#FFFFFF!important;box-shadow:0 8px 16px -8px rgba(200,16,46,.45),0 1px 2px rgba(90,20,35,.08)!important}
+main.ck .ck-day.today:not(.sel){border:1px solid #EFE3E5!important;box-shadow:0 6px 14px -6px rgba(90,20,35,.22),0 1px 2px rgba(90,20,35,.08)!important}
+.ck-past{display:flex;flex-direction:column;gap:10px}
+.ck-past[hidden],.ck-stats[hidden]{display:none!important}
+.ck-past-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ck-past-h > span{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.ck-past-chip{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+.ck-past-chip.ok{background:#DDF2E6;color:#0F7049}.ck-past-chip.late{background:#FCE3E7;color:#B0101F}
+.ck-past-chip.warn{background:#FDEDD6;color:#94500A}.ck-past-chip.leave{background:#E3EEFC;color:#1A5DB5}.ck-past-chip.none{background:#EFEBEC;color:#5E5255}
+#pastBack{flex:none;height:34px;padding:0 14px;border-radius:999px;border:1px solid #EFE3E5;background:#FFFFFF;font:inherit;font-size:13px;font-weight:600;color:#B0101F;cursor:pointer;box-shadow:0 3px 8px -4px rgba(90,20,35,.25)}
+
+/* ดูวันก่อนหน้า: ซ่อนปุ่มเช็คเอาท์/ข้อความของวันนี้ */
+body.viewing-past .ck-act{display:none!important}
+
+/* แถบเมนูล่างติดขอบล่างจอ ไม่ลอย */
+.tabbar2{left:0!important;right:0!important;bottom:0!important;height:auto!important;border-radius:24px 24px 0 0!important;border-left:0!important;border-right:0!important;border-bottom:0!important;padding:6px 6px calc(10px + env(safe-area-inset-bottom,0px))!important;background:rgba(255,255,255,.97)!important;box-shadow:0 -8px 24px -16px rgba(90,20,35,.35)!important}
+.tabbar2 .in{height:62px!important}
+</style>
+</head>
+<body>
+<main class="ck out" id="app">
+  <header class="ck-head">
+    <div>
+      <div class="ck-mrow"><p class="ck-month"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span id="monthTitle">—</span></p><span class="ck-wnav"><button type="button" id="wPrev" aria-label="สัปดาห์ก่อน"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><button type="button" id="wNext" aria-label="สัปดาห์ถัดไป"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></span></div>
+      <p class="ck-sub"><span id="today">—</span> · <b id="clock">--:--</b> น.</p>
+    </div>
+    <!-- เปิดหน้าโอที: ดูสถานะคำขอ ชั่วโมงที่อนุมัติ และกดขอโอทีได้ในหน้านั้น -->
+    <a class="ck-req" href="attendance.html?tab=ot">ขอโอที <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></a>
+  </header>
+
+  <nav class="ck-week" id="week" aria-label="สัปดาห์นี้"></nav>
+
+  <section class="ck-loc">
+    <span class="pin"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.2-7-11a7 7 0 0 1 14 0c0 5.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
+    <span class="tx"><small id="locLabel">พื้นที่ทำงาน</small><b>สำนักงาน MAZ · รัศมี 1 กม.</b></span>
+    <span class="st" id="zone-text">กำลังตรวจสอบตำแหน่ง</span>
+  </section>
+
+  <section class="ck-dial">
+    <span class="ck-pulse" aria-hidden="true"></span><span class="ck-pulse" aria-hidden="true"></span><span class="ck-pulse" aria-hidden="true"></span>
+    <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+      <circle cx="60" cy="60" r="45.3" fill="none" stroke="#F3E6E9" stroke-width="4"/>
+      <circle id="ringArc" cx="60" cy="60" r="45.3" fill="none" stroke="#D0021B" stroke-width="4" stroke-linecap="round" stroke-dasharray="284.63" stroke-dashoffset="284.63" style="transition:stroke-dashoffset .6s ease"/>
+    </svg>
+    <button class="ck-btn" id="dialBtn" type="button"></button>
+  </section>
+
+  <section class="ck-past" id="pastBox" hidden aria-live="polite">
+    <div class="ck-past-h">
+      <span><b id="pastDate">—</b><span class="ck-past-chip" id="pastChip">—</span></span>
+      <button type="button" id="pastBack">กลับวันนี้</button>
+    </div>
+    <div class="ck-stats">
+      <div class="ck-stat" id="pastIn"><span class="ic" style="background:#FDEDD6;color:#B4630B"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5M15 12H3M21 4v16"/></svg></span><b>--:--</b><span>เวลาเข้างาน</span></div>
+      <div class="ck-stat" id="pastOut"><span class="ic" style="background:#FCE3E7;color:#C0121F"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7l5 5-5 5M19 12H7M3 4v16"/></svg></span><b>--:--</b><span>เวลาออกงาน</span></div>
+      <div class="ck-stat" id="pastTot"><span class="ic" style="background:#ECE6FA;color:#5B3FBF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>--:--</b><span>รวมชั่วโมง</span></div>
+    </div>
+  </section>
+  <section class="ck-stats" id="todayStats">
+    <div class="ck-stat empty" id="slot-in"><span class="ic" style="background:#FDEDD6;color:#B4630B"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5M15 12H3M21 4v16"/></svg></span><b id="time-in">--:--</b><span>เวลาเข้างาน</span></div>
+    <div class="ck-stat empty" id="slot-out"><span class="ic" style="background:#FCE3E7;color:#C0121F"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 7l5 5-5 5M19 12H7M3 4v16"/></svg></span><b id="time-out">--:--</b><span>เวลาออกงาน</span></div>
+    <div class="ck-stat empty" id="slot-total"><span class="ic" style="background:#ECE6FA;color:#5B3FBF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b id="time-total">--:--</b><span>รวมชั่วโมง</span></div>
+  </section>
+
+    <section class="ck-act">
+    <p class="ck-note" id="note">—</p>
+    <span class="ck-tip" id="outTip">—</span>
+    <button class="manual" id="manualBtn" type="button">เช็คเอาท์</button>
+  </section>
+
+  <details class="ck-demo">
+    <summary>โหมดทดสอบ (จำลองสถานการณ์)</summary>
+    <div class="demo">
+      <button id="d-in" type="button">จำลอง: เข้าพื้นที่</button>
+      <button id="d-out" type="button">จำลอง: ออกนอกพื้นที่</button>
+      <button id="d-early" type="button">จำลอง: มาเช้า</button>
+      <button id="d-late" type="button">จำลอง: มาสาย</button>
+      <button id="d-bye" type="button">จำลอง: เลิกงาน</button>
+      <button id="d-half" type="button">จำลอง: ลาครึ่งวันเช้า</button>
+      <button id="d-early-out" type="button">จำลอง: ออกก่อนเวลา</button>
+    </div>
+  </details>
+</main>
+
+<nav class="tabbar2" aria-label="เมนูล่าง"><div class="in">
+  <a href="home-glass.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/></svg>หน้าหลัก</a>
+  <a href="leave.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>การลา</a>
+  <a href="checkin.html" class="on" aria-current="page"><span class="fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>ลงเวลา</a>
+  <a href="expense.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>เบิกค่าใช้จ่าย</a>
+  <a href="profile-glass.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>โปรไฟล์</a>
+</div></nav>
+<div class="veil" id="veil" role="dialog" aria-modal="true" aria-labelledby="pop-title">
+  <div class="pop" id="pop">
+
+    <div class="stage1">
+      <div class="art">
+        <svg class="face-happy" width="176" height="150" viewBox="0 0 176 150" role="img" xmlns="http://www.w3.org/2000/svg">
+          <title>หน้ายิ้ม</title><desc>อิโมจิหน้ายิ้มที่ค่อยๆ หลับตาเป็นเส้นโค้งขณะยิ้มกว้างขึ้น</desc>
+          <circle class="bob" cx="30" cy="44" r="6" fill="#F5A8B2"/>
+          <circle class="bob b" cx="150" cy="56" r="5" fill="#FAD2D7"/>
+          <circle class="bob b" cx="26" cy="114" r="4.5" fill="#FAD2D7"/>
+          <circle class="bob" cx="152" cy="116" r="7" fill="#F5A8B2"/>
+          <circle cx="88" cy="80" r="48" fill="#FBE6E9"/>
+          <circle cx="88" cy="80" r="42" fill="#F5C445"/>
+          <ellipse class="blush" cx="62" cy="90" rx="8" ry="5.5" fill="#EE7A7A"/>
+          <ellipse class="blush" cx="114" cy="90" rx="8" ry="5.5" fill="#EE7A7A"/>
+          <g class="eo">
+            <ellipse cx="74" cy="70" rx="5" ry="6.5" fill="#3B3B4F"/>
+            <ellipse cx="102" cy="70" rx="5" ry="6.5" fill="#3B3B4F"/>
+            <circle cx="75.8" cy="67.6" r="1.8" fill="#FFFFFF"/>
+            <circle cx="103.8" cy="67.6" r="1.8" fill="#FFFFFF"/>
+          </g>
+          <g class="es" fill="none" stroke="#3B3B4F" stroke-width="4" stroke-linecap="round">
+            <path d="M66 72 Q74 63 82 72"/>
+            <path d="M94 72 Q102 63 110 72"/>
+          </g>
+          <g class="grin">
+            <path d="M70 90 Q88 110 106 90 Q88 100 70 90 Z" fill="#3B3B4F"/>
+            <path d="M70 90 Q88 110 106 90" fill="none" stroke="#3B3B4F" stroke-width="4" stroke-linecap="round"/>
+            <path d="M83 101 Q88 106 93 100 Q88 98 83 101 Z" fill="#F0736F"/>
+          </g>
+        </svg>
+
+        <svg class="face-late" width="176" height="150" viewBox="0 0 176 150" role="img" xmlns="http://www.w3.org/2000/svg">
+          <title>หน้าบึ้ง</title><desc>อิโมจิหน้าบึ้งส่ายหน้าไปมา บอกว่ามาสาย</desc>
+          <circle class="bob" cx="30" cy="44" r="6" fill="#F5A8B2"/>
+          <circle class="bob b" cx="150" cy="56" r="5" fill="#FAD2D7"/>
+          <circle class="bob b" cx="26" cy="114" r="4.5" fill="#FAD2D7"/>
+          <circle class="bob" cx="152" cy="116" r="7" fill="#F5A8B2"/>
+          <circle cx="88" cy="80" r="48" fill="#FBE6E9"/>
+          <g class="shake">
+            <circle cx="88" cy="80" r="42" fill="#E8253C"/>
+            <g fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" opacity=".92">
+              <path d="M64 58 L82 66"/>
+              <path d="M112 58 L94 66"/>
+            </g>
+            <ellipse cx="74" cy="78" rx="4.6" ry="5.8" fill="#FFFFFF"/>
+            <ellipse cx="102" cy="78" rx="4.6" ry="5.8" fill="#FFFFFF"/>
+            <path d="M72 104 Q88 90 104 104" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round"/>
+          </g>
+          <g fill="#C8CFD9">
+            <g class="steam" style="transform-origin:46px 44px">
+              <circle cx="46" cy="44" r="6"/><circle cx="38" cy="49" r="4.5"/><circle cx="54" cy="49" r="4"/>
+            </g>
+            <g class="steam s2" style="transform-origin:130px 40px">
+              <circle cx="130" cy="40" r="6.5"/><circle cx="139" cy="46" r="4.5"/><circle cx="122" cy="46" r="4"/>
+            </g>
+            <g class="steam s3" style="transform-origin:120px 24px">
+              <circle cx="120" cy="24" r="4.5"/><circle cx="112" cy="28" r="3.2"/>
+            </g>
+          </g>
+        </svg>
+        <svg class="face-out" width="176" height="150" viewBox="0 0 176 150" role="img" xmlns="http://www.w3.org/2000/svg">
+          <title>หน้าเหนื่อยแต่ยิ้ม</title><desc>อิโมจิหน้าเหนื่อยยิ้มโค้งคำนับขอบคุณ พร้อมลมหายใจผ่อนคลาย</desc>
+          <circle class="bob" cx="30" cy="44" r="6" fill="#F5A8B2"/>
+          <circle class="bob b" cx="150" cy="56" r="5" fill="#FAD2D7"/>
+          <circle class="bob b" cx="26" cy="114" r="4.5" fill="#FAD2D7"/>
+          <circle class="bob" cx="152" cy="116" r="7" fill="#F5A8B2"/>
+          <circle cx="88" cy="80" r="48" fill="#FBE6E9"/>
+          <g class="bow">
+            <circle cx="88" cy="80" r="42" fill="#EE9A4D"/>
+            <g fill="none" stroke="#3B3B4F" stroke-width="3.4" stroke-linecap="round" opacity=".75">
+              <path d="M64 60 Q74 56 84 61"/>
+              <path d="M112 60 Q102 56 92 61"/>
+            </g>
+            <g fill="none" stroke="#3B3B4F" stroke-width="4" stroke-linecap="round">
+              <path d="M66 72 Q74 80 82 72"/>
+              <path d="M94 72 Q102 80 110 72"/>
+            </g>
+            <ellipse cx="63" cy="88" rx="8" ry="5" fill="#E06A6A" opacity=".55"/>
+            <ellipse cx="113" cy="88" rx="8" ry="5" fill="#E06A6A" opacity=".55"/>
+            <path d="M76 94 Q88 106 100 94 Q88 100 76 94 Z" fill="#3B3B4F"/>
+            <path d="M76 94 Q88 106 100 94" fill="none" stroke="#3B3B4F" stroke-width="3.6" stroke-linecap="round"/>
+          </g>
+          <g class="puff" fill="none" stroke="#B9C7D8" stroke-width="3.2" stroke-linecap="round">
+            <path d="M126 92 q8 -4 14 1"/>
+            <path d="M130 101 q7 -3 12 1"/>
+          </g>
+        </svg>
+      </div>
+      <h2 id="pop-title">เช็คอินเข้างาน</h2>
+      <p class="sub" id="pop-sub">คุณอยู่ในพื้นที่ทำงานแล้ว<b id="pop-time">--:--</b></p>
+      <div class="row">
+        <button class="btn main" id="confirm" type="button">
+          <span id="c-label">เช็คอิน</span><span id="c-spin" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="stage2">
+      <div class="mark">
+        <span class="halo" aria-hidden="true"></span>
+        <svg width="92" height="92" viewBox="0 0 92 92" role="img">
+          <title>เช็คอินสำเร็จ</title><desc>เครื่องหมายถูกสีขาวบนวงกลมเขียว</desc>
+          <circle cx="46" cy="46" r="36" fill="#14875A"/>
+          <path class="tick" d="M30 47 L41 58 L62 36" fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h2 id="ok-title">เช็คอินสำเร็จ</h2>
+      <p id="ok-note">บันทึกเวลาเรียบร้อย</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  var app=document.getElementById('app'), veil=document.getElementById('veil'), pop=document.getElementById('pop');
+  var clock=document.getElementById('clock'), today=document.getElementById('today');
+  var zoneText=document.getElementById('zone-text'), note=document.getElementById('note');
+  var popTime=document.getElementById('pop-time');
+  var popTitle=document.getElementById('pop-title'), popSub=document.getElementById('pop-sub');
+  var confirmBtn=document.getElementById('confirm');
+  var cLabel=document.getElementById('c-label'), cSpin=document.getElementById('c-spin');
+  var timeIn=document.getElementById('time-in'), slotIn=document.getElementById('slot-in'), okNote=document.getElementById('ok-note');
+  var timeOut=document.getElementById('time-out'), slotOut=document.getElementById('slot-out'), okTitle=document.getElementById('ok-title');
+
+  var MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var DAYS=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+  function pad(n){return n<10?'0'+n:''+n}
+  function hhmm(d){return pad(d.getHours())+':'+pad(d.getMinutes())}
+
+  function tick(){
+    var d=new Date();
+    clock.textContent=hhmm(d);
+    today.textContent='วัน'+DAYS[d.getDay()]+'ที่ '+d.getDate()+' '+MONTHS[d.getMonth()]+' '+(d.getFullYear()+543);
+  }
+  tick(); setInterval(tick,20000);
+
+  var checkedIn=false, checkedOut=false, inside=false, inAt=null, mode='in';
+
+  // กะงานมาตรฐาน — ⚠️ ยืนยันกับฝ่ายบุคคล
+  var SHIFT = { inMin: 9*60, outMin: 18*60, breakMin: 60 };
+  var LEAD_IN = 10;   // ป๊อปอัพเข้างานเด้งล่วงหน้า 10 นาที · เช็คเอาท์ไม่เผื่อเวลา
+
+  // ใบลาที่อนุมัติแล้วของวันนี้ — พนักงานเป็นคนกำหนดช่วงเวลาเอง
+  // TODO: ดึงจากตารางใบลา (HR) ที่อนุมัติแล้วและครอบคลุมวันนี้
+  // ตัวอย่าง { from:9*60, to:13*60 }  = ลา 09:00–13:00 -> เริ่มงาน 13:00
+  var leaveToday = null;
+
+  // ปุ่มสาธิตต้องจำลองเวลาได้ ไม่งั้นมันคิดจากนาฬิกาจริงแล้วผลเพี้ยน
+  // (กด "เลิกงาน" ตอน 09:33 จะได้ 18:00-09:33 > 0 กลายเป็นออกก่อนเวลา)
+  var simNow=null;
+  function now(){ return simNow ? new Date(simNow) : new Date(); }
+  function at(h,m){ var d=new Date(); d.setHours(h,m||0,0,0); return d; }
+
+  function mins(d){ return d.getHours()*60 + d.getMinutes(); }
+  function hhmmOf(m){ return pad(Math.floor(m/60))+':'+pad(m%60); }
+  // ลาคาบเวลาเข้างาน -> เริ่มงานเมื่อใบลาหมดเวลา · ลาคาบเวลาเลิกงาน -> เลิกเมื่อใบลาเริ่ม
+  function leaveAtStart(){ return leaveToday && leaveToday.from <= SHIFT.inMin && leaveToday.to > SHIFT.inMin; }
+  function leaveAtEnd(){   return leaveToday && leaveToday.to >= SHIFT.outMin && leaveToday.from < SHIFT.outMin; }
+  function expectIn(){  return leaveAtStart() ? leaveToday.to   : SHIFT.inMin; }
+  function expectOut(){ return leaveAtEnd()   ? leaveToday.from : SHIFT.outMin; }
+  // หักพักกลางวันเฉพาะกะที่คร่อมเวลาพัก
+  var LUNCH_FROM = 12*60, LUNCH_TO = 13*60;
+  function breakMin(){ return (expectIn() < LUNCH_TO && expectOut() > LUNCH_FROM) ? SHIFT.breakMin : 0; }
+  function requiredMin(){ return Math.max(0, expectOut() - expectIn() - breakMin()); }
+
+  function lateBy(d){ return mins(d) - expectIn(); }
+  function isLate(d){ return lateBy(d) > 0; }
+  function earlyBy(d){ return expectOut() - mins(d); }
+
+  // 3 -> "3 นาที", 75 -> "1 ชั่วโมง 15 นาที", 120 -> "2 ชั่วโมง"
+  function lateText(mins){
+    var hh=Math.floor(mins/60), mm=mins%60, out='';
+    if(hh) out += hh+' ชั่วโมง';
+    if(mm) out += (hh?' ':'')+mm+' นาที';
+    return 'เลยเวลามา '+out;
+  }
+
+  // 0 -> "", 75 -> "1 ชั่วโมง 15 นาที"
+  function spanText(mins){
+    var hh=Math.floor(mins/60), mm=mins%60, out='';
+    if(hh) out += hh+' ชั่วโมง';
+    if(mm) out += (hh?' ':'')+mm+' นาที';
+    return out || 'ไม่ถึง 1 นาที';
+  }
+
+  function leaveText(){
+    if(!leaveToday) return '';
+    return 'ลา '+hhmmOf(leaveToday.from)+'–'+hhmmOf(leaveToday.to)+' น.';
+  }
+
+  function dressPop(d){
+    if(mode==='out'){
+      pop.classList.remove('late'); pop.classList.add('bye');
+      var early = earlyBy(d);
+      popTitle.textContent = early>0 ? 'ออกก่อนเวลา' : 'เลิกงานแล้ว';
+      popSub.firstChild.nodeValue = early>0
+        ? 'ออกเวลา '+hhmm(d)+' น.'
+        : 'ขอบคุณสำหรับวันนี้ พักผ่อนเยอะๆ นะ';
+      cLabel.textContent='เช็คเอาท์';
+      return;
+    }
+    var late=isLate(d);
+    pop.classList.remove('bye');
+    pop.classList.toggle('late',late);
+    popTitle.textContent = late ? 'คุณมาสายวันนี้' : 'เช็คอินเข้างาน';
+    var base = leaveAtStart()
+      ? 'เริ่มงาน '+hhmmOf(expectIn())+' น.'
+      : 'คุณอยู่ในพื้นที่ทำงานแล้ว';
+    popSub.firstChild.nodeValue = late ? lateText(lateBy(d)) : base;
+    cLabel.textContent='เช็คอิน';
+  }
+
+  function inWindow(d){
+    return mode==='out' ? mins(d) >= expectOut()          // เช็คเอาท์เป๊ะเวลา
+                        : mins(d) >= expectIn() - LEAD_IN; // เข้างานเผื่อ 10 นาที
+  }
+  function homeNote(){
+    if(checkedOut) return 'บันทึกเวลาออกงานแล้ววันนี้';
+    if(checkedIn)  return 'ระบบจะแจ้งเตือนให้เช็คเอาท์เวลา '+hhmmOf(expectOut())+' น.';
+    var lead = hhmmOf(Math.max(0, expectIn()-LEAD_IN));
+    return (leaveAtStart() ? leaveText()+' เริ่มงาน '+hhmmOf(expectIn())+' น. ' : '')
+         + 'ระบบจะแจ้งเตือนเวลา '+lead+' น.';
+  }
+
+  function openPop(auto){
+    if(checkedOut) return;
+    mode = checkedIn ? 'out' : 'in';
+    var now=new Date();
+    if(auto && !inWindow(now)) return;   // ยังไม่ถึงเวลา ไม่ต้องรบกวน
+    popTime.textContent=hhmm(now)+' น.';
+    dressPop(now);
+    pop.classList.remove('ok');
+    confirmBtn.disabled=false; cSpin.innerHTML='';
+    veil.classList.add('on');
+    setTimeout(function(){confirmBtn.focus()},380);
+  }
+  function closePop(){ veil.classList.remove('on'); }
+
+  // HR module rule: the check-in prompt only exists inside the 1 km work zone
+  function setZone(nowInside){
+    var entering = nowInside && !inside;
+    inside = nowInside;
+    if(nowInside){
+      app.classList.remove('out');
+      zoneText.textContent='อยู่ในพื้นที่ทำงาน';
+      note.textContent = homeNote();
+      if(entering) setTimeout(function(){ openPop(true); },450);
+    }else{
+      app.classList.add('out');
+      zoneText.textContent='อยู่นอกพื้นที่ทำงาน';
+      note.textContent='คุณอยู่นอกรัศมี 1 กิโลเมตรจากที่ทำงาน ระบบจะแจ้งเตือนเมื่อเข้ามาในพื้นที่';
+      closePop();
+    }
+  }
+
+
+  var manualBtn=document.getElementById('manualBtn');
+  manualBtn.addEventListener('click', function(){ openPop(false); });
+
+  confirmBtn.addEventListener('click',function(){
+    if(confirmBtn.disabled) return;
+    confirmBtn.disabled=true; cLabel.textContent='';
+    cSpin.innerHTML='<span class="spinner"></span>';
+
+    // TODO: เรียก Supabase บันทึก attendance แล้วรอผลจริงก่อนแสดงสำเร็จ
+    setTimeout(function(){
+      var d=now(), t=hhmm(d);
+      if(mode==='out'){
+        checkedOut=true;
+        timeOut.textContent=t; slotOut.classList.remove('empty');
+        note.textContent=homeNote(); manualBtn.style.display='none';
+        var early2 = earlyBy(d);
+        var worked2 = inAt ? Math.max(0, mins(d) - mins(inAt) - breakMin()) : 0;
+        var missing2 = Math.max(0, requiredMin() - worked2);
+        okTitle.textContent = early2>0 ? 'บันทึกออกก่อนเวลา' : 'เช็คเอาท์สำเร็จ';
+        okNote.textContent = early2>0
+          ? 'ออกงาน '+t+' น.'
+          : 'บันทึกเวลาออกงาน '+t+' น. เรียบร้อย';
+      }else{
+        checkedIn=true; inAt=d;
+        timeIn.textContent=t; slotIn.classList.remove('empty');
+        note.textContent=homeNote(); manualBtn.style.display=inside?'block':'none';
+        okTitle.textContent='เช็คอินสำเร็จ';
+        okNote.textContent='บันทึกเวลาเข้างาน '+t+' น. เรียบร้อย';
+      }
+      cSpin.innerHTML=''; pop.classList.add('ok');
+      setTimeout(closePop,1900);
+    },1300);
+  });
+
+  // TODO: แทนที่ด้วย navigator.geolocation.watchPosition + คำนวณระยะจากพิกัดสำนักงาน
+  setZone(false);
+  document.getElementById('d-in').onclick=function(){ simNow=null; setZone(true); };
+  document.getElementById('d-out').onclick=function(){ simNow=null; setZone(false); };
+  function preview(late){
+    mode='in'; checkedIn=false; checkedOut=false; inside=true;
+    app.classList.remove('out');
+    zoneText.textContent='อยู่ในพื้นที่ทำงาน';
+    note.textContent='ระบบจะแจ้งเตือนให้เช็คอินอัตโนมัติ';
+    leaveToday=null;
+    simNow = late ? at(9,30) : at(8,42);
+    popTime.textContent=hhmm(simNow)+' น.';
+    pop.classList.remove('ok','bye'); pop.classList.toggle('late',late);
+    popTitle.textContent = late ? 'คุณมาสายวันนี้' : 'เช็คอินเข้างาน';
+    popSub.firstChild.nodeValue = late ? lateText(Math.max(1,lateBy(simNow))) : 'คุณอยู่ในพื้นที่ทำงานแล้ว';
+    confirmBtn.disabled=false; cLabel.textContent='เช็คอิน'; cSpin.innerHTML='';
+    veil.classList.add('on');
+  }
+  document.getElementById('d-early').onclick=function(){ preview(false); };
+  document.getElementById('d-late').onclick=function(){ preview(true); };
+  document.getElementById('d-half').onclick=function(){
+    leaveToday={from:9*60, to:13*60};
+    mode='in'; checkedIn=false; checkedOut=false; inside=true;
+    app.classList.remove('out');
+    zoneText.textContent='อยู่ในพื้นที่ทำงาน';
+    popTime.textContent='12:50 น.';
+    pop.classList.remove('ok');
+    // ป๊อปอัพเด้ง 12:50 คือ 10 นาทีก่อนใบลาหมดเวลา 13:00
+    simNow=at(12,50);
+    dressPop(simNow);
+    note.textContent=homeNote();
+    confirmBtn.disabled=false; cSpin.innerHTML='';
+    veil.classList.add('on');
+  };
+  document.getElementById('d-early-out').onclick=function(){
+    leaveToday=null;
+    mode='out'; checkedIn=true; checkedOut=false; inside=true;
+    inAt=new Date(); inAt.setHours(9,0,0,0);
+    timeIn.textContent='09:00'; slotIn.classList.remove('empty');
+    app.classList.remove('out');
+    simNow=at(16,0);
+    var d=simNow;
+    popTime.textContent='16:00 น.';
+    pop.classList.remove('ok'); dressPop(d);
+    confirmBtn.disabled=false; cSpin.innerHTML='';
+    veil.classList.add('on');
+  };
+  document.getElementById('d-bye').onclick=function(){
+    leaveToday=null;
+    mode='out'; checkedIn=true; checkedOut=false; inside=true;
+    simNow=at(18,0);                     // เลิกงานตรงเวลา ไม่ใช่เวลาจริงบนเครื่อง
+    inAt=at(9,0); timeIn.textContent='09:00'; slotIn.classList.remove('empty');
+    app.classList.remove('out');
+    popTime.textContent='18:00 น.';
+    pop.classList.remove('ok'); dressPop(simNow);
+    confirmBtn.disabled=false; cSpin.innerHTML='';
+    veil.classList.add('on');
+  };
+
+  /* ให้ส่วนแสดงผลแบบใหม่อ่านสถานะได้ (อ่านอย่างเดียว ไม่เปลี่ยนกฎ) */
+  window.__chk=function(){
+    var o=timeOut.textContent.split(':');
+    return {checkedIn:checkedIn, checkedOut:checkedOut, inside:inside, inAt:inAt, now:now(),
+            outAt:(checkedOut&&o.length===2&&!isNaN(+o[0]))?(+o[0])*60+(+o[1]):null,
+            expectIn:expectIn(), expectOut:expectOut(), required:requiredMin(), breakMin:breakMin()};
+  };
+  window.__chkOpen=function(){ openPop(false); };
+})();
+</script>
+<script>
+(function(){
+  /* ส่วนแสดงผลแบบใหม่: อ่านสถานะจากตรรกะเดิมผ่าน window.__chk ไม่ได้เปลี่ยนกฎการลงเวลา */
+  var MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var DOW=['อา','จ','อ','พ','พฤ','ศ','ส'];
+  function pad(n){ return n<10?'0'+n:''+n; }
+  function mins(d){ return d.getHours()*60+d.getMinutes(); }
+  /* ตัวเลขแบบนาฬิกาดิจิทัล 7 ส่วน (วาดเป็น SVG จึงไม่ต้องโหลดฟอนต์เพิ่ม) ส่วนที่ไม่ติดจะจางไว้เหมือนจอ LCD */
+  var SEGS={'0':'abcdef','1':'bc','2':'abged','3':'abgcd','4':'fgbc','5':'afgcd','6':'afgedc','7':'abc','8':'abcdefg','9':'abcdfg'};
+  function hbar(x1,x2,y){ return (x1)+','+(y+3)+' '+(x1+3)+','+y+' '+(x2-3)+','+y+' '+x2+','+(y+3)+' '+(x2-3)+','+(y+6)+' '+(x1+3)+','+(y+6); }
+  function vbar(x,y1,y2){ return (x+3)+','+y1+' '+(x+6)+','+(y1+3)+' '+(x+6)+','+(y2-3)+' '+(x+3)+','+y2+' '+x+','+(y2-3)+' '+x+','+(y1+3); }
+  var GEO={a:hbar(3,27,0), g:hbar(3,27,23), d:hbar(3,27,46), f:vbar(0,3,26), b:vbar(24,3,26), e:vbar(0,26,49), c:vbar(24,26,49)};
+  function digital(str){
+    var x=0, out='';
+    str.split('').forEach(function(ch){
+      if(ch===':'){ out+='<g transform="translate('+x+',0)"><rect x="1" y="14" width="6" height="6" rx="1.2"/><rect x="1" y="33" width="6" height="6" rx="1.2"/></g>'; x+=12; return; }
+      var on=SEGS[ch]||'';
+      out+='<g transform="translate('+x+',0)">'+'abcdefg'.split('').map(function(k){ return '<polygon points="'+GEO[k]+'"'+(on.indexOf(k)<0?' class="off"':'')+'/>'; }).join('')+'</g>';
+      x+=36;
+    });
+    return '<svg viewBox="-9 -1 '+(x+10)+' 54" fill="currentColor" role="img" aria-label="'+str+'"><g transform="skewX(-7)">'+out+'</g></svg>';
+  }
+  function span(m){ var h=Math.floor(m/60), mm=m%60, p=[]; if(h) p.push(h+' ชม.'); if(mm||!h) p.push(mm+' นาที'); return p.join(' '); }
+
+  /* วันที่เช็คอินและเช็คเอาท์ครบแล้ว ได้ดาวที่มุมบนขวา
+     TODO: ของจริงอ่านจากประวัติการลงเวลา (attendance) ตอนนี้จำไว้ในเครื่องนี้ทุกครั้งที่เช็คเอาท์สำเร็จ */
+  var DKEY='maz-att-done-v2';   /* เปลี่ยนชื่อคีย์เพื่อล้างดาวเก่าที่เกิดจากการทดสอบ */
+  function readDone(){ try{ return JSON.parse(localStorage.getItem(DKEY)||'{}'); }catch(e){ return {}; } }
+  var DONE=readDone();
+  var STAR='<svg class="star" viewBox="0 0 24 24" aria-label="ลงเวลาครบ"><path d="M12 2.6l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z" fill="#F5B21B" stroke="#FFFFFF" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  var t0=new Date();
+  function isoOf(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  var TODAY_ISO=isoOf(t0);
+  /* ประวัติการลงเวลาย้อนหลัง
+     TODO: ⚠️ ข้อมูลตัวอย่าง สร้างจากวันที่ ของจริงอ่านจากตารางการลงเวลา (attendance) ของพนักงาน */
+  function hist(iso){
+    var d=new Date(iso+'T00:00:00'); if(iso>=TODAY_ISO || d.getDay()%6===0) return null;
+    var n=(d.getDate()*7+d.getMonth()*3)%10;
+    if(n===3) return {kind:'late', inAt:'09:'+pad(10+d.getDate()%15), out:'18:0'+(d.getDate()%9)};
+    if(n===6) return {kind:'forgot', inAt:'08:5'+(d.getDate()%9), out:null};
+    if(n===8) return {kind:'leave'};
+    return {kind:'ok', inAt:'08:'+pad(45+d.getDate()%14), out:'18:'+pad(d.getDate()%12)};
+  }
+  function hm(t){ var p=t.split(':'); return (+p[0])*60+(+p[1]); }   /* แปลง 'HH:MM' เป็นนาที (ชื่อไม่ชนกับ mins() เดิมที่รับ Date) */
+  function workedOf(h){ if(!h||!h.inAt||!h.out) return null; var w=hm(h.out)-hm(h.inAt); if(hm(h.inAt)<13*60&&hm(h.out)>12*60) w-=60; return Math.max(0,w); }
+  var weekOff=0, sel=TODAY_ISO;
+  function drawWeek(){
+    var start=new Date(t0); start.setDate(t0.getDate()-t0.getDay()+weekOff*7), h='';
+    var mid=new Date(start); mid.setDate(start.getDate()+3);
+    document.getElementById('monthTitle').textContent=MONTHS[mid.getMonth()]+' '+(mid.getFullYear()+543);
+    for(var i=0;i<7;i++){ var d=new Date(start); d.setDate(start.getDate()+i); var iso=isoOf(d);
+      var today=iso===TODAY_ISO, fut=iso>TODAY_ISO, hs=hist(iso), done=hs&&hs.inAt&&hs.out;
+      var cls=(today?' today':'')+(d.getDay()%6===0?' wk':'')+(done?' done':'')+(iso===sel?' sel':'');
+      h+='<button type="button" class="ck-day'+cls+'" data-d="'+iso+'"'+(fut?' disabled':'')+(today?' aria-current="date"':'')+' aria-pressed="'+(iso===sel)+'">'+d.getDate()+'<small>'+DOW[d.getDay()]+'</small>'+STAR+'</button>'; }
+    document.getElementById('week').innerHTML=h;
+    document.getElementById('wNext').disabled=weekOff>=0;
+  }
+  var DAYN=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+  function pastDial(){
+    var dial=document.getElementById('dialBtn'), wrap=dial.parentNode, arc=document.getElementById('ringArc'), C=284.63;
+    var h=hist(sel), w=workedOf(h);
+    var map={ok:['ปกติ','ok'],late:['มาสาย','late'],forgot:['ไม่ได้เช็คเอาท์','warn'],leave:['ลา','leave']}, k=h?map[h.kind]:['ไม่มีบันทึก','none'];
+    wrap.classList.remove('searching','found'); wrap.classList.add('working');
+    dial.disabled=true;
+    var mid=w===null?'<span class="big" style="font-size:28px;color:#6E6164">'+(h&&h.kind==='leave'?'วันลา':'ไม่มีชั่วโมงทำงาน')+'</span>'
+                   :'<span class="dur">'+digital(pad(Math.floor(w/60))+':'+pad(w%60))+'</span>';
+    dial.innerHTML='<span class="lab">ชั่วโมงทำงาน</span>'+mid;
+    arc.style.strokeDashoffset=w===null?C:C*(1-Math.min(1,w/480));
+  }
+  function showDay(iso){
+    sel=iso; var past=iso!==TODAY_ISO;
+    document.getElementById('pastBox').hidden=!past; document.getElementById('todayStats').hidden=past;
+    if(past){
+      var d=new Date(iso+'T00:00:00'), h=hist(iso), w=workedOf(h);
+      document.getElementById('pastDate').textContent='วัน'+DAYN[d.getDay()]+'ที่ '+d.getDate()+' '+MONTHS[d.getMonth()]+' '+(d.getFullYear()+543);
+      var chip=document.getElementById('pastChip'), map={ok:['ปกติ','ok'],late:['มาสาย','late'],forgot:['ไม่ได้เช็คเอาท์','warn'],leave:['ลา','leave']};
+      var k=h?map[h.kind]:['ไม่มีบันทึก','none']; chip.textContent=k[0]; chip.className='ck-past-chip '+k[1];
+      function put(id,v){ var el=document.getElementById(id); el.querySelector('b').textContent=v||'--:--'; el.classList.toggle('empty',!v); }
+      put('pastIn',h&&h.inAt); put('pastOut',h&&h.out); put('pastTot',w===null?null:pad(Math.floor(w/60))+':'+pad(w%60));
+    }
+    drawWeek();
+    document.body.classList.toggle('viewing-past',past);
+    if(typeof paint==='function') paint();
+  }
+  document.getElementById('week').addEventListener('click',function(e){ var b=e.target.closest('.ck-day'); if(b&&!b.disabled) showDay(b.getAttribute('data-d')); });
+  document.getElementById('pastBack').addEventListener('click',function(){ weekOff=0; showDay(TODAY_ISO); });
+  document.getElementById('wPrev').addEventListener('click',function(){ weekOff--; drawWeek(); });
+  document.getElementById('wNext').addEventListener('click',function(){ if(weekOff<0){ weekOff++; drawWeek(); } });
+  /* ปัดซ้าย-ขวาบนแถบวันที่เพื่อเปลี่ยนสัปดาห์ */
+  (function(){ var wk=document.getElementById('week'), x0=null;
+    wk.addEventListener('touchstart',function(e){ x0=e.touches[0].clientX; },{passive:true});
+    wk.addEventListener('touchend',function(e){ if(x0===null) return; var dx=e.changedTouches[0].clientX-x0; x0=null;
+      if(dx>50){ weekOff--; drawWeek(); } else if(dx<-50 && weekOff<0){ weekOff++; drawWeek(); } });
+  })();
+  /* เข้างาน/ออกงานจากป๊อปอัพ: กลับมาดูวันนี้ก่อน */
+  document.addEventListener('click',function(e){ if(e.target.closest('#confirm') && sel!==TODAY_ISO){ weekOff=0; showDay(TODAY_ISO); } },true);
+  drawWeek();
+
+  var app=document.getElementById('app'), dial=document.getElementById('dialBtn'), arc=document.getElementById('ringArc');
+  var C=284.63, tip=document.getElementById('outTip'), mb=document.getElementById('manualBtn'), note=document.getElementById('note');
+  var tot=document.getElementById('time-total'), slotT=document.getElementById('slot-total');
+
+  /* นาทีที่ทำงานจริง: จากเวลาเข้าถึงตอนนี้ หักพักกลางวันเมื่อทำงานคร่อมช่วง 12:00–13:00 (ตามกฎเดิม) */
+  function worked(s){
+    if(!s.inAt) return 0;
+    var endM=s.checkedOut&&s.outAt!=null?s.outAt:mins(s.now), inM=mins(s.inAt);
+    var w=Math.max(0,endM-inM);
+    if(s.breakMin && inM<13*60 && endM>12*60) w-=Math.max(0,Math.min(endM,13*60)-Math.max(inM,12*60));
+    return Math.max(0,w);
+  }
+  function secs(s){ var n=s.now; return pad(n.getSeconds()); }
+
+  function paint(){
+    var s=window.__chk&&window.__chk(); if(!s) return;
+    if(sel!==TODAY_ISO){ pastDial(); return; }   /* กำลังดูวันก่อนหน้า: วงกลมแสดงชั่วโมงทำงานของวันนั้น */
+    var out=app.classList.contains('out'), w=worked(s), req=s.required||1;
+    /* สถานะของวงกลม: ค้นหาพื้นที่ (วงแดงกระจาย) / เจอพื้นที่ (ปุ่มแดง) / กำลังทำงาน (วงแหวนเวลา) */
+    var wrap=dial.parentNode;
+    wrap.classList.toggle('searching', !s.checkedIn && out);
+    wrap.classList.toggle('found', !s.checkedIn && !out);
+    wrap.classList.toggle('working', !!s.checkedIn);
+    document.getElementById('locLabel').textContent=s.checkedIn?'เช็คอินที่':'พื้นที่ทำงาน';
+    if(s.checkedOut){
+      dial.disabled=true;
+      var miss=Math.max(0,req-w);
+      dial.innerHTML='<span class="lab">วันนี้ทำงาน</span><span class="dur">'+digital(pad(Math.floor(w/60))+':'+pad(w%60))+'</span>'+(miss?'<span class="chip2" style="background:#FDEDD6;color:#B4630B">ขาด '+span(miss)+'</span>':'<span class="chip2" style="background:#DDF2E6;color:#14875A">ครบเวลาแล้ว</span>');
+      arc.style.strokeDashoffset=0;
+    } else if(s.checkedIn){
+      dial.disabled=true;
+      var left=Math.max(0,req-w);
+      dial.innerHTML='<span class="lab">เวลาทำงาน</span><span class="dur">'+digital(pad(Math.floor(w/60))+':'+pad(w%60)+':'+secs(s))+'</span>';
+      arc.style.strokeDashoffset=C*(1-Math.min(1,w/req));
+    } else {
+      dial.disabled=out;
+      dial.innerHTML=out?'<span class="big">เข้างาน</span><span class="lab">กำลังค้นหาพื้นที่ทำงาน…</span>':'<span class="big">เข้างาน</span><span class="lab">แตะเพื่อบันทึกเวลาเข้างาน</span>';
+      arc.style.strokeDashoffset=C;
+    }
+    /* เช็คเอาท์แล้ว: วันนี้ได้ดาว และจำไว้ */
+    var todayIso=t0.getFullYear()+'-'+pad(t0.getMonth()+1)+'-'+pad(t0.getDate()), pill=document.querySelector('.ck-day[data-d="'+todayIso+'"]');
+    if(s.checkedOut && !DONE[todayIso]){ DONE[todayIso]=1; try{ localStorage.setItem(DKEY,JSON.stringify(DONE)); }catch(e){} }
+    /* วันนี้: มีดาวก็ต่อเมื่อเข้างานและออกงานครบแล้วในวันนี้เท่านั้น วันก่อนหน้าอ่านจากที่บันทึกไว้ */
+    if(pill) pill.classList.toggle('done', !!s.checkedOut);
+    if(s.inAt){ tot.textContent=pad(Math.floor(w/60))+':'+pad(w%60); slotT.classList.remove('empty'); }
+    else { tot.textContent='--:--'; slotT.classList.add('empty'); }
+    /* หลังเช็คอิน: ปุ่มเช็คเอาท์ใช้ได้เสมอเหมือนเดิม (ออกก่อนเวลาจะถูกบันทึกเป็นออกก่อนเวลา) แต่บอกให้รู้ล่วงหน้า */
+    var showBtn=mb.style.display==='block';
+    note.style.display=showBtn?'none':'';
+    var early=s.expectOut-mins(s.now);
+    mb.classList.toggle('early',showBtn&&early>0);
+    mb.textContent=showBtn&&early>0?'เช็คเอาท์ก่อนเวลา':'เช็คเอาท์';
+    tip.textContent='เวลาเลิกงาน '+pad(Math.floor(s.expectOut/60))+':'+pad(s.expectOut%60)+' น. อีก '+span(Math.max(0,early));
+    tip.classList.toggle('on',showBtn&&early>0);
+  }
+  dial.addEventListener('click',function(){ if(!dial.disabled && window.__chkOpen) window.__chkOpen(); });
+  paint(); setInterval(paint,1000);
+  /* ปุ่มจำลองเปลี่ยนสถานะทันที ให้หน้าจอตามทัน */
+  document.addEventListener('click',function(){ setTimeout(paint,30); setTimeout(paint,1500); setTimeout(paint,3500); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>การลา — ERP MAZ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --maz-red:#D0021B; --maz-red-deep:#8E0012; --maz-red-bright:#E8253C;
+  --ink:#1F2430; --ink-soft:#68707E; --ink-faint:#9AA1AE;
+  --line:#E8EBF0; --field:#FAFBFC; --white:#FFF;
+  --ok:#14875A;   --ok-bg:#E7F5EE;
+  --late:#C0121F; --late-bg:#FDECEE;
+  --early:#B4630B;--early-bg:#FDF2E3;
+  --leave:#1A3E8C;--leave-bg:#E7ECF7;
+  --miss:#6B7280; --miss-bg:#F1F3F6;
+  --off:#8A919E;  --off-bg:#F1F3F6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'Noto Sans Thai',system-ui,sans-serif;color:var(--ink);background:#F4F5F8;display:flex}
+
+/* ---------- sidebar ---------- */
+.side{width:228px;flex:none;color:var(--white);position:relative;background:linear-gradient(170deg,var(--maz-red-bright),var(--maz-red) 42%,var(--maz-red-deep));display:flex;flex-direction:column;padding:24px 0 18px}
+.side::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.09) 0 1px,transparent 1px 44px),repeating-linear-gradient(90deg,rgba(255,255,255,.09) 0 1px,transparent 1px 44px);mask-image:linear-gradient(160deg,rgba(0,0,0,1) 8%,rgba(0,0,0,.3) 80%);-webkit-mask-image:linear-gradient(160deg,rgba(0,0,0,1) 8%,rgba(0,0,0,.3) 80%)}
+.side > *{position:relative;z-index:1}
+.logo{padding:0 24px 18px;font-size:21px;font-weight:700;letter-spacing:.05em;flex:none}
+.nav{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:1px;padding:0 12px 12px;scrollbar-width:thin}
+.nav a{display:flex;align-items:center;gap:11px;padding:8px 13px;border-radius:10px;color:rgba(255,255,255,.82);text-decoration:none;font-size:13.5px;font-weight:500;transition:background .15s,color .15s}
+.nav a:hover{background:rgba(255,255,255,.12);color:var(--white)}
+.nav a.on{background:var(--white);color:var(--maz-red);font-weight:600}
+.nav svg{flex:none}
+.grp{padding:12px 20px 5px;font-size:10.5px;font-weight:700;letter-spacing:.12em;color:rgba(255,255,255,.55)}
+.grp:first-child{padding-top:0}
+
+/* ---------- app bar ---------- */
+.main{position:relative;flex:1;min-width:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.appbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 26px;background:var(--white);border-bottom:1px solid var(--line)}
+.appbar .where{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:600;min-width:0}
+.appbar .where svg{color:var(--ink-faint);flex:none}
+.appbar .side-tools{display:flex;align-items:center;gap:9px}
+.iconbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--white);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;flex:none}
+.iconbtn:hover{border-color:var(--ink-faint);color:var(--ink)}
+.iconbtn .dot{position:absolute;top:7px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--maz-red);border:1.5px solid var(--white)}
+.me{display:flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--white);cursor:pointer;font-family:inherit;flex:none}
+.me:hover{border-color:var(--maz-red)}
+.me .av{width:30px;height:30px;border-radius:50%;background:#FCEBEE;color:var(--maz-red);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+.menu{position:absolute;top:50px;right:26px;z-index:60;width:236px;background:var(--white);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 40px -18px rgba(60,20,30,.34);padding:8px;opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .18s,transform .18s,visibility .18s}
+.menu.on{opacity:1;visibility:visible;transform:none}
+.mehead{display:flex;align-items:center;gap:11px;padding:8px 10px 10px}
+.mehead .av{width:40px;height:40px;border-radius:50%;background:#FCEBEE;color:var(--maz-red);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex:none}
+.mehead .tx{min-width:0}
+.mehead .tx b{display:block;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mehead .tx span{display:block;font-size:11.5px;color:var(--ink-faint);margin-top:2px}
+.menu a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;font-size:13px;color:var(--ink);text-decoration:none}
+.menu a:hover{background:#FDECEE;color:var(--maz-red)}
+.menu a.out{color:var(--maz-red)}
+.menu hr{border:none;border-top:1px solid var(--line);margin:5px 4px}
+
+/* ---------- page ---------- */
+.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 30px 0;flex-wrap:wrap}
+.bar h1{font-size:23px;font-weight:700}
+.bar p{margin-top:3px;font-size:13.5px;color:var(--ink-soft)}
+.tools{display:flex;align-items:center;gap:10px}
+.mo{display:flex;align-items:center;gap:2px;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:3px}
+.mo button{width:30px;height:30px;border:none;background:none;border-radius:8px;cursor:pointer;color:var(--ink-soft);display:flex;align-items:center;justify-content:center}
+.mo button:hover:not(:disabled){background:var(--field);color:var(--ink)}
+.mo button:disabled{opacity:.35;cursor:default}
+.mo span{padding:0 12px;font-size:13.5px;font-weight:600;min-width:120px;text-align:center}
+.btn{height:36px;padding:0 15px;border-radius:10px;border:1px solid var(--line);background:var(--white);color:var(--ink-soft);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{border-color:var(--ink-faint);color:var(--ink)}
+.btn.solid{border:none;background:linear-gradient(100deg,var(--maz-red-bright),var(--maz-red-deep));color:var(--white);height:36px}
+.btn.solid:hover{filter:brightness(1.06)}
+.btn.solid.out{background:linear-gradient(100deg,#3B4657,#20293A)}
+.btn.solid:disabled{cursor:default;background:#E7EAEF;color:var(--ink-faint);filter:none}
+
+
+
+.panel{margin:16px 30px 22px;background:var(--white);border:1px solid var(--line);border-radius:16px;overflow:hidden;flex:1;min-height:0;display:flex;flex-direction:column}
+.strip{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:4px 20px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{background:none;border:none;cursor:pointer;font-family:inherit;padding:14px 13px 12px;font-size:13.5px;font-weight:500;color:var(--ink-soft);border-bottom:2.5px solid transparent}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{color:var(--maz-red);border-bottom-color:var(--maz-red);font-weight:600}
+.tabs button b{margin-left:6px;font-size:11.5px;font-weight:600;padding:1px 6px;border-radius:9px;background:var(--field);color:var(--ink-faint)}
+.tabs button.on b{background:#FCEBEE;color:var(--maz-red)}
+.legend{display:flex;align-items:center;gap:12px;padding:8px 0;font-size:11.5px;color:var(--ink-faint);flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:8px;height:8px;border-radius:50%;flex:none}
+
+.scroll{flex:1;min-height:0;overflow:auto}
+.pages{display:flex;gap:5px}
+.pages button{min-width:31px;height:31px;padding:0 8px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:var(--white);font-family:inherit;font-size:13px;color:var(--ink-soft)}
+.pages button.on{background:var(--maz-red);border-color:var(--maz-red);color:var(--white);font-weight:600}
+.pages button:disabled{opacity:.35;cursor:default}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+thead th{position:sticky;top:0;background:var(--white);z-index:2}
+th{text-align:left;font-size:12px;font-weight:600;color:var(--ink-faint);padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.c,td.c{text-align:center}
+th.r,td.r{text-align:right}
+td{padding:12px 14px;font-size:13.5px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.today{background:#FEF7F8}
+.day b{font-weight:600;font-variant-numeric:tabular-nums}
+.day span{display:block;font-size:11.5px;color:var(--ink-faint);margin-top:1px}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-faint)}
+.diff{font-size:11.5px;font-weight:600;margin-left:6px}
+.diff.late{color:var(--late)}
+.diff.early{color:var(--early)}
+.sub2{display:block;font-size:11px;color:var(--ink-faint);margin-top:1px;font-weight:400}
+
+.tag{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+.tag i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.t-ok{background:var(--ok-bg);color:var(--ok)}
+.t-late{background:var(--late-bg);color:var(--late)}
+.t-early{background:var(--early-bg);color:var(--early)}
+.t-leave{background:var(--leave-bg);color:var(--leave)}
+.t-miss{background:var(--miss-bg);color:var(--miss)}
+
+.foot{flex:none;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 20px;font-size:13px;color:var(--ink-soft);flex-wrap:wrap}
+.foot .sum{font-variant-numeric:tabular-nums}
+.foot .sum b{color:var(--ink);font-weight:600;margin-left:6px}
+
+:focus-visible{outline:2.5px solid var(--maz-red);outline-offset:3px}
+@media (max-width:1180px){
+  .side{width:74px}
+  .logo{padding:0 0 22px;text-align:center;font-size:17px}
+  .nav a span,.grp{display:none}
+  .nav a{justify-content:center;padding:12px 0}
+  th.hide,td.hide{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+
+/* ---------- เพิ่มเฉพาะหน้าการลา ---------- */
+.mo span{min-width:150px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:16px 30px 0}
+.card{border-radius:16px;padding:15px 17px;background:var(--white);border:1px solid var(--line)}
+.card .ct{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card .ct b{font-size:13.5px;font-weight:600}
+.card .ct em{font-style:normal;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:20px;background:var(--field);color:var(--ink-faint)}
+.card .big{margin-top:9px;font-size:27px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.card .big u{text-decoration:none;font-size:13px;font-weight:600;color:var(--ink-soft);margin-left:5px}
+.card .meta{margin-top:3px;font-size:12px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+.card .track{display:block;height:5px;border-radius:4px;background:rgba(31,36,48,.09);margin-top:11px;overflow:hidden}
+.card .track i{display:block;height:100%;border-radius:4px;background:var(--maz-red)}
+
+.t-pend{background:var(--early-bg);color:var(--early)}
+.t-appr{background:var(--ok-bg);color:var(--ok)}
+.t-rej{background:var(--late-bg);color:var(--late)}
+.t-cxl{background:var(--miss-bg);color:var(--miss)}
+
+.over{display:block;margin-top:4px;font-size:11px;font-weight:600;color:var(--late);line-height:1.3}
+.why{display:block;font-size:11px;color:var(--ink-faint);margin-top:2px}
+.clip{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.span{display:block;white-space:nowrap}
+.lnk{background:none;border:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--maz-red);cursor:pointer}
+.lnk:hover{text-decoration:underline}
+
+/* ---------- กล่องยื่นใบลา ---------- */
+.veil{position:fixed;inset:0;z-index:80;background:rgba(28,20,45,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;visibility:hidden;transition:opacity .18s,visibility .18s}
+.veil.on{opacity:1;visibility:visible}
+.box{width:100%;max-width:560px;max-height:100%;border-radius:18px;background:var(--white);border:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden;transform:translateY(8px);transition:transform .18s}
+.veil.on .box{transform:none}
+.bhead{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.bhead h2{font-size:16.5px;font-weight:700}
+.bbody{flex:1;min-height:0;overflow:auto;padding:18px 20px}
+.bfoot{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:9px;padding:14px 20px;border-top:1px solid var(--line)}
+.fld{margin-bottom:15px}
+.fld:last-child{margin-bottom:0}
+.fld > label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:6px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input[type=text],input[type=date],input[type=time],select,textarea{width:100%;height:38px;padding:0 11px;border-radius:10px;border:1px solid var(--line);background:var(--field);font-family:inherit;font-size:13.5px;color:var(--ink)}
+textarea{height:78px;padding:9px 11px;resize:vertical;line-height:1.5}
+select{cursor:pointer}
+.seg{display:flex;gap:3px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{flex:1;height:30px;border:none;background:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:500;color:var(--ink-soft)}
+.seg button.on{background:var(--white);color:var(--maz-red);font-weight:600;box-shadow:0 1px 3px rgba(28,20,45,.1)}
+.calc{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border-radius:11px;background:var(--field);border:1px solid var(--line);font-size:13px}
+.calc b{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px}
+.warn{margin-top:9px;padding:10px 13px;border-radius:11px;font-size:12.5px;line-height:1.55;background:var(--late-bg);color:var(--late);border:1px solid rgba(192,18,31,.2)}
+.warn.hide{display:none}
+.file{display:flex;align-items:center;gap:11px}
+.file input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.file .pick{height:36px;padding:0 15px;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--ink-soft);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;flex:none}
+.file .pick:hover{border-color:var(--ink-faint);color:var(--ink)}
+.file .fname{font-size:12.5px;color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hint{margin-top:7px;font-size:11.5px;color:var(--ink-faint);line-height:1.5}
+
+/* ---------- ช่องติกเลือกช่วงครึ่งวัน ---------- */
+.picks{display:flex;flex-direction:column;gap:2px}
+.pickone{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;cursor:pointer;font-size:13.5px;font-weight:500;color:var(--ink)}
+.pickone:hover{background:rgba(31,36,48,.05)}
+.pickone.on{color:var(--maz-red);font-weight:600}
+.pickone input{-webkit-appearance:radio;appearance:radio;width:17px;height:17px;margin:0;padding:0;flex:none;accent-color:var(--maz-red);background:none;border:none;box-shadow:none;cursor:pointer}
+.pickone em{font-style:normal;font-size:12px;color:var(--ink-faint);margin-left:auto;font-variant-numeric:tabular-nums}
+.pickone.on em{color:var(--maz-red)}
+
+/* ---------- ตัวเลือกวันที่แบบไทย ---------- */
+.dwrap{position:relative}
+.dwrap input{cursor:pointer;padding-right:36px}
+.dwrap .calbtn{position:absolute;bottom:0;right:0;width:36px;height:38px;border:none;background:none;cursor:pointer;color:var(--ink-faint);display:flex;align-items:center;justify-content:center}
+.dwrap .calbtn:hover{color:var(--maz-red)}
+.cal{position:absolute;z-index:90;top:100%;margin-top:5px;left:0;width:276px;padding:12px;border-radius:14px;background:var(--white);border:1px solid var(--line);box-shadow:0 22px 46px -20px rgba(40,25,60,.42);display:none}
+.cal.on{display:block}
+.cal.up, .tpop.up{top:auto;bottom:100%;margin-top:0;margin-bottom:5px}
+.calhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.calhead b{font-size:13.5px;font-weight:600}
+.calnav{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--white);cursor:pointer;color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex:none}
+.calnav:hover{border-color:var(--ink-faint);color:var(--ink)}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.calgrid span.dw{display:block;text-align:center;font-size:10.5px;font-weight:700;color:var(--ink-faint);padding:5px 0}
+.calgrid button{height:32px;border:none;background:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+.calgrid button:hover{background:var(--field)}
+.calgrid button.off{color:var(--ink-faint)}
+.calgrid button.hol{color:var(--late)}
+.calgrid button.on{background:var(--maz-red);color:var(--white);font-weight:700}
+.calgrid button.blank{visibility:hidden;cursor:default}
+
+/* ---------- ตัวเลือกเวลาแบบ stepper ---------- */
+.twrap{position:relative}
+.twrap input{cursor:pointer;padding-right:36px;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.twrap .clockbtn{position:absolute;bottom:0;right:0;width:36px;height:38px;border:none;background:none;cursor:pointer;color:var(--ink-faint);display:flex;align-items:center;justify-content:center}
+.twrap .clockbtn:hover{color:var(--maz-red)}
+.tpop{position:absolute;z-index:90;top:100%;margin-top:5px;left:0;padding:13px;border-radius:14px;background:var(--white);border:1px solid var(--line);box-shadow:0 22px 46px -20px rgba(40,25,60,.42);display:none}
+.tpop.on{display:flex;align-items:flex-start;gap:8px}
+.tcol{display:flex;flex-direction:column;align-items:center;gap:5px;width:78px}
+.tcol .h{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--ink-faint);margin-bottom:1px}
+.tcol .step{width:34px;height:26px;border:none;background:none;border-radius:7px;cursor:pointer;color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex:none}
+.tcol .step:hover:not(:disabled){background:var(--field);color:var(--maz-red)}
+.tcol .step:disabled{opacity:.28;cursor:default}
+.tcol .val{display:block;width:100%;text-align:center;font-size:23px;font-weight:700;font-variant-numeric:tabular-nums;padding:7px 0;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--ink)}
+.tsep{font-size:21px;font-weight:700;color:var(--ink-faint);padding-top:47px}
+
+
+/* ---------- เฉพาะหน้าโอที ---------- */
+.cards.two-up{grid-template-columns:repeat(2,1fr)}
+.adj{display:block;margin-top:4px;font-size:11px;font-weight:600;color:var(--early);line-height:1.3}
+
+@media (max-width:900px){
+  .cards{grid-template-columns:1fr;margin:14px 18px 0}
+  .two{grid-template-columns:1fr}
+}
+/* ตัวเลือกที่ถูกเลือกอยู่ในดรอปดาวน์ เป็นสีชมพูอ่อน */
+select option:checked{
+  background:#FDECEE linear-gradient(0deg,#FDECEE,#FDECEE);
+  color:var(--maz-red);font-weight:600}
+
+/* ---------- ดรอปดาวน์ที่วาดเอง ---------- */
+.ddw{position:relative;display:block}
+.ddw > select{position:absolute;opacity:0;pointer-events:none;width:100%;height:100%;left:0;top:0;margin:0}
+.ddb{display:flex;align-items:center;gap:10px;width:100%;height:38px;padding:0 12px;
+  border:1px solid var(--line);border-radius:10px;background:var(--white);cursor:pointer;
+  font-family:inherit;font-size:13.5px;color:var(--ink);text-align:left}
+.ddb:hover{border-color:#D3D8E0}
+.ddw.open .ddb{border-color:var(--maz-red);box-shadow:0 0 0 3px rgba(208,2,27,.12)}
+.ddb .ddtx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddb .ddar{flex:none;color:var(--ink-faint);display:flex}
+.ddw.open .ddb .ddar{color:var(--maz-red);transform:rotate(180deg)}
+.ddl{position:absolute;z-index:120;left:0;top:calc(100% + 6px);min-width:100%;width:max-content;
+  max-width:min(340px, 92vw);max-height:260px;overflow:auto;
+  background:var(--white);border:1px solid var(--line);border-radius:12px;padding:6px;
+  box-shadow:0 14px 34px rgba(28,20,45,.14);display:none}
+/* รายการที่อยู่ริมขวา ให้กางไปทางซ้ายแทน จะได้ไม่ตกขอบจอ */
+.ddw.toleft .ddl{left:auto;right:0}
+.ddw.open .ddl{display:block}
+.ddl button{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border:none;
+  border-radius:9px;background:none;cursor:pointer;font-family:inherit;font-size:13.5px;
+  color:var(--ink);text-align:left;white-space:nowrap}
+/* ชี้เมาส์แล้วเป็นชมพูอ่อน ตามที่ต้องการ */
+.ddl button:hover{background:#FDECEE;color:var(--maz-red)}
+.ddl button.on{font-weight:600;color:var(--maz-red)}
+.ddl button[disabled]{color:var(--ink-faint);cursor:default}
+.ddl button[disabled]:hover{background:none;color:var(--ink-faint)}
+
+/* ================= glass theme ================= */
+body{background:#F2F3F7}
+body::before{
+  content:'';position:fixed;inset:-20%;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(38% 42% at 78% 6%,  rgba(255,64,92,.34),  transparent 68%),
+    radial-gradient(34% 40% at 12% 18%, rgba(255,140,90,.26), transparent 66%),
+    radial-gradient(42% 44% at 62% 88%, rgba(96,132,255,.28), transparent 68%),
+    radial-gradient(36% 40% at 18% 82%, rgba(120,220,200,.24),transparent 66%),
+    radial-gradient(30% 34% at 92% 60%, rgba(196,120,255,.22),transparent 66%),
+    #F4F5F9;
+  filter:blur(40px);
+}
+/* ชั้นฝ้าบางๆ ให้สีไม่จัดเกินและตัวหนังสืออ่านง่าย */
+body::after{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:rgba(255,255,255,.34);
+}
+
+/* ---- พื้นผิวกระจก ---- */
+.panel, .card, .kpi, .pcard, .revcard, .box, .edu-wrap{
+  background:rgba(255,255,255,.46);
+  backdrop-filter:blur(30px) saturate(190%);
+  -webkit-backdrop-filter:blur(30px) saturate(190%);
+  border:1px solid rgba(255,255,255,.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.85),
+    inset 0 -1px 0 rgba(255,255,255,.28),
+    0 1px 2px rgba(28,20,45,.05),
+    0 18px 40px -20px rgba(40,25,60,.30);
+}
+.appbar, .topbar{
+  background:rgba(255,255,255,.52);
+  backdrop-filter:blur(26px) saturate(190%);
+  -webkit-backdrop-filter:blur(26px) saturate(190%);
+  border-bottom:1px solid rgba(255,255,255,.55);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8), 0 8px 26px -20px rgba(40,25,60,.5);
+}
+.menu{
+  background:rgba(255,255,255,.72);
+  backdrop-filter:blur(34px) saturate(200%);
+  -webkit-backdrop-filter:blur(34px) saturate(200%);
+  border:1px solid rgba(255,255,255,.7);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 26px 54px -24px rgba(40,25,60,.45);
+}
+.search, .seg, .mo, .iconbtn, .me, .btn.ghost, .chip, .drop, .master, .opt, .pages button, .tabs, .sw{
+  background:rgba(255,255,255,.5);
+  backdrop-filter:blur(18px) saturate(170%);
+  -webkit-backdrop-filter:blur(18px) saturate(170%);
+  border-color:rgba(255,255,255,.62);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7);
+}
+.iconbtn:hover, .me:hover, .btn.ghost:hover, .chip:hover{background:rgba(255,255,255,.72)}
+.chip.on, .opt.on, .seg button.on, .pages button.on{box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+
+/* ปุ่มหลักเป็นแก้วสีแดง ไม่ใช่สีทึบ */
+.btn.solid, .add, .solid{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34), 0 12px 26px -12px rgba(208,2,27,.6);
+}
+
+/* ตารางโปร่ง เห็นชั้นสีด้านหลัง */
+thead th{background:rgba(255,255,255,.62)!important;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+tbody tr:hover{background:rgba(255,255,255,.42)}
+tr.sub td{background:rgba(255,255,255,.34)}
+table.rounds, table.revs, table.inner{background:rgba(255,255,255,.5)}
+
+/* ช่องกรอกทึบกว่าเล็กน้อยเพื่อให้อ่านง่าย */
+input, select, textarea{
+  background:rgba(255,255,255,.58);
+  border-color:rgba(255,255,255,.7);
+  box-shadow:inset 0 1px 2px rgba(40,25,60,.05);
+}
+input:hover, select:hover, textarea:hover{background:rgba(255,255,255,.72)}
+input:focus, select:focus, textarea:focus{background:rgba(255,255,255,.92)}
+input:disabled, input[readonly]{background:rgba(240,241,245,.62)}
+
+/* กระดาษเอกสารต้องทึบ เพราะต้องพิมพ์จริง */
+.paper{
+  background:#FFF;backdrop-filter:none;-webkit-backdrop-filter:none;
+  border:1px solid rgba(255,255,255,.8);
+  box-shadow:0 2px 8px rgba(28,20,45,.06), 0 30px 66px -30px rgba(40,25,60,.45);
+}
+
+@supports not (backdrop-filter: blur(2px)){
+  body::before{filter:none;opacity:.5}
+  .panel,.card,.kpi,.pcard,.revcard,.box,.edu-wrap,.menu,.appbar,.topbar{background:rgba(255,255,255,.94)}
+}
+@media print{ body::before,body::after{display:none} }
+
+/* ===== glass theme — ส่วนเพิ่ม (ใช้ร่วมทุกหน้า) ===== */
+/* บล็อกด้านบนคลุมแค่ .panel .card .menu .appbar ฯลฯ ส่วนนี้เก็บของที่ตกสำรวจ
+   ห้ามเขียน CSS ของหน้าไว้ใต้บล็อกนี้ ไม่งั้นจะไปทับธีมกระจก */
+
+/* กล่องที่ลอยทับเนื้อหา ต้องทึบกว่าการ์ดพื้นหลัง ไม่งั้นตารางด้านหลังทะลุจนอ่านไม่ออก */
+.drawer, .list, .tip, /* เมนูบัญชีลอยทับเนื้อหา ถ้าโปร่งจะเห็นข้อความข้างหลังทะลุจนอ่านยาก ต้องทึบ */
+.menu{
+  background:rgba(255,255,255,.97);
+  backdrop-filter:blur(30px) saturate(180%);
+  -webkit-backdrop-filter:blur(30px) saturate(180%);
+  border-color:rgba(31,36,48,.1);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 26px 54px -24px rgba(40,25,60,.45);
+}
+.cal, .tpop{
+  background:rgba(255,255,255,.93);
+  backdrop-filter:blur(34px) saturate(200%);
+  -webkit-backdrop-filter:blur(34px) saturate(200%);
+  border-color:rgba(255,255,255,.8);
+}
+.box{
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(36px) saturate(200%);
+  -webkit-backdrop-filter:blur(36px) saturate(200%);
+  border-color:rgba(255,255,255,.75);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 34px 70px -28px rgba(40,25,60,.5);
+}
+
+/* ปุ่มเล็กในตารางและแถบเครื่องมือ ให้เป็นแก้วระดับเดียวกับ .iconbtn */
+.act, .del, .mini, .more, .calbar button, .file .rm, .b-line, .pick, .calnav, .tcol .val{
+  background:rgba(255,255,255,.5);
+  backdrop-filter:blur(18px) saturate(170%);
+  -webkit-backdrop-filter:blur(18px) saturate(170%);
+  border-color:rgba(255,255,255,.62);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7);
+}
+/* ไม่ใส่ .del:hover เพราะหน้าใบเสนอราคากำหนดพื้นแดงอ่อนตอน hover ไว้แล้ว */
+.act:hover, .mini:hover, .more:hover, .calbar button:hover, .file .rm:hover, .b-line:hover, .pick:hover, .calnav:hover{
+  background:rgba(255,255,255,.76);
+}
+
+/* ปฏิทินไทยและตัวเลือกเวลาแบบ stepper (หน้าการลา) */
+.calgrid button:hover{background:rgba(31,36,48,.06)}
+.calgrid button.on:hover{background:var(--maz-red)}
+.tcol .step:hover:not(:disabled){background:rgba(31,36,48,.06)}
+.card .track{background:rgba(31,36,48,.13)}
+.calc{
+  background:rgba(255,255,255,.5);
+  backdrop-filter:blur(18px) saturate(170%);
+  -webkit-backdrop-filter:blur(18px) saturate(170%);
+  border-color:rgba(31,36,48,.09);
+}
+.bhead, .bfoot{border-color:rgba(31,36,48,.09)}
+
+/* กล่องไฟล์แนบ */
+.file{
+  background:rgba(255,255,255,.42);
+  backdrop-filter:blur(18px) saturate(170%);
+  -webkit-backdrop-filter:blur(18px) saturate(170%);
+  border-color:rgba(255,255,255,.6);
+}
+
+/* หน้าเข้าสู่ระบบ */
+.shell, .formside, .scoop{
+  background:rgba(255,255,255,.6);
+  backdrop-filter:blur(30px) saturate(190%);
+  -webkit-backdrop-filter:blur(30px) saturate(190%);
+}
+
+/* ตัวเครื่องในหน้าตัวอย่างสถานะบัญชี เป็นภาพจำลองมือถือ ต้องทึบ ไม่ใส่กระจก */
+
+@supports not (backdrop-filter: blur(2px)){
+  .drawer,.list,.tip,.cal,.tpop,.box{background:rgba(255,255,255,.98)}
+  .shell,.formside,.scoop{background:rgba(255,255,255,.96)}
+}
+
+/* ===== เลื่อนทั้งคอลัมน์เนื้อหาเป็นก้อนเดียว ไม่เลื่อนในตาราง (ใช้ร่วมทุกหน้า) ===== */
+/* เดิมตารางมีสกรอลล์ของตัวเองซ้อนอยู่ข้างใน เอาออกให้เลื่อนทีเดียวทั้งคอลัมน์
+   ตัวที่เลื่อนคือ .main ไม่ใช่ทั้งหน้า เมนูซ้ายเลยอยู่กับที่เสมอ ไม่ต้องพึ่ง sticky
+   (ถ้าให้ทั้งหน้ายาวแล้วใช้ sticky เมนูจะหายตอนเลื่อนในกรอบพรีวิวที่สูงเท่าเนื้อหา) */
+/* ต้องระบุ main.main เพราะมีปุ่มที่ใช้คลาส main ด้วย ถ้าเขียน .main เฉยๆ ปุ่มจะสูงเท่าจอ */
+main.main{height:100vh;overflow:auto}
+.panel{flex:none}
+.scroll, .scrollarea, .stage{flex:none;min-height:0;overflow:visible}
+/* ยกเว้นดรอปดาวน์ค้นหา ต้องเลื่อนในกล่องตัวเองเหมือนเดิม */
+.list .scrollarea{max-height:264px;overflow:auto}
+/* แถบหัวลอยอยู่บนสุดของคอลัมน์เนื้อหา และต้องทึบพอให้อ่านออกตอนเนื้อหาเลื่อนลอดใต้ */
+.appbar, .topbar{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.86)}
+/* แผงเลื่อนข้างและกล่องซ้อนยังเลื่อนในตัวเองตามเดิม */
+.drawer .body, .bbody{overflow:auto}
+@media print{ .appbar, .topbar{position:static} .main{height:auto;overflow:visible} }
+
+.twrap input.bad, .dwrap input.bad{
+  border-color:var(--late);
+  background:var(--late-bg);
+  color:var(--late);
+  font-weight:600;
+}
+.twrap input.bad ~ .clockbtn, .dwrap input.bad ~ .calbtn{color:var(--late)}
+
+/* ===== มือถือ: ตารางรายการเปลี่ยนเป็นการ์ดต่อแถว (ใช้ร่วมทุกหน้า) =====
+   จอ 640px ลงมา ตารางหลายคอลัมน์อ่านยากมากถ้าเลื่อนแนวนอน
+   จึงพับแต่ละแถวเป็นการ์ด โดยเอาชื่อคอลัมน์จาก th มาไว้หน้าเซลล์
+   ใช้เฉพาะตารางรายการ (.scroll > table) ไม่แตะตารางในเอกสาร A4 หรือตารางกรอกในฟอร์ม */
+@media (max-width:640px){
+  /* ตารางที่แปลงเป็นการ์ดจะแคบพอดีอยู่แล้ว ส่วนตารางกรอกในฟอร์มยังกว้าง ต้องเลื่อนข้างได้
+     ถ้าตั้ง visible เนื้อหาจะถูกตัดหายโดยไม่มีทางเลื่อนไปดู */
+  .scroll{overflow-x:auto}
+  .scroll > table.grid{min-width:760px}
+  .scroll > table:not(.grid){min-width:0!important;display:block;border-collapse:separate;border-spacing:0}
+  .scroll > table:not(.grid) > thead{display:none}
+  .scroll > table:not(.grid) > tbody{display:block}
+
+  .scroll > table:not(.grid) > tbody > tr{
+    display:block;margin:10px 14px;padding:6px 2px;
+    border:1px solid var(--line);border-radius:13px;background:var(--white);
+  }
+  .scroll > table:not(.grid) > tbody > tr > td{
+    display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+    width:auto;border:none;padding:7px 13px;text-align:right;
+  }
+  .scroll > table:not(.grid) > tbody > tr > td::before{
+    content:attr(data-label);flex:none;max-width:44%;
+    color:var(--ink-faint);font-size:12px;font-weight:600;text-align:left;line-height:1.5;
+  }
+  .scroll > table:not(.grid) > tbody > tr > td:not([data-label])::before{content:none}
+  .scroll > table:not(.grid) > tbody > tr > td > *{text-align:right}
+  .scroll > table:not(.grid) > tbody > tr > td .clip{white-space:normal}
+
+  /* แถวว่างและแถวที่กางรายละเอียดคร่อมทั้งแถว ให้แสดงเต็มความกว้างตามเดิม */
+  .scroll > table:not(.grid) > tbody > tr.sub{margin:0;padding:0;border:none;border-radius:0;background:none}
+  .scroll > table:not(.grid) > tbody > tr.sub > td{display:block;text-align:left;padding:0}
+  .scroll > table:not(.grid) > tbody > tr.sub > td::before{content:none}
+  .scroll > table:not(.grid) > tbody > tr > td.blank,
+  .scroll > table:not(.grid) > tbody > tr > td.empty{display:block;text-align:center}
+  .scroll > table:not(.grid) > tbody > tr > td.blank::before,
+  .scroll > table:not(.grid) > tbody > tr > td.empty::before{content:none}
+
+  /* ตารางย่อยข้างในการ์ดยังเป็นตารางปกติ แต่ให้เลื่อนข้างได้ */
+  .subwrap{overflow-x:auto}
+  table.inner{min-width:560px}
+
+
+  /* แถบหัวหน้า: ชื่อหน้ากับปุ่มเครื่องมือไม่พอในบรรทัดเดียว ต้องตกบรรทัดแทนการถูกตัดหาย */
+  .bar{flex-wrap:wrap;gap:12px}
+  .bar .tools{width:100%;flex-wrap:wrap;justify-content:flex-start;gap:9px}
+  .bar .tools .mo{flex:1 1 auto;min-width:0;justify-content:space-between}
+  .bar .tools .btn, .bar .tools .seg{flex:1 1 auto;justify-content:center}
+  .bar h1{font-size:20px}
+
+  /* กริดที่ตั้งความกว้างคอลัมน์เป็นพิกเซลตายตัวไว้ ต้องบีบให้พอดีจอ ไม่งั้นลูกล้นออกไป */
+  .shell{grid-template-columns:minmax(0,1fr)!important;max-width:100%!important}
+  .pcard, .scoop{max-width:100%!important;width:auto!important;min-width:0}
+  .profile{grid-template-columns:1fr!important}
+  .facts{grid-template-columns:1fr!important}
+  .two, .two-up, .wide-left, .moneygrid{grid-template-columns:1fr!important}
+
+  /* ตารางอื่นที่ไม่ได้อยู่ในกรอบเลื่อน ต้องมีกรอบเลื่อนของตัวเอง */
+  .pcard table, .card table{display:block;overflow-x:auto;max-width:100%}
+
+  /* ช่องค้นหาและแถวป้าย-ค่า ตั้งความกว้างตายตัวไว้ ต้องยืดหดตามจอ */
+  .search{width:100%!important;min-width:0}
+  .search input{width:100%;min-width:0}
+  .mrow{flex-wrap:wrap;gap:4px 10px}
+  .mrow > span, .mrow > label{width:auto;min-width:120px}
+  .card, .panel{min-width:0}
+
+  /* ปุ่มยาวๆ อย่างส่งออก Excel และแถวปุ่มด้านขวาให้ตกบรรทัด ไม่ดันออกนอกจอ */
+  .right, .acts, .btnrow{flex-wrap:wrap}
+  .btn{white-space:nowrap}
+  .bars .bar{max-width:100%}
+
+  /* แถบเลขหน้าและปุ่มสาธิตให้ตกบรรทัดแทนที่จะดันออกนอกจอ */
+  .pages{flex-wrap:wrap;justify-content:center}
+  .foot{flex-wrap:wrap;gap:10px}
+  .demo{flex-wrap:wrap;justify-content:center}
+
+  /* ตารางกรอกในกล่องซ้อน ให้เลื่อนข้างในกล่องแทนที่จะดันกล่องล้นจอ */
+  .bbody{overflow-x:auto}
+  .bbody table.grid{min-width:420px}
+
+  /* แท็บบนมือถือให้เลื่อนแนวนอนแทนที่จะตกบรรทัด */
+  .tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex:none}
+  .strip{flex-wrap:wrap;gap:8px}
+  .legend{display:none}
+}
+
+/* ===== แท็บเล็ต: กล่องที่ตั้งความกว้างเป็นพิกเซลตายตัวต้องยืดหดตามจอด้วย ===== */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr)!important;max-width:100%!important}
+  .pcard, .scoop{max-width:100%!important;width:auto!important;min-width:0}
+  .pcard table, .card table{display:block;overflow-x:auto;max-width:100%}
+}
+/* ===== จอแคบมาก: การ์ดสรุปเรียงลงคอลัมน์เดียว ===== */
+@media (max-width:420px){
+  .cards{grid-template-columns:minmax(0,1fr)!important}
+  .cards > *{min-width:0}
+  /* กริดหลายคอลัมน์ในแดชบอร์ดเหลือคอลัมน์เดียว ไม่งั้นคอลัมน์กว้างเกินจอ */
+  .grid, .grid2, .grid3{grid-template-columns:minmax(0,1fr)!important}
+  .grid > *, .grid2 > *, .grid3 > *{min-width:0}
+}
+
+/* ===== มือถือ: เปลี่ยนเมนูข้างเป็นแถบล่าง ===== */
+.botnav{display:none}
+.bnsheet{display:none}
+@media (max-width:640px){
+  /* ซ่อนแถบข้าง ใช้แถบล่างแทน เพราะนิ้วโป้งเอื้อมถึงง่ายกว่า */
+  .side{display:none!important}
+  main.main{margin-left:0!important;padding-bottom:calc(74px + env(safe-area-inset-bottom))}
+  body{padding-bottom:0}
+
+  .botnav{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:90;
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    background:rgba(255,255,255,.94);
+    backdrop-filter:blur(26px) saturate(180%);
+    -webkit-backdrop-filter:blur(26px) saturate(180%);
+    border-top:1px solid rgba(31,36,48,.09);
+    box-shadow:0 -6px 22px -14px rgba(40,25,60,.35);
+  }
+  .bn-i{
+    flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    padding:6px 2px;border:none;background:none;cursor:pointer;text-decoration:none;
+    font-family:inherit;color:var(--ink-faint);border-radius:12px;
+  }
+  .bn-i svg{width:21px;height:21px;flex:none}
+  .bn-i span{font-size:10.5px;font-weight:600;line-height:1.25;text-align:center;
+             max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bn-i.on{color:var(--maz-red)}
+  .bn-i.on svg{stroke-width:2.1}
+  .bn-i:active{background:rgba(208,2,27,.07)}
+
+  /* แผ่นเมนูทั้งหมด เลื่อนขึ้นจากด้านล่าง */
+  .bnsheet{
+    display:block;position:fixed;inset:0;z-index:95;
+    background:rgba(28,20,45,.42);
+    opacity:0;visibility:hidden;transition:opacity .2s,visibility .2s;
+  }
+  .bnsheet.on{opacity:1;visibility:visible}
+  .bnpanel{
+    position:absolute;left:0;right:0;bottom:0;
+    background:var(--white);border-radius:20px 20px 0 0;
+    padding:10px 16px calc(18px + env(safe-area-inset-bottom));
+    transform:translateY(14px);transition:transform .22s;
+    max-height:78vh;overflow:auto;
+  }
+  .bnsheet.on .bnpanel{transform:translateY(0)}
+  .bngrab{width:38px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 12px}
+  .bntitle{font-size:13px;font-weight:700;color:var(--ink-soft);margin-bottom:8px;padding-left:4px}
+  .bnlist{display:flex;flex-direction:column}
+  .bnrow{
+    display:flex;align-items:center;gap:13px;padding:13px 12px;border-radius:12px;
+    text-decoration:none;color:var(--ink);font-size:14.5px;font-weight:500;
+  }
+  .bnrow svg{width:19px;height:19px;flex:none;color:var(--ink-faint)}
+  .bnrow.on{background:#FEF5F6;color:var(--maz-red);font-weight:700}
+  .bnrow.on svg{color:var(--maz-red)}
+  .bnrow:active{background:var(--field)}
+}
+</style>
+
+<!-- ===== PWA (ใส่ร่วมทุกหน้าโดย apply_glass.py) ===== -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#D0021B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ERP MAZ">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" href="./icons/icon-192.png">
+<script src="./pwa.js" defer></script>
+<script>window.__lvAllYear=window.matchMedia&&matchMedia("(max-width:760px)").matches;  /* มือถือ: แสดงใบลาทั้งปี แบ่งตามเดือน */</script>
+<style id="lv-mobile">
+/* ================= มือถือ: หน้าการลาแบบเดียวกับหน้าโอที ================= */
+.m-lv-head,.m-lv-filter,.m-lv-sheet,.tabbar2{display:none}
+@media (max-width:760px){
+  html,body{height:auto!important;min-height:100%;overflow:visible!important}   /* ให้หน้ายาวตามเนื้อหา ระยะเว้นล่างจึงพ้นแถบเมนูล่าง */
+  .main{height:auto!important;max-height:none!important;overflow:visible!important}
+  body{background:#F7F5F6!important;padding:0 0 calc(110px + env(safe-area-inset-bottom,0px))!important}
+  body::before,body::after{display:none!important}
+  .side,.appbar,.botnav,.bnav,.bnsheet{display:none!important}
+  .main{background:transparent!important;padding:0!important}
+  .bar{display:block!important;height:0;overflow:visible;padding:0!important;margin:0!important;border:0!important}
+  .bar > div:first-child,.bar .mo{display:none!important}
+  .m-lv-head{display:flex;align-items:center;gap:10px;padding:20px 16px 4px;font-family:'Noto Sans Thai',Tahoma,sans-serif}
+  .m-lv-head h1,.m-lv-head #mLvCount{display:none!important}   /* ไม่แสดงหัวข้อและจำนวนคำขอ */
+  .m-lv-head h1{margin:0;font-size:26px;font-weight:700;color:#2A1F22}
+  .m-lv-head span{font-size:13px;color:#8A7E81;align-self:flex-end;padding-bottom:6px}
+  .m-lv-calbtn{margin-left:auto;width:42px;height:42px;border-radius:50%;border:1px solid #EFE3E5;background:#FFFFFF;color:#2A1F22;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 4px 10px -6px rgba(90,20,35,.3)}
+  .m-lv-filter:not([hidden]){display:flex;align-items:center;gap:8px;align-self:flex-start;margin:8px 16px 0;height:36px;width:max-content;padding:0 6px 0 14px;border-radius:999px;background:#FDECEE;color:#B0101F;font-size:13px;font-weight:700}
+  .m-lv-filter button{width:26px;height:26px;border-radius:50%;border:0;background:#FFFFFF;color:#B0101F;display:flex;align-items:center;justify-content:center;padding:0}
+  /* วันลาคงเหลือ: กล่อง KPI แถวเดียวแบบหน้าโฮม */
+  #cards{display:flex!important;gap:0!important;margin:14px 16px 0!important;padding:12px 0!important;border-radius:16px!important;border:1px solid #E3D3D7!important;background:#FFFFFF!important}
+  #cards .card{flex:1;min-width:0;display:flex!important;flex-direction:column;align-items:center;gap:2px;padding:2px 4px!important;margin:0!important;border:0!important;border-right:1px solid #D9C8CC!important;border-radius:0!important;background:none!important;box-shadow:none!important;min-height:0!important;text-align:center}
+  #cards .card:last-child{border-right:0!important}
+  #cards .card .big{order:0;margin:0!important;font-size:17px!important;font-weight:700!important;line-height:1.2!important;white-space:nowrap}
+  #cards .card .big u{display:none!important}
+  #cards .card .big::after{content:"วัน";font-size:11px;font-weight:600;color:#6B5F62;margin-left:2px}
+  #cards .card .ct{order:1;display:block!important;margin:0!important}
+  #cards .card .ct b{font-size:11px!important;font-weight:500!important;color:#8A7E81!important;white-space:nowrap}
+  #cards .card .ct b::after{content:"คงเหลือ"}
+  #cards .card .ct em,#cards .card .meta,#cards .card .track{display:none!important}
+  /* แท็บสถานะเป็นชิป */
+  .panel{background:transparent!important;border:0!important;box-shadow:none!important;margin:12px 0 0!important}
+  .strip{padding:0 16px!important;border:0!important;background:transparent!important;display:block!important}
+  .strip .legend{display:none!important}
+  .strip .tabs{display:flex!important;gap:8px!important;overflow-x:auto;scrollbar-width:none;padding:2px 0 4px!important;background:transparent!important;border:0!important}
+  .strip .tabs button{flex:none;height:38px!important;padding:0 16px!important;border-radius:999px!important;border:0!important;background:#EDE8EA!important;color:#6E6164!important;box-shadow:none!important;font-weight:600!important;font-size:13px!important}
+  .strip .tabs button.on{background:#C8102E!important;color:#FFFFFF!important}
+  .strip .tabs button b{background:transparent!important;color:inherit!important;opacity:.85;margin-left:4px}
+  /* รายการเป็นการ์ด */
+  .panel .scroll{overflow:visible!important;margin:0!important;padding:0!important;width:auto!important}
+  .panel table{display:block!important;min-width:0!important;width:100%!important;border:0!important}
+  .panel thead{display:none!important}
+  #rows{display:flex!important;flex-direction:column;gap:10px;padding:10px 16px 0;box-sizing:border-box;width:100%}
+  #rows > tr{display:grid!important;width:100%;box-sizing:border-box;margin:0!important;grid-template-columns:40px minmax(0,1fr) auto auto!important;column-gap:10px;row-gap:6px;padding:14px!important;border-radius:20px!important;background:#FFFFFF!important;border:0!important;box-shadow:0 1px 2px rgba(40,20,25,.04)!important;
+    grid-template-areas:"ico ty ty dy" "ico rs rs rs" "line line line line" "rg rg rg st" "no no no ac"}
+  #rows > tr::before{content:"";grid-area:ico;width:40px;height:40px;border-radius:50%;background:#E8F0FC url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%231A5DB5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2.5'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3C/svg%3E") center/19px no-repeat}
+  #rows > tr::after{content:"";grid-area:line;border-top:1.5px dashed #ECE3E5;margin:6px 0 4px}
+  #rows > tr:has(td[colspan]){display:block!important}
+  #rows > tr:has(td[colspan])::before,#rows > tr:has(td[colspan])::after{display:none}
+  #rows > tr > td{display:block!important;padding:0!important;border:0!important;background:none!important;text-align:left!important;min-width:0}
+  #rows > tr > td::before{content:none!important;display:none!important}
+  #rows > tr > td:nth-child(2){grid-area:ty;font-size:15px;font-weight:700;align-self:center}
+  #rows > tr > td:nth-child(4){grid-area:dy;font-size:15px;font-weight:700;justify-self:end;align-self:center;white-space:nowrap}
+  #rows > tr > td:nth-child(4){display:flex!important;flex-wrap:wrap;justify-content:flex-end;align-items:baseline;column-gap:3px;text-align:right!important}
+  #rows > tr > td:nth-child(4)::after{content:"วัน";font-weight:600;order:1}
+  #rows > tr > td:nth-child(4) > b{order:0;flex-basis:auto;font-size:15px!important;font-weight:700!important}
+  #rows > tr > td:nth-child(4) > .over{order:2;flex-basis:100%;text-align:right!important;font-size:11px;font-weight:600}
+  /* ธีมเดิมจัดเซลล์บนจอแคบให้ชิดขวา -> บังคับชิดซ้าย */
+  #rows > tr > td:not(:nth-child(4)){justify-content:flex-start!important}
+  #rows > tr > td:not(:nth-child(4)) > *{text-align:left!important;margin-left:0!important}
+  #rows > tr > td:nth-child(5){grid-area:rs;font-size:13px;color:#6E6164;line-height:1.45}
+  #rows > tr > td:nth-child(5) .why{display:block;font-size:12px;color:#9A8E91}
+  #rows > tr > td:nth-child(3){grid-area:rg;font-size:12.5px;font-weight:600;color:#6E6164;display:flex!important;flex-wrap:wrap;align-items:center;gap:2px 5px}
+  #rows > tr > td:nth-child(3)::before{content:""!important;display:inline-block!important;width:14px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238A7E81' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2.5'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3C/svg%3E") center/14px no-repeat}
+  #rows > tr > td:nth-child(3) .why{flex-basis:100%;font-size:11.5px;font-weight:500;color:#9A8E91;padding-left:19px}
+  #rows > tr > td:nth-child(6){grid-area:st;align-self:start;justify-self:end}
+  #rows > tr > td:nth-child(1){grid-area:no;justify-self:start;align-self:center;font-size:12px;color:#9A8E91;white-space:nowrap}
+  #rows > tr > td:nth-child(1) b{display:none}
+  #rows > tr > td:nth-child(7){grid-area:ac;justify-self:end}
+  #rows > tr > td:nth-child(7):not(:has(button)){display:none!important}
+  .foot{border:0!important;background:transparent!important;justify-content:center!important;padding:8px 16px!important}
+  .foot #range,.foot .sum{display:none!important}
+  /* ปุ่ม + ยื่นใบลา */
+  #newBtn{display:flex!important;position:fixed;right:18px;bottom:calc(100px + env(safe-area-inset-bottom,0px));z-index:40;width:58px;height:58px;padding:0!important;border-radius:50%!important;font-size:0!important;gap:0!important;align-items:center;justify-content:center;box-shadow:0 14px 24px -10px rgba(200,16,46,.9)!important}
+  #newBtn svg{width:24px!important;height:24px!important}
+  /* ปฏิทินกรองวันที่ */
+  .m-lv-sheet:not([hidden]){display:flex;position:fixed;inset:0;z-index:90;background:rgba(40,20,25,.4);align-items:flex-end}
+  .m-lv-panel{width:100%;box-sizing:border-box;background:#FFFFFF;border-radius:26px 26px 0 0;padding:10px 18px calc(22px + env(safe-area-inset-bottom,0px));font-family:'Noto Sans Thai',Tahoma,sans-serif}
+  .m-lv-grab{width:40px;height:4px;border-radius:4px;background:#E8DDE0;margin:0 auto 12px}
+  .m-lv-calhead{display:flex;align-items:center;justify-content:space-between}
+  .m-lv-calhead h2{margin:0;font-size:17px;font-weight:700}
+  .m-lv-calhead button{width:38px;height:38px;border-radius:50%;border:1px solid #EFE3E5;background:#FFFFFF;display:flex;align-items:center;justify-content:center;padding:0;color:#2A1F22}
+  .m-lv-calhead button:disabled{opacity:.35}
+  .m-lv-wk,.m-lv-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}
+  .m-lv-wk{margin-top:12px}.m-lv-wk span{font-size:12px;color:#9A8E91;padding:4px 0}
+  .m-lv-grid button,.m-lv-grid span{height:46px;border:0;background:none;font:inherit;display:flex;flex-direction:column;align-items:center;gap:3px;padding:0;color:#2A1F22}
+  .m-lv-grid b{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
+  .m-lv-grid i{width:5px;height:5px;border-radius:50%;background:transparent}
+  .m-lv-grid .has i{background:#C8102E}.m-lv-grid .today b{color:#C8102E}.m-lv-grid .sel b{background:#C8102E;color:#FFFFFF}
+  .m-lv-all{width:100%;height:48px;margin-top:10px;border:0;border-radius:14px;background:#F6F0F1;font:inherit;font-size:14px;font-weight:700;color:#2A1F22}
+  .m-lv-head,.m-lv-filter,.m-lv-sheet{display:none!important}   /* ไม่กรองตามวันแล้ว */
+  #cards{margin-top:20px!important}
+  .foot{display:none!important}
+  #rows > tr.m-lv-mo{display:block!important;margin:8px 0 -2px!important;padding:0 4px!important;background:none!important;box-shadow:none!important;border-radius:0!important}
+  #rows > tr.m-lv-mo::before,#rows > tr.m-lv-mo::after{display:none!important}
+  #rows > tr.m-lv-mo > td{font-size:15px!important;font-weight:700!important;color:#2A1F22;text-align:left!important;padding:0!important}
+  /* แถบล่างติดขอบจอ */
+  .tabbar2{display:block;position:fixed;left:0;right:0;bottom:0;z-index:50;background:rgba(255,255,255,.97);border-radius:24px 24px 0 0;box-shadow:0 -8px 24px -16px rgba(90,20,35,.35);padding:6px 6px calc(10px + env(safe-area-inset-bottom,0px))}
+  .tabbar2 .in{height:62px;display:grid;grid-template-columns:repeat(5,1fr);align-items:center}
+  .tabbar2 a{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:#A3979A;text-decoration:none}
+  .tabbar2 a.on{color:#C8102E}
+  .tabbar2 a:has(> .fab){gap:14px}
+  .tabbar2 .fab{width:58px;height:58px;margin-top:-42px;border-radius:50%;background:#C8102E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 9px rgba(253,227,231,.85),0 12px 22px -10px rgba(200,16,46,.9)}
+}
+</style>
+</head>
+<body>
+
+<aside class="side">
+  <p class="logo">MAZ</p>
+  <nav class="nav">
+    <p class="grp">งานขาย</p>
+    <a href="leads.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.4"/><path d="M3 20c0-3.4 2.7-5.6 6-5.6s6 2.2 6 5.6"/><path d="M17 10h5M19.5 7.5v5"/></svg><span>ผู้สนใจ</span></a>
+    <a href="presales.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 3h6l1 3h3a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3Z"/><path d="M9 13h6M9 16.5h4"/></svg><span>คำขอก่อนการขาย</span></a>
+    <a href="quotations.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v6h6"/></svg><span>ใบเสนอราคา</span></a>
+    <a href="deals.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 6h18l-1.6 9.5a2 2 0 0 1-2 1.7H6.6a2 2 0 0 1-2-1.7Z"/><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg><span>ดีลและใบงาน</span></a>
+    <a href="dashboard.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>รายงาน</span></a>
+    <p class="grp">ของฉัน</p>
+    <a href="attendance.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>เวลาทำงาน</span></a>
+    <a href="leave.html" class="on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="16" rx="2.4"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9.5 15.5l1.8 1.8 3.4-3.6"/></svg><span>การลา</span></a>
+    <a href="expense.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v18"/><path d="M16.5 7.5c0-1.9-2-3-4.5-3s-4.5 1.1-4.5 3 2 2.6 4.5 3 4.5 1.1 4.5 3-2 3-4.5 3-4.5-1.1-4.5-3"/></svg><span>เบิกค่าใช้จ่าย</span></a>
+    <a href="my-payslip.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>สลิปเงินเดือน</span></a>
+  </nav>
+</aside>
+
+<main class="main">
+  <header class="m-lv-head">
+    <h1>การลา</h1><span id="mLvCount"></span>
+    <button type="button" class="m-lv-calbtn" id="mLvCalBtn" aria-label="เลือกวันที่" aria-haspopup="dialog"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
+  </header>
+  <div class="m-lv-filter" id="mLvFilter" hidden><span id="mLvFilterTx">—</span><button type="button" id="mLvFilterX" aria-label="ล้างวันที่ที่เลือก"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+
+  <header class="appbar">
+    <p class="where"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="16" rx="2.4"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9.5 15.5l1.8 1.8 3.4-3.6"/></svg>การลา</p>
+    <div class="side-tools">
+      <button class="iconbtn" aria-label="แจ้งเตือน"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 15v-4a6 6 0 1 0-12 0v4l-1.5 2.5h15Z"/><path d="M10 20h4"/></svg><span class="dot"></span></button>
+      <button class="me" id="meBtn" aria-haspopup="menu" aria-expanded="false" aria-label="บัญชีของฉัน">
+        <span class="av">ชจ</span>
+      </button>
+      <nav class="menu" id="meMenu" role="menu" aria-labelledby="meBtn">
+        <div class="mehead">
+          <span class="av">ชจ</span>
+          <span class="tx"><b>ชนัญชิดา ใจดี</b><span>พนักงานขาย</span></span>
+        </div>
+        <hr>
+        <a href="profile.html" role="menuitem"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>โปรไฟล์ของฉัน</a>
+        <a href="profile.html" role="menuitem"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>เปลี่ยนรหัสผ่าน</a>
+        <hr>
+        <a href="./install.html" role="menuitem"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M5 21h14"/></svg>ติดตั้งแอป</a>
+        <a href="#" role="menuitem" class="out"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/></svg>ออกจากระบบ</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="bar">
+    <div>
+      <h1>การลาของฉัน</h1>
+    </div>
+    <div class="tools">
+      <div class="mo">
+        <button id="prevMo" aria-label="เดือนก่อนหน้า"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 19 8 12l7-7"/></svg></button>
+        <span id="moLabel">—</span>
+        <button id="nextMo" aria-label="เดือนถัดไป"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></button>
+      </div>
+      <button class="btn solid" id="newBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>ยื่นใบลา</button>
+    </div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <section class="panel">
+    <div class="strip">
+      <div class="tabs" id="tabs"></div>
+      <div class="legend">
+        <span><i style="background:var(--early)"></i>รออนุมัติ</span>
+        <span><i style="background:var(--ok)"></i>อนุมัติแล้ว</span>
+        <span><i style="background:var(--late)"></i>ไม่อนุมัติ</span>
+        <span><i style="background:var(--miss)"></i>ยกเลิก</span>
+      </div>
+    </div>
+
+    <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:158px">เลขที่คำขอ</th>
+          <th style="width:118px">ประเภท</th>
+          <th style="width:178px">ช่วงวันลา</th>
+          <th class="c" style="width:116px">จำนวนวัน</th>
+          <th>เหตุผล</th>
+          <th style="width:132px">สถานะ</th>
+          <th class="c hide" style="width:96px">จัดการ</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    </div>
+
+    <div class="foot">
+      <span id="range">—</span>
+      <span class="sum">วันลาที่อนุมัติแล้วรวม<b id="sumDays">0</b> วัน</span>
+      <div class="pages" id="pages"></div>
+    </div>
+  </section>
+
+</main>
+<div class="m-lv-sheet" id="mLvSheet" hidden role="dialog" aria-modal="true" aria-labelledby="mLvCalT">
+  <div class="m-lv-panel">
+    <div class="m-lv-grab"></div>
+    <div class="m-lv-calhead"><button type="button" id="mLvPrev" aria-label="เดือนก่อนหน้า"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><h2 id="mLvCalT">—</h2><button type="button" id="mLvNext" aria-label="เดือนถัดไป"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
+    <div class="m-lv-wk" aria-hidden="true"><span>อา</span><span>จ</span><span>อ</span><span>พ</span><span>พฤ</span><span>ศ</span><span>ส</span></div>
+    <div class="m-lv-grid" id="mLvGrid"></div>
+    <button type="button" class="m-lv-all" id="mLvAll">ดูทั้งเดือน</button>
+  </div>
+</div>
+<nav class="tabbar2" aria-label="เมนูล่าง"><div class="in">
+  <a href="home-glass.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/></svg>หน้าหลัก</a>
+  <a href="leave.html" class="on" aria-current="page"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>การลา</a>
+  <a href="checkin.html"><span class="fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>ลงเวลา</a>
+  <a href="expense.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>เบิกค่าใช้จ่าย</a>
+  <a href="profile-glass.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>โปรไฟล์</a>
+</div></nav>
+<script>
+window.addEventListener('DOMContentLoaded',function(){
+  /* มือถือ: จำนวนคำขอข้างหัวข้อ + ปฏิทินกรองวันที่ (เลือกวัน = เห็นใบลาที่ครอบวันนั้น) */
+  if(!window.__lv) return;
+  var MONF=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var MON=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var TODAY=new Date(2026,8,7);
+  function pad(n){ return n<10?'0'+n:''+n; }
+  var tabs=document.getElementById('tabs'), cnt=document.getElementById('mLvCount');
+  function sync(){ var b=tabs.querySelector('button b'); cnt.textContent=b?b.textContent.replace(/\s/g,'')+' คำขอ':''; }
+  if(window.MutationObserver) new MutationObserver(sync).observe(tabs,{childList:true,subtree:true,characterData:true}); sync();
+  var sheet=document.getElementById('mLvSheet'), ym=null;
+  function draw(){
+    var y=ym[0], m=ym[1], first=new Date(y,m,1).getDay(), dim=new Date(y,m+1,0).getDate(), h='';
+    var reqs=window.__lv.reqs();
+    document.getElementById('mLvCalT').textContent=MONF[m]+' '+(y+543);
+    for(var i=0;i<first;i++) h+='<span></span>';
+    for(var d=1;d<=dim;d++){
+      var iso=y+'-'+pad(m+1)+'-'+pad(d);
+      var has=reqs.some(function(r){ return r.from<=iso && r.to>=iso; });
+      var cls=(has?'has ':'')+(iso===window.__lvDay?'sel ':'')+(y===TODAY.getFullYear()&&m===TODAY.getMonth()&&d===TODAY.getDate()?'today':'');
+      h+='<button type="button" class="'+cls+'" data-d="'+iso+'"><b>'+d+'</b><i></i></button>';
+    }
+    document.getElementById('mLvGrid').innerHTML=h;
+    document.getElementById('mLvNext').disabled=(y>TODAY.getFullYear())||(y===TODAY.getFullYear()&&m>=TODAY.getMonth());
+  }
+  function label(){ var f=document.getElementById('mLvFilter');
+    if(window.__lvDay){ var p=window.__lvDay.split('-'); document.getElementById('mLvFilterTx').textContent=(+p[2])+' '+MON[+p[1]-1]+' '+(+p[0]+543); f.hidden=false; } else f.hidden=true; }
+  document.getElementById('mLvCalBtn').addEventListener('click',function(){ ym=window.__lv.month(); draw(); sheet.hidden=false; });
+  sheet.addEventListener('click',function(e){ if(e.target===sheet) sheet.hidden=true; });
+  document.getElementById('mLvPrev').addEventListener('click',function(){ var d=new Date(ym[0],ym[1]-1,1); ym=[d.getFullYear(),d.getMonth()]; draw(); });
+  document.getElementById('mLvNext').addEventListener('click',function(){ var d=new Date(ym[0],ym[1]+1,1); ym=[d.getFullYear(),d.getMonth()]; draw(); });
+  document.getElementById('mLvGrid').addEventListener('click',function(e){ var b=e.target.closest('button[data-d]'); if(!b) return;
+    window.__lvDay=b.getAttribute('data-d'); window.__lv.go(ym[0],ym[1]); label(); sheet.hidden=true; });
+  document.getElementById('mLvAll').addEventListener('click',function(){ window.__lvDay=null; window.__lv.go(ym[0],ym[1]); label(); sheet.hidden=true; });
+  document.getElementById('mLvFilterX').addEventListener('click',function(){ window.__lvDay=null; window.__lv.redraw(); label(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') sheet.hidden=true; });
+});
+</script>
+
+
+<!-- ---------- กล่องยื่นใบลา ---------- -->
+<div class="veil" id="veil" role="dialog" aria-modal="true" aria-labelledby="boxTitle">
+  <div class="box">
+    <div class="bhead">
+      <h2 id="boxTitle">ยื่นใบลา</h2>
+      <button class="iconbtn" id="closeBox" aria-label="ปิด"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+
+    <div class="bbody">
+      <div class="fld">
+        <label for="fType">ประเภทการลา</label>
+        <select id="fType"></select>
+      </div>
+
+      <div class="fld two">
+        <div class="dwrap">
+          <label for="fFrom">วันที่เริ่มลา</label>
+          <input type="text" id="fFrom" placeholder="เลือกวันที่" autocomplete="off" readonly>
+          <button type="button" class="calbtn" data-cal="fFrom" aria-label="เลือกวันที่เริ่มลา"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="16" rx="2.4"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
+        </div>
+        <div class="dwrap">
+          <label for="fTo">วันที่สิ้นสุด</label>
+          <input type="text" id="fTo" placeholder="เลือกวันที่" autocomplete="off" readonly>
+          <button type="button" class="calbtn" data-cal="fTo" aria-label="เลือกวันที่สิ้นสุด"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="16" rx="2.4"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
+        </div>
+      </div>
+
+      <div class="fld">
+        <label>ช่วงเวลา</label>
+        <div class="seg" id="fSpan">
+          <button type="button" data-span="full" class="on">เต็มวัน</button>
+          <button type="button" data-span="half">ครึ่งวัน</button>
+        </div>
+      </div>
+
+      <div class="fld" id="fHalfWrap" style="display:none">
+        <label>ลาช่วงไหน</label>
+        <div class="picks" id="fHalf">
+          <label class="pickone on" for="fAM"><input type="radio" name="halfPeriod" id="fAM" value="am" checked><span>ลาช่วงเช้า</span><em>09:00–13:00</em></label>
+          <label class="pickone" for="fPM"><input type="radio" name="halfPeriod" id="fPM" value="pm"><span>ลาช่วงบ่าย</span><em>13:00–18:00</em></label>
+        </div>
+      </div>
+
+      <div class="fld" id="fTimeWrap" style="display:none">
+        <div class="two">
+        <div class="twrap">
+          <label for="fStart">เวลาเริ่ม</label>
+          <input type="text" id="fStart" readonly autocomplete="off">
+          <button type="button" class="clockbtn" data-clock="fStart" aria-label="เลือกเวลาเริ่ม"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
+        </div>
+        <div class="twrap">
+          <label for="fEnd">เวลาสิ้นสุด</label>
+          <input type="text" id="fEnd" readonly autocomplete="off">
+          <button type="button" class="clockbtn" data-clock="fEnd" aria-label="เลือกเวลาสิ้นสุด"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
+        </div>
+        </div>
+        <p class="hint">ปรับนาทีทีละ 15 นาที ภายในกะ 09:00–18:00 ระบบใช้เวลานี้เลื่อนกะในหน้าเวลาทำงาน</p>
+      </div>
+
+      <div class="fld">
+        <label for="fReason">เหตุผลการลา</label>
+        <textarea id="fReason" placeholder="ระบุเหตุผล"></textarea>
+      </div>
+
+      <div class="fld">
+        <label for="fFile">เอกสารประกอบ (ถ้ามี)</label>
+        <div class="file">
+          <input type="file" id="fFile" multiple>
+          <button type="button" class="pick" id="fPick">เลือกไฟล์</button>
+          <span class="fname" id="fName">ยังไม่ได้เลือกไฟล์</span>
+        </div>
+      </div>
+
+      <div class="calc">
+        <span>จำนวนวันลา (ไม่นับเสาร์-อาทิตย์และวันหยุดนักขัตฤกษ์)</span>
+        <b id="fDays">0</b>
+      </div>
+      <p class="warn hide" id="fWarn"></p>
+    </div>
+
+    <div class="bfoot">
+      <button class="btn" id="cancelBox">ยกเลิก</button>
+      <button class="btn solid" id="submitBox">ส่งคำขอ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var TODAY=new Date(2026,8,7);              // 7 ก.ย. 2569
+  var YEAR=TODAY.getFullYear();              // ปี ค.ศ. ที่ใช้เป็นคีย์ของ leave_entitlement
+  var viewYear=YEAR, viewMonth=TODAY.getMonth();
+
+  // TODO: ดึงจากตาราง leave_type
+  var TYPES=[
+    {code:'personal', name:'ลากิจ',     days:3,  paid:true},
+    {code:'vacation', name:'ลาพักร้อน', days:6,  paid:true},
+    {code:'sick',     name:'ลาป่วย',    days:30, paid:true}
+  ];
+
+  // TODO: ดึงจากตาราง holiday ของปีที่เลือก — ชุดนี้ใส่ไว้ให้คำนวณเดโมได้เท่านั้น
+  var HOLIDAYS={
+    '2026-01-01':1,'2026-04-06':1,'2026-04-13':1,'2026-04-14':1,'2026-04-15':1,
+    '2026-05-01':1,'2026-05-04':1,'2026-07-28':1,'2026-08-12':1,
+    '2026-10-13':1,'2026-10-23':1,'2026-12-05':1,'2026-12-10':1,'2026-12-31':1
+  };
+
+  // TODO: ดึงจากตาราง leave_request ของพนักงานที่ล็อกอิน
+  // status: pending | approved | rejected | cancelled
+  // span/start_time/end_time ยังไม่มีใน ERD — ดูหมายเหตุท้ายไฟล์
+  var REQS=[
+    {no:'LV-2569-0001', type:'sick',     from:'2026-01-15', to:'2026-01-15', days:1.0, span:'full',
+     reason:'ไข้หวัด พักรักษาตัว', status:'approved', comment:'', submitted:'2026-01-15 08:40', decided:'2026-01-15 09:20', files:['ใบรับรองแพทย์.pdf']},
+    {no:'LV-2569-0002', type:'vacation', from:'2026-03-09', to:'2026-03-11', days:3.0, span:'full',
+     reason:'เดินทางต่างจังหวัดกับครอบครัว', status:'approved', comment:'', submitted:'2026-02-24 14:05', decided:'2026-02-25 10:12', files:[]},
+    {no:'LV-2569-0003', type:'personal', from:'2026-05-11', to:'2026-05-11', days:1.0, span:'full',
+     reason:'ติดต่อราชการที่อำเภอ', status:'approved', comment:'', submitted:'2026-05-07 16:22', decided:'2026-05-08 09:03', files:[]},
+    {no:'LV-2569-0004', type:'sick',     from:'2026-08-10', to:'2026-08-11', days:2.0, span:'full',
+     reason:'ปวดท้องรุนแรง แพทย์ให้พัก 2 วัน', status:'approved', comment:'', submitted:'2026-08-10 07:55', decided:'2026-08-10 08:30', files:['ใบรับรองแพทย์-ส.ค.pdf']},
+    {no:'LV-2569-0005', type:'sick',     from:'2026-09-01', to:'2026-09-01', days:0.5, span:'half', period:'am', start:'09:00', end:'13:00',
+     reason:'พบทันตแพทย์ตามนัด', status:'approved', comment:'', submitted:'2026-08-28 11:10', decided:'2026-08-28 13:44', files:[]},
+    {no:'LV-2569-0006', type:'personal', from:'2026-06-22', to:'2026-06-22', days:1.0, span:'full',
+     reason:'ธุระส่วนตัว', status:'rejected', comment:'ช่วงนั้นมีนัดส่งงานลูกค้า ขอให้เลื่อนไปสัปดาห์ถัดไป', submitted:'2026-06-18 09:31', decided:'2026-06-18 15:02', files:[]},
+    {no:'LV-2569-0007', type:'personal', from:'2026-07-06', to:'2026-07-06', days:1.0, span:'full',
+     reason:'พาผู้ปกครองไปโรงพยาบาล', status:'cancelled', comment:'', submitted:'2026-07-02 10:14', decided:'', files:[]},
+    {no:'LV-2569-0008', type:'vacation', from:'2026-09-21', to:'2026-09-25', days:5.0, span:'full',
+     reason:'พักผ่อนประจำปี', status:'pending', comment:'', submitted:'2026-09-04 17:26', decided:'', files:[]}
+  ];
+
+  var STATUS={
+    pending:  {label:'รออนุมัติ',   cls:'t-pend'},
+    approved: {label:'อนุมัติแล้ว', cls:'t-appr'},
+    rejected: {label:'ไม่อนุมัติ',  cls:'t-rej'},
+    cancelled:{label:'ยกเลิก',     cls:'t-cxl'}
+  };
+  var TABS=[['all','ทั้งหมด'],['pending','รออนุมัติ'],['approved','อนุมัติแล้ว'],['rejected','ไม่อนุมัติ'],['cancelled','ยกเลิก']];
+  var SPAN={full:'เต็มวัน', half:'ครึ่งวัน'};
+  var PERIOD={am:'ช่วงเช้า', pm:'ช่วงบ่าย'};
+
+  // กะทำงาน 09:00-18:00 พักกลางวัน 12:00-13:00 — ต้องตรงกับ attendance.html
+  var SHIFT_IN=9*60, SHIFT_OUT=18*60, LUNCH_A=12*60, LUNCH_B=13*60, FULL_MIN=480;
+  // ลาครึ่งวัน เลือกช่วงเช้าหรือช่วงบ่าย ระบบเติมเวลามาตรฐานให้ แต่พนักงานแก้เวลาเองได้
+  var PRESET={am:{start:9*60, end:13*60}, pm:{start:13*60, end:18*60}};
+
+  var tab='all', page=1, PER_PAGE=10;
+  var rowsEl=document.getElementById('rows'), tabsEl=document.getElementById('tabs'),
+      rangeEl=document.getElementById('range'), pagesEl=document.getElementById('pages'),
+      sumD=document.getElementById('sumDays'), cardsEl=document.getElementById('cards'),
+      moLabel=document.getElementById('moLabel');
+
+  var BUSY=false;
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function pad(n){ return n<10?'0'+n:''+n; }
+  function parse(s){ var p=String(s).split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
+  function num(n){ return (Math.round(n*10)/10).toString(); }
+
+  var MONFULL=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var MON=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  function thDate(s){ var d=parse(s); return d.getDate()+' '+MON[d.getMonth()]+' '+(d.getFullYear()+543); }
+  // ลาต่อเนื่องหลายวัน ย่อไม่ให้ซ้ำเดือนและปี จะได้เห็นวันที่สิ้นสุดครบไม่โดนตัดท้าย
+  function thRange(a,b){
+    if(a===b) return thDate(a);
+    var x=parse(a), y=parse(b);
+    if(x.getFullYear()!==y.getFullYear()) return thDate(a)+' – '+thDate(b);
+    if(x.getMonth()===y.getMonth())
+      return x.getDate()+' – '+y.getDate()+' '+MON[y.getMonth()]+' '+(y.getFullYear()+543);
+    return x.getDate()+' '+MON[x.getMonth()]+' – '+y.getDate()+' '+MON[y.getMonth()]+' '+(y.getFullYear()+543);
+  }
+  function thStamp(s){
+    if(!s) return '';
+    var p=s.split(' '), d=parse(p[0]);
+    return d.getDate()+' '+MON[d.getMonth()]+' '+(d.getFullYear()+543)+(p[1]?' '+p[1]:'');
+  }
+
+  function hhmm(m){ return pad(Math.floor(m/60))+':'+pad(m%60); }
+  function netMin(a,b){
+    if(a==null||b==null||b<=a) return 0;
+    var lunch=Math.max(0, Math.min(b,LUNCH_B)-Math.max(a,LUNCH_A));
+    return Math.max(0, b-a-lunch);
+  }
+  // ปัดเป็นขั้น 0.5 วัน อย่างต่ำ 0.5 — ⚠️ เอกสารบอกแค่ว่า total_days เป็น DECIMAL(4,1) ไม่ได้ระบุวิธีปัด
+  function minToDays(m){ return Math.max(0.5, Math.round(m/FULL_MIN*2)/2); }
+
+  function typeOf(code){
+    for(var i=0;i<TYPES.length;i++) if(TYPES[i].code===code) return TYPES[i];
+    return {code:code, name:code, days:0, paid:true};
+  }
+
+  // BR-02 นับวันลาโดยข้ามเสาร์-อาทิตย์และวันหยุดนักขัตฤกษ์
+  function countDays(from, to){
+    if(!from || !to) return 0;
+    var a=parse(from), b=parse(to);
+    if(b<a) return 0;
+    var n=0, d=new Date(a);
+    while(d<=b){
+      var w=d.getDay();
+      if(w!==0 && w!==6 && !HOLIDAYS[ymd(d)]) n++;
+      d.setDate(d.getDate()+1);
+    }
+    return n;
+  }
+
+  function inYear(r){ return parse(r.from).getFullYear()===viewYear; }
+  // ตารางกรองตามเดือนที่เลือก ใบที่ลาคร่อมเดือนก็ให้ติดมาด้วย
+  function inMonth(r){
+    var s=viewYear+'-'+pad(viewMonth+1)+'-01';
+    var e=viewYear+'-'+pad(viewMonth+1)+'-'+pad(new Date(viewYear, viewMonth+1, 0).getDate());
+    if(window.__lvAllYear) return inYear(r);   /* มือถือ: ทั้งปี */
+    return r.from<=e && r.to>=s;
+  }
+
+  // used_days ตัดเมื่อคำขอได้รับอนุมัติเท่านั้น
+  function usedOf(code){
+    return REQS.reduce(function(a,r){
+      return a + ((inYear(r) && r.type===code && r.status==='approved') ? r.days : 0);
+    },0);
+  }
+  function remainOf(code){ return Math.max(0, typeOf(code).days - usedOf(code)); }
+
+  // ส่วนที่เกินสิทธิ์ = ขาดงานหักเงินเดือน ไม่ใช่วันลาที่ได้รับค่าจ้าง
+  function overOf(r){
+    if(r.status==='rejected' || r.status==='cancelled') return 0;
+    var t=typeOf(r.type), used=0;
+    for(var i=0;i<REQS.length;i++){
+      var x=REQS[i];
+      if(x===r) break;
+      if(inYear(x) && x.type===r.type && (x.status==='approved'||x.status==='pending')) used+=x.days;
+    }
+    return Math.max(0, (used + r.days) - t.days);
+  }
+
+  function drawCards(){
+    cardsEl.innerHTML=TYPES.map(function(t){
+      var used=usedOf(t.code), left=Math.max(0, t.days-used);
+      var pct=t.days ? Math.min(100, Math.round(used/t.days*100)) : 0;
+      return '<div class="card">'+
+        '<div class="ct"><b>'+esc(t.name)+'</b><em>'+num(t.days)+' วัน/ปี</em></div>'+
+        '<p class="big">'+num(left)+'<u>วันคงเหลือ</u></p>'+
+        '<p class="meta">ทั้งปี '+(viewYear+543)+' ใช้ไปแล้ว '+num(used)+' จาก '+num(t.days)+' วัน</p>'+
+        '<span class="track"><i style="width:'+pct+'%"></i></span>'+
+      '</div>';
+    }).join('');
+  }
+
+  function scope(){
+    var list=REQS.filter(inMonth);
+    if(tab!=='all') list=list.filter(function(r){ return r.status===tab; });
+    return list.slice().sort(function(a,b){ return a.from<b.from?1:a.from>b.from?-1:0; });
+  }
+
+  function drawTabs(){
+    var yr=REQS.filter(inMonth);
+    tabsEl.innerHTML=TABS.map(function(t){
+      var n = t[0]==='all' ? yr.length : yr.filter(function(r){ return r.status===t[0]; }).length;
+      return '<button data-tab="'+t[0]+'" class="'+(tab===t[0]?'on':'')+'">'+t[1]+' <b>'+n+'</b></button>';
+    }).join('');
+  }
+
+  function drawRows(){
+    var all=scope(), total=all.length;
+    var maxPage=Math.max(1,Math.ceil(total/PER_PAGE));
+    if(page>maxPage) page=maxPage;
+    var from=(page-1)*PER_PAGE, list=window.__lvAllYear?all:all.slice(from,from+PER_PAGE);
+
+    if(!total){
+      rowsEl.innerHTML='<tr><td colspan="7" style="padding:50px;text-align:center;color:var(--ink-faint)">'+(window.__lvAllYear?'ไม่มีใบลาในปีนี้':'ไม่มีรายการในเดือนนี้')+'</td></tr>';
+      rangeEl.textContent='แสดง 0 รายการ'; sumD.textContent='0'; pagesEl.innerHTML=''; return;
+    }
+
+    rowsEl.innerHTML=list.map(function(r){
+      var t=typeOf(r.type), over=overOf(r);
+      var sub='';
+      if(r.status==='rejected' && r.comment) sub='<span class="why">ผู้อนุมัติ: '+esc(r.comment)+'</span>';
+      else if(r.files && r.files.length) sub='<span class="why">แนบ '+r.files.length+' ไฟล์</span>';
+
+      var act='—';
+      // S-3 : ยกเลิกได้เฉพาะคำขอที่ยังไม่อนุมัติ — ที่อนุมัติแล้วให้ GM แก้คำอนุมัติพร้อมเหตุผล
+      if(r.status==='pending') act='<button class="lnk" data-cancel="'+esc(r.no)+'">ยกเลิก</button>';
+
+      return '<tr data-from="'+esc(r.from)+'">'+
+        '<td class="day"><b>'+esc(r.no)+'</b><span>ยื่น '+esc(thStamp(r.submitted))+'</span></td>'+
+        '<td>'+esc(t.name)+'</td>'+
+        '<td><span class="span">'+esc(thRange(r.from,r.to))+'</span>'+
+          (r.span!=='full'?'<span class="why">'+esc(SPAN[r.span]||r.span)+(PERIOD[r.period]?' '+esc(PERIOD[r.period]):'')+(r.start&&r.end?' '+esc(r.start)+'–'+esc(r.end):'')+'</span>':'')+'</td>'+
+        '<td class="c num"><b style="font-weight:600">'+num(r.days)+'</b>'+
+          (over>0?'<span class="over">เกินสิทธิ์ '+num(over)+' วัน</span>':'')+'</td>'+
+        '<td><span class="clip">'+esc(r.reason)+'</span>'+sub+'</td>'+
+        '<td><span class="tag '+STATUS[r.status].cls+'"><i></i>'+STATUS[r.status].label+'</span></td>'+
+        '<td class="c hide">'+act+'</td>'+
+      '</tr>';
+    }).join('');
+
+    var appr=REQS.filter(inMonth).reduce(function(a,r){ return a + (r.status==='approved'?r.days:0); },0);
+    rangeEl.textContent='แสดง '+(from+1)+'–'+(from+list.length)+' จาก '+total+' รายการ';
+    sumD.textContent=num(appr);
+
+    var btns='<button data-page="'+(page-1)+'" aria-label="ก่อนหน้า"'+(page===1?' disabled':'')+'>‹</button>';
+    for(var i=1;i<=maxPage;i++) btns+='<button data-page="'+i+'" class="'+(i===page?'on':'')+'">'+i+'</button>';
+    btns+='<button data-page="'+(page+1)+'" aria-label="ถัดไป"'+(page===maxPage?' disabled':'')+'>›</button>';
+    pagesEl.innerHTML=btns;
+  }
+
+  function render(){ moLabel.textContent=MONFULL[viewMonth]+' '+(viewYear+543); drawCards(); drawTabs(); drawRows(); }
+
+  tabsEl.addEventListener('click',function(e){
+    var b=e.target.closest('button[data-tab]'); if(!b) return;
+    tab=b.getAttribute('data-tab'); page=1; render();
+  });
+
+  pagesEl.addEventListener('click',function(e){
+    var b=e.target.closest('button[data-page]'); if(!b||b.disabled) return;
+    var n=parseInt(b.getAttribute('data-page'),10);
+    var maxPage=Math.max(1,Math.ceil(scope().length/PER_PAGE));
+    if(n<1||n>maxPage) return;
+    page=n; drawRows();
+  });
+
+  rowsEl.addEventListener('click',function(e){
+    var b=e.target.closest('button[data-cancel]'); if(!b) return;
+    var no=b.getAttribute('data-cancel');
+    for(var i=0;i<REQS.length;i++) if(REQS[i].no===no && REQS[i].status==='pending'){
+      // TODO: เรียก API ยกเลิกคำขอ แล้วบันทึกลงประวัติการเปลี่ยนสถานะ (BR-04)
+      REQS[i].status='cancelled';
+    }
+    render();
+  });
+
+  function shiftMonth(n){
+    var d=new Date(viewYear, viewMonth+n, 1);
+    viewYear=d.getFullYear(); viewMonth=d.getMonth();
+    page=1; render(); syncMonthBtns();
+  }
+  document.getElementById('prevMo').addEventListener('click',function(){ shiftMonth(-1); });
+  window.__lv={ reqs:function(){ return REQS; }, month:function(){ return [viewYear,viewMonth]; }, go:function(y,m){ viewYear=y; viewMonth=m; page=1; render(); syncMonthBtns(); }, redraw:function(){ page=1; render(); } };
+  document.getElementById('nextMo').addEventListener('click',function(){ shiftMonth(1); });
+  // เลื่อนไปเดือนอนาคตไม่ได้
+  function syncMonthBtns(){
+    document.getElementById('nextMo').disabled =
+      (viewYear>TODAY.getFullYear()) || (viewYear===TODAY.getFullYear() && viewMonth>=TODAY.getMonth());
+  }
+
+  // ---------- กล่องยื่นใบลา ----------
+  var veil=document.getElementById('veil'),
+      fType=document.getElementById('fType'), fFrom=document.getElementById('fFrom'),
+      fTo=document.getElementById('fTo'), fSpan=document.getElementById('fSpan'),
+      fHalf=document.getElementById('fHalf'), fHalfWrap=document.getElementById('fHalfWrap'),
+      fTimeWrap=document.getElementById('fTimeWrap'), fStart=document.getElementById('fStart'),
+      fEnd=document.getElementById('fEnd'), fReason=document.getElementById('fReason'),
+      fFile=document.getElementById('fFile'), fDays=document.getElementById('fDays'),
+      fPick=document.getElementById('fPick'), fName=document.getElementById('fName'),
+      fWarn=document.getElementById('fWarn'), submitBox=document.getElementById('submitBox');
+  var span='full', period='am';
+
+  // ช่อง input เป็นข้อความไทย ค่าจริงเก็บเป็น ISO ใน data-iso
+  function gv(el){ return el.getAttribute('data-iso') || ''; }
+  function sv(el, iso){
+    if(iso){ el.setAttribute('data-iso', iso); el.value=thDate(iso); }
+    else{ el.removeAttribute('data-iso'); el.value=''; }
+  }
+
+  fType.innerHTML=TYPES.map(function(t){
+    return '<option value="'+t.code+'">'+esc(t.name)+' (คงเหลือ '+num(remainOf(t.code))+' วัน)</option>';
+  }).join('');
+
+  function formDays(){
+    if(!gv(fFrom) || !gv(fTo)) return 0;
+    var n=countDays(gv(fFrom), gv(fTo));
+    if(span==='full' || gv(fFrom)!==gv(fTo) || !n) return n;
+    return minToDays(netMin(tv(fStart), tv(fEnd)));
+  }
+
+  // S-2 ห้ามทับซ้อนกับคำขอที่ยังไม่ถูกปฏิเสธหรือยกเลิก
+  function overlapOf(){
+    if(!gv(fFrom) || !gv(fTo)) return null;
+    for(var i=0;i<REQS.length;i++){
+      var r=REQS[i];
+      if(r.status==='rejected' || r.status==='cancelled') continue;
+      if(gv(fFrom)<=r.to && gv(fTo)>=r.from) return r;
+    }
+    return null;
+  }
+
+  function refreshForm(){
+    var n=formDays();
+    fDays.textContent=num(n)+' วัน';
+
+    var msgs=[], block=false;
+    var ov=overlapOf();
+    if(ov){ msgs.push('ช่วงวันที่เลือกทับซ้อนกับคำขอ '+ov.no+' ('+thRange(ov.from,ov.to)+') ต้องยกเลิกคำขอเดิมก่อน'); block=true; }
+    if(gv(fFrom) && gv(fTo) && gv(fTo)<gv(fFrom)){ msgs.push('วันที่สิ้นสุดต้องไม่อยู่ก่อนวันที่เริ่มลา'); block=true; }
+    if(gv(fFrom) && gv(fTo) && n===0 && !block) msgs.push('ช่วงที่เลือกเป็นวันหยุดทั้งหมด ไม่มีวันลาที่นับได้');
+    if(span!=='full' && gv(fFrom) && gv(fTo) && gv(fFrom)!==gv(fTo)){ msgs.push('ลาครึ่งวันเลือกได้วันเดียว'); block=true; }
+
+    if(span!=='full'){
+      var a=tv(fStart), b=tv(fEnd);
+      if(b<=a){ msgs.push('เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม'); block=true; }
+      else if(netMin(a,b)===0){ msgs.push('ช่วงเวลาที่เลือกตกอยู่ในเวลาพักกลางวันทั้งหมด'); block=true; }
+    }
+
+    var left=remainOf(fType.value), over=Math.max(0, n-left);
+    if(over>0) msgs.push('เกินสิทธิ์คงเหลือ '+num(over)+' วัน — ส่วนที่เกินถือเป็นขาดงานและถูกหักเงินเดือน ไม่ใช่วันลาที่ได้รับค่าจ้าง');
+
+    fWarn.innerHTML=msgs.map(esc).join('<br>');
+    fWarn.classList.toggle('hide', msgs.length===0);
+    submitBox.disabled = block || n===0 || !fReason.value.trim();
+  }
+
+  // เวลาเก็บเป็นนาทีจากเที่ยงคืนใน data-min ส่วนที่โชว์เป็น 24 ชั่วโมงแบบไทย
+  var MIN_STEP=15;
+  function tv(el){ return parseInt(el.getAttribute('data-min'),10); }
+  function stv(el, m){
+    m=Math.max(SHIFT_IN, Math.min(SHIFT_OUT, m));
+    el.setAttribute('data-min', m);
+    el.value=hhmm(m)+' น.';
+  }
+  function buildTimes(){ stv(fStart, PRESET.am.start); stv(fEnd, PRESET.am.end); }
+
+  // ---------- ตัวเลือกเวลาแบบ stepper ----------
+  function initTime(input){
+    var wrap=input.parentNode;
+    var pop=document.createElement('div');
+    pop.className='tpop';
+    wrap.appendChild(pop);
+
+    function arrow(dir){
+      return dir>0
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 15 7-7 7 7"/></svg>'
+        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m5 9 7 7 7-7"/></svg>';
+    }
+    function col(part, label, txt, upOff, downOff){
+      return '<div class="tcol">'+
+        '<span class="h">'+label+'</span>'+
+        '<button type="button" class="step" data-part="'+part+'" data-dir="1"'+(upOff?' disabled':'')+' aria-label="เพิ่ม'+label+'">'+arrow(1)+'</button>'+
+        '<b class="val">'+txt+'</b>'+
+        '<button type="button" class="step" data-part="'+part+'" data-dir="-1"'+(downOff?' disabled':'')+' aria-label="ลด'+label+'">'+arrow(-1)+'</button>'+
+      '</div>';
+    }
+    function draw(){
+      var m=tv(input), h=Math.floor(m/60), mm=m%60;
+      pop.innerHTML=
+        col('h','ชั่วโมง', pad(h), m+60>SHIFT_OUT, m-60<SHIFT_IN)+
+        '<span class="tsep">:</span>'+
+        col('m','นาที', pad(mm), m+MIN_STEP>SHIFT_OUT, m-MIN_STEP<SHIFT_IN);
+    }
+    function open(){ closeAllPops(); draw(); pop.classList.add('on'); placePop(input, pop); }
+    function close(){ pop.classList.remove('on'); }
+    function toggle(e){ e.stopPropagation(); pop.classList.contains('on') ? close() : open(); }
+
+    input.addEventListener('click', toggle);
+    input.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+    wrap.querySelector('.clockbtn').addEventListener('click', toggle);
+
+    pop.addEventListener('click', function(e){
+      e.stopPropagation();
+      var b=e.target.closest('button[data-part]'); if(!b||b.disabled) return;
+      var dir=parseInt(b.getAttribute('data-dir'),10);
+      var stepM = b.getAttribute('data-part')==='h' ? 60 : MIN_STEP;
+      stv(input, tv(input) + dir*stepM);
+      draw(); placePop(input, pop); refreshForm();
+    });
+
+    POPS.push(close);
+  }
+  var POPS=[];
+  function closeAllPops(){ POPS.forEach(function(f){ f(); }); closeAllCals(); }
+
+  // กล่องลอยเปิดลงล่างเป็นค่าเริ่มต้น ถ้าที่ว่างด้านล่างไม่พอให้พลิกขึ้นบน
+  // แล้วถ้ายังล้นขอบพื้นที่เลื่อนของกล่องยื่นใบลา ให้เลื่อนตามจนเห็นเต็มใบ
+  function placePop(input, pop){
+    pop.classList.remove('up');
+    var box=input.closest('.bbody') || document.documentElement;
+    var ir=input.getBoundingClientRect();
+    var br=box.getBoundingClientRect();
+    var h=pop.offsetHeight;
+    var below=br.bottom-ir.bottom-10, above=ir.top-br.top-10;
+    if(h>below && above>below) pop.classList.add('up');
+    var pr=pop.getBoundingClientRect();
+    if(pr.bottom>br.bottom) box.scrollTop += (pr.bottom-br.bottom)+10;
+    else if(pr.top<br.top)  box.scrollTop -= (br.top-pr.top)+10;
+  }
+
+  // ---------- ปฏิทินไทย ----------
+  var DW=['อา','จ','อ','พ','พฤ','ศ','ส'];
+  function initCal(input){
+    var wrap=input.parentNode;
+    var cal=document.createElement('div');
+    cal.className='cal';
+    wrap.appendChild(cal);
+    var cur=new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+
+    function draw(){
+      var y=cur.getFullYear(), m=cur.getMonth();
+      var first=new Date(y,m,1).getDay(), last=new Date(y,m+1,0).getDate();
+      var sel=gv(input);
+      var g=DW.map(function(d){ return '<span class="dw">'+d+'</span>'; }).join('');
+      for(var i=0;i<first;i++) g+='<button type="button" class="blank" tabindex="-1"></button>';
+      for(var d=1;d<=last;d++){
+        var iso=y+'-'+pad(m+1)+'-'+pad(d);
+        var w=new Date(y,m,d).getDay();
+        var c=[];
+        if(w===0||w===6) c.push('off');
+        if(HOLIDAYS[iso]) c.push('hol');
+        if(iso===sel) c.push('on');
+        g+='<button type="button" class="'+c.join(' ')+'" data-iso="'+iso+'">'+d+'</button>';
+      }
+      cal.innerHTML=
+        '<div class="calhead">'+
+          '<button type="button" class="calnav" data-mv="-1" aria-label="เดือนก่อนหน้า"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 19 8 12l7-7"/></svg></button>'+
+          '<b>'+MON[m]+' '+(y+543)+'</b>'+
+          '<button type="button" class="calnav" data-mv="1" aria-label="เดือนถัดไป"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></button>'+
+        '</div>'+
+        '<div class="calgrid">'+g+'</div>';
+    }
+
+    function open(){
+      closeAllPops();
+      var sel=gv(input);
+      cur = sel ? new Date(parse(sel).getFullYear(), parse(sel).getMonth(), 1)
+                : new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+      draw(); cal.classList.add('on'); placePop(input, cal);
+    }
+    function close(){ cal.classList.remove('on'); }
+
+    input.addEventListener('click', function(e){ e.stopPropagation(); cal.classList.contains('on') ? close() : open(); });
+    input.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+    wrap.querySelector('.calbtn').addEventListener('click', function(e){ e.stopPropagation(); cal.classList.contains('on') ? close() : open(); });
+
+    cal.addEventListener('click', function(e){
+      e.stopPropagation();
+      var mv=e.target.closest('button[data-mv]');
+      if(mv){ cur.setMonth(cur.getMonth()+parseInt(mv.getAttribute('data-mv'),10)); draw(); return; }
+      var d=e.target.closest('button[data-iso]');
+      if(!d) return;
+      sv(input, d.getAttribute('data-iso'));
+      if(input===fFrom && (!gv(fTo) || gv(fTo)<gv(fFrom))) sv(fTo, gv(fFrom));
+      if(span!=='full' && input===fFrom) sv(fTo, gv(fFrom));
+      close(); refreshForm();
+    });
+
+    CALS.push(close);
+  }
+  var CALS=[];
+  function closeAllCals(){ CALS.forEach(function(f){ f(); }); }
+  document.addEventListener('click', function(){ closeAllPops(); });
+
+  function applySpan(){
+    var half = span==='half';
+    fHalfWrap.style.display = half ? '' : 'none';
+    fTimeWrap.style.display = half ? '' : 'none';
+    if(half){ stv(fStart, PRESET[period].start); stv(fEnd, PRESET[period].end); }
+  }
+
+  fSpan.addEventListener('click',function(e){
+    var b=e.target.closest('button[data-span]'); if(!b) return;
+    span=b.getAttribute('data-span');
+    Array.prototype.forEach.call(fSpan.querySelectorAll('button'),function(x){ x.classList.toggle('on', x===b); });
+    applySpan();
+    if(span!=='full' && gv(fFrom)) sv(fTo, gv(fFrom));
+    refreshForm();
+  });
+
+  function markPeriod(){
+    Array.prototype.forEach.call(fHalf.querySelectorAll('.pickone'),function(l){
+      l.classList.toggle('on', l.querySelector('input').checked);
+    });
+  }
+  fHalf.addEventListener('change',function(e){
+    var r=e.target.closest('input[name="halfPeriod"]'); if(!r) return;
+    period=r.value; markPeriod(); applySpan(); refreshForm();
+  });
+
+  [fType,fReason].forEach(function(el){
+    el.addEventListener('change', refreshForm);
+    el.addEventListener('input', refreshForm);
+  });
+
+  function openBox(){
+    // TODO: ⚠️ ยังไม่เคาะว่ายื่นย้อนหลังได้กี่วัน — ถ้าเคาะแล้วให้ใส่ min ที่นี่
+    fType.selectedIndex=0; sv(fFrom,''); sv(fTo,''); fReason.value=''; fFile.value=''; fName.textContent='ยังไม่ได้เลือกไฟล์';
+    span='full'; period='am';
+    Array.prototype.forEach.call(fSpan.querySelectorAll('button'),function(x){ x.classList.toggle('on', x.getAttribute('data-span')==='full'); });
+    document.getElementById('fAM').checked=true; markPeriod();
+    buildTimes();
+    applySpan();
+    fType.innerHTML=TYPES.map(function(t){
+      return '<option value="'+t.code+'">'+esc(t.name)+' (คงเหลือ '+num(remainOf(t.code))+' วัน)</option>';
+    }).join('');
+    refreshForm();
+    veil.classList.add('on');
+    fType.focus();
+  }
+  function closeBox(){ veil.classList.remove('on'); }
+
+  document.getElementById('newBtn').addEventListener('click', openBox);
+  document.getElementById('closeBox').addEventListener('click', closeBox);
+  document.getElementById('cancelBox').addEventListener('click', closeBox);
+  veil.addEventListener('click', function(e){ if(e.target===veil) closeBox(); });
+
+  submitBox.addEventListener('click', function(){
+    if(submitBox.disabled) return;
+    var n=formDays();
+    // BR-05 เลขที่คำขอออกตอนบันทึก
+    // TODO: บันทึกลง leave_request + request_attachment แล้วแจ้งเตือนผู้อนุมัติ (GM หรือ CEO ตามตำแหน่ง)
+    var seq=REQS.length+1;
+    REQS.push({
+      no:'LV-'+(viewYear+543)+'-'+('000'+seq).slice(-4),
+      type:fType.value, from:gv(fFrom), to:gv(fTo), days:n, span:span,
+      period: span==='full' ? '' : period,
+      start: span==='full' ? '' : hhmm(tv(fStart)), end: span==='full' ? '' : hhmm(tv(fEnd)),
+      reason:fReason.value.trim(), status:'pending', comment:'',
+      submitted:ymd(TODAY)+' '+pad(new Date().getHours())+':'+pad(new Date().getMinutes()),
+      decided:'', files:[]
+    });
+    closeBox(); tab='all'; page=1; render();
+  });
+
+  // ---------- เมนูบัญชี ----------
+  var meBtn=document.getElementById('meBtn'), meMenu=document.getElementById('meMenu');
+  function closeMe(){ meMenu.classList.remove('on'); meBtn.setAttribute('aria-expanded','false'); }
+  meBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var open=!meMenu.classList.contains('on');
+    meMenu.classList.toggle('on',open);
+    meBtn.setAttribute('aria-expanded', open?'true':'false');
+  });
+  document.addEventListener('click', function(e){ if(!meMenu.contains(e.target)) closeMe(); });
+  document.addEventListener('keydown', function(e){
+    if(e.key!=='Escape') return;
+    closeMe();
+    if(veil.classList.contains('on')) closeBox();
+  });
+
+  fPick.addEventListener('click', function(){ fFile.click(); });
+  fFile.addEventListener('change', function(){
+    var n=fFile.files.length;
+    fName.textContent = !n ? 'ยังไม่ได้เลือกไฟล์'
+      : (n===1 ? fFile.files[0].name : 'เลือกแล้ว '+n+' ไฟล์');
+  });
+
+  buildTimes();
+  initTime(fStart); initTime(fEnd);
+  initCal(fFrom); initCal(fTo);
+  syncMonthBtns();
+  render();
+})();
+</script>
+<!-- ===== ตารางเป็นการ์ดบนมือถือ (ใส่ร่วมทุกหน้าโดย apply_glass.py) ===== -->
+<script>
+(function(){
+  // บนจอแคบตารางถูกจัดใหม่เป็นการ์ด แต่ละเซลล์ต้องมีป้ายชื่อคอลัมน์ของตัวเอง
+  // เพราะหัวตารางถูกซ่อน จึงคัดชื่อจาก th มาใส่เป็น data-label ให้ทุก td
+  function label(t){
+    var ths = t.querySelectorAll(':scope > thead > tr > th');
+    if(!ths.length) return;
+    var rows = t.querySelectorAll(':scope > tbody > tr');
+    Array.prototype.forEach.call(rows, function(tr){
+      if(tr.classList.contains('sub')) return;          // แถวที่กางรายละเอียดคร่อมทั้งแถว ไม่ต้องมีป้าย
+      Array.prototype.forEach.call(tr.children, function(td, i){
+        if(!ths[i]) return;
+        var txt = ths[i].textContent.trim();
+        if(txt) td.setAttribute('data-label', txt);
+        else td.removeAttribute('data-label');
+      });
+    });
+  }
+  function run(){
+    Array.prototype.forEach.call(document.querySelectorAll('.scroll > table'), label);
+  }
+  run();
+  // ตารางถูกวาดใหม่ด้วย JS ตลอด ต้องติดป้ายใหม่ทุกครั้งที่แถวเปลี่ยน
+  if(window.MutationObserver){
+    var mo = new MutationObserver(run);
+    Array.prototype.forEach.call(document.querySelectorAll('.scroll > table > tbody'), function(tb){
+      mo.observe(tb, {childList:true});
+    });
+  }
+})();
+</script>
+
+<!-- ===== แถบเมนูล่างบนมือถือ (ใส่ร่วมทุกหน้าโดย apply_glass.py) ===== -->
+<script>
+(function(){
+  var side = document.querySelector('.side .nav');
+  if(!side) return;
+
+  var links = Array.prototype.slice.call(side.querySelectorAll('a'));
+  if(!links.length) return;
+
+  // เอา 4 เมนูแรกขึ้นแถบล่าง ที่เหลือไปอยู่ในปุ่ม "อื่นๆ"
+  var MAIN = 4;
+  var main = links.slice(0, MAIN), rest = links.slice(MAIN);
+
+  function iconOf(a){
+    var svg = a.querySelector('svg');
+    return svg ? svg.outerHTML : '';
+  }
+  function labelOf(a){
+    var s = a.querySelector('span');
+    return s ? s.textContent.trim() : a.textContent.trim();
+  }
+
+  var bn = document.createElement('nav');
+  bn.className = 'botnav';
+  bn.setAttribute('aria-label','เมนูหลัก');
+
+  bn.innerHTML = main.map(function(a){
+    return '<a href="'+a.getAttribute('href')+'" class="bn-i'+(a.classList.contains('on')?' on':'')+'">'+
+      iconOf(a)+'<span>'+labelOf(a)+'</span></a>';
+  }).join('') +
+  (rest.length
+    ? '<button type="button" class="bn-i" id="bnMore" aria-haspopup="true" aria-expanded="false">'+
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'+
+      '<circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>'+
+      '<circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg><span>อื่นๆ</span></button>'
+    : '');
+  document.body.appendChild(bn);
+
+  if(rest.length){
+    var sheet = document.createElement('div');
+    sheet.className = 'bnsheet';
+    sheet.innerHTML =
+      '<div class="bnpanel" role="menu">'+
+        '<div class="bngrab"></div>'+
+        '<p class="bntitle">เมนูทั้งหมด</p>'+
+        '<div class="bnlist">'+
+          links.map(function(a){
+            return '<a href="'+a.getAttribute('href')+'" class="bnrow'+(a.classList.contains('on')?' on':'')+'" role="menuitem">'+
+              iconOf(a)+'<span>'+labelOf(a)+'</span></a>';
+          }).join('')+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(sheet);
+
+    var moreBtn = document.getElementById('bnMore');
+    function open(){ sheet.classList.add('on'); moreBtn.setAttribute('aria-expanded','true'); }
+    function close(){ sheet.classList.remove('on'); moreBtn.setAttribute('aria-expanded','false'); }
+    moreBtn.addEventListener('click', function(e){ e.stopPropagation(); sheet.classList.contains('on')?close():open(); });
+    sheet.addEventListener('click', function(e){ if(e.target===sheet) close(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') close(); });
+    // ถ้าเมนูที่กำลังเปิดอยู่ไม่ได้อยู่ใน 4 อันแรก ให้ปุ่มอื่นๆ ติดสถานะแทน
+    if(rest.some(function(a){ return a.classList.contains('on'); })) moreBtn.classList.add('on');
+  }
+})();
+</script>
+
+
+<script>
+/* ---------- ดรอปดาวน์ที่วาดเอง ----------
+   ครอบ <select> ทุกตัวในหน้า ค่ายังอยู่ที่ select เดิมและยังยิง change เหมือนเดิม
+   ทำแบบนี้เพราะ CSS สั่งสีตอนชี้เมาส์ในรายการของเบราว์เซอร์ไม่ได้ */
+(function(){
+  var ARROW = '<span class="ddar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" '+
+    'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'+
+    '<path d="m6 9 6 6 6-6"/></svg></span>';
+  var BUSY=false;
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  function closeAll(except){
+    var l=document.querySelectorAll('.ddw.open');
+    for(var i=0;i<l.length;i++){ if(l[i]!==except) l[i].classList.remove('open'); }
+  }
+  function label(sel){
+    var o=sel.options[sel.selectedIndex];
+    return o ? o.text : '';
+  }
+  function fill(w){
+    var sel=w.querySelector('select'), list=w.querySelector('.ddl'), html='';
+    for(var i=0;i<sel.options.length;i++){
+      var o=sel.options[i];
+      html += '<button type="button" data-i="'+i+'"'+
+        (o.disabled?' disabled':'')+(i===sel.selectedIndex?' class="on"':'')+'>'+
+        esc(o.text)+'</button>';
+    }
+    list.innerHTML=html;
+    w.querySelector('.ddtx').textContent=label(sel);
+  }
+  function wrap(sel){
+    if(sel.multiple || sel.size>1 || sel.closest('.ddw')) return;
+    var w=document.createElement('span');
+    w.className='ddw';
+    sel.parentNode.insertBefore(w, sel);
+    w.appendChild(sel);
+    var btn=document.createElement('button');
+    btn.type='button'; btn.className='ddb';
+    btn.innerHTML='<span class="ddtx"></span>'+ARROW;
+    var list=document.createElement('div');
+    list.className='ddl';
+    w.appendChild(btn); w.appendChild(list);
+    if(sel.id) btn.setAttribute('aria-label', sel.id);
+    if(sel.disabled) btn.disabled=true;
+    BUSY=true; try{ fill(w); } finally { BUSY=false; }
+
+    btn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      var open=!w.classList.contains('open');
+      closeAll(w);
+      if(open){ BUSY=true; try{ fill(w); } finally { BUSY=false; } }
+      w.classList.toggle('open', open);
+      if(open){
+        // กางแล้วล้นขอบขวาไหม ถ้าล้นให้กางไปทางซ้ายแทน
+        w.classList.remove('toleft');
+        var r=w.querySelector('.ddl').getBoundingClientRect();
+        if(r.right > document.documentElement.clientWidth - 8) w.classList.add('toleft');
+      }
+    });
+    list.addEventListener('click', function(ev){
+      var b=ev.target.closest('button[data-i]'); if(!b || b.disabled) return;
+      sel.selectedIndex=+b.getAttribute('data-i');
+      w.classList.remove('open');
+      BUSY=true; try{ fill(w); } finally { BUSY=false; }
+      // ยิงเหมือนผู้ใช้เลือกเอง ตรรกะเดิมของหน้าจึงทำงานต่อได้
+      sel.dispatchEvent(new Event('change', {bubbles:true}));
+    });
+    // หน้าอาจเปลี่ยนค่าหรือรายการเองด้วยโค้ด ต้องตามให้ทัน
+    sel.addEventListener('change', function(){
+      BUSY=true; try{ fill(w); } finally { BUSY=false; }
+    });
+  }
+
+  function scan(){
+    var l=document.querySelectorAll('select');
+    for(var i=0;i<l.length;i++) wrap(l[i]);
+  }
+  document.addEventListener('click', function(){ closeAll(null); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeAll(null); });
+
+  scan();
+  /* รายการที่หน้าสร้างทีหลัง ให้ตามไปครอบด้วย
+     ต้องตั้งธงระหว่างที่เราเขียน DOM เอง ไม่งั้นจะกระตุ้นตัวเองวนไม่รู้จบ */
+  if(window.MutationObserver){
+    var mo=new MutationObserver(function(){
+      if(BUSY) return;
+      BUSY=true;
+      try{ scan(); } finally { BUSY=false; }
+    });
+    mo.observe(document.body, {childList:true, subtree:true});
+  }
+})();
+</script>
+
+<script>
+/* มือถือ: แทรกหัวข้อเดือน (เช่น "กันยายน 2569") ระหว่างใบลาที่เรียงจากล่าสุด */
+window.addEventListener('DOMContentLoaded',function(){
+  if(!window.__lvAllYear) return;
+  var MONF=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var tb=document.getElementById('rows');
+  function heads(){
+    if(tb.querySelector('tr.m-lv-mo')) return;
+    var last='';
+    Array.prototype.forEach.call(tb.querySelectorAll('tr[data-from]'),function(tr){
+      var p=tr.getAttribute('data-from').split('-'), key=p[0]+'-'+p[1];
+      if(key===last) return; last=key;
+      var h=document.createElement('tr'); h.className='m-lv-mo';
+      h.innerHTML='<td colspan="7">'+MONF[+p[1]-1]+' '+(+p[0]+543)+'</td>';
+      tb.insertBefore(h,tr);
+    });
+  }
+  if(window.MutationObserver) new MutationObserver(heads).observe(tb,{childList:true});
+  heads();
+});
+</script>
+</body>
+</html>

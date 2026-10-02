@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FBF5F4">
+<title>ผู้สนใจและใบเสนอราคา — ERP MAZ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+:root{
+  --red:#D0021B; --ink:#2A1F22; --ink-2:#6E6164; --ink-3:#A3979A; --page:#FBF5F4; --line:#F2E7E8;
+  --shadow:0 1px 2px rgba(120,20,35,.05),0 12px 28px -18px rgba(120,20,35,.3);
+  box-sizing:border-box;
+}
+*,*::before,*::after{box-sizing:inherit;margin:0;padding:0}
+body{min-height:100vh;font-family:'Noto Sans Thai',Tahoma,'Leelawadee UI',sans-serif;color:var(--ink);background:var(--page);
+  padding:env(safe-area-inset-top,0px) 0 calc(100px + env(safe-area-inset-bottom,0px))}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit}
+:focus-visible{outline:2.5px solid var(--red);outline-offset:3px}
+.wrap{max-width:560px;margin:0 auto;padding:0 18px}
+.clay{--c:#FDE8EB;--g:#C0121F;flex:none;display:flex;align-items:center;justify-content:center;border-radius:30%;color:var(--g);
+  background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 60%),var(--c);box-shadow:inset 0 -2px 0 rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.06)}
+.c-rose{--c:#FCE3E7;--g:#C0121F}.c-sky{--c:#E3EEFC;--g:#1F6FD0}.c-mint{--c:#DDF2E6;--g:#14875A}
+.c-peach{--c:#FDEDD6;--g:#B4630B}.c-lilac{--c:#ECE6FA;--g:#5B3FBF}.c-grey{--c:#EFEBEC;--g:#6E6164}
+
+/* header: back · title · create (same pattern as the reference) */
+.head{position:sticky;top:0;z-index:20;background:var(--page);padding:12px 0 0}
+.bar{display:grid;grid-template-columns:44px 1fr 44px;align-items:center}
+.bar h1{text-align:center;font-size:17px;font-weight:700;line-height:1.3}
+.icb{width:44px;height:44px;border-radius:50%;border:0;background:#FFF;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;color:var(--ink);cursor:pointer}
+.icb.add{background:var(--red);color:#FFF;box-shadow:0 10px 18px -10px rgba(208,2,27,.9)}
+
+/* underline tabs */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);margin-top:14px;border-bottom:1.5px solid var(--line)}
+.tabs button{position:relative;border:0;background:none;height:46px;font-size:14.5px;font-weight:600;color:var(--ink-3);cursor:pointer}
+.tabs button .n{display:inline-flex;min-width:20px;height:20px;padding:0 6px;margin-left:6px;border-radius:10px;align-items:center;justify-content:center;font-size:11px;background:#F1E8EA;color:var(--ink-2);vertical-align:1px}
+.tabs button.on{color:var(--red)}
+.tabs button.on .n{background:var(--red);color:#FFF}
+.tabs button.on::after{content:"";position:absolute;left:18%;right:18%;bottom:-1.5px;height:3px;border-radius:3px 3px 0 0;background:var(--red)}
+
+/* cards */
+.list{display:flex;flex-direction:column;gap:14px;padding:16px 0}
+.qc{background:#FFF;border-radius:22px;box-shadow:var(--shadow);padding:14px}
+.qtop{display:grid;grid-template-columns:78px minmax(0,1fr);gap:14px}
+.thumb{width:78px;height:78px;border-radius:18px;flex-direction:column;gap:2px}
+.thumb small{font-size:9.5px;font-weight:700;letter-spacing:.02em;max-width:70px;text-align:center;line-height:1.2}
+.qh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.qh b{font-size:15.5px;font-weight:700;line-height:1.35;min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.amt{flex:none;text-align:right;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.amt small{display:block;font-size:10.5px;font-weight:500;color:var(--ink-3)}
+.meta{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:12.5px;color:var(--ink-2);min-width:0}
+.meta svg{flex:none;color:var(--red)}
+.meta span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta i{width:4px;height:4px;border-radius:50%;background:var(--ink-3);flex:none}
+.chip{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:8px;margin-top:6px}
+.ch-rose{background:#FCE3E7;color:#C0121F}.ch-peach{background:#FDEDD6;color:#B4630B}.ch-mint{background:#DDF2E6;color:#14875A}
+.ch-grey{background:#F1ECED;color:#6E6164}.ch-lilac{background:#ECE6FA;color:#5B3FBF}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.acts a{height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
+.acts .sec{background:#F7EFF1;color:var(--ink)}
+.acts .pri{background:var(--red);color:#FFF;box-shadow:0 10px 18px -12px rgba(208,2,27,.9)}
+.acts a:active{transform:scale(.98)}
+.empty{text-align:center;color:var(--ink-3);font-size:13.5px;padding:48px 0}
+.empty .clay{width:56px;height:56px;margin:0 auto 12px;border-radius:18px}
+
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:50;background:#FFF;border-radius:26px 26px 0 0;box-shadow:0 -10px 30px -18px rgba(120,20,35,.45);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
+.tabbar .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);align-items:end}
+.tabbar a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;font-size:10.5px;font-weight:600;color:var(--ink-3)}
+.tabbar .fab{width:60px;height:60px;margin-top:-30px;border-radius:50%;background:linear-gradient(160deg,#E8253C,#A00F26);color:#FFF;display:flex;align-items:center;justify-content:center;border:5px solid var(--page);box-shadow:0 12px 22px -10px rgba(208,2,27,.9)}
+.tabbar a.mid{color:var(--ink-2)}
+@media (min-width:900px){ .wrap{max-width:980px} .list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))} }
+
+/* ---- รายการลูกค้า ---- */
+.ini{width:78px;height:78px;border-radius:20px;font-size:22px;font-weight:700}
+.fu{flex:none;text-align:right;font-size:11px;color:var(--ink-3);white-space:nowrap}
+.fu b{display:block;font-size:13px;color:var(--ink)}
+.acts.one{grid-template-columns:1fr}
+.why{margin-top:10px;font-size:12.5px;color:var(--ink-2);background:#FBF5F5;border-radius:12px;padding:9px 11px}
+.acts button{height:44px;border-radius:14px;border:0;font-size:14px;font-weight:600;cursor:pointer}
+.acts button.sec{background:#F7EFF1;color:var(--ink)}
+/* กล่องถามเหตุผลที่ปฏิเสธ */
+.veil{position:fixed;inset:0;z-index:80;background:rgba(40,20,25,.45);display:none;align-items:flex-end;justify-content:center}
+.veil.on{display:flex}
+.sheet{width:100%;max-width:560px;background:#FFF;border-radius:26px 26px 0 0;padding:10px 20px calc(20px + env(safe-area-inset-bottom,0px));max-height:90vh;overflow:auto}
+.grab{width:40px;height:4px;border-radius:4px;background:#E8DDE0;margin:0 auto 14px}
+.sheet h2{font-size:18px;font-weight:700}
+.sheet .who{font-size:13px;color:var(--ink-2);margin-top:2px}
+.opts{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.opts label{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:#FBF5F5;font-size:14px;cursor:pointer;border:1.5px solid transparent}
+.opts label:has(input:checked){border-color:var(--red);background:#FFF}
+.opts input{accent-color:var(--red);width:18px;height:18px}
+.sheet textarea{width:100%;margin-top:10px;min-height:76px;border-radius:14px;border:1.5px solid var(--line);padding:10px 12px;font:inherit;font-size:14px;resize:vertical}
+.err{min-height:18px;margin-top:6px;font-size:12.5px;color:#B42318}
+.sheet .acts{margin-top:8px}
+@media (min-width:900px){ .veil{align-items:center} .sheet{border-radius:26px} }
+
+</style>
+<style id="tabbar-new">
+/* แถบเมนูล่างชุดใหม่ (ติดขอบจอ): หน้าหลัก / การลา / ลงเวลา / เบิกค่าใช้จ่าย / โปรไฟล์ */
+.tabbar2{display:none}
+@media (max-width:760px){
+  .botnav,.bnav,.bnsheet,nav.tabbar{display:none!important}
+  body{padding-bottom:calc(110px + env(safe-area-inset-bottom,0px))!important}
+  .tabbar2{display:block!important;position:fixed;left:0;right:0;bottom:0;z-index:50;background:#FFFFFF;border-radius:24px 24px 0 0;box-shadow:0 -8px 24px -16px rgba(90,20,35,.35);padding:6px 6px calc(10px + env(safe-area-inset-bottom,0px));font-family:'Noto Sans Thai','IBM Plex Sans Thai',Tahoma,sans-serif}
+  .tabbar2 .in{height:62px;display:grid;grid-template-columns:repeat(5,1fr);align-items:center}
+  .tabbar2 a{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:#A3979A;text-decoration:none}
+  .tabbar2 a:has(> .fab){gap:14px}
+  .tabbar2 .fab{width:58px;height:58px;margin-top:-42px;border-radius:50%;background:#C8102E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 9px rgba(253,227,231,.85),0 12px 22px -10px rgba(200,16,46,.9)}
+}
+</style>
+<style id="qm-lead-link">
+.qc .qtop{cursor:pointer;position:relative}
+.qc .qtop .qgo{position:absolute;right:0;top:2px;color:#B3A7AA}
+.qc .qh{padding-right:18px}
+</style>
+<style id="qm-search">
+/* ค้นหาผู้สนใจ/ลูกค้า + ปุ่มบนการ์ดเล็กลง */
+.qm-find{display:flex;align-items:center;gap:8px;margin:10px 16px 2px;height:44px;padding:0 14px;border-radius:999px;background:#FFFFFF;border:1px solid #EFE6E8;box-sizing:border-box}
+.qm-find input{flex:1;min-width:0;height:100%;border:0;outline:0;background:none;font:inherit;font-size:14.5px;color:#2A1F22}
+.qm-find button{width:26px;height:26px;border-radius:50%;border:0;background:#F3EEF0;color:#6E6164;display:none;align-items:center;justify-content:center;padding:0;cursor:pointer}
+.qm-find.has button{display:flex}
+.qm-none{margin:28px 16px;text-align:center;color:#9A8E91;font-size:14px}
+.qc .acts{display:flex!important;justify-content:center!important;gap:8px!important;grid-template-columns:none!important}
+.qc .acts > .sec,.qc .acts > .pri{flex:none!important;width:auto!important;height:36px!important;min-height:0!important;padding:0 14px!important;border-radius:10px!important;font-size:13px!important;display:inline-flex!important;align-items:center;justify-content:center;box-shadow:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <div class="bar">
+      <a class="icb" href="home.html" aria-label="กลับหน้าหลัก"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></a>
+      <h1>ผู้สนใจและใบเสนอราคา</h1>
+      <a class="icb add" href="quotation-new.html" aria-label="สร้างใบเสนอราคา"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></a>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="สถานะลูกค้า">
+      <button role="tab" data-t="todo" class="on" aria-selected="true">ยังไม่มีใบ<span class="n" id="n-todo">0</span></button>
+      <button role="tab" data-t="has" aria-selected="false">มีใบแล้ว<span class="n" id="n-has">0</span></button>
+      <button role="tab" data-t="no" aria-selected="false">ปฏิเสธแล้ว<span class="n" id="n-no">0</span></button>
+    </nav>
+  </header>
+  <main class="list" id="list" role="tabpanel"></main>
+</div>
+
+<!-- กล่องถามเหตุผลที่พนักงานขายปฏิเสธ -->
+<div class="veil" id="veil" role="dialog" aria-modal="true" aria-labelledby="dT">
+  <form class="sheet" id="dForm" novalidate>
+    <div class="grab"></div>
+    <h2 id="dT">ไม่ทำใบเสนอราคาให้ลูกค้ารายนี้</h2>
+    <p class="who" id="dWho">—</p>
+    <div class="opts" id="dOpts">
+      <label><input type="radio" name="why" value="ไม่อยู่ในบริการของเรา">ไม่อยู่ในบริการของเรา</label>
+      <label><input type="radio" name="why" value="งบประมาณลูกค้าไม่พอ">งบประมาณลูกค้าไม่พอ</label>
+      <label><input type="radio" name="why" value="ติดต่อลูกค้าไม่ได้">ติดต่อลูกค้าไม่ได้</label>
+      <label><input type="radio" name="why" value="ลูกค้ายังไม่พร้อม">ลูกค้ายังไม่พร้อม</label>
+      <label><input type="radio" name="why" value="อื่นๆ">อื่นๆ</label>
+    </div>
+    <textarea id="dNote" placeholder="รายละเอียดเพิ่มเติม (ถ้าเลือกอื่นๆ ต้องกรอก)" aria-label="รายละเอียดเพิ่มเติม"></textarea>
+    <p class="err" id="dErr" aria-live="polite"></p>
+    <div class="acts"><button type="button" class="sec" id="dCancel">ยกเลิก</button><button type="submit" class="pri" style="background:var(--red);color:#FFF">ยืนยันปฏิเสธ</button></div>
+  </form>
+</div>
+
+
+<script>
+(function(){
+  /* ผู้สนใจ ใบเสนอราคา และดีล ชุดเดียวกับหน้าผู้สนใจ หน้าใบเสนอราคา และแดชบอร์ดฝ่ายขาย (คัดลอกมาโดยไม่แก้)
+     TODO: อ่านจริงจากตาราง customer / quotation / deal */
+  var SL_LEADS=[
+    {code:'LEAD-2609-001', company_name:'เทคโซลูชั่น จำกัด', contact_name:'สมชาย จันทร์เพ็ญ', phone:'081-234-5678', email:'somchai@techsolution.co.th', address:'99/1 ถ.นิมมานเหมินท์ อ.เมือง จ.เชียงใหม่ 50200', source:'เว็บไซต์', tax_id:'0505561000123', status:'lead',     last:'2026-09-03', channel:'โทรศัพท์', summary:'สอบถามราคาทำเว็บไซต์บริษัท ขอให้ส่งตัวอย่างงานก่อน', next_action:'ส่งพอร์ตงานทางอีเมล', next_followup:'2026-09-10'},
+    {code:'LEAD-2608-014', company_name:'อัลฟ่าคอร์ป จำกัด', contact_name:'วิภาดา ธนกิจ', phone:'089-112-3344', email:'', address:'', source:'แนะนำต่อ', tax_id:'', status:'lead', last:'2026-08-18', channel:'นัดพบ', summary:'เข้าพบที่ออฟฟิศ คุยเรื่องระบบสต๊อก ยังไม่สรุปงบ', next_action:'รอลูกค้าเคาะงบภายในเดือนนี้', next_followup:'2026-09-08'},
+    {code:'LEAD-2608-002', company_name:'บ้านสวนพฤกษา', contact_name:'กิตติ ศรีสุข', phone:'086-909-1122', email:'kitti@baansuan.com', address:'', source:'ออกบูธ', tax_id:'', status:'lead', last:'2026-08-02', channel:'โทรศัพท์', summary:'สนใจทำเพจและระบบจองห้องพัก ขอเวลาปรึกษาหุ้นส่วน', next_action:'โทรตามอีกครั้ง', next_followup:''},
+    {code:'CUS-2608-021', company_name:'สยามพลาสติก', contact_name:'ณัฐพล พงษ์ไพร', phone:'082-556-7788', email:'nut@siamplastic.co.th', address:'145 ม.4 ต.หนองป่าครั่ง อ.เมือง จ.เชียงใหม่', source:'เว็บไซต์', tax_id:'0505558000456', status:'customer', last:'2026-08-28', channel:'อีเมล', summary:'ส่งใบเสนอราคาแล้ว รอผลพิจารณาจากผู้บริหาร', next_action:'ติดตามผลใบเสนอราคา', next_followup:'2026-09-09'},
+    {code:'CUS-2605-007', company_name:'เอ็มเทคเอ็นจิเนียริ่ง', contact_name:'อรทัย รุ่งเรือง', phone:'095-221-9080', email:'orathai@mtech.co.th', address:'88/9 ถ.เชียงใหม่-ลำปาง อ.เมือง จ.เชียงใหม่', source:'ลูกค้าเก่า', tax_id:'0505560000789', status:'customer', last:'2026-08-25', channel:'นัดพบ', summary:'ปิดการขายระบบจัดการคลัง เริ่มงานต้นเดือนหน้า', next_action:'ส่งมอบใบงานให้ทีม PM', next_followup:''},
+    {code:'LEAD-2607-011', company_name:'ร้านทองไพศาล', contact_name:'ธนา วงศ์ทอง', phone:'083-447-1290', email:'', address:'', source:'โทรเข้า', tax_id:'', status:'inactive', inactive_reason:'ชะลอโครงการ — ยังไม่มีกำหนดกลับมา', last:'2026-08-12', channel:'โทรศัพท์', summary:'แจ้งว่าชะลอโครงการออกไปก่อน ยังไม่มีกำหนด', next_action:'', next_followup:''},
+    {code:'LEAD-2609-002', company_name:'มั่นคงก่อสร้าง', contact_name:'ปิยะ มั่นคง', phone:'081-778-4433', email:'piya@mankong.co.th', address:'', source:'เว็บไซต์', tax_id:'', status:'lead', last:'2026-09-01', channel:'โทรศัพท์', summary:'สอบถามระบบติดตามหน้างาน ขอนัดเข้าพบ', next_action:'นัดเข้าพบที่ไซต์งาน', next_followup:'2026-09-12'},
+    {code:'LEAD-2607-018', company_name:'คลินิกใสใส', contact_name:'สุดารัตน์ แก้วใส', phone:'094-332-1177', email:'', address:'', source:'เฟซบุ๊ก', tax_id:'', status:'lead', last:'2026-07-20', channel:'อีเมล', summary:'ขอใบเสนอราคาระบบนัดหมายคนไข้ ส่งไปแล้วยังไม่ตอบกลับ', next_action:'โทรตาม', next_followup:''},
+    {code:'LEAD-2608-030', company_name:'วีพีโลจิสติกส์', contact_name:'วรพล อินทร์แก้ว', phone:'087-665-2201', email:'worapon@vplogis.co.th', address:'', source:'แนะนำต่อ', tax_id:'0505559000321', status:'lead', last:'2026-08-30', channel:'นัดพบ', summary:'คุยขอบเขตงานระบบติดตามรถ รอสรุปจำนวนคันที่ใช้จริง', next_action:'รอข้อมูลจำนวนรถจากลูกค้า', next_followup:'2026-09-07'},
+    {code:'CUS-2606-004', company_name:'ครัวคุณจิ', contact_name:'จิราพร นาคทอง', phone:'092-118-5566', email:'', address:'12 ถ.ช้างคลาน อ.เมือง จ.เชียงใหม่', source:'ออกบูธ', tax_id:'', status:'customer', last:'2026-08-21', channel:'โทรศัพท์', summary:'รับงานทำเว็บไซต์ร้าน ชำระมัดจำแล้ว', next_action:'', next_followup:''},
+    {code:'CUS-2606-019', company_name:'ทองดีการช่าง', contact_name:'อนุชา ทองดี', phone:'088-909-3311', email:'', address:'', source:'โทรเข้า', tax_id:'', status:'customer', last:'2026-06-28', channel:'โทรศัพท์', summary:'สอบถามราคาคร่าวๆ ยังไม่ระบุความต้องการชัดเจน', next_action:'ส่งข้อมูลบริการเพิ่มเติม', next_followup:''},
+    {code:'LEAD-2609-003', company_name:'บุญมีฟาร์ม', contact_name:'เมธาวี บุญมี', phone:'081-556-9911', email:'methawee@boonmee.farm', address:'', source:'เฟซบุ๊ก', tax_id:'', status:'lead', last:'2026-09-04', channel:'อีเมล', summary:'สนใจระบบจัดการออเดอร์ผลผลิต ขอดูเดโม', next_action:'นัดเดโมออนไลน์', next_followup:'2026-09-11'},
+    {code:'LEAD-2608-008', company_name:'ใจงามเบเกอรี่', contact_name:'ศิริพร ใจงาม', phone:'090-224-6677', email:'', address:'', source:'เว็บไซต์', tax_id:'', status:'inactive', inactive_reason:'เลือกผู้ให้บริการรายอื่น', last:'2026-08-08', channel:'โทรศัพท์', summary:'แจ้งว่าเลือกใช้ผู้ให้บริการรายอื่นแล้ว', next_action:'', next_followup:''},
+    {code:'CUS-2608-027', company_name:'พูลผลอะไหล่', contact_name:'ชัยวัฒน์ พูลผล', phone:'084-771-2288', email:'', address:'', source:'ลูกค้าเก่า', tax_id:'0505557000654', status:'customer', last:'2026-08-27', channel:'นัดพบ', summary:'ต่อยอดระบบเดิม เพิ่มโมดูลรายงาน', next_action:'จัดทำใบเสนอราคา', next_followup:'2026-09-08'}
+  ];
+  var SL_QUOTES=[
+    {no:'DR-1', draft:true, service:'seo', cus:'บ้านสวนพฤกษา', code:'LEAD-2608-002', issued:'2026-09-05', valid:'', issuer:'MAZ', base:35000, vat:2450, wht:0, total:37450, terms:'มัดจำ 50% ก่อนเริ่มงาน', items:2},
+    {no:'DR-2', draft:true, service:'branding', cus:'เทคโซลูชั่น จำกัด', code:'LEAD-2609-001', issued:'2026-09-06', valid:'', issuer:'MAZ', base:80000, vat:5600, wht:0, total:85600, terms:'แบ่งชำระ 2 งวด', items:3},
+    {no:'MAZ-2569-0042', service:'website', ps:'PS-2569-0031', cus:'สยามพลาสติก',          code:'CUS-2608-021', issued:'2026-08-28', sentAt:'2026-08-28', valid:'2026-09-27', issuer:'MAZ', base:320000, vat:22400,  wht:0,     total:342400, terms:'มัดจำ 50% ก่อนเริ่มงาน', items:4},
+    {no:'MAZ-2569-0041', service:'dataviz', ps:'PS-2569-0030', cus:'วีพีโลจิสติกส์',        code:'LEAD-2608-030', issued:'2026-08-30', sentAt:'2026-08-30', valid:'2026-09-09', issuer:'MAZ', base:128000, vat:8960,   wht:3840,  total:136960, replaces:'MAZ-2569-0035', terms:'ชำระเต็มจำนวนเมื่อส่งมอบ', items:3},
+    {no:'MAZ-2569-0040', service:'dm', ps:'PS-2569-0026', cus:'พูลผลอะไหล่',           code:'CUS-2608-027', issued:'2026-08-27', sentAt:'2026-08-27', valid:'2026-09-26', issuer:'MAZ', base:175000, vat:12250,  wht:0,     total:187250, terms:'มัดจำ 30% ก่อนเริ่มงาน', items:5},
+    {no:'MAZ-2569-0038', service:'website', ps:'PS-2569-0019', cus:'เอ็มเทคเอ็นจิเนียริ่ง',  code:'CUS-2605-007', issued:'2026-08-14', sentAt:'2026-08-14', valid:'2026-09-13', issuer:'MAZ', base:39000,  vat:2730,   wht:1170,  total:41730,  terms:'มัดจำ 50% ก่อนเริ่มงาน', items:2},
+    {no:'MAZ-2569-0036', service:'website', cus:'ครัวคุณจิ',              code:'CUS-2606-004', issued:'2026-08-10', sentAt:'2026-08-10', valid:'2026-09-09', issuer:'IND', base:26000,  vat:0,      wht:0,     total:26000,  terms:'ชำระเต็มจำนวนก่อนเริ่มงาน', items:1},
+    {no:'MAZ-2569-0035', service:'dataviz', ps:'PS-2569-0030', cus:'วีพีโลจิสติกส์',        code:'LEAD-2608-030', issued:'2026-08-22', sentAt:'2026-08-22', valid:'2026-09-21', issuer:'MAZ', base:110280.37, vat:7719.63, wht:3308.41, total:118000, replacedBy:'MAZ-2569-0041', terms:'ชำระเต็มจำนวนเมื่อส่งมอบ', items:3},
+    {no:'MAZ-2569-0034', service:'seo', cus:'ใจงามเบเกอรี่',          code:'LEAD-2608-008', issued:'2026-07-28', sentAt:'2026-07-28', valid:'2026-08-27', issuer:'MAZ', base:41000,  vat:2870,   wht:0,     total:43870,  terms:'มัดจำ 50% ก่อนเริ่มงาน', items:2},
+    {no:'MAZ-2569-0031', rejectedAt:'2026-08-12', rejectReason:'เลือกผู้เสนอรายอื่นที่ราคาถูกกว่า', service:'branding', cus:'คลินิกใสใส',             code:'LEAD-2607-018', issued:'2026-07-16', sentAt:'2026-07-16', valid:'2026-08-15', issuer:'MAZ', base:48000,  vat:3360,   wht:1440,  total:51360,  terms:'มัดจำ 50% ก่อนเริ่มงาน', items:3},
+    {no:'MAZ-2569-0029', service:'complan', cus:'ทองดีการช่าง',           code:'CUS-2606-019', issued:'2026-07-02', sentAt:'2026-07-02', valid:'2026-08-01', issuer:'MAZ', base:95000,  vat:6650,   wht:0,     total:101650, terms:'มัดจำ 40% ก่อนเริ่มงาน', items:4},
+    {no:'B1-2569-0007', service:'website',  cus:'อัลฟ่าคอร์ป จำกัด',      code:'LEAD-2608-014', issued:'2026-08-20', valid:'2026-09-19', issuer:'B1',  base:85000,  vat:5950,   wht:2550,  total:90950,  terms:'ชำระ 30 วันหลังส่งมอบ', items:2},
+  ];
+  var SL_DEALS=[
+    {no:'DL-2569-0018', cus:'เอ็มเทคเอ็นจิเนียริ่ง', code:'CUS-2605-007', quo:'MAZ-2569-0038', total:40560,  status:'won', start:'2026-09-01', delivery:'2026-10-15', scope:'เว็บไซต์บริษัทและระบบฟอร์มติดต่อ', closed:'2026-08-25', paid:true, contracts:[{no:'CT-2569-004', signed:'2026-08-26', kind:'pdf', name:'contract-mtech.pdf', url:'', by:'ชนัญชิดา ใจดี', at:'2026-08-26'},{no:'CT-2569-004 (แก้ไขครั้งที่ 1)', signed:'2026-09-02', kind:'pdf', name:'contract-mtech-r1.pdf', url:'', by:'ชนัญชิดา ใจดี', at:'2026-09-02'}]},
+    {no:'DL-2569-0017', cus:'ครัวคุณจิ',            code:'CUS-2606-004', quo:'MAZ-2569-0036', total:26000,  status:'won', start:'2026-08-25', delivery:'2026-09-30', scope:'เว็บไซต์ร้านอาหาร 5 หน้า พร้อมระบบเมนูออนไลน์',  closed:'2026-08-21', paid:false},
+    {no:'DL-2569-0011', cus:'ทองดีการช่าง',         code:'CUS-2606-019', quo:'MAZ-2569-0029', total:101650, status:'cancelled', start:'2026-08-10', delivery:'2026-09-20', scope:'ระบบจัดการงานซ่อม', closed:'2026-08-18', cancelReason:'ลูกค้าชะลอโครงการ ขอยกเลิกก่อนเริ่มงาน', cancelledAt:'2026-08-18', cancelledBy:'ชนัญชิดา ใจดี', paid:false},
+    {no:'DL-2569-0009', cus:'สยามพลาสติก',          code:'CUS-2608-021', quo:'MAZ-2569-0042', total:342400, status:'won', start:'2026-09-15', delivery:'2026-12-20', scope:'เว็บไซต์บริษัท ระบบสต๊อกวัตถุดิบ เชื่อมบัญชีเดิม และอบรม', closed:'2026-09-02', paid:true},
+    {no:'DL-2569-0007', cus:'พูลผลอะไหล่',          code:'CUS-2608-027', quo:'MAZ-2569-0040', total:187250, status:'won', start:'2026-09-08', delivery:'2026-11-10', scope:'ต่อยอดระบบเดิม เพิ่มโมดูลรายงานผู้บริหาร', closed:'2026-08-30', paid:false}
+  ];
+
+  var TODAY_ISO='2026-09-07';   // วันนี้ของต้นแบบ ตรงกับหน้าอื่น
+  var MON=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var SERVICE={bplan:'Business Plan',branding:'Branding',seo:'SEO',franchise:'Franchise',complan:'Communication Plan',dm:'Digital Marketing',dataviz:'Data Visualize',website:'Website'};
+  var TINT=['c-rose','c-sky','c-mint','c-peach','c-lilac'];
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function parse(s){ var p=String(s).split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+  function th(s){ if(!s) return '—'; var d=parse(s); return d.getDate()+' '+MON[d.getMonth()]+' '+(d.getFullYear()+543); }
+  function days(a,b){ return Math.round((parse(b)-parse(a))/86400000); }
+  function money(n){ return Math.round(n).toLocaleString('th-TH'); }
+  function svg(g,s){ return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+g+'</svg>'; }
+  var IC={user:'<circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/>',
+          doc:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+          note:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>'};
+  function initials(name){ return name.replace(/^(บริษัท|ห้าง|ร้าน)\s*/,'').replace(/\s/g,'').slice(0,2); }
+
+  /* ---------- ปฏิเสธโดยพนักงานขาย ----------
+     TODO: บันทึกจริงที่ customer (sales_declined_reason, declined_at, declined_by) แล้วนับรวมในรายงานเหตุผลที่ไม่ตกลง
+     ตอนนี้จำไว้ในเครื่องนี้เพื่อทดลองใช้ */
+  var STORE='maz-sales-declined';
+  function readNo(){ try{ return JSON.parse(localStorage.getItem(STORE)||'{}'); }catch(e){ return {}; } }
+  function writeNo(o){ try{ localStorage.setItem(STORE,JSON.stringify(o)); }catch(e){} }
+  var NO=readNo();
+
+  /* สถานะของใบเสนอราคาล่าสุด คำนวณจากข้อมูลเดิม */
+  function qState(q){
+    var deal=SL_DEALS.filter(function(d){ return d.quo===q.no; })[0];
+    if(q.draft) return ['ch-grey','ฉบับร่าง'];
+    if(deal && deal.status==='won') return ['ch-mint','ได้งานแล้ว'];
+    if(deal && deal.status==='cancelled') return ['ch-rose','ลูกค้ายกเลิกดีล'];
+    if(q.rejectedAt) return ['ch-rose','ลูกค้าปฏิเสธใบนี้'];
+    if(q.valid && days(TODAY_ISO,q.valid)<0) return ['ch-grey','หมดอายุแล้ว'];
+    var left=q.valid?days(TODAY_ISO,q.valid):null;
+    return ['ch-peach', left!==null&&left<=7?'รอตอบ เหลือ '+left+' วัน':'รอลูกค้าตอบ'];
+  }
+
+  /* จัดลูกค้าเข้าแท็บ: ปฏิเสธแล้ว (โดยพนักงานขาย) / มีใบแล้ว / ยังไม่มีใบ
+     ผู้สนใจที่ถูกปิดไปแล้ว (inactive) และยังไม่มีใบ ไม่ขึ้นในแท็บแรก เพราะไม่ได้รอให้ทำใบ */
+  function rows(){
+    return SL_LEADS.map(function(l,i){
+      var qs=SL_QUOTES.filter(function(q){ return q.code===l.code && !q.replacedBy; })
+                      .sort(function(a,b){ return a.issued<b.issued?1:-1; });
+      var tab=NO[l.code]?'no':qs.length?'has':(l.status==='inactive'?null:'todo');
+      return {l:l, q:qs[0], all:qs.length, tab:tab, tint:TINT[i%TINT.length]};
+    }).filter(function(r){ return r.tab; });
+  }
+
+  function card(r){
+    var l=r.l, top, body, acts;
+    var head='<div class="qtop"><span class="clay ini '+r.tint+'">'+esc(initials(l.company_name))+'</span><div style="min-width:0">';
+    if(r.tab==='has'){
+      var q=r.q, st=qState(q);
+      top='<div class="qh"><b>'+esc(l.company_name)+'</b><span class="amt">'+money(q.total)+' ฿<small>ใบล่าสุด</small></span></div>';
+      body='<p class="meta">'+svg(IC.doc,15)+'<span>'+esc(q.draft?'ร่าง '+q.no:q.no)+'</span><i></i><span>'+esc(SERVICE[q.service]||'—')+'</span></p>'+
+           '<p class="meta">'+svg(IC.user,15)+'<span>'+esc(l.contact_name)+' · '+esc(l.phone)+'</span></p>'+
+           '<span class="chip '+st[0]+'">'+esc(st[1])+(r.all>1?' · ทั้งหมด '+r.all+' ใบ':'')+'</span>';
+      /* ดูรายละเอียดใบล่าสุด + สร้างฉบับใหม่จากใบนั้น (หน้าสร้างรองรับ ?from= อยู่แล้ว) */
+      acts='<div class="acts"><a class="sec" href="quotation-view.html?no='+encodeURIComponent(q.no)+'">ดูรายละเอียด</a>'+
+           '<a class="pri" href="quotation-new.html?from='+encodeURIComponent(q.no)+'">สร้างฉบับใหม่</a></div>';
+    } else {
+      var fu=l.next_followup?('<span class="fu">นัดติดตาม<b>'+esc(th(l.next_followup))+'</b></span>'):'';
+      top='<div class="qh"><b>'+esc(l.company_name)+'</b>'+fu+'</div>';
+      body='<p class="meta">'+svg(IC.user,15)+'<span>'+esc(l.contact_name)+' · '+esc(l.phone)+'</span></p>'+
+           '<p class="meta">'+svg(IC.note,15)+'<span>'+esc(l.summary||'—')+'</span></p>'+
+           '<span class="chip ch-lilac">มาจาก '+esc(l.source)+'</span>';
+      if(r.tab==='todo'){
+        acts='<div class="acts"><button type="button" class="sec" data-no="'+esc(l.code)+'">ปฏิเสธ</button>'+
+             '<a class="pri" href="quotation-new.html?cus='+encodeURIComponent(l.code)+'">สร้างใบเสนอราคา</a></div>';
+      } else {
+        var d=NO[l.code];
+        body+='<p class="why"><b>เหตุผล:</b> '+esc(d.why)+(d.note?' — '+esc(d.note):'')+'<br><small style="color:var(--ink-3)">ปฏิเสธเมื่อ '+esc(d.at)+'</small></p>';
+        acts='<div class="acts one"><button type="button" class="sec" data-undo="'+esc(l.code)+'">ยกเลิกการปฏิเสธ</button></div>';
+      }
+    }
+    return '<article class="qc">'+head+top+body+'</div></div>'+acts+'</article>';
+  }
+
+  var cur='todo', EMPTY={todo:'ทำใบเสนอราคาครบทุกรายแล้ว',has:'ยังไม่มีลูกค้าที่มีใบเสนอราคา',no:'ยังไม่มีลูกค้าที่ปฏิเสธ'};
+  function draw(){
+    var all=rows();
+    ['todo','has','no'].forEach(function(t){ document.getElementById('n-'+t).textContent=all.filter(function(r){ return r.tab===t; }).length; });
+    var l=all.filter(function(r){ return r.tab===cur; });
+    document.getElementById('list').innerHTML=l.length?l.map(card).join(''):
+      '<p class="empty"><span class="clay c-mint">'+svg('<circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/>',26)+'</span>'+EMPTY[cur]+'</p>';
+  }
+  document.getElementById('tabs').addEventListener('click',function(e){
+    var b=e.target.closest('button[data-t]'); if(!b) return;
+    cur=b.dataset.t;
+    Array.prototype.forEach.call(this.children,function(x){ x.classList.toggle('on',x===b); x.setAttribute('aria-selected',x===b); });
+    draw(); if(window.scrollTo) try{ window.scrollTo(0,0); }catch(err){}
+  });
+
+  /* ---------- กล่องปฏิเสธ ---------- */
+  var veil=document.getElementById('veil'), form=document.getElementById('dForm'), err=document.getElementById('dErr'), pending=null;
+  function openNo(code){
+    var l=SL_LEADS.filter(function(x){ return x.code===code; })[0]; if(!l) return;
+    pending=code; form.reset(); err.textContent='';
+    document.getElementById('dWho').textContent=l.company_name+' · '+l.contact_name;
+    veil.classList.add('on'); form.querySelector('input').focus();
+  }
+  function closeNo(){ veil.classList.remove('on'); pending=null; }
+  document.getElementById('list').addEventListener('click',function(e){
+    var n=e.target.closest('[data-no]'), u=e.target.closest('[data-undo]');
+    if(n) openNo(n.getAttribute('data-no'));
+    if(u){ delete NO[u.getAttribute('data-undo')]; writeNo(NO); draw(); }
+  });
+  document.getElementById('dCancel').onclick=closeNo;
+  veil.addEventListener('click',function(e){ if(e.target===veil) closeNo(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeNo(); });
+  form.addEventListener('change',function(){ err.textContent=''; });
+  form.addEventListener('submit',function(e){
+    e.preventDefault();
+    var w=form.querySelector('input[name=why]:checked'), note=document.getElementById('dNote').value.trim();
+    if(!w){ err.textContent='เลือกเหตุผลก่อน'; return; }
+    if(w.value==='อื่นๆ' && !note){ err.textContent='กรอกรายละเอียดของเหตุผลอื่นๆ'; return; }
+    var d=new Date();
+    NO[pending]={why:w.value, note:note, at:d.getDate()+' '+MON[d.getMonth()]+' '+(d.getFullYear()+543)};
+    writeNo(NO); closeNo(); draw();
+  });
+
+  draw();
+})();
+</script>
+<nav class="tabbar2" aria-label="เมนูล่าง"><div class="in">
+  <a href="home-sales.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/></svg>หน้าหลัก</a>
+  <a href="leave.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>การลา</a>
+  <a href="checkin.html"><span class="fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>ลงเวลา</a>
+  <a href="expense.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>เบิกค่าใช้จ่าย</a>
+  <a href="profile-glass.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>โปรไฟล์</a>
+</div></nav>
+<script>
+/* แตะการ์ดผู้สนใจ (ส่วนบน) เพื่อเปิดรายละเอียดผู้สนใจ — ปุ่มปฏิเสธ/สร้างใบเสนอราคาทำงานเหมือนเดิม */
+(function(){
+  var GO='<svg class="qgo" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
+  function codeOf(card){ var a=card.querySelector('a.pri[href*="cus="]'); if(a){ var m=a.getAttribute('href').match(/cus=([^&]+)/); if(m) return decodeURIComponent(m[1]); }
+    var b=card.querySelector('[data-no]'); return b?b.getAttribute('data-no'):''; }
+  function deco(){ Array.prototype.forEach.call(document.querySelectorAll('.qc .qtop'),function(t){ if(!t.querySelector('.qgo')) t.insertAdjacentHTML('beforeend',GO); }); }
+  deco(); if(window.MutationObserver) new MutationObserver(deco).observe(document.body,{childList:true,subtree:true});
+  document.addEventListener('click',function(e){
+    var top=e.target.closest('.qc .qtop'); if(!top || e.target.closest('button,a')) return;
+    var c=codeOf(top.closest('.qc')); if(c) location.href='lead-detail.html?code='+encodeURIComponent(c);
+  });
+})();
+</script>
+<script>
+/* ค้นหาในการ์ดที่แสดงอยู่ (ชื่อ ผู้ติดต่อ เบอร์ รายละเอียด ที่มา) — ใช้ได้ทุกแท็บ */
+(function(){
+  var tabs=document.getElementById('tabs'), list=document.getElementById('list'); if(!tabs||!list) return;
+  var box=document.createElement('label'); box.className='qm-find';
+  box.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A7E81" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'+
+    '<input type="search" id="qmQ" placeholder="ค้นหาชื่อลูกค้า ผู้ติดต่อ หรือเบอร์โทร" aria-label="ค้นหาผู้สนใจและใบเสนอราคา">'+
+    '<button type="button" aria-label="ล้างคำค้น"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
+  tabs.insertAdjacentElement('beforebegin',box);
+  var q=box.querySelector('input'), none=document.createElement('p'); none.className='qm-none'; none.textContent='ไม่พบรายการที่ค้นหา'; none.hidden=true;
+  function norm(t){ return String(t||'').toLowerCase().replace(/[\s\-]/g,''); }
+  function apply(){
+    var k=norm(q.value), shown=0, cards=list.querySelectorAll('.qc');
+    Array.prototype.forEach.call(cards,function(c){ var ok=!k||norm(c.textContent).indexOf(k)>=0; c.style.display=ok?'':'none'; if(ok) shown++; });
+    box.classList.toggle('has',!!q.value);
+    if(none.parentNode!==list) list.appendChild(none);
+    none.hidden=!(k && cards.length && !shown);
+  }
+  q.addEventListener('input',apply);
+  box.querySelector('button').addEventListener('click',function(){ q.value=''; apply(); q.focus(); });
+  // สลับแท็บแล้วรายการวาดใหม่ → กรองซ้ำ
+  if(window.MutationObserver) new MutationObserver(function(m){ if(m.some(function(x){ return [].some.call(x.addedNodes,function(n){ return n!==none; }); })) apply(); }).observe(list,{childList:true});
+})();
+</script>
+</body>
+</html>
