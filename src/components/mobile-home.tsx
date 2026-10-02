@@ -40,6 +40,9 @@ import { ICONS } from "./app-shell";
 import { BellIcon, ChevronRightIcon, ClockIcon, HomeIcon, LeadsIcon, LeaveIcon, ProjectIcon, ReceiptIcon, SearchIcon } from "./icons";
 import { useReadNotices } from "@/lib/notification-store";
 
+/* เมนูหน้าหลักของทีมก่อนการขาย ตามต้นแบบ home-presales.html — สามช่องเท่านั้น */
+const PS_HOME = ["/presales-work", "/presales-schedule", "/presales-templates"];
+
 /* สีไอคอนเมนูตามต้นแบบ — ไล่สีคนละชุดเรียงกันไป ไม่ได้ผูกกับเมนูใดเมนูหนึ่ง */
 const TILE = [
   "linear-gradient(150deg,#F2A93B,#D9731A)",
@@ -247,6 +250,12 @@ export function MobileHome({
     const list = items.filter((i) => i.href !== "/");
     /* ผู้บริหาร: การ์ดเหลือสี่ฝ่ายตามต้นแบบ — แดชบอร์ดกับคำขออนุมัติอยู่แถบล่างแล้ว */
     if (role === "ceo") return list.filter((i) => !/dashboard|approvals/.test(i.href));
+    /*
+     * ทีมก่อนการขาย: เหลือสามช่องตามต้นแบบ home-presales.html (เจ้าของยืนยัน 2 ต.ค. 2569)
+     * หน้าที่เหลือเข้าได้จากแถบล่าง (แดชบอร์ด · การลา) การ์ด "วันนี้ของฉัน" (ลงเวลา · ลา · สลิป)
+     * และปุ่มค้นหาเมนูด้านบน
+     */
+    if (role === "ps") return list.filter((i) => PS_HOME.includes(i.href));
     return list;
   }, [items, role]);
   const hits = useMemo(() => {
