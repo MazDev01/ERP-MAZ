@@ -360,7 +360,7 @@ function DealCards({
                 {d.quotationNo && (
                   <Link
                     href={quoHref(d.quotationNo)}
-                    className="num mt-1.5 inline-flex rounded-full border border-border bg-card px-2.5 py-1 text-[12px] font-semibold text-muted-foreground"
+                    className="num mt-1.5 inline-flex items-center rounded-full border border-border bg-card px-2.5 py-1 text-[12px] font-semibold text-muted-foreground max-sm:min-h-9 max-sm:px-3.5"
                   >
                     {d.quotationNo}
                   </Link>

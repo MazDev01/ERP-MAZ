@@ -450,7 +450,10 @@ function MobileRow({ row, hit, onEdit }: { row: OtRecord; hit?: boolean; onEdit:
         <span className="row-span-2 grid size-10 place-items-center rounded-full bg-[#F4EEEF] text-primary">
           <ClockIcon className="size-5" strokeWidth={2} />
         </span>
-        <Link href={`/records?month=${row.date.slice(0, 7)}`} className="text-[15px] font-bold hover:text-primary">
+        <Link
+          href={`/records?month=${row.date.slice(0, 7)}`}
+          className="text-[15px] font-bold hover:text-primary max-sm:-my-1.5 max-sm:flex max-sm:min-h-9 max-sm:items-center"
+        >
           {thaiDate(row.date)}
         </Link>
         <b className="num text-right text-[15px] font-bold whitespace-nowrap">

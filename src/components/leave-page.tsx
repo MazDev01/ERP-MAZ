@@ -552,7 +552,10 @@ function MobileLeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?
 
       <div className="flex items-start justify-between gap-2.5">
         <span className="min-w-0 text-[12.5px] font-semibold text-[#6E6164]">
-          <Link href={`/records?month=${row.date.slice(0, 7)}`} className="flex items-center gap-1.5 hover:text-primary">
+          <Link
+            href={`/records?month=${row.date.slice(0, 7)}`}
+            className="flex items-center gap-1.5 hover:text-primary max-sm:-my-2 max-sm:min-h-9"
+          >
             <LeaveIcon className="size-3.5 flex-none text-[#8A7E81]" strokeWidth={2.2} />
             <span className="num">{thaiRange(row.date, row.toDate)}</span>
           </Link>

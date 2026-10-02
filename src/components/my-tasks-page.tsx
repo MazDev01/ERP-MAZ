@@ -354,7 +354,7 @@ function TaskCard({
             <button
               type="button"
               onClick={onOpen}
-              className="min-w-0 text-left text-[15px] font-bold hover:text-primary hover:underline"
+              className="min-w-0 text-left text-[15px] font-bold hover:text-primary hover:underline max-sm:-my-1.5 max-sm:flex max-sm:min-h-9 max-sm:items-center"
             >
               {t.name}
             </button>
@@ -412,7 +412,7 @@ function TaskCard({
             <button
               type="button"
               onClick={onTalk}
-              className="text-[12.5px] font-semibold text-primary hover:underline max-sm:w-full max-sm:text-left"
+              className="text-[12.5px] font-semibold text-primary hover:underline max-sm:-my-1.5 max-sm:flex max-sm:min-h-9 max-sm:w-full max-sm:items-center max-sm:text-left"
             >
               {nudge ? "ตอบ PM" : "คุยกับ PM เรื่องงานนี้"}
               {talks.length > 0 ? ` (${talks.length})` : ""}

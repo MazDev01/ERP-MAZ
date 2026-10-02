@@ -87,7 +87,7 @@ export function DashChips<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onPick(it.key)}
-            className={`h-7 rounded-full px-[11px] text-[12px] font-semibold ${
+            className={`h-9 rounded-full px-3.5 text-[12.5px] font-semibold ${
               on ? "bg-white text-primary shadow-[0_4px_10px_-6px_rgba(120,20,35,.45)]" : "bg-white/70 text-muted-foreground"
             }`}
           >
@@ -265,7 +265,7 @@ export function DashSection({
       <div className="flex items-center justify-between">
         <h3 className="text-[16px] font-bold">{title}</h3>
         {href && (
-          <Link href={href} className="text-[12.5px] font-semibold text-primary">
+          <Link href={href} className="-my-1.5 inline-flex min-h-9 items-center px-1 text-[12.5px] font-semibold text-primary">
             {linkLabel}
           </Link>
         )}
@@ -279,7 +279,7 @@ export function DashSection({
             const inner = (
               <>
                 <span className="min-w-0">
-                  <b className="block truncate text-[14.5px] font-semibold">{r.title}</b>
+                  <b className="line-clamp-2 block text-[14.5px] leading-snug font-semibold">{r.title}</b>
                   {r.meta && (
                     <span
                       className={`mt-1.5 inline-block rounded-[9px] px-2.5 py-1 text-[12px] font-semibold ${

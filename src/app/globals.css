@@ -461,6 +461,10 @@ body {
   transition: border-color 0.15s, background 0.15s;
 }
 .lnk:hover { border-color: var(--primary); background: var(--accent); }
+/* บนมือถือปุ่มสูง 28px กดพลาดง่าย — ขยายเป็น 36px ให้นิ้วกดติดแน่ ๆ (ตรวจหน้าจอ 2 ต.ค. 2569) */
+@media (max-width: 767.98px) {
+  .lnk { height: 36px; padding: 0 12px; font-size: 12.5px; }
+}
 /* ปุ่มรองในชุดเดียวกัน เช่น ปฏิเสธ ที่ไม่ควรเด่นเท่าปุ่มหลัก */
 .lnk.quiet { color: var(--muted-foreground); }
 /* รหัสในตาราง — เป็นลิงก์ไปยังรายการนั้น ไม่ใช่ปุ่มสั่งงาน */
