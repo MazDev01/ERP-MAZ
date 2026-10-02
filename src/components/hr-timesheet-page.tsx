@@ -45,7 +45,7 @@ import {
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, useGroupBack } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
 import { usePendingInMonth, useHrTime, useMissingApproved, type MissingReq } from "@/lib/hr-link";
 import { MissingBox } from "./hr-payroll-page";
 import { ChevronDownIcon, PencilIcon } from "./icons";
@@ -88,7 +88,8 @@ export function HrTimesheetPage() {
   const [mgroup, setMgroup] = useState<Tab | null>(urlGroup ? (urlGroup === "day" ? "daily" : "month") : null);
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
-  useGroupBack(mgroup !== null, () => setMgroup(null));
+  const syncGroupUrl = useGroupUrl();
+  useGroupBack(mgroup !== null, () => { setMgroup(null); syncGroupUrl(null); });
 
   const period = hr.periods.find((p) => p.month === month)!;
   /* ปิดรอบทีละกลุ่ม ปุ่มและสถานะจึงอ่านจากแท็บที่เปิดอยู่ */
@@ -180,7 +181,7 @@ export function HrTimesheetPage() {
 
       {mgroup === null && (
         <GroupTiles
-          onPick={(g) => { setTab(g); setMgroup(g); }}
+          onPick={(g) => { setTab(g); setMgroup(g); syncGroupUrl(g === "daily" ? "day" : "month"); }}
           month={{
             n: monthly.length,
             note: period.closed ? "ปิดรอบแล้ว" : issuesOf(monthly) ? `ต้องตรวจ ${issuesOf(monthly)} รายการ` : "ตรวจครบแล้ว",

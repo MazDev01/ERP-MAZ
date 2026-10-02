@@ -11,7 +11,8 @@
  * ระบบจะเลือกรอบนั้นให้ทั้งรอบ เพราะรอบเงินเดือนไม่ใช่เดือนปฏิทิน
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { setMobileBack } from "@/lib/mobile-back";
 import { bkkNow, thaiDate, thaiMonth, todayIso } from "@/lib/format";
 import { hrCycle } from "@/lib/hr-data";
@@ -176,6 +177,26 @@ function PaySheet({
         {hint && <p className="mt-1.5 text-center text-[12px] text-muted-foreground">{hint}</p>}
       </div>
     </div>
+  );
+}
+
+/**
+ * จดกลุ่มที่เลือกไว้ใน URL (?g=) — กดย้อนกลับของเบราว์เซอร์แล้วได้กลุ่มเดิม ไม่ใช่หน้าเลือกกลุ่ม
+ * ใช้ replace เพื่อไม่ให้ประวัติบวมทุกครั้งที่สลับกลุ่ม (เจ้าของแจ้ง 2 ต.ค. 2569)
+ */
+export function useGroupUrl() {
+  const router = useRouter();
+  const path = usePathname();
+  const sp = useSearchParams();
+  return useCallback(
+    (g: "month" | "day" | null) => {
+      const q = new URLSearchParams(sp.toString());
+      if (g) q.set("g", g);
+      else q.delete("g");
+      const s = q.toString();
+      router.replace(s ? `${path}?${s}` : path, { scroll: false });
+    },
+    [router, path, sp],
   );
 }
 

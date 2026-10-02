@@ -20,7 +20,7 @@
  */
 
 import { settings } from "@/lib/system-settings";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, cycleTitle, useGroupBack } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, cycleTitle, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
 import Link from "next/link";
 import { useState } from "react";
 import { baht, bkkStamp, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
@@ -111,7 +111,8 @@ export function HrPayrollPage() {
   const [mgroup, setMgroup] = useState<Tab | null>(urlGroup ? (urlGroup === "day" ? "daily" : "month") : null);
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
-  useGroupBack(mgroup !== null, () => setMgroup(null));
+  const syncGroupUrl = useGroupUrl();
+  useGroupBack(mgroup !== null, () => { setMgroup(null); syncGroupUrl(null); });
 
   /* ตรงกับรอบเดือนไหนพอดีหรือเปล่า — ตัวนี้เป็นตัวตัดสินว่าปิดรอบได้ไหม */
   const month = cycleMonthOf(range, months);
@@ -247,7 +248,7 @@ export function HrPayrollPage() {
 
       {mgroup === null && (
         <GroupTiles
-          onPick={(g) => { setTab(g); setMgroup(g); }}
+          onPick={(g) => { setTab(g); setMgroup(g); syncGroupUrl(g === "daily" ? "day" : "month"); }}
           month={{ n: monthly.length, note: payStateText(month ? payApproval(hr.payApprove, month, "month").status : "draft") }}
           daily={{ n: daily.length, note: payStateText(month ? payApproval(hr.payApprove, month, "day").status : "draft") }}
         />

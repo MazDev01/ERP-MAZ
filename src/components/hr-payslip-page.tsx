@@ -55,7 +55,7 @@ import {
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
 import { useComSource, useHrTime } from "@/lib/hr-link";
 import {
   BanIcon,
@@ -111,7 +111,8 @@ export function HrPayslipPage() {
   const [mgroup, setMgroup] = useState<PayGroup | null>(urlGroup || null);
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
-  useGroupBack(mgroup !== null, () => setMgroup(null));
+  const syncGroupUrl = useGroupUrl();
+  useGroupBack(mgroup !== null, () => { setMgroup(null); syncGroupUrl(null); });
 
   const payrun = hr.payruns.find((p) => p.month === month);
   const slip = hr.slips.find((s) => s.month === month);
@@ -184,7 +185,7 @@ export function HrPayslipPage() {
 
       {mgroup === null && (
         <GroupTiles
-          onPick={(g) => { const k = g === "month" ? "month" : "day"; setTab(k); setMgroup(k); }}
+          onPick={(g) => { const k = g === "month" ? "month" : "day"; setTab(k); setMgroup(k); syncGroupUrl(k); }}
           month={{ n: monthlyCount, note: slip?.published ? "เผยแพร่แล้ว" : slip?.madeAt ? "ออกสลิปแล้ว" : "ยังไม่ออกสลิป" }}
           daily={{ n: dailyCount, note: slip?.dayPublished ? "เผยแพร่แล้ว" : slip?.dayMadeAt ? "ออกสลิปแล้ว" : "ยังไม่ออกสลิป" }}
         />
