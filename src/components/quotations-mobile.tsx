@@ -21,7 +21,7 @@ import {
 } from "@/lib/crm-data";
 import { serviceLabel } from "@/lib/pm-data";
 import { baht, daysBetween, initials, thaiDate, todayIso } from "@/lib/format";
-import { CloseIcon, FileIcon, PlusIcon, UserIcon } from "./icons";
+import { ChevronRightIcon, CloseIcon, FileIcon, PlusIcon, SearchIcon, UserIcon } from "./icons";
 
 type Tab = "todo" | "has" | "no";
 
@@ -68,6 +68,8 @@ export function QuotationsMobile() {
   const [tab, setTab] = useState<Tab>("todo");
   /** ลูกค้าที่กำลังจะกดปฏิเสธ — ต้องเลือกเหตุผลก่อนถึงยืนยันได้ */
   const [declining, setDeclining] = useState<Customer | null>(null);
+  /** คำค้นในรายการ (ค้นเฉพาะการ์ดที่แสดงอยู่ในแท็บนั้น) */
+  const [q, setQ] = useState("");
 
   const hasDeal = useMemo(
     () => new Set(crm.deals.filter((d) => d.quotationNo).map((d) => d.quotationNo)),
@@ -91,7 +93,14 @@ export function QuotationsMobile() {
   );
 
   const count = (t: Tab) => rows.filter((r) => r.tab === t).length;
-  const list = rows.filter((r) => r.tab === tab);
+  /* ค้นหาในแท็บที่เปิดอยู่ — ชื่อ ผู้ติดต่อ เบอร์ สรุปการคุย และที่มา (ต้นแบบ quotations-mobile.html 2 ต.ค. 2569) */
+  const key = q.trim().toLowerCase().replace(/[\s-]/g, "");
+  const list = rows.filter((r) => {
+    if (r.tab !== tab) return false;
+    if (!key) return true;
+    const hay = `${r.c.name} ${r.c.contact} ${r.c.phone} ${r.last?.summary ?? ""} ${r.c.source}`;
+    return hay.toLowerCase().replace(/[\s-]/g, "").includes(key);
+  });
 
   /** สถานะของใบล่าสุด — คิดจากดีล วันหมดอายุ และการปฏิเสธ ไม่ได้เก็บเป็นช่องแยก */
   function stateOf(q: Quotation): [string, string] {
@@ -105,6 +114,28 @@ export function QuotationsMobile() {
 
   return (
     <div className="space-y-3 md:hidden">
+      <label className="flex h-11 items-center gap-2 rounded-full border border-border bg-card px-3.5">
+        <SearchIcon className="size-[18px] flex-none text-muted-foreground" strokeWidth={2.2} />
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="ค้นหาชื่อลูกค้า ผู้ติดต่อ หรือเบอร์โทร"
+          aria-label="ค้นหาผู้สนใจและใบเสนอราคา"
+          className="min-w-0 flex-1 bg-transparent text-[14.5px] outline-none placeholder:text-muted-foreground"
+        />
+        {q && (
+          <button
+            type="button"
+            onClick={() => setQ("")}
+            aria-label="ล้างคำค้น"
+            className="grid size-[26px] flex-none place-items-center rounded-full bg-muted text-muted-foreground"
+          >
+            <CloseIcon className="size-3" strokeWidth={3} />
+          </button>
+        )}
+      </label>
+
       {/* แท็บพร้อมจำนวน — เห็นทันทีว่าเหลือกี่รายที่ยังไม่ได้ทำใบ */}
       <nav
         className="grid grid-cols-3 border-b-[1.5px] border-border"
@@ -150,7 +181,12 @@ export function QuotationsMobile() {
             const q = qs[0];
             return (
               <li key={c.code} className="glass rounded-[22px] p-3.5">
-                <div className="grid grid-cols-[62px_minmax(0,1fr)] gap-3.5">
+                {/* กดส่วนบนของการ์ด = เปิดรายละเอียดผู้สนใจ ปุ่มด้านล่างยังทำงานของมันเอง */}
+                <Link
+                  href={`/leads/${encodeURIComponent(c.code)}`}
+                  className="grid grid-cols-[62px_minmax(0,1fr)] gap-3.5 text-foreground"
+                >
+
                   <span
                     className={`grid size-[62px] place-items-center rounded-[18px] text-[20px] font-bold ${tint}`}
                     aria-hidden="true"
@@ -159,6 +195,11 @@ export function QuotationsMobile() {
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-2">
+                      <ChevronRightIcon
+                        className="order-last mt-0.5 size-4 flex-none text-muted-foreground"
+                        strokeWidth={2.4}
+                        aria-hidden="true"
+                      />
                       <b className="line-clamp-2 text-[15.5px] leading-snug font-bold">{c.name}</b>
                       {q ? (
                         <span className="num shrink-0 text-right text-[14px] font-bold">
@@ -221,7 +262,7 @@ export function QuotationsMobile() {
                       </span>
                     )}
                   </div>
-                </div>
+                </Link>
 
                 {c.status === "ปฏิเสธ" && (
                   <p className="mt-2.5 rounded-xl bg-muted px-3 py-2.5 text-[12.5px] text-muted-foreground">
@@ -233,16 +274,16 @@ export function QuotationsMobile() {
                 {c.status === "ปฏิเสธ" ? (
                   <button
                     type="button"
-                    className="btn glass-thin mt-3.5 h-11 w-full justify-center"
+                    className="btn glass-thin mt-3.5 h-9! w-full justify-center rounded-[10px]! text-[13px]"
                     onClick={() => reopenLead(c.code)}
                   >
                     ยกเลิกการปฏิเสธ
                   </button>
                 ) : q ? (
-                  <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+                  <div className="mt-3.5 flex justify-center gap-2">
                     <Link
                       href={`/quotations/${encodeURIComponent(q.no || q.id)}`}
-                      className="btn glass-thin h-11 justify-center"
+                      className="btn glass-thin h-9! justify-center rounded-[10px]! px-3.5 text-[13px]"
                     >
                       ดูรายละเอียด
                     </Link>
@@ -252,25 +293,25 @@ export function QuotationsMobile() {
                           ? `/quotations/new?from=${encodeURIComponent(q.no)}`
                           : `/quotations/new?draft=${encodeURIComponent(q.id)}`
                       }
-                      className="btn solid btn-solid h-11 justify-center"
+                      className="btn solid btn-solid h-9! justify-center rounded-[10px]! px-3.5 text-[13px]"
                     >
                       {q.no ? "สร้างฉบับใหม่" : "แก้ไขร่าง"}
                     </Link>
                   </div>
                 ) : (
-                  <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+                  <div className="mt-3.5 flex justify-center gap-2">
                     <button
                       type="button"
-                      className="btn glass-thin h-11 justify-center"
+                      className="btn glass-thin h-9! justify-center rounded-[10px]! px-3.5 text-[13px]"
                       onClick={() => setDeclining(c)}
                     >
                       ปฏิเสธ
                     </button>
                     <Link
                       href={`/quotations/new?cus=${encodeURIComponent(c.code)}`}
-                      className="btn solid btn-solid h-11 justify-center"
+                      className="btn solid btn-solid h-9! justify-center rounded-[10px]! px-3.5 text-[13px]"
                     >
-                      <PlusIcon className="size-4" strokeWidth={2.4} />
+                      <PlusIcon className="size-3.5" strokeWidth={2.4} />
                       สร้างใบเสนอราคา
                     </Link>
                   </div>

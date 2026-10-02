@@ -247,10 +247,12 @@ export function QuotationsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <p>พบ {rows.length} ฉบับ</p>
+          <p className="max-md:hidden!">พบ {rows.length} ฉบับ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
+          {/* มือถือมีช่องค้นหาของตัวเองในรายการรายลูกค้าแล้ว ไม่ต้องมีสองช่อง */}
           <SearchBox
+            className="max-md:hidden!"
             value={query}
             onChange={(v) => {
               setQuery(v);

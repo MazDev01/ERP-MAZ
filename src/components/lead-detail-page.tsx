@@ -145,16 +145,18 @@ export function LeadDetailPage({ code }: { code: string }) {
   return (
     <div className="space-y-4">
       <div className="bar">
-        <div className="min-w-0">
-          {/* เส้นทาง "ผู้สนใจ › ชื่อ" ตาม mockup แทนปุ่มย้อนกลับ */}
-          <p className="mb-1 flex min-w-0 items-center gap-[7px] text-[13px] text-muted-foreground">
+        <div className="min-w-0 max-sm:flex max-sm:w-full max-sm:items-start max-sm:gap-2.5">
+          <div className="min-w-0 max-sm:flex-1">
+          {/* เส้นทาง "ผู้สนใจ › ชื่อ" ตาม mockup แทนปุ่มย้อนกลับ — มือถือมีปุ่มย้อนกลับบนหัวจออยู่แล้ว */}
+          <p className="mb-1 flex min-w-0 items-center gap-[7px] text-[13px] text-muted-foreground max-sm:hidden">
             <Link href="/leads" className="shrink-0 hover:text-primary">
               ผู้สนใจ
             </Link>
             <ChevronRightIcon className="size-[13px] shrink-0" strokeWidth={2.4} />
             <span className="truncate">{customer.name}</span>
           </p>
-          <h1 className="flex flex-wrap items-center gap-2.5">
+          {/* ชื่อผู้สนใจคือตัวบอกว่าเปิดรายไหนอยู่ จึงยังขึ้นบนมือถือ ต่างจากหัวข้อหน้าทั่วไปที่ซ่อนไว้ */}
+          <h1 className="flex flex-wrap items-center gap-2.5 max-sm:flex! max-sm:text-[20px] max-sm:leading-snug">
             {customer.name}
             <LeadStatusMenu code={code} name={customer.name} status={customer.status} />
           </h1>
@@ -164,8 +166,18 @@ export function LeadDetailPage({ code }: { code: string }) {
               <span className="text-muted-foreground"> · เดิม {customer.leadCode}</span>
             )}
           </p>
+          </div>
+          {/* มือถือ: ปุ่มหลักอยู่แถวเดียวกับชื่อ ชิดขวา (ต้นแบบ lead-detail.html 2 ต.ค. 2569) */}
+          <Link
+            href={`/quotations/new?customer=${encodeURIComponent(code)}`}
+            className="btn solid btn-solid h-[34px] flex-none px-3 text-[12.5px] sm:hidden"
+          >
+            <QuotationIcon className="size-3.5" strokeWidth={2.2} />
+            ใบเสนอราคา
+          </Link>
         </div>
-        <div className="tools w-full flex-wrap sm:w-auto">
+        {/* ปุ่มรองบนมือถือย้ายไปท้ายหน้า เหลือแต่ของจอใหญ่ตรงนี้ */}
+        <div className="tools w-full flex-wrap max-sm:hidden! sm:w-auto">
           {/* ปฏิเสธได้เฉพาะรายการที่ยังเป็นผู้สนใจ (ต้นแบบ: status = lead) · เปลี่ยนกลับได้ที่ป้ายสถานะ */}
           {customer.status === "รอนัดหมาย" && (
             <button
@@ -423,6 +435,48 @@ export function LeadDetailPage({ code }: { code: string }) {
             }))}
           />
         </div>
+      </div>
+
+      {/* มือถือ: ปุ่มรองอยู่ท้ายหน้า หลังการ์ดทั้งหมด (ต้นแบบ lead-detail.html) */}
+      <div className="grid grid-cols-2 gap-2 sm:hidden">
+        {customer.status === "รอนัดหมาย" && (
+          <button
+            type="button"
+            className="btn glass-thin h-[46px] justify-center text-destructive"
+            onClick={() => setCloseOpen(true)}
+          >
+            <BanIcon className="size-[15px]" strokeWidth={2.2} />
+            ปฏิเสธ
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn glass-thin h-[46px] justify-center text-destructive disabled:cursor-not-allowed disabled:opacity-45"
+          disabled={Boolean(blockWhy)}
+          title={blockWhy || undefined}
+          onClick={() => setDelOpen(true)}
+        >
+          <TrashIcon className="size-[15px]" strokeWidth={2.2} />
+          ลบผู้สนใจ
+        </button>
+        {!mine && (
+          <button
+            type="button"
+            className="btn glass-thin h-[46px] justify-center"
+            onClick={() => setTakeOverOpen(true)}
+          >
+            <HandoverIcon className="size-[15px]" strokeWidth={2.2} />
+            รับช่วงดูแล
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn glass-thin h-[46px] justify-center"
+          onClick={() => setLogOpen(true)}
+        >
+          <PlusIcon className="size-[15px]" strokeWidth={2.2} />
+          บันทึกการติดต่อ
+        </button>
       </div>
 
       {logOpen && (

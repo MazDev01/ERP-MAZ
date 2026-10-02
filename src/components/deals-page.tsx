@@ -21,7 +21,7 @@ import { usePm } from "@/lib/pm-store";
 import { baht, thaiDate, todayIso } from "@/lib/format";
 import { USERS } from "@/lib/mock-data";
 import { useRole } from "@/lib/role";
-import { BanIcon, PaperclipIcon } from "./icons";
+import { BanIcon, CalendarIcon, ChevronDownIcon, PaperclipIcon } from "./icons";
 import { CancelDealDialog } from "./cancel-deal-dialog";
 import { Sheet } from "./lead-dialogs";
 import { Pager, SearchBox, TabStrip, Who, usePaged } from "./sales-ui";
@@ -96,7 +96,8 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
         </div>
       </div>
 
-      <section className="panel glass flex flex-col">
+      {/* มือถือ: การ์ดวางบนพื้นหน้า ไม่มีกรอบขาวครอบอีกชั้น (ต้นแบบ deals.html 2 ต.ค. 2569) */}
+      <section className="panel glass flex flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
         <div className="strip">
           <TabStrip
             tabs={TABS}
@@ -235,9 +236,10 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
           </table>
         </div>
 
-        <div className="foot flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
-          <span>{paged.range("ดีล")}</span>
-          <span className="sum">
+        {/* มือถือเหลือแค่ปุ่มแบ่งหน้าตรงกลาง ช่วงที่แสดงกับยอดรวมอยู่บนจอใหญ่พอ (ต้นแบบ deals.html) */}
+        <div className="foot flex-col items-stretch gap-3 text-center max-sm:border-0! max-sm:justify-center sm:flex-row sm:items-center sm:text-left">
+          <span className="max-sm:hidden">{paged.range("ดีล")}</span>
+          <span className="sum max-sm:hidden">
             มูลค่ารวมที่กรอง<b>{baht(filteredTotal)}</b> บาท
           </span>
           {/* ไม่มีผลลัพธ์ก็ไม่ต้องแสดงปุ่มแบ่งหน้า ตาม mockup */}
@@ -324,85 +326,91 @@ function DealCards({
     return <p className="px-5 py-12 text-center text-muted-foreground sm:hidden">ไม่พบดีลที่ตรงกับเงื่อนไข</p>;
   }
   return (
-    <ul className="divide-y divide-border sm:hidden">
+    <ul className="flex flex-col gap-2.5 px-4 pt-3 pb-1 sm:hidden">
       {list.map((d) => {
         const cons = d.contracts ?? [];
         const isOpen = Boolean(open[d.no]) && canOpen(d);
+        const name = nameOf.get(d.customerCode) ?? d.customerCode;
         return (
-          <li key={d.id} className="px-4 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <Who name={nameOf.get(d.customerCode) ?? d.customerCode} sub={d.customerCode} />
-              </div>
-              <span className={`tag shrink-0 ${DEAL_STATUS[d.status]}`}>
-                <i />
-                {d.status}
+          <li key={d.id} className="rounded-[20px] bg-card p-3.5 shadow-[0_1px_2px_rgb(40_20_25/0.04)]">
+            <div className="flex gap-3">
+              {/* วงกลมย่อชื่อลูกค้า — โทนน้ำเงินตามต้นแบบ แยกจากการ์ดฝั่ง PM ที่เป็นโทนส้ม */}
+              <span className="grid size-10 flex-none place-items-center rounded-full bg-[#E8F0FC] text-[16px] font-bold text-[#1A5DB5]">
+                {name.replace(/^(บริษัท|ห้าง|ร้าน)\s*/, "").replace(/\s/g, "").slice(0, 2)}
               </span>
-            </div>
-            {/* บนมือถือให้ความคืบหน้าอยู่เต็มบรรทัด ชื่อลูกค้าจะได้ไม่ถูกบีบ */}
-            <WorkProgress deal={d} className="mt-1.5" />
-
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <div className="min-w-0 text-[12.5px] leading-relaxed text-muted-foreground">
-                <span className="num block">{d.no}</span>
-                <span className="block">
-                  ใบเสนอราคา{" "}
-                  {d.quotationNo ? (
-                    <Link href={quoHref(d.quotationNo)} className="num font-semibold text-primary underline">
-                      {d.quotationNo}
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </span>
-                <span className="num block">ส่งมอบ {d.delivery ? thaiDate(d.delivery) : "—"}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-2">
+                  <b className="min-w-0 flex-1 text-[15.5px] leading-snug font-bold">{name}</b>
+                  <b className="num flex-none text-[15.5px] font-bold whitespace-nowrap">{baht(d.total)} ฿</b>
+                </div>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className="num flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+                    {d.no}
+                    {cons.length > 0 && (
+                      <em className="rounded-full bg-[#E8F0FC] px-2 py-0.5 text-[11px] font-semibold text-[#1A5DB5] not-italic">
+                        มีสัญญา {cons.length} ฉบับ
+                      </em>
+                    )}
+                  </span>
+                  <span className={`tag shrink-0 ${DEAL_STATUS[d.status]}`}>
+                    <i />
+                    {d.status}
+                  </span>
+                </div>
+                {d.quotationNo && (
+                  <Link
+                    href={quoHref(d.quotationNo)}
+                    className="num mt-1.5 inline-flex rounded-full border border-border bg-card px-2.5 py-1 text-[12px] font-semibold text-muted-foreground"
+                  >
+                    {d.quotationNo}
+                  </Link>
+                )}
+                <WorkProgress deal={d} className="mt-1.5" />
               </div>
-              <div className="shrink-0 text-right">
-                <span className="block text-[11.5px] text-muted-foreground">มูลค่าดีล (บาท)</span>
-                <b className="money num text-[17px]">{baht(d.total)}</b>
-              </div>
             </div>
 
-            {canOpen(d) && (
-              <button
-                type="button"
-                onClick={() => onToggle(d.no)}
-                aria-expanded={isOpen}
-                className="mt-3 flex h-10 w-full items-center justify-between rounded-[10px] bg-muted px-3.5 text-[13px] font-semibold"
-              >
-                <span>
-                  {d.status !== "ปิดการขาย" ? "เหตุผล" : "รายละเอียด"}
-                  {cons.length > 0 && ` · สัญญา ${cons.length} ฉบับ`}
-                </span>
-                <span aria-hidden className={`transition-transform ${isOpen ? "rotate-180" : ""}`}>
-                  ▾
-                </span>
-              </button>
-            )}
-            {isOpen && <SubCard deal={d} />}
+            <div className="mt-2 border-t border-dashed border-[#ECE3E5]" />
 
-            <div className="mt-3 flex gap-2">
-              {/* แนบสัญญาได้ทุกดีล รวมดีลที่ยกเลิกแล้ว (เก็บเป็นหลักฐาน) */}
-              <button
-                type="button"
-                className="btn glass-thin h-10 flex-1 justify-center"
-                onClick={() => onAttach(d.no)}
-              >
-                <PaperclipIcon className="size-4" strokeWidth={2} />
-                แนบสัญญา
-              </button>
-              {canCancel(d) && (
+            <div className="mt-2.5 flex items-center gap-2">
+              <span className="num flex min-w-0 flex-1 items-center gap-1.5 text-[12.5px] font-semibold text-[#6E6164]">
+                <CalendarIcon className="size-3.5 flex-none text-muted-foreground" strokeWidth={2.2} />
+                ส่งมอบ {d.delivery ? thaiDate(d.delivery) : "—"}
+              </span>
+              <span className="flex flex-none gap-2">
+                {canOpen(d) && (
+                  <button
+                    type="button"
+                    onClick={() => onToggle(d.no)}
+                    aria-expanded={isOpen}
+                    aria-label={`รายละเอียดดีล ${d.no}`}
+                    className="grid size-9 place-items-center rounded-[10px] border border-border bg-card text-muted-foreground"
+                  >
+                    <ChevronDownIcon className={`size-4 transition-transform ${isOpen ? "rotate-180" : ""}`} strokeWidth={2.2} />
+                  </button>
+                )}
+                {/* แนบสัญญาได้ทุกดีล รวมดีลที่ยกเลิกแล้ว (เก็บเป็นหลักฐาน) */}
                 <button
                   type="button"
-                  className="btn glass-thin h-10 flex-1 justify-center !text-destructive"
-                  data-ceo-hide
-                  onClick={() => onCancel(d.no)}
+                  className="grid size-9 place-items-center rounded-[10px] border border-border bg-card text-muted-foreground"
+                  aria-label={`แนบสัญญา ${d.no}`}
+                  onClick={() => onAttach(d.no)}
                 >
-                  <BanIcon className="size-4" strokeWidth={2.2} />
-                  ยกเลิกดีล
+                  <PaperclipIcon className="size-4" strokeWidth={2} />
                 </button>
-              )}
+                {canCancel(d) && (
+                  <button
+                    type="button"
+                    className="grid size-9 place-items-center rounded-[10px] border border-border bg-card text-destructive"
+                    data-ceo-hide
+                    aria-label={`ยกเลิกดีล ${d.no}`}
+                    onClick={() => onCancel(d.no)}
+                  >
+                    <BanIcon className="size-4" strokeWidth={2.2} />
+                  </button>
+                )}
+              </span>
             </div>
+            {isOpen && <SubCard deal={d} />}
           </li>
         );
       })}

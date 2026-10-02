@@ -11,13 +11,15 @@ export function SearchBox({
   value,
   onChange,
   placeholder,
+  className = "",
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  className?: string;
 }) {
   return (
-    <div className="search glass-thin w-full sm:w-[260px]">
+    <div className={`search glass-thin w-full sm:w-[260px] ${className}`}>
       <SearchIcon className="size-[15px] shrink-0" strokeWidth={2} />
       <input
         type="search"
