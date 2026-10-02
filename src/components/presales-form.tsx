@@ -24,6 +24,13 @@ const KINDS = [
   { key: "SA" as const, label: "SA", detail: "วิเคราะห์ขอบเขตและความเป็นไปได้ทางเทคนิค" },
 ];
 
+/** สีจุดหน้าชื่อระดับบนมือถือ ตามต้นแบบ presales-new.html */
+const URGENCY_DOT: Record<string, string> = {
+  ปกติ: "bg-[#9AA3AE]",
+  ด่วน: "bg-[#E08A00]",
+  ด่วนมาก: "bg-[#C8102E]",
+};
+
 const URGENCIES: { key: Urgency; detail: string }[] = [
   { key: "ปกติ", detail: "ตามคิวงาน" },
   { key: "ด่วน", detail: "ขอให้จัดลำดับก่อนงานอื่น" },
@@ -176,8 +183,9 @@ function PresalesForm({
           </Field>
 
           <Field label="ระดับความเร่งด่วน" required>
-            {/* มือถือก็วางสามช่องในแถวเดียว กดสลับได้ทันทีโดยไม่ต้องเลื่อนผ่านการ์ดยาว ๆ */}
-            <div className="grid grid-cols-3 gap-2">
+            {/* มือถือ: ปุ่มแบ่งช่องแถวเดียวในกรอบสีเทา จุดสีบอกระดับ คำอธิบายของระดับที่เลือกอยู่ใต้ปุ่ม
+                (ต้นแบบ presales-new.html · psn-urg) · จอใหญ่ยังเป็นสามการ์ดพร้อมคำอธิบายในปุ่ม */}
+            <div className="grid grid-cols-3 gap-2 max-sm:gap-1 max-sm:rounded-[14px] max-sm:bg-[#F1ECEE] max-sm:p-1">
               {URGENCIES.map((u) => (
                 <button
                   key={u.key}
@@ -185,19 +193,25 @@ function PresalesForm({
                   /* ปุ่มสลับสถานะ ต้องบอกโปรแกรมอ่านหน้าจอด้วยว่าอันไหนถูกเลือก ไม่ใช่รู้จากสีอย่างเดียว */
                   aria-pressed={urgency === u.key}
                   onClick={() => setUrgency(u.key)}
-                  className={`rounded-xl border-[1.4px] px-3 py-2.5 text-left transition-colors max-sm:px-2.5 ${
+                  className={`rounded-xl border-[1.4px] px-3 py-2.5 text-left transition-colors max-sm:flex max-sm:h-10 max-sm:items-center max-sm:justify-center max-sm:gap-1.5 max-sm:border-0! max-sm:px-1.5 max-sm:py-0 max-sm:text-[14px] max-sm:font-semibold ${
                     urgency === u.key
                       ? u.key === "ด่วนมาก"
-                        ? "border-destructive bg-[var(--destructive-soft)] text-destructive"
-                        : "border-primary bg-accent text-primary"
-                      : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40"
+                        ? "border-destructive bg-[var(--destructive-soft)] text-destructive max-sm:bg-white! max-sm:text-[#B0101F] max-sm:shadow-[0_2px_6px_rgb(40_20_25/0.12)]"
+                        : "border-primary bg-accent text-primary max-sm:bg-white! max-sm:shadow-[0_2px_6px_rgb(40_20_25/0.12)] " +
+                          (u.key === "ด่วน" ? "max-sm:text-[#94500A]" : "max-sm:text-foreground")
+                      : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40 max-sm:bg-transparent! max-sm:text-[#6E6164]"
                   }`}
                 >
-                  <b className="block text-[13.5px] font-semibold">{u.key}</b>
-                  <small className="mt-0.5 block text-[11.5px] opacity-80">{u.detail}</small>
+                  <i className={`hidden size-2 shrink-0 rounded-full max-sm:block ${URGENCY_DOT[u.key]}`} />
+                  <b className="block text-[13.5px] font-semibold max-sm:text-[14px]">{u.key}</b>
+                  <small className="mt-0.5 block text-[11.5px] opacity-80 max-sm:hidden">{u.detail}</small>
                 </button>
               ))}
             </div>
+            {/* คำอธิบายของระดับที่เลือกอยู่ — บนมือถือปุ่มไม่มีที่พอใส่ */}
+            <p className="mt-1.5 hidden px-0.5 text-[12.5px] text-[#8A7E81] max-sm:block">
+              {URGENCIES.find((u) => u.key === urgency)?.detail}
+            </p>
           </Field>
         </div>
 

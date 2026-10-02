@@ -53,6 +53,13 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "done", label: "ส่งแล้ว" },
 ];
 
+/** สีป้ายความเร่งด่วนบนการ์ดมือถือ ตามต้นแบบ presales-work.html (psw-card) */
+const URGENCY_PILL: Record<string, { box: string; dot: string }> = {
+  ปกติ: { box: "bg-[#F1ECEE] text-[#6E6164]", dot: "bg-[#9AA3AE]" },
+  ด่วน: { box: "bg-[#FDEDD6] text-[#94500A]", dot: "bg-[#E08A00]" },
+  ด่วนมาก: { box: "bg-[#FCE3E7] text-[#B0101F]", dot: "bg-[#C8102E]" },
+};
+
 /** ป้ายสถานะแบบเดียวกับหน้าคำขอก่อนการขายของฝ่ายขาย */
 function StatusTag({ status }: { status: PresalesStatus }) {
   return (
@@ -89,6 +96,8 @@ export function PresalesWorkPage() {
   const [query, setQuery] = useState(find);
   const [tab, setTab] = useState<Tab>(() => (linked ? bucket(linked) : "todo"));
   const [open, setOpen] = useState<string | null>(() => linked?.no ?? null);
+  /* กด "ส่งงาน" บนการ์ดมือถือ = เปิดงานนั้นแล้วขึ้นฟอร์มส่งงานเลย ไม่ต้องกดซ้ำในแผ่น */
+  const [sendNow, setSendNow] = useState(false);
   /* คำขอที่เพิ่งสร้างอยู่ใน localStorage ตอนเรนเดอร์ครั้งแรกจึงยังหาไม่เจอ
      ค่าตั้งต้นด้านบนเลยเปิดให้ไม่ได้ ต้องรอสโตร์ hydrate แล้วค่อยเปิดให้ครั้งเดียว */
   const jumped = useRef(false);
@@ -117,7 +126,8 @@ export function PresalesWorkPage() {
   return (
     <div className="space-y-4">
       <div className="bar">
-        <div>
+        {/* ต้นแบบมือถือไม่มีบรรทัดนับรายการ เพราะจำนวนอยู่บนชิปแท็บแล้ว */}
+        <div className="max-sm:hidden">
           <p>คำขอ SA และ BD ที่แสดงอยู่ {rows.length} รายการ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
@@ -142,43 +152,63 @@ export function PresalesWorkPage() {
           </div>
         </div>
 
-        {/* มือถือ — แสดงเป็นการ์ดทีละใบ กดทั้งใบเพื่อเปิดงาน ไม่ต้องเลื่อนตารางไปด้านข้าง */}
+        {/* มือถือ — การ์ดตามต้นแบบ presales-work.html (psw-card)
+            ชื่อผู้สนใจเป็นหัวใหญ่ โจทย์อยู่ใต้ ป้ายความเร่งด่วนมุมขวาบน
+            ไม่ต้องมีเลขที่ใบงานและป้ายสถานะ เพราะสถานะดูได้จากชิปด้านบนอยู่แล้ว */}
         <ul className="flex flex-col gap-2.5 pt-2.5 sm:hidden">
           {rows.length === 0 ? (
-            <li className="rounded-[22px] border border-white/95 bg-white/72 px-5 py-10 text-center text-[13.5px] text-muted-foreground shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px]">
+            <li className="rounded-[20px] bg-card px-5 py-10 text-center text-[13.5px] text-muted-foreground shadow-[0_1px_2px_rgb(40_20_25/0.04)]">
               ไม่มีงานในแท็บนี้
             </li>
           ) : (
             rows.map((r) => {
               const late = r.due < today && bucket(r) !== "done";
+              const urg = URGENCY_PILL[r.urgency] ?? URGENCY_PILL["ปกติ"];
+              /* ปุ่มบนการ์ด — รอรับงานกดรับได้ทันที กำลังทำกดแล้วขึ้นฟอร์มส่งงานเลย (ต้นแบบ psw-send) */
+              const act = ro ? "" : r.status === "รอรับงาน" ? "take" : bucket(r) === "doing" ? "send" : "";
               return (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpen(r.no)}
-                    className="block w-full rounded-[22px] border border-white/95 bg-white/72 p-3.5 text-left shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] active:bg-white/90"
-                  >
-                    <span className="flex items-start justify-between gap-2.5">
-                      <b className="min-w-0 text-[14.5px] font-semibold">
-                        {nameOf.get(r.customerCode) ?? r.customerCode}
-                      </b>
-                      <span className="flex shrink-0 items-center gap-1.5">
-                        <KindTag kind={r.kind} />
-                        <StatusTag status={r.status} />
-                      </span>
-                    </span>
-                    <span className="num mt-0.5 block text-[12px] text-muted-foreground">{r.no}</span>
-                    <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                <li
+                  key={r.id}
+                  className="relative rounded-[20px] bg-card p-3.5 shadow-[0_1px_2px_rgb(40_20_25/0.04)]"
+                >
+                  <span className={`absolute top-3.5 right-3.5 flex items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[12px] font-bold ${urg.box}`}>
+                    <i className={`size-[7px] rounded-full ${urg.dot}`} />
+                    {r.urgency}
+                  </span>
+                  <button type="button" onClick={() => setOpen(r.no)} className="block w-full text-left">
+                    <b className="block pr-[92px] text-[18px] leading-[1.3] font-bold">
+                      {nameOf.get(r.customerCode) ?? r.customerCode}
+                    </b>
+                    <span className="mt-1 block text-[13.5px] leading-[1.5] text-muted-foreground">{r.problem}</span>
+                    {/* คำขอต้องมีคนเห็นเสมอ — บอกประเภทงานและผู้รับผิดชอบไว้ทุกใบ */}
+                    <span className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                      <KindTag kind={r.kind} />
                       ผู้รับผิดชอบ {psOwner(r)}
                     </span>
-                    <span className="mt-1.5 line-clamp-2 block text-[13px] text-muted-foreground">{r.problem}</span>
-                    <span className="mt-2 flex items-center justify-between gap-2.5 text-[12.5px]">
-                      <span className="font-semibold text-muted-foreground">{r.urgency}</span>
-                      <span className={`num ${late ? "font-semibold text-destructive" : ""}`}>
-                        ส่งงาน {thaiDate(r.due)}
-                      </span>
+                    <span className="mt-3 flex items-center justify-between gap-2.5 border-t border-[#F2EAEC] pt-2.5 text-[14px]">
+                      <span className="text-[13px] text-muted-foreground">วันส่งงาน</span>
+                      <span className={`num ${late ? "font-semibold text-destructive" : ""}`}>{thaiDate(r.due)}</span>
                     </span>
                   </button>
+                  {act && (
+                    <div className="flex justify-end pt-2.5">
+                      <button
+                        type="button"
+                        className="h-[38px] rounded-xl bg-primary px-[18px] text-[13.5px] font-bold text-white"
+                        onClick={() => {
+                          if (act === "take") {
+                            acceptPresales(r.no, ME.name);
+                            setTab("doing");
+                            return;
+                          }
+                          setOpen(r.no);
+                          setSendNow(true);
+                        }}
+                      >
+                        {act === "take" ? "รับงาน" : "ส่งงาน"}
+                      </button>
+                    </div>
+                  )}
                 </li>
               );
             })
@@ -261,7 +291,11 @@ export function PresalesWorkPage() {
           key={current.no}
           request={current}
           customerName={nameOf.get(current.customerCode) ?? current.customerCode}
-          onClose={() => setOpen(null)}
+          initialForm={sendNow ? "send" : null}
+          onClose={() => {
+            setOpen(null);
+            setSendNow(false);
+          }}
           onMoved={(t, keepOpen) => {
             /* งานสำเร็จแล้วต้องไม่หายไปเฉย ๆ — สลับไปแท็บของขั้นใหม่เสมอ
                และถ้ายังมีงานให้ทำต่อ (เพิ่งรับงาน) ก็คาหน้าต่างเดิมไว้ตรงหน้าเลย */
@@ -283,11 +317,14 @@ export function PresalesWorkPage() {
 function WorkDialog({
   request: r,
   customerName,
+  initialForm,
   onClose,
   onMoved,
 }: {
   request: PresalesRequest;
   customerName: string;
+  /** เปิดแผ่นมาพร้อมฟอร์มนี้เลย — การ์ดมือถือกด "ส่งงาน" แล้วต้องได้ฟอร์มส่งงานทันที */
+  initialForm?: "send" | "ask" | null;
   onClose: () => void;
   /** งานย้ายขั้นแล้ว — ส่งแท็บที่ต้องสลับไปมาด้วย (ไม่ส่ง = อยู่แท็บเดิม) · keepOpen = ไม่ปิดหน้าต่าง */
   onMoved: (tab?: Tab, keepOpen?: boolean) => void;
@@ -295,7 +332,7 @@ function WorkDialog({
   const crm = useCrm();
   const templates = useTemplates();
   const rounds = crm.presalesRounds.filter((x) => x.requestNo === r.no).sort((a, b) => b.round - a.round);
-  const [form, setForm] = useState<"send" | "ask" | null>(null);
+  const [form, setForm] = useState<"send" | "ask" | null>(initialForm ?? null);
   const ro = usePmReadOnly();
   /* ถามตอบกับฝ่ายขายทั้งสายของคำขอใบนี้ */
   const thread = psThreadOf(usePsThreads(), r);
