@@ -52,6 +52,7 @@ import { ROLES, approvesFor, roleLabel, useApprovalRoute, type Role } from "@/li
 import { useMyRoles } from "@/lib/hr-link";
 import { useSearchParams } from "next/navigation";
 import { formatMinutesOfDay, minutesOfDay } from "@/lib/work-schedule";
+import { ClockIcon, LeaveIcon, ReceiptIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { OtActualFields, useOtDecision, type OtReq } from "./ot-actual-fields";
 import { SearchBox } from "./sales-ui";
@@ -110,6 +111,17 @@ const KIND: Record<Kind, string> = {
   ot: "ขอโอที",
   leave: "การลา",
   expense: "เบิกค่าใช้จ่าย",
+};
+
+/** ชื่อประเภทบนการ์ดมือถือ */
+const KIND_LABEL: Record<Kind, string> = { leave: "การลา", ot: "ขอโอที", expense: "เบิกค่าใช้จ่าย" };
+/** สีป้ายประเภท — ชุดเดียวกับ .t-lv .t-ot .t-ex ของต้นแบบ */
+const KIND_TAG: Record<Kind, string> = { leave: "t-leave", ot: "t-early", expense: "t-ok" };
+/** วงกลมไอคอนหน้าการ์ด — สีตามประเภทคำขอ (ต้นแบบ pm-approvals.html) */
+const KIND_SKIN: Record<Kind, { box: string; icon: typeof ClockIcon }> = {
+  leave: { box: "bg-[#E8F0FC] text-[#1A5DB5]", icon: LeaveIcon },
+  ot: { box: "bg-[#ECE6FA] text-[#4E35A8]", icon: ClockIcon },
+  expense: { box: "bg-[#FDEDD6] text-[#94500A]", icon: ReceiptIcon },
 };
 
 const TABS: { key: "all" | Kind; label: string }[] = [
@@ -277,13 +289,13 @@ export function ApprovalsPage() {
         {/* มือถือ: ช่องค้นหากับตัวกรองสถานะอยู่แถวเดียวกัน ค้นหากินที่ที่เหลือ */}
         <div className="flex w-full flex-wrap items-center gap-2.5 max-sm:flex-nowrap sm:ml-auto sm:w-auto sm:flex-nowrap">
           <div className="w-full max-sm:min-w-0 max-sm:flex-1 sm:w-[260px]">
-            <SearchBox value={q} onChange={setQ} placeholder="ค้นหาผู้ขอหรือรายละเอียด" />
+            <SearchBox className="max-sm:h-[46px] max-sm:rounded-full!" value={q} onChange={setQ} placeholder="ค้นหาผู้ขอหรือรายละเอียด" />
           </div>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as Status | "")}
             aria-label="กรองตามสถานะ"
-            className="field-control h-9 !w-[150px] flex-none cursor-pointer pr-8 text-[13px] max-sm:h-10 max-sm:!w-[124px]"
+            className="field-control h-9 !w-[150px] flex-none cursor-pointer pr-8 text-[13px] max-sm:h-[46px] max-sm:rounded-full! max-sm:!w-[124px]"
           >
             {STATUS_OPTS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -294,10 +306,11 @@ export function ApprovalsPage() {
         </div>
       </div>
 
-      {/* มือถือ: การ์ดละคำขอ ตามดีไซน์ชุดใหม่ (30 ก.ย. 2569) กดการ์ดเปิดรายละเอียด */}
+      {/* มือถือ: การ์ดละคำขอ (ต้นแบบ pm-approvals.html 2 ต.ค. 2569)
+          วงกลมไอคอนตามประเภทซ้าย · ชื่อ-ตำแหน่ง กับป้ายประเภทแถวบน · สรุปคำขอ · เส้นประ · วันที่รอกับปุ่มดูคำขอ */}
       <section className="sm:hidden">
         {rows.length === 0 ? (
-          <p className="rounded-[22px] border border-white/95 bg-white/72 px-5 py-10 text-center text-[13px] text-muted-foreground shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px]">
+          <p className="rounded-[20px] bg-card px-5 py-10 text-center text-[13px] text-muted-foreground shadow-[0_1px_2px_rgb(40_20_25/0.04)]">
             ไม่มีคำขอตามเงื่อนไขที่เลือก
           </p>
         ) : (
@@ -306,24 +319,40 @@ export function ApprovalsPage() {
               const wait = daysBetween(item.at.split(" ")[0], today);
               const hot = wait >= WAIT_HOT && item.status === "pending";
               const hit = Boolean(findId) && item.key === findId;
+              const skin = KIND_SKIN[item.kind];
+              const Glyph = skin.icon;
               return (
                 <li key={`${item.kind}-${item.src}-${item.role ?? ""}-${item.key}`}>
                   <button
                     type="button"
                     aria-label={`เปิดคำขอของ ${item.name}`}
                     onClick={() => setViewing(item)}
-                    className={`flex min-h-[64px] w-full items-center gap-3 rounded-[22px] border border-white/95 bg-white/72 p-3.5 text-left shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] active:bg-white/90 ${
+                    className={`block w-full rounded-[20px] bg-card p-3.5 text-left shadow-[0_1px_2px_rgb(40_20_25/0.04)] active:bg-[#FBF5F4] ${
                       hit ? "ring-2 ring-primary ring-inset" : ""
                     }`}
                   >
-                    <span className="min-w-0 flex-1">
-                      <b className="block truncate text-[14px] font-semibold">{item.name}</b>
-                      <span className="block truncate text-[11.5px] text-muted-foreground">{item.sub}</span>
-                      <span className="mt-1.5 block rounded-[12px] bg-muted/60 px-2.5 py-1.5 text-[13px] leading-snug">
-                        {item.topic}
-                        {cutHours(item) != null && (
-                          <span className="text-[11.5px] text-muted-foreground"> · อนุมัติ {cutHours(item)?.toFixed(2)} ชม.</span>
-                        )}
+                    <span className="flex gap-3">
+                      <span className={`grid size-10 flex-none place-items-center rounded-full ${skin.box}`}>
+                        <Glyph className="size-5" strokeWidth={2} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-start gap-2">
+                          <span className="min-w-0 flex-1">
+                            <b className="block truncate text-[15px] font-bold">{item.name}</b>
+                            <em className="block truncate text-[12px] text-muted-foreground not-italic">{item.sub}</em>
+                          </span>
+                          <span className={`tag shrink-0 ${KIND_TAG[item.kind]}`}>
+                            <i />
+                            {KIND_LABEL[item.kind]}
+                          </span>
+                        </span>
+                        {/* สรุปคำขอบรรทัดเดียวตามต้นแบบ — ประเภท ช่วงวัน และยอดรวม */}
+                        <span className="mt-1 block text-[13px] leading-snug text-[#6E6164]">
+                          {item.lines.length ? item.lines.join(" ") : item.topic}
+                          {cutHours(item) != null && (
+                            <span className="text-[11.5px]"> · อนุมัติ {cutHours(item)?.toFixed(2)} ชม.</span>
+                          )}
+                        </span>
                         {multi && (
                           <span className="block truncate text-[11.5px] text-muted-foreground">
                             มาถึงคุณในฐานะ {roleLabel(item.as)}
@@ -335,15 +364,24 @@ export function ApprovalsPage() {
                         )}
                       </span>
                     </span>
-                    <span
-                      className={`flex-none text-right text-[12px] whitespace-nowrap ${
-                        hot ? "font-semibold text-destructive" : "text-muted-foreground"
-                      }`}
-                    >
-                      {wait <= 0 ? "วันนี้" : wait === 1 ? "เมื่อวาน" : `${wait} วันก่อน`}
-                    </span>
-                    <span aria-hidden className="flex-none text-[18px] leading-none text-muted-foreground">
-                      ›
+
+                    <span className="mt-2 block border-t border-dashed border-[#ECE3E5]" />
+
+                    <span className="mt-2.5 flex items-center gap-3">
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] font-semibold text-[#6E6164]">
+                        <ClockIcon className="size-3.5 flex-none text-muted-foreground" strokeWidth={2.2} />
+                        <span className="num">
+                          {wait <= 0 ? "วันนี้" : wait === 1 ? "เมื่อวาน" : `${wait} วันก่อน`}
+                        </span>
+                        {hot && (
+                          <em className="num text-[11.5px] font-semibold text-destructive not-italic">
+                            รอมาแล้ว {wait} วัน
+                          </em>
+                        )}
+                      </span>
+                      <span className="grid h-9 flex-none place-items-center rounded-[10px] bg-primary px-3.5 text-[13px] font-bold text-primary-foreground">
+                        ดูคำขอ
+                      </span>
                     </span>
                   </button>
                 </li>
