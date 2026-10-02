@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { AccountLocked, type LockReason } from "./account-locked";
 import { LoginScene } from "./login-scene";
-import { DownloadIcon, EyeIcon, EyeOffIcon, LockIcon, UserIcon } from "./icons";
+import { DownloadIcon, EyeIcon, EyeOffIcon } from "./icons";
 import { homeOf, navItems } from "@/lib/nav";
 import { accountKey, accountOf, markLogin } from "@/lib/accounts";
 import { useHr } from "@/lib/hr-store";
@@ -327,15 +327,8 @@ export function LoginForm() {
             )}
 
             <div className="mb-2.5">
-              <div
-                className={`field-control field-shell h-[48px] rounded-[12px] text-[15px] lg:h-[52px] ${
-                  badUser ? "border-destructive bg-[#FEF6F7]" : ""
-                }`}
-              >
-                <UserIcon
-                  className="size-[21px] shrink-0 text-muted-foreground"
-                  strokeWidth={1.9}
-                />
+              {/* ช่องกรอกแบบเส้นใต้ตามต้นแบบ login-3d-redwhite.html — คลิกแล้วเส้นแดงวิ่งออกจากกลาง */}
+              <div className={`login-field ${badUser ? "bad" : ""}`}>
                 <input
                   ref={userRef}
                   value={username}
@@ -359,15 +352,7 @@ export function LoginForm() {
             </div>
 
             <div className="mb-2.5">
-              <div
-                className={`field-control field-shell h-[48px] rounded-[12px] text-[15px] lg:h-[52px] ${
-                  badPass ? "border-destructive bg-[#FEF6F7]" : ""
-                }`}
-              >
-                <LockIcon
-                  className="size-[21px] shrink-0 text-muted-foreground"
-                  strokeWidth={1.9}
-                />
+              <div className={`login-field ${badPass || credError ? "bad" : ""}`}>
                 <input
                   ref={passRef}
                   type={show ? "text" : "password"}
