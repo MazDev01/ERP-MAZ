@@ -399,7 +399,7 @@ export function ScheduleBoard<T>({
                   type="button"
                   aria-pressed={!hidden}
                   onClick={() => setOff((v) => ({ ...v, [k.key]: !v[k.key] }))}
-                  className={`inline-flex items-center gap-1.5 rounded-[20px] border border-border bg-card px-[11px] py-[5px] text-[11.5px] font-semibold text-muted-foreground hover:border-primary ${
+                  className={`inline-flex items-center gap-1.5 rounded-[20px] border border-border bg-card px-[11px] py-[5px] text-[11.5px] font-semibold text-muted-foreground hover:border-primary max-sm:min-h-9 max-sm:px-3.5 ${
                     hidden ? "opacity-45" : ""
                   }`}
                 >

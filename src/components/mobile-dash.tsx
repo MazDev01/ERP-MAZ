@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { thaiDate, todayIso } from "@/lib/format";
+import { useRole } from "@/lib/role";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 
 const DOW = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
@@ -260,11 +261,15 @@ export function DashSection({
   rows: DashRow[];
   empty: string;
 }) {
+  /* ผู้บริหารดูหน้าของฝ่ายอื่นแบบอ่านอย่างเดียว ลิงก์ข้ามไปหน้าของฝ่ายนั้นกดไม่ได้ (ceo-view.tsx)
+     จึงไม่ต้องขึ้นลิงก์ให้กดแล้วไม่มีอะไรเกิดขึ้น (ตรวจปุ่มทุกหน้า 2 ต.ค. 2569) */
+  const role = useRole();
+  const canLink = href ? role !== "ceo" || href.startsWith("/ceo") : false;
   return (
     <section className="space-y-2.5">
       <div className="flex items-center justify-between">
         <h3 className="text-[16px] font-bold">{title}</h3>
-        {href && (
+        {href && canLink && (
           <Link href={href} className="-my-1.5 inline-flex min-h-9 items-center px-1 text-[12.5px] font-semibold text-primary">
             {linkLabel}
           </Link>

@@ -1386,6 +1386,11 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 /* ── มุมมองของ CEO บนหน้าของฝ่ายอื่น (components/ceo-view.tsx) ──
    ลิงก์ไปหน้าของฝ่ายอื่นดูเป็นข้อความธรรมดา · ปุ่มที่เปลี่ยนข้อมูลถูกซ่อน */
 .ceo-view [data-ceo-hide] { display: none !important; }
+/* ลิงก์ที่พาไปหน้าของฝ่ายอื่นถูกกันไว้ที่ ceo-view.tsx — ทำให้ดูเป็นข้อความธรรมดา
+   ไม่งั้นเห็นเป็นลิงก์สีแดงแล้วกดไม่ไปไหน (ตรวจปุ่มทุกหน้า 2 ต.ค. 2569) */
+.ceo-view a[href]:not([href^="/ceo"]):not([href^="#"]) {
+  color: inherit; cursor: default; text-decoration: none;
+}
 /* GM เปิดหน้าของ PM แบบดูอย่างเดียว (pm-readonly.tsx) */
 .ro-gm [data-ceo-hide], .ro-gm [data-ro-hide] { display: none !important; }
 .ceo-view a[href]:not([href^="/ceo"]) { cursor: default; }
