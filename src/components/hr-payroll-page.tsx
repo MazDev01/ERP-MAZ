@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 /*
  * คำนวณเงินเดือน — คิดจากรอบเวลาทำงานที่ปิดแล้วเท่านั้น (ตามต้นแบบ hr-payroll.html)
  *
@@ -111,6 +113,7 @@ export function HrPayrollPage() {
   const [mgroup, setMgroup] = useState<Tab | null>(urlGroup ? (urlGroup === "day" ? "daily" : "month") : null);
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
+  const router = useRouter();
   const syncGroupUrl = useGroupUrl();
   /* สี่ขั้นนี้คือหน้าเดียวกัน — ปุ่มย้อนกลับพากลับไปหน้าเลือกกลุ่มเสมอ
      ไม่ไล่ย้อนทีละขั้นที่เพิ่งข้ามมา (เจ้าของสั่ง 2 ต.ค. 2569) */
@@ -253,7 +256,11 @@ export function HrPayrollPage() {
 
       {mgroup === null && (
         <GroupTiles
-          onPick={(g) => { setTab(g); setMgroup(g); syncGroupUrl(g === "daily" ? "day" : "month"); }}
+          /* เลือกกลุ่มใหม่ = เริ่มที่ขั้นแรกของสายเสมอ (เจ้าของสั่ง 2 ต.ค. 2569) */
+          onPick={(g) => {
+            const q = [month ? `m=${month}` : "", `g=${g === "daily" ? "day" : "month"}`].filter(Boolean).join("&");
+            router.replace(`/hr/timesheet?${q}`);
+          }}
           month={{ n: monthly.length, note: payStateText(month ? payApproval(hr.payApprove, month, "month").status : "draft") }}
           daily={{ n: daily.length, note: payStateText(month ? payApproval(hr.payApprove, month, "day").status : "draft") }}
         />
@@ -318,7 +325,6 @@ export function HrPayrollPage() {
         <GroupBack
           label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"}
           count={mgroup === "month" ? monthly.length : daily.length}
-          onBack={() => { setMgroup(null); syncGroupUrl(null); }}
         />
       )}
 

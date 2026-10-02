@@ -230,7 +230,6 @@ export function HrTimesheetPage() {
         <GroupBack
           label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"}
           count={mgroup === "month" ? monthly.length : daily.length}
-          onBack={() => { setMgroup(null); syncGroupUrl(null); }}
         />
       )}
 

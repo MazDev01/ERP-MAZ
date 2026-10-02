@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 /*
  * ประวัติรอบจ่าย (โครงหน้าชุด 24 ก.ย. 2569) — ขั้นสุดท้ายของสายรอบเงินเดือน
  *
@@ -37,6 +39,7 @@ export function HrCyclesPage() {
   /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ — ชุดเดียวกับหน้าอื่นในสายรอบเงินเดือน
      (ต้นแบบ hr-cycles.html บล็อก pay-tiles 1 ต.ค. 2569) */
   const [mgroup, setMgroup] = useState<PayGroup | null>(urlGroup || null);
+  const router = useRouter();
   const syncGroupUrl = useGroupUrl();
   /* สี่ขั้นนี้คือหน้าเดียวกัน — ปุ่มย้อนกลับพากลับไปหน้าเลือกกลุ่มเสมอ
      ไม่ไล่ย้อนทีละขั้นที่เพิ่งข้ามมา (เจ้าของสั่ง 2 ต.ค. 2569) */
@@ -83,9 +86,7 @@ export function HrCyclesPage() {
         <GroupTiles
           onPick={(g) => {
             const k: PayGroup = g === "month" ? "month" : "day";
-            setTab(k);
-            setMgroup(k);
-            syncGroupUrl(k);
+            router.replace(`/hr/timesheet?g=${k}`);
           }}
           month={{ n: hr.payruns.filter((p) => p.closed).length, unit: "รอบ", note: "ปิดรอบแล้ว" }}
           daily={{ n: hr.payruns.filter((p) => p.dayClosed).length, unit: "รอบ", note: "ปิดรอบแล้ว" }}
@@ -123,7 +124,6 @@ export function HrCyclesPage() {
           label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"}
           count={rows.length}
           unit="รอบ"
-          onBack={() => { setMgroup(null); syncGroupUrl(null); }}
         />
       )}
 
