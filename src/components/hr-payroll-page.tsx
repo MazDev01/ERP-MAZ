@@ -20,7 +20,7 @@
  */
 
 import { settings } from "@/lib/system-settings";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, cycleTitle, useGroupBack } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, cycleTitle, useGroupBack } from "./hr-pay-mobile";
 import Link from "next/link";
 import { useState } from "react";
 import { baht, bkkStamp, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
@@ -77,6 +77,14 @@ type Line = PayLine;
 /* เหตุผลเดียวกันทุกปุ่มที่กดไม่ลงเพราะรอบปิดแล้ว (HR-BR-03) */
 const LOCK_WHY =
   "รอบเงินเดือนปิดแล้ว แก้ตัวเลขไม่ได้ · ถ้าคำนวณผิด ให้บันทึกเป็นรายการปรับปรุงในรอบถัดไปพร้อมเหตุผล หรือเปิดรอบกลับ";
+
+/** ข้อความสถานะสั้น ๆ บนการ์ดเลือกกลุ่ม (มือถือ) */
+function payStateText(status: string) {
+  return status === "approved" ? "อนุมัติแล้ว"
+    : status === "waiting" ? "รอผู้บริหารอนุมัติ"
+    : status === "rejected" ? "ถูกตีกลับ"
+    : "ยังไม่ส่งอนุมัติ";
+}
 
 export function HrPayrollPage() {
   const hr = useHr();
@@ -148,6 +156,9 @@ export function HrPayrollPage() {
   usePayrollVoidWatch();
   const groupLines = group === "month" ? monthly : daily;
   const groupSum = sumOfGroup(groupLines, group, range, hr.extras);
+  /* ยอดรวมของทั้งสองกลุ่ม — ใช้บนแถบสรุปของมือถือก่อนเลือกกลุ่ม */
+  const mSum = sumOfGroup(monthly, "month", range, hr.extras);
+  const dSum = sumOfGroup(daily, "day", range, hr.extras);
   const ap = month ? payApproval(hr.payApprove, month, group) : { status: "draft" as const };
   const drifted =
     ap.status === "approved" && ap.net !== undefined && Math.abs(ap.net - groupSum.net) > 0.005;
@@ -222,7 +233,24 @@ export function HrPayrollPage() {
         />
       )}
 
-      {mgroup === null && <GroupTiles onPick={(g) => { setTab(g); setMgroup(g); }} />}
+      {mgroup === null && (
+        <PaySummary
+          items={[
+            { k: "คนในรอบ", v: String(monthly.length + daily.length), u: "คน" },
+            /* ยอดเงินตัดทศนิยมบนแถบสรุป ตัวเลขยาวเกินช่องจะอ่านยากบนมือถือ */
+            { k: "ยอดจ่ายสุทธิ", v: baht(Math.round(mSum.net + dSum.net)), u: "฿" },
+            { k: "ประกันสังคม", v: baht(Math.round((mSum.ss + dSum.ss) * 2)), u: "฿" },
+          ]}
+        />
+      )}
+
+      {mgroup === null && (
+        <GroupTiles
+          onPick={(g) => { setTab(g); setMgroup(g); }}
+          month={{ n: monthly.length, note: payStateText(month ? payApproval(hr.payApprove, month, "month").status : "draft") }}
+          daily={{ n: daily.length, note: payStateText(month ? payApproval(hr.payApprove, month, "day").status : "draft") }}
+        />
+      )}
 
       <div className="bar max-md:hidden!">
         <div>

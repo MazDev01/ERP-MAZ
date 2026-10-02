@@ -181,7 +181,13 @@ export function HrPayslipPage() {
         />
       )}
 
-      {mgroup === null && <GroupTiles onPick={(g) => { const k = g === "month" ? "month" : "day"; setTab(k); setMgroup(k); }} />}
+      {mgroup === null && (
+        <GroupTiles
+          onPick={(g) => { const k = g === "month" ? "month" : "day"; setTab(k); setMgroup(k); }}
+          month={{ n: monthlyCount, note: slip?.published ? "เผยแพร่แล้ว" : slip?.madeAt ? "ออกสลิปแล้ว" : "ยังไม่ออกสลิป" }}
+          daily={{ n: dailyCount, note: slip?.dayPublished ? "เผยแพร่แล้ว" : slip?.dayMadeAt ? "ออกสลิปแล้ว" : "ยังไม่ออกสลิป" }}
+        />
+      )}
 
       <div className="bar max-md:hidden!">
         <div />

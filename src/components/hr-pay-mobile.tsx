@@ -179,18 +179,75 @@ function PaySheet({
   );
 }
 
-/** เลือกกลุ่มก่อนเข้ารายการ — สองช่องใหญ่เต็มจอ กดง่ายด้วยนิ้วโป้ง (ต้นแบบชุด 1 ต.ค. 2569) */
-export function GroupTiles({ onPick }: { onPick: (g: "month" | "daily") => void }) {
+/**
+ * แถบสรุปรอบแบบเดียวกับหน้าการลา — ตัวเลขสำคัญของรอบนี้เรียงในกรอบเดียว
+ * (เจ้าของสั่ง 2 ต.ค. 2569 ให้หน้าอื่นทำตามหน้าการลา)
+ */
+export function PaySummary({ items }: { items: { k: string; v: string; u?: string }[] }) {
   return (
-    <div className="grid h-[calc(100dvh-290px)] min-h-[260px] grid-cols-2 gap-3 md:hidden">
-      {([["month", "พนักงาน"], ["daily", "ทดลองงาน"]] as const).map(([k, label]) => (
-        <button
-          key={k}
-          type="button"
-          className="grid h-full place-items-center rounded-[24px] bg-card p-4 text-[19px] font-bold shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_24px_-20px_rgb(90_20_35/0.45)]"
-          onClick={() => onPick(k)}
+    <ul className="flex list-none rounded-[16px] border border-[#E3D3D7] bg-white p-0 py-3 md:hidden">
+      {items.map((it) => (
+        <li
+          key={it.k}
+          className="flex flex-1 flex-col items-center gap-0.5 border-r border-[#D9C8CC] px-1 text-center last:border-r-0"
         >
-          {label}
+          <b className="num text-[17px] leading-tight font-bold whitespace-nowrap">
+            {it.v}
+            {it.u && <span className="ml-0.5 text-[11px] font-semibold text-[#6B5F62]">{it.u}</span>}
+          </b>
+          <span className="truncate text-[11px] text-[#8A7E81]">{it.k}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** ข้อมูลบนช่องเลือกกลุ่ม — จำนวนคนและสถานะของรอบนี้ จะได้รู้ตั้งแต่ยังไม่กดเข้าไป */
+export type GroupInfo = { n?: number; note?: string; unit?: string };
+
+/**
+ * เลือกกลุ่มก่อนเข้ารายการ — การ์ดสองใบ กดง่ายด้วยนิ้วโป้ง (ต้นแบบชุด 1 ต.ค. 2569)
+ * 2 ต.ค. 2569 เจ้าของสั่งให้หน้าอื่นทำตามหน้าการลา — การ์ดจึงบอกจำนวนคนและสถานะด้วย
+ * ไม่ใช่ช่องเปล่าเต็มจอแบบเดิม
+ */
+export function GroupTiles({
+  onPick,
+  month,
+  daily,
+}: {
+  onPick: (g: "month" | "daily") => void;
+  month?: GroupInfo;
+  daily?: GroupInfo;
+}) {
+  const tiles = [
+    { k: "month" as const, label: "พนักงาน", sub: "รายเดือน", info: month },
+    { k: "daily" as const, label: "ทดลองงาน", sub: "จ่ายรายวัน", info: daily },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-3 md:hidden">
+      {tiles.map((t) => (
+        <button
+          key={t.k}
+          type="button"
+          className="flex min-h-[132px] flex-col items-start rounded-[24px] bg-card p-4 text-left shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_24px_-20px_rgb(90_20_35/0.45)] active:bg-accent/60"
+          onClick={() => onPick(t.k)}
+        >
+          <span className="flex w-full items-start justify-between gap-2">
+            <span className="min-w-0">
+              <b className="block text-[18px] leading-tight font-bold">{t.label}</b>
+              <small className="mt-0.5 block text-[12px] text-muted-foreground">{t.sub}</small>
+            </span>
+            <ChevronRightIcon className="mt-1 size-4 flex-none text-muted-foreground" strokeWidth={2.2} />
+          </span>
+          <span className="mt-auto flex flex-col gap-0.5 pt-3">
+            {t.info?.n !== undefined && (
+              <b className="num text-[22px] leading-none font-bold">
+                {t.info.n}
+                <small className="ml-1 text-[12px] font-medium text-muted-foreground">{t.info.unit ?? "คน"}</small>
+              </b>
+            )}
+            {t.info?.note && <small className="text-[12px] text-muted-foreground">{t.info.note}</small>}
+          </span>
         </button>
       ))}
     </div>

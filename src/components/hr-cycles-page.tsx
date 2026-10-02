@@ -66,6 +66,8 @@ export function HrCyclesPage() {
             setTab(k);
             setMgroup(k);
           }}
+          month={{ n: hr.payruns.filter((p) => p.closed).length, unit: "รอบ", note: "ปิดรอบแล้ว" }}
+          daily={{ n: hr.payruns.filter((p) => p.dayClosed).length, unit: "รอบ", note: "ปิดรอบแล้ว" }}
         />
       )}
 

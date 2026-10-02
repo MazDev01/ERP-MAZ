@@ -45,7 +45,7 @@ import {
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlMonth } from "./hr-steps";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, useGroupBack } from "./hr-pay-mobile";
 import { usePendingInMonth, useHrTime, useMissingApproved, type MissingReq } from "@/lib/hr-link";
 import { MissingBox } from "./hr-payroll-page";
 import { ChevronDownIcon, PencilIcon } from "./icons";
@@ -166,7 +166,30 @@ export function HrTimesheetPage() {
         />
       )}
 
-      {mgroup === null && <GroupTiles onPick={(g) => { setTab(g); setMgroup(g); }} />}
+      {mgroup === null && (
+        <PaySummary
+          items={[
+            { k: "คนในรอบ", v: String(people.length), u: "คน" },
+            { k: "ต้องตรวจ", v: String(issuesOf(people)), u: "รายการ" },
+            { k: "วันลาในรอบ", v: String(people.reduce((n, x) => n + leaveDays(x.r), 0)), u: "วัน" },
+            { k: "โอทีในรอบ", v: String(Math.round(people.reduce((n, x) => n + otHours(x.r), 0) * 10) / 10), u: "ชม." },
+          ]}
+        />
+      )}
+
+      {mgroup === null && (
+        <GroupTiles
+          onPick={(g) => { setTab(g); setMgroup(g); }}
+          month={{
+            n: monthly.length,
+            note: period.closed ? "ปิดรอบแล้ว" : issuesOf(monthly) ? `ต้องตรวจ ${issuesOf(monthly)} รายการ` : "ตรวจครบแล้ว",
+          }}
+          daily={{
+            n: daily.length,
+            note: period.dayClosed ? "ปิดรอบแล้ว" : issuesOf(daily) ? `ต้องตรวจ ${issuesOf(daily)} รายการ` : "ตรวจครบแล้ว",
+          }}
+        />
+      )}
 
       <div className="bar max-md:hidden!">
         <div>
