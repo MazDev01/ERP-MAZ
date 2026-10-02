@@ -39,6 +39,7 @@ import { approveOt, rejectOt, useAllOt } from "@/lib/ot-store";
 import { approvesFor, useApprovalRoute, type Role } from "@/lib/role";
 import { formatMinutesOfDay, minutesOfDay } from "@/lib/work-schedule";
 import { ConfirmDialog } from "./confirm-dialog";
+import { ChevronLeftIcon } from "./icons";
 import { OtActualFields, useOtDecision, type OtReq } from "./ot-actual-fields";
 
 type Kind = "leave" | "ot" | "expense";
@@ -273,6 +274,11 @@ export function CeoApprovalsPage() {
     return { name: e?.name ?? id, pos: e ? hrPos(e.pos).label : "" };
   };
   const [replying, setReplying] = useState<Item | null>(null);
+  /*
+   * มือถือ: เลือกก่อนว่าจะดู "อนุมัติเงินเดือน" หรือ "คำขอของพนักงาน" (ต้นแบบ ceo-approvals.html · ca-tiles)
+   * สองเรื่องนี้คนละงานกัน เอามาต่อกันในจอเดียวต้องเลื่อนยาว จอใหญ่ยังเห็นพร้อมกันเหมือนเดิม
+   */
+  const [pane, setPane] = useState<"" | "pay" | "req">("");
 
   const items = useCeoRequests();
 
@@ -291,8 +297,13 @@ export function CeoApprovalsPage() {
   const term = q.trim().toLowerCase();
   const shown = rooms.filter((r) => !term || person(r.emp).name.toLowerCase().includes(term));
   const reqRoom = items.find((i) => i.id === reqId)?.emp ?? null;
+  /** จำนวนบนป้ายของสองช่อง — ยอดเงินเดือนที่ยังไม่ตัดสิน และคำขอที่ยังรออยู่ทุกห้อง */
+  const payWaiting = Object.values(hr.payApprove).filter((a) => a.status === "waiting").length;
+  const reqWaiting = items.filter((i) => i.status === "pending").length;
   /* มือถือ: ยังไม่เลือกห้อง = เห็นรายการห้อง · จอใหญ่: เปิดห้องแรกไว้เลย */
   const mobileRoom = sel ?? reqRoom;
+  /* มาจากลิงก์ ?req= ให้ข้ามหน้าเลือกไปที่ห้องนั้นเลย */
+  const mPane = reqRoom ? "req" : pane;
   const active = mobileRoom ?? rooms[0]?.emp ?? null;
   const room = rooms.find((r) => r.emp === active);
 
@@ -332,12 +343,57 @@ export function CeoApprovalsPage() {
         </div>
       </div>
 
+      {/* มือถือ: สองช่องใหญ่ให้เลือกก่อน มีป้ายบอกจำนวนที่ค้าง */}
+      {mPane === "" && !mobileRoom && (
+        <div className="grid grid-cols-2 gap-3 sm:hidden">
+          {([
+            { k: "pay", label: "อนุมัติเงินเดือน", n: payWaiting },
+            { k: "req", label: "คำขอของพนักงาน", n: reqWaiting },
+          ] as const).map((t) => (
+            <button
+              key={t.k}
+              type="button"
+              onClick={() => setPane(t.k)}
+              className="relative grid h-[min(46dvh,300px)] place-items-center rounded-[24px] bg-card p-4 text-[19px] leading-snug font-bold shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_24px_-20px_rgb(90_20_35/0.45)]"
+            >
+              <span className="text-center">{t.label}</span>
+              {t.n > 0 && (
+                <i className="num absolute top-3.5 right-3.5 grid h-6 min-w-6 place-items-center rounded-full bg-primary px-1.5 text-[12.5px] font-bold text-primary-foreground not-italic">
+                  {t.n}
+                </i>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* มือถือ: อยู่ในส่วนย่อยแล้ว มีหัวเรื่องกับปุ่มกลับไปหน้าเลือก */}
+      {mPane !== "" && !mobileRoom && (
+        <div className="flex items-center gap-2.5 sm:hidden">
+          <button
+            type="button"
+            onClick={() => setPane("")}
+            aria-label="กลับไปหน้าเลือก"
+            className="grid size-9 flex-none place-items-center rounded-full border border-border bg-card"
+          >
+            <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
+          </button>
+          <b className="text-[16px] font-bold">
+            {mPane === "pay" ? "อนุมัติเงินเดือน" : "คำขอของพนักงาน"}
+          </b>
+        </div>
+      )}
+
       {/* empty:hidden — ไม่มียอดรออนุมัติ กล่องว่างจะได้ไม่กินระยะห่างเพิ่ม */}
-      <div className={`empty:hidden ${mobileRoom ? "max-sm:hidden" : ""}`}>
+      <div className={`empty:hidden ${mobileRoom || mPane !== "pay" ? "max-sm:hidden" : ""}`}>
         <PayrollStrip />
       </div>
 
-      <section className="glass grid overflow-hidden rounded-[14px] max-sm:overflow-clip md:h-[calc(100dvh-200px)] md:min-h-[480px] md:grid-cols-[290px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
+      <section
+        className={`glass grid overflow-hidden rounded-[14px] max-sm:overflow-clip md:h-[calc(100dvh-200px)] md:min-h-[480px] md:grid-cols-[290px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)] ${
+          mPane === "req" || mobileRoom ? "" : "max-sm:hidden"
+        }`}
+      >
         {/* รายการห้อง */}
         <div className={`${mobileRoom ? "hidden md:flex" : "flex"} min-h-0 flex-col border-border md:border-r`}>
           <div className="border-b border-border p-3">
@@ -560,20 +616,37 @@ function PayrollStrip() {
               <b className="block text-[14px] font-semibold">
                 รอบ {thaiMonth(month)} · {GROUP_LABEL[group]}
               </b>
-              <p className="mt-0.5 text-[13px]">
+              {/* จอใหญ่อ่านเป็นบรรทัดเดียว · มือถือแยกเป็นช่องในกรอบเทาตามต้นแบบ (cpay-kv) */}
+              <p className="mt-0.5 text-[13px] max-sm:hidden">
                 {sum.n} คน · ยอดจ่ายสุทธิ {baht(sum.net)} บาท · นำส่งประกันสังคม {baht(sum.ss * 2)} บาท
               </p>
+              <dl className="mt-2.5 rounded-[14px] bg-[#FAF6F7] px-3 sm:hidden">
+                {[
+                  { k: "จำนวน", v: `${sum.n} คน`, big: false },
+                  { k: "ยอดจ่ายสุทธิ", v: `${baht(sum.net)} บาท`, big: true },
+                  { k: "นำส่งประกันสังคม", v: `${baht(sum.ss * 2)} บาท`, big: false },
+                ].map((r) => (
+                  <div
+                    key={r.k}
+                    className="flex items-center justify-between gap-3 border-b border-[#F0E6E8] py-2.5 last:border-0"
+                  >
+                    <dt className="text-[13px] text-[#6E6164]">{r.k}</dt>
+                    <dd className={`num font-bold ${r.big ? "text-[16px] text-primary" : "text-[14px]"}`}>{r.v}</dd>
+                  </div>
+                ))}
+              </dl>
               {/* ตัวเลขนี้คิดเมื่อไร ต้องอ่านออกจากหน้าจอ ไม่ใช่เดาว่าเป็นของวันนี้ */}
               <p className="mt-0.5 text-[12px] text-muted-foreground">
                 คำนวณเมื่อ {thaiStamp(a.sentAt ?? "")} · ฝ่ายบุคคลส่งมา
                 {a.sentBy && ` โดย ${empOf(hr.emp, a.sentBy)?.name ?? a.sentBy}`}
               </p>
             </div>
+            {/* มือถือ: ปุ่มอยู่แถวเดียวชิดขวาใต้เส้นประ ปุ่มอนุมัติเป็นสีเขียว (ต้นแบบ ceo-approvals.html) */}
             {rejecting !== key && (
-              <div className="flex flex-none gap-2 max-sm:w-full">
+              <div className="flex flex-none gap-2 max-sm:w-full max-sm:justify-end max-sm:border-t max-sm:border-dashed max-sm:border-[#ECE3E5] max-sm:pt-3">
                 <button
                   type="button"
-                  className="btn glass-thin max-sm:!h-12 max-sm:flex-1 max-sm:justify-center"
+                  className="btn glass-thin max-sm:!h-10 max-sm:justify-center"
                   aria-expanded={listing === key}
                   onClick={() => setListing(listing === key ? null : key)}
                 >
@@ -581,7 +654,19 @@ function PayrollStrip() {
                 </button>
                 <button
                   type="button"
-                  className="btn solid btn-solid max-sm:!h-12 max-sm:flex-1 max-sm:justify-center"
+                  className="btn glass-thin !text-destructive max-sm:!h-10 max-sm:justify-center"
+                  onClick={() => {
+                    setRejecting(key);
+                    setListing(null);
+                    setWhy("");
+                    setWarn(false);
+                  }}
+                >
+                  ตีกลับ
+                </button>
+                <button
+                  type="button"
+                  className="btn solid btn-solid max-sm:!h-10 max-sm:justify-center max-sm:!bg-[var(--success)] max-sm:!bg-none"
                   onClick={() => setConfirming(key)}
                 >
                   อนุมัติยอดนี้
@@ -609,24 +694,6 @@ function PayrollStrip() {
                 <b className="min-w-0 flex-1 font-semibold">รวม {sum.n} คน</b>
                 <b className="num flex-none font-bold">{baht(sum.net)} บาท</b>
               </p>
-            </div>
-          )}
-          {rejecting !== key && (
-            /* ตีกลับอยู่คนละแถวและห่างจากปุ่มอนุมัติ (mt-8 + เส้นคั่น = ราว 44px)
-               นิ้วที่พลาดจากปุ่มอนุมัติบนมือถือจึงไปไม่ถึง — สองปุ่มนี้เคยห่างกัน 8px */
-            <div className="mt-8 border-t border-border pt-3">
-              <button
-                type="button"
-                className="btn glass-thin max-sm:!h-12 max-sm:w-full max-sm:justify-center"
-                onClick={() => {
-                  setRejecting(key);
-                  setListing(null);
-                  setWhy("");
-                  setWarn(false);
-                }}
-              >
-                ตีกลับ
-              </button>
             </div>
           )}
           {rejecting === key && (
