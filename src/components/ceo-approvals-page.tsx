@@ -15,6 +15,7 @@
  */
 
 import { useSearchParams } from "next/navigation";
+import { setMobileBack } from "@/lib/mobile-back";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { claimTotal } from "@/lib/expense-data";
 import { approveClaim, rejectClaim, useAllClaims } from "@/lib/expense-store";
@@ -304,6 +305,18 @@ export function CeoApprovalsPage() {
   const mobileRoom = sel ?? reqRoom;
   /* มาจากลิงก์ ?req= ให้ข้ามหน้าเลือกไปที่ห้องนั้นเลย */
   const mPane = reqRoom ? "req" : pane;
+  /*
+   * ปุ่มย้อนกลับบนแถบหัว (มือถือ): อยู่ในห้องของพนักงาน -> กลับไปรายการ · อยู่ในส่วนย่อย -> กลับไปหน้าเลือก
+   * ไม่ใช่เด้งออกจากหน้าไปเลย (เจ้าของสั่ง 2 ต.ค. 2569 — แบบเดียวกับสายรอบเงินเดือน)
+   */
+  useEffect(() => {
+    if (!sel && !pane) return;
+    setMobileBack(() => {
+      if (sel) setSel(null);
+      else setPane("");
+    });
+    return () => setMobileBack(null);
+  }, [sel, pane]);
   const active = mobileRoom ?? rooms[0]?.emp ?? null;
   const room = rooms.find((r) => r.emp === active);
 

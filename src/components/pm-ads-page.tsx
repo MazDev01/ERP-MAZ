@@ -154,7 +154,8 @@ function Head({ children }: { children?: React.ReactNode }) {
   return (
     <div className="bar">
       <div>
-        <p>แผนสื่อ การสั่งรันโฆษณา และผลที่ได้ ของงาน Digital Marketing</p>
+        {/* มือถือไม่ต้องมีคำอธิบายว่าหน้านี้คืออะไร (เจ้าของสั่ง 2 ต.ค. 2569) */}
+        <p className="max-md:hidden">แผนสื่อ การสั่งรันโฆษณา และผลที่ได้ ของงาน Digital Marketing</p>
       </div>
       {children && <div className="tools w-full sm:w-auto">{children}</div>}
     </div>

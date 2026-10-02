@@ -35,6 +35,7 @@ import { psBucket, psMine } from "@/lib/presales-work";
 import { useHr } from "@/lib/hr-store";
 import { expectedInMinutes, formatMinutesOfDay } from "@/lib/work-schedule";
 import { pageTitle, type NavItem } from "@/lib/nav";
+import { botnavChoices, botnavDefault, botnavOf, useBotnavPrefs } from "@/lib/botnav-prefs";
 import type { Notice } from "@/lib/notifications";
 import { ICONS } from "./app-shell";
 import { BellIcon, ChevronRightIcon, ClockIcon, HomeIcon, LeadsIcon, LeaveIcon, ProjectIcon, ReceiptIcon, SearchIcon } from "./icons";
@@ -246,8 +247,16 @@ export function MobileHome({
    * แต่แถบล่างมีแค่ลงเวลา/การลา ส่วนโอที เบิกค่าใช้จ่าย และสลิป ไม่มีทางกดเข้าจากหน้าหลักเลย
    * หน้าหลักเองไม่ต้องอยู่ในเมนู เพราะยืนอยู่บนหน้านี้แล้ว
    */
+  /* หน้าที่อยู่บนแถบล่างอยู่แล้ว ไม่ต้องมีไอคอนซ้ำในเมนูหน้าหลัก (เจ้าของสั่ง 2 ต.ค. 2569) */
+  const botPrefs = useBotnavPrefs();
+  const inBar = useMemo(() => {
+    const allow = new Set(botnavChoices(items, role).map((c) => c.href));
+    const base = botnavOf(botPrefs, role) ?? botnavDefault(items, role);
+    return new Set(base.filter((h) => allow.has(h)));
+  }, [items, role, botPrefs]);
+
   const work = useMemo(() => {
-    const list = items.filter((i) => i.href !== "/");
+    const list = items.filter((i) => i.href !== "/" && !inBar.has(i.href));
     /* ผู้บริหาร: การ์ดเหลือสี่ฝ่ายตามต้นแบบ — แดชบอร์ดกับคำขออนุมัติอยู่แถบล่างแล้ว */
     if (role === "ceo") return list.filter((i) => !/dashboard|approvals/.test(i.href));
     /*
@@ -257,7 +266,7 @@ export function MobileHome({
      */
     if (role === "ps") return list.filter((i) => PS_HOME.includes(i.href));
     return list;
-  }, [items, role]);
+  }, [items, role, inBar]);
   const hits = useMemo(() => {
     const key = q.trim().toLowerCase();
     return key ? items.filter((i) => i.label.toLowerCase().includes(key)) : [];

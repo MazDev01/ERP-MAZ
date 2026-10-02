@@ -51,7 +51,7 @@ export function AccWhtPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <p>รายจ่ายที่บริษัทหักภาษีจากผู้รับเงิน แล้วนำส่งกรมสรรพากร</p>
+          <p className="max-md:hidden">รายจ่ายที่บริษัทหักภาษีจากผู้รับเงิน แล้วนำส่งกรมสรรพากร</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
           <MonthNav view={view} onChange={setView} />
