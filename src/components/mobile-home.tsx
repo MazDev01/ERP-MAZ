@@ -21,7 +21,7 @@ import {
   getRecordsSnapshot,
   subscribeRecords,
 } from "@/lib/attendance-store";
-import { bkkNow, daysBetween, greetNow, thaiMonth, todayIso } from "@/lib/format";
+import { baht, bkkNow, daysBetween, greetNow, thaiMonth, todayIso } from "@/lib/format";
 import { currentPeriod, entitlementDays, leaveTypes } from "@/lib/leave-data";
 import { leaveUsage, useLeaveRecords } from "@/lib/leave-store";
 import { useMyLeavePolicy } from "@/lib/leave-policy";
@@ -36,7 +36,7 @@ import { expectedInMinutes, formatMinutesOfDay } from "@/lib/work-schedule";
 import { pageTitle, type NavItem } from "@/lib/nav";
 import type { Notice } from "@/lib/notifications";
 import { ICONS } from "./app-shell";
-import { BellIcon, ChevronRightIcon, ClockIcon, HomeIcon, LeaveIcon, ReceiptIcon, SearchIcon } from "./icons";
+import { BellIcon, ChevronRightIcon, ClockIcon, HomeIcon, LeadsIcon, LeaveIcon, ProjectIcon, ReceiptIcon, SearchIcon } from "./icons";
 import { useReadNotices } from "@/lib/notification-store";
 
 /* สีไอคอนเมนูตามต้นแบบ — ไล่สีคนละชุดเรียงกันไป ไม่ได้ผูกกับเมนูใดเมนูหนึ่ง */
@@ -112,12 +112,25 @@ function useHomeStats(role: Role): { k: string; v: string; u?: string; href: str
   const active = hr.emp.filter((e) => e.status === "active");
   const myTasks = pm.projects.flatMap((p) => p.tasks.filter((t) => t.whos.includes(me.employeeId)));
 
-  if (role === "acc" || role === "ceo")
+  /* ผู้บริหาร — ภาพรวมทั้งบริษัทเดือนนี้ (ต้นแบบ home-ceo.html 2 ต.ค. 2569) */
+  if (role === "ceo") {
+    const month = todayIso().slice(0, 7);
+    const won = crm.deals
+      .filter((d) => d.status === "ปิดการขาย" && d.closedAt.startsWith(month))
+      .reduce((a, d) => a + d.total, 0);
+    return [
+      { k: "ปิดการขาย", v: money(won), u: "฿", href: "/ceo/sales" },
+      { k: "รับชำระแล้ว", v: money(paid), u: "฿", href: "/ceo/acc" },
+      { k: "กำลังทำ", v: String(running.length), u: "โปรเจค", href: "/ceo/pm" },
+      { k: "พนักงาน", v: String(active.length), u: "คน", href: "/ceo/hr" },
+    ];
+  }
+  if (role === "acc")
     return [
       { k: "รับชำระแล้ว", v: money(paid), u: "฿", href: "/acc/receipts" },
       { k: "ลูกหนี้คงเหลือ", v: money(open.reduce((a, v) => a + v.outstanding, 0)), u: "฿", href: "/acc/billing" },
       { k: "รอวางบิล", v: String(acc.deals.filter((d) => !d.plan.length).length), u: "ดีล", href: "/acc/billing" },
-      role === "ceo" ? { k: "พนักงาน", v: String(active.length), u: "คน", href: "/ceo/hr" } : mine,
+      mine,
     ];
   if (role === "hr")
     return [
@@ -196,7 +209,12 @@ export function MobileHome({
    * แต่แถบล่างมีแค่ลงเวลา/การลา ส่วนโอที เบิกค่าใช้จ่าย และสลิป ไม่มีทางกดเข้าจากหน้าหลักเลย
    * หน้าหลักเองไม่ต้องอยู่ในเมนู เพราะยืนอยู่บนหน้านี้แล้ว
    */
-  const work = useMemo(() => items.filter((i) => i.href !== "/"), [items]);
+  const work = useMemo(() => {
+    const list = items.filter((i) => i.href !== "/");
+    /* ผู้บริหาร: การ์ดเหลือสี่ฝ่ายตามต้นแบบ — แดชบอร์ดกับคำขออนุมัติอยู่แถบล่างแล้ว */
+    if (role === "ceo") return list.filter((i) => !/dashboard|approvals/.test(i.href));
+    return list;
+  }, [items, role]);
   const hits = useMemo(() => {
     const key = q.trim().toLowerCase();
     return key ? items.filter((i) => i.label.toLowerCase().includes(key)) : [];
@@ -302,7 +320,10 @@ export function MobileHome({
           <span className="flex min-w-0 flex-col">
             <span className="text-[12.5px] text-muted-foreground">{greetNow()}</span>
             <b className="truncate text-[17px] font-bold">{hello}</b>
-            <em className="text-[12px] text-muted-foreground not-italic">{roleLabel(role)}</em>
+            {/* ผู้บริหารใช้คำเรียกตำแหน่งเป็นชื่อทักทายอยู่แล้ว ไม่ต้องขึ้นซ้ำอีกบรรทัด */}
+            {roleLabel(role) !== hello && (
+              <em className="text-[12px] text-muted-foreground not-italic">{roleLabel(role)}</em>
+            )}
           </span>
           </div>
 
@@ -329,8 +350,8 @@ export function MobileHome({
         {/* ── เมนู ── */}
         {work.length > 0 && (
           <>
-            <h2 className="px-5 text-[16px] font-bold">เมนู</h2>
-            <nav aria-label="เมนู" className="grid grid-cols-5 gap-2 px-3">
+            <h2 className="px-5 text-[16px] font-bold">{role === "ceo" ? "ภาพรวม" : "เมนู"}</h2>
+            <nav aria-label={role === "ceo" ? "ภาพรวม" : "เมนู"} className={`grid gap-2 px-3 ${role === "ceo" ? "grid-cols-4" : "grid-cols-5"}`}>
               {work.slice(0, 10).map((i, n) => {
                 const Icon = ICONS[i.icon] ?? HomeIcon;
                 return (
@@ -353,7 +374,7 @@ export function MobileHome({
         {notices.length > 0 && (
           <>
             <div className="flex items-center gap-2 px-5">
-              <h2 className="text-[16px] font-bold">สิ่งที่ต้องทำวันนี้</h2>
+              <h2 className="text-[16px] font-bold">{role === "ceo" ? "รอคุณอนุมัติ" : "สิ่งที่ต้องทำวันนี้"}</h2>
               <span className="num rounded-[6px] bg-primary px-1.5 py-px text-[11px] font-bold text-white">
                 {String(notices.length).padStart(2, "0")}
               </span>
@@ -416,10 +437,86 @@ export function MobileHome({
           </>
         )}
 
-        {/* ── วันนี้ของฉัน ── */}
-        <MyToday />
+        {/* ── ท้ายหน้า ── ผู้บริหารไม่ตอกบัตรและไม่มีสิทธิ์ลา จึงเป็นสรุปเรื่องที่ควรรู้แทน */}
+        {role === "ceo" ? <CeoBrief /> : <MyToday />}
       </div>
     </div>
+  );
+}
+
+/*
+ * เรื่องที่ควรรู้ของผู้บริหาร (ต้นแบบ home-ceo.html) — เรื่องที่ยังไม่จบ พากดเข้าหน้าของฝ่ายนั้น
+ * ทุกบรรทัดคิดสดจากสโตร์จริง เรื่องไหนไม่มีก็ไม่ขึ้น ไม่ใช่ขึ้นเลขศูนย์ให้รก
+ */
+function CeoBrief() {
+  const pm = usePm();
+  const acc = useAcc();
+  const crm = useCrm();
+  const today = todayIso();
+
+  /* ใกล้ครบกำหนด = เหลือไม่เกิน 7 วัน หรือเลยกำหนดแล้วแต่ยังไม่ปิด */
+  const soon = pm.projects.filter(
+    (p) => p.status === "running" && p.due && daysBetween(today, p.due) <= 7,
+  );
+  const unpaid = acc.invoices.filter((v) => v.status !== "cancelled" && v.outstanding > 0);
+  const waiting = crm.customers.filter((c) => c.status === "รอนัดหมาย");
+
+  const rows = [
+    soon.length > 0 && {
+      key: "pm",
+      href: "/ceo/pm",
+      skin: "bg-[#E3F6F3] text-[#13867D]",
+      Icon: ProjectIcon,
+      title: `โปรเจคใกล้ครบกำหนด ${soon.length} งาน`,
+      sub: "ภายใน 7 วัน",
+    },
+    unpaid.length > 0 && {
+      key: "acc",
+      href: "/ceo/acc",
+      skin: "bg-[#FDEDD6] text-[#94500A]",
+      Icon: ReceiptIcon,
+      title: `ใบแจ้งหนี้รอชำระ ${unpaid.length} ใบ`,
+      sub: `${unpaid[0].cus} ${baht(unpaid.reduce((a, v) => a + v.outstanding, 0))} ฿`.trim(),
+    },
+    waiting.length > 0 && {
+      key: "sales",
+      href: "/ceo/sales",
+      skin: "bg-[#E8F0FC] text-[#2A5CC9]",
+      Icon: LeadsIcon,
+      title: `ผู้สนใจรอนัดหมาย ${waiting.length} ราย`,
+      sub: "งานขาย",
+    },
+  ].filter(Boolean) as {
+    key: string;
+    href: string;
+    skin: string;
+    Icon: typeof ProjectIcon;
+    title: string;
+    sub: string;
+  }[];
+
+  if (rows.length === 0) return null;
+  return (
+    <>
+      <h2 className="px-5 text-[16px] font-bold">เรื่องที่ควรรู้</h2>
+      <div className={`mx-4 flex flex-col rounded-[24px] ${CARD}`}>
+        {rows.map((r, i) => (
+          <div key={r.key}>
+            {i > 0 && <span className="mx-3.5 block h-px bg-[rgb(42_31_34/0.07)]" />}
+            <Link href={r.href} className="flex items-center gap-3 px-3.5 py-3 text-foreground">
+              <span className={`grid size-[38px] flex-none place-items-center rounded-[12px] ${r.skin}`}>
+                <r.Icon className="size-[18px]" strokeWidth={2.1} />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <b className="text-[14px] leading-snug font-bold">{r.title}</b>
+                <span className="num truncate text-[12px] text-muted-foreground">{r.sub}</span>
+              </span>
+              <ChevronRightIcon className="size-[18px] flex-none text-muted-foreground" strokeWidth={2.1} />
+            </Link>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

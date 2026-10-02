@@ -81,8 +81,11 @@ export function botnavChoices(items: NavItem[], role: Role) {
  */
 export function botnavDefault(items: NavItem[], role: Role) {
   const work = items.filter((i) => i.href !== "/" && i.href !== "/leave");
+  /* ผู้บริหารเข้าหน้าคำขออนุมัติทุกวัน แถบล่างจึงเป็นช่องนั้น ไม่ใช่แดชบอร์ด (ต้นแบบ home-ceo.html) */
   const second =
-    items.find((i) => i.href.endsWith("/dashboard") || i.href === "/presales-dash") ?? work[0];
+    (role === "ceo" ? items.find((i) => i.href.endsWith("/approvals")) : undefined) ??
+    items.find((i) => i.href.endsWith("/dashboard") || i.href === "/presales-dash") ??
+    work[0];
   const leave = items.find((i) => i.href === "/leave");
   return [mobileHomeOf(role), second?.href ?? BOTNAV_EMPTY, leave?.href ?? BOTNAV_EMPTY, "/profile"];
 }
