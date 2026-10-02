@@ -9,6 +9,7 @@
  */
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 const STEPS = [
@@ -22,8 +23,19 @@ export function HrSteps({ month, group }: { month?: string; group?: "month" | "d
   const here = usePathname();
   /* ข้ามขั้นแล้วต้องอยู่กลุ่มเดิม ไม่ใช่กลับไปหน้าเลือกกลุ่มใหม่ทุกครั้ง (เจ้าของแจ้ง 2 ต.ค. 2569) */
   const qs = [month ? `m=${month}` : "", group ? `g=${group}` : ""].filter(Boolean).join("&");
+  /* มือถือเลื่อนแถบนี้ได้ ขั้นที่เปิดอยู่จึงอาจอยู่นอกจอ — เลื่อนให้มาอยู่กลางเองตอนเปิดหน้า
+     (เจ้าของแจ้ง 2 ต.ค. 2569) · เลื่อนเฉพาะในแถบ ไม่ขยับทั้งหน้า */
+  const barRef = useRef<HTMLElement>(null);
+  const onRef = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    const bar = barRef.current;
+    const el = onRef.current;
+    if (!bar || !el) return;
+    bar.scrollLeft = Math.max(0, el.offsetLeft - (bar.clientWidth - el.clientWidth) / 2);
+  }, [here]);
   return (
     <nav
+      ref={barRef}
       aria-label="ขั้นตอนของรอบเงินเดือน"
       /* มือถือ: เป็นเม็ดยาเลื่อนแนวนอน ขั้นที่เปิดอยู่พื้นเข้ม (ต้นแบบชุด 1 ต.ค. 2569) */
       className="flex w-fit max-w-full overflow-x-auto rounded-[12px] border border-border bg-muted/50 max-md:-mx-4 max-md:w-auto max-md:gap-2 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-4 max-md:[scrollbar-width:none]"
@@ -33,6 +45,7 @@ export function HrSteps({ month, group }: { month?: string; group?: "month" | "d
         return (
           <Link
             key={s.href}
+            ref={on ? onRef : undefined}
             href={qs ? `${s.href}?${qs}` : s.href}
             aria-current={on ? "page" : undefined}
             className={`flex h-11 flex-none items-center px-4 text-[14px] font-semibold whitespace-nowrap transition-colors sm:px-6 max-md:h-9 max-md:rounded-full max-md:border-0! max-md:px-3.5 max-md:text-[13px] ${

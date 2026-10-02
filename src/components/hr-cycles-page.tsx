@@ -25,7 +25,7 @@ import { HrSteps, useUrlGroup } from "./hr-steps";
 import { Sheet } from "./lead-dialogs";
 import { CheckCircleIcon } from "./icons";
 import { PhoneCard, PhoneList } from "./acchr-phone";
-import { GroupBack, GroupTiles, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
 
 type Row = { period: Period; sum: CycleSum | null; at: string; by: string };
 
@@ -41,10 +41,15 @@ export function HrCyclesPage() {
   useGroupBack(mgroup !== null, () => { setMgroup(null); syncGroupUrl(null); });
 
   const day = tab === "day";
+  /* ปฏิทินบนหัวหน้า = กรองให้เหลือรอบเดียว (เจ้าของเลือกแบบนี้ 2 ต.ค. 2569)
+     ว่าง = เห็นทุกรอบที่ปิดแล้วตามเดิม */
+  const [only, setOnly] = useState("");
+  const [cal, setCal] = useState(false);
   /* รอบล่าสุดขึ้นก่อน คนมักย้อนดูรอบที่เพิ่งผ่านมา */
   const rows: Row[] = [...hr.payruns]
     .sort((a, b) => b.month.localeCompare(a.month))
     .filter((p) => (day ? p.dayClosed : p.closed))
+    .filter((p) => !only || p.month === only)
     .map((p) => ({
       period: p,
       sum: day ? p.daySum : p.sum,
@@ -58,6 +63,11 @@ export function HrCyclesPage() {
 
   /* แถบขั้นตอนพาเดือนไปด้วย — ย้อนจากประวัติกลับไปขั้นก่อนหน้าแล้วได้รอบล่าสุดที่ปิดของกลุ่มนี้เลย */
   const stepMonth = rows[0]?.period.month;
+  /* เดือนที่เลือกได้ในปฏิทิน = รอบที่ปิดแล้วของกลุ่มที่กำลังดู */
+  const closedMonths = hr.payruns
+    .filter((p) => (day ? p.dayClosed : p.closed))
+    .map((p) => p.month)
+    .sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="space-y-4">
@@ -74,12 +84,37 @@ export function HrCyclesPage() {
         />
       )}
 
+      {/* มือถือ: ชื่อรอบที่กรองอยู่ + ปุ่มปฏิทิน เหมือนอีกสามขั้นในสายเดียวกัน */}
+      <PayHead title={only ? thaiMonth(only) : "ทุกรอบที่ปิดแล้ว"} onCal={() => setCal(true)} />
+
+      {cal && (
+        <CycleSheet
+          months={closedMonths}
+          selected={only}
+          onPick={(m) => {
+            setOnly(m);
+            setCal(false);
+          }}
+          onClose={() => setCal(false)}
+        />
+      )}
+
+      {only && (
+        <button
+          type="button"
+          className="btn glass-thin btn-mini"
+          onClick={() => setOnly("")}
+        >
+          ดูทุกรอบ
+        </button>
+      )}
+
       <div className={mgroup === null ? "max-md:hidden" : ""}>
         <HrSteps month={stepMonth} group={tab} />
       </div>
 
       {mgroup !== null && (
-        <GroupBack label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"} count={rows.length} />
+        <GroupBack label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"} count={rows.length} unit="รอบ" />
       )}
 
       <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>

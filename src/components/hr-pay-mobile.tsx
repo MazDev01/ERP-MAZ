@@ -292,11 +292,13 @@ export function useGroupBack(active: boolean, onBack: () => void) {
 }
 
 /** ชื่อกลุ่มที่เปิดอยู่ พร้อมจำนวนคน — ย้อนกลับด้วยปุ่มบนแถบหัว */
-export function GroupBack({ label, count }: { label: string; count: number }) {
+export function GroupBack({ label, count, unit = "คน" }: { label: string; count: number; unit?: string }) {
   return (
     <p className="flex h-9 items-center text-[16px] font-bold md:hidden">
       {label}
-      <small className="num ml-2 text-[12.5px] font-medium text-muted-foreground">{count} คน</small>
+      <small className="num ml-2 text-[12.5px] font-medium text-muted-foreground">
+        {count} {unit}
+      </small>
     </p>
   );
 }
