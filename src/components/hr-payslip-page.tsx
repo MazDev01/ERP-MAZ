@@ -55,7 +55,7 @@ import {
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupUrl } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
 import { useComSource, useHrTime } from "@/lib/hr-link";
 import {
   BanIcon,
@@ -112,6 +112,12 @@ export function HrPayslipPage() {
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
   const syncGroupUrl = useGroupUrl();
+  /* สี่ขั้นนี้คือหน้าเดียวกัน — ปุ่มย้อนกลับพากลับไปหน้าเลือกกลุ่มเสมอ
+     ไม่ไล่ย้อนทีละขั้นที่เพิ่งข้ามมา (เจ้าของสั่ง 2 ต.ค. 2569) */
+  useGroupBack(mgroup !== null, () => {
+    setMgroup(null);
+    syncGroupUrl(null);
+  });
 
   const payrun = hr.payruns.find((p) => p.month === month);
   const slip = hr.slips.find((s) => s.month === month);

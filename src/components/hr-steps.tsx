@@ -46,6 +46,8 @@ export function HrSteps({ month, group }: { month?: string; group?: "month" | "d
           <Link
             key={s.href}
             ref={on ? onRef : undefined}
+            /* ข้ามขั้นไม่ต้องทิ้งประวัติไว้ ย้อนกลับทีเดียวถึงหน้าเลือกกลุ่ม ไม่ไล่ทีละขั้น */
+            replace
             href={qs ? `${s.href}?${qs}` : s.href}
             aria-current={on ? "page" : undefined}
             className={`flex h-11 flex-none items-center px-4 text-[14px] font-semibold whitespace-nowrap transition-colors sm:px-6 max-md:h-9 max-md:rounded-full max-md:border-0! max-md:px-3.5 max-md:text-[13px] ${

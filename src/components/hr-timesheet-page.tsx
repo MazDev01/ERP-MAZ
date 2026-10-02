@@ -45,7 +45,7 @@ import {
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, useGroupUrl } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
 import { usePendingInMonth, useHrTime, useMissingApproved, type MissingReq } from "@/lib/hr-link";
 import { MissingBox } from "./hr-payroll-page";
 import { ChevronDownIcon, PencilIcon } from "./icons";
@@ -89,6 +89,12 @@ export function HrTimesheetPage() {
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
   const syncGroupUrl = useGroupUrl();
+  /* สี่ขั้นนี้คือหน้าเดียวกัน — ปุ่มย้อนกลับพากลับไปหน้าเลือกกลุ่มเสมอ
+     ไม่ไล่ย้อนทีละขั้นที่เพิ่งข้ามมา (เจ้าของสั่ง 2 ต.ค. 2569) */
+  useGroupBack(mgroup !== null, () => {
+    setMgroup(null);
+    syncGroupUrl(null);
+  });
 
   const period = hr.periods.find((p) => p.month === month)!;
   /* ปิดรอบทีละกลุ่ม ปุ่มและสถานะจึงอ่านจากแท็บที่เปิดอยู่ */

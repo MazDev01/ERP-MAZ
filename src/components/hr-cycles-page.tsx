@@ -25,7 +25,7 @@ import { HrSteps, useUrlGroup } from "./hr-steps";
 import { Sheet } from "./lead-dialogs";
 import { CheckCircleIcon } from "./icons";
 import { PhoneCard, PhoneList } from "./acchr-phone";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupUrl } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
 
 type Row = { period: Period; sum: CycleSum | null; at: string; by: string };
 
@@ -38,6 +38,12 @@ export function HrCyclesPage() {
      (ต้นแบบ hr-cycles.html บล็อก pay-tiles 1 ต.ค. 2569) */
   const [mgroup, setMgroup] = useState<PayGroup | null>(urlGroup || null);
   const syncGroupUrl = useGroupUrl();
+  /* สี่ขั้นนี้คือหน้าเดียวกัน — ปุ่มย้อนกลับพากลับไปหน้าเลือกกลุ่มเสมอ
+     ไม่ไล่ย้อนทีละขั้นที่เพิ่งข้ามมา (เจ้าของสั่ง 2 ต.ค. 2569) */
+  useGroupBack(mgroup !== null, () => {
+    setMgroup(null);
+    syncGroupUrl(null);
+  });
 
   const day = tab === "day";
   /* ปฏิทินบนหัวหน้า = กรองให้เหลือรอบเดียว (เจ้าของเลือกแบบนี้ 2 ต.ค. 2569)

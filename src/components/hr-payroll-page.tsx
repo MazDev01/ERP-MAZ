@@ -20,7 +20,7 @@
  */
 
 import { settings } from "@/lib/system-settings";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, cycleTitle, useGroupUrl } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, PaySummary, cycleTitle, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
 import Link from "next/link";
 import { useState } from "react";
 import { baht, bkkStamp, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
@@ -112,6 +112,12 @@ export function HrPayrollPage() {
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
   const syncGroupUrl = useGroupUrl();
+  /* สี่ขั้นนี้คือหน้าเดียวกัน — ปุ่มย้อนกลับพากลับไปหน้าเลือกกลุ่มเสมอ
+     ไม่ไล่ย้อนทีละขั้นที่เพิ่งข้ามมา (เจ้าของสั่ง 2 ต.ค. 2569) */
+  useGroupBack(mgroup !== null, () => {
+    setMgroup(null);
+    syncGroupUrl(null);
+  });
 
   /* ตรงกับรอบเดือนไหนพอดีหรือเปล่า — ตัวนี้เป็นตัวตัดสินว่าปิดรอบได้ไหม */
   const month = cycleMonthOf(range, months);
