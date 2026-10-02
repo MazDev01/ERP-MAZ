@@ -31,6 +31,7 @@ import { roleLabel, useRole, type Role } from "@/lib/role";
 import { useCrm } from "@/lib/crm-store";
 import { useAcc } from "@/lib/acc-store";
 import { usePm } from "@/lib/pm-store";
+import { psBucket, psMine } from "@/lib/presales-work";
 import { useHr } from "@/lib/hr-store";
 import { expectedInMinutes, formatMinutesOfDay } from "@/lib/work-schedule";
 import { pageTitle, type NavItem } from "@/lib/nav";
@@ -164,6 +165,27 @@ function useHomeStats(role: Role): { k: string; v: string; u?: string; href: str
       { k: "ผู้สนใจใหม่", v: String(crm.customers.filter((c) => c.status === "รอนัดหมาย").length), u: "ราย", href: "/leads" },
       { k: "อัตราปิด", v: String(rate), u: "%", href: "/deals" },
       { k: "ปิดเฉลี่ย", v: String(avg), u: "วัน", href: "/deals" },
+    ];
+  }
+  /*
+   * ทีมก่อนการขาย — สรุปคำขอในมือ (ต้นแบบ home-presales.html 2 ต.ค. 2569)
+   * ได้ดีล = ลูกค้าที่เราเคยทำข้อเสนอให้แล้วปิดการขายได้
+   */
+  if (role === "ps") {
+    const mineReqs = crm.presales.filter(psMine);
+    const today = todayIso();
+    const codes = new Set(mineReqs.map((r) => r.customerCode));
+    const wonDeals = crm.deals.filter((d) => d.status === "ปิดการขาย" && codes.has(d.customerCode));
+    return [
+      { k: "รอรับงาน", v: String(mineReqs.filter((r) => psBucket(r) === "todo").length), u: "งาน", href: "/presales-work" },
+      { k: "รอข้อมูลเพิ่ม", v: String(mineReqs.filter((r) => psBucket(r) === "wait").length), u: "งาน", href: "/presales-work" },
+      {
+        k: "เลยกำหนด",
+        v: String(mineReqs.filter((r) => r.due < today && psBucket(r) !== "done").length),
+        u: "งาน",
+        href: "/presales-work",
+      },
+      { k: "ได้ดีล", v: String(wonDeals.length), u: "ดีล", href: "/presales-dash" },
     ];
   }
   if (role === "pm" || role === "gm")

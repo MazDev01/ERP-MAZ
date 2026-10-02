@@ -105,14 +105,17 @@ const SALES: NavItem[] = [
 
 /*
  * ทีมก่อนการขาย (SA/BD) — รับคำขอจากฝ่ายขายแล้วส่งข้อเสนอกลับ
- * Proposal ฉบับ 28 ก.ย. 2569 ให้เหลือ 3 เมนู แดชบอร์ด (/presales-dash) กับคลังเทมเพลต
- * (/presales-templates) จึงไม่อยู่ในเมนูแล้ว — ไฟล์ยังอยู่ รอเจ้าของยืนยันว่าจะเอาออกจริงไหม
+ * ต้นแบบชุด 2 ต.ค. 2569 (presales-work / presales-schedule / presales-templates.html)
+ * เอาแดชบอร์ดกับคลังเทมเพลตกลับเข้าเมนู และเรียกหน้างานว่า "งานก่อนการขาย"
+ * (ของฝ่ายขายคือ "คำขอก่อนการขาย" คนละหน้ากัน)
  */
 const PS: NavItem[] = [
-  { group: "งานก่อนการขาย", label: "คำขอก่อนการขาย", icon: "presales", href: "/presales-work" },
+  { group: "งานก่อนการขาย", label: "แดชบอร์ด", icon: "chart", href: "/presales-dash" },
+  { group: "งานก่อนการขาย", label: "งานก่อนการขาย", icon: "presales", href: "/presales-work" },
   /* BD/SA รับงานจาก PM เหมือนทีมโปรเจค (Proposal · BD / SA Site Map) */
   { group: "งานก่อนการขาย", label: "งานที่ได้รับ", icon: "tasks", href: "/my-tasks" },
   { group: "งานก่อนการขาย", label: "ตารางงาน", icon: "leave", href: "/presales-schedule" },
+  { group: "งานก่อนการขาย", label: "คลังเทมเพลต", icon: "project", href: "/presales-templates" },
   /*
    * SA รับโอนโปรเจคจาก PM ได้ (Proposal · PM — Transfer Project)
    * หน้านี้ของ SA แสดงเฉพาะโปรเจคที่ตัวเองเป็นผู้ดูแล ไม่ใช่โปรเจคทั้งบริษัทแบบฝั่ง PM

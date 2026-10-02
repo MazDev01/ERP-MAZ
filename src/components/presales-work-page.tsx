@@ -387,6 +387,12 @@ function WorkDialog({
     onMoved("wait");
   }
 
+  /* แถวป้าย-ค่าในแผงสีเทาบนมือถือ (ต้นแบบ psw-detail) */
+  const kv =
+    "max-sm:[&>dt]:border-b max-sm:[&>dt]:border-[#F0E6E8] max-sm:[&>dt]:py-[11px] max-sm:[&>dt]:pr-3 max-sm:[&>dt]:text-[14px] max-sm:[&>dt]:font-medium max-sm:[&>dt]:whitespace-nowrap max-sm:[&>dd]:border-b max-sm:[&>dd]:border-[#F0E6E8] max-sm:[&>dd]:py-[11px] max-sm:[&>dd]:text-right max-sm:[&>dd]:text-[14px] max-sm:[&>dd]:font-semibold max-sm:[&>dt:last-of-type]:border-b-0 max-sm:[&>dd:last-of-type]:border-b-0";
+  /* หัวข้อของกล่องโจทย์ — เต็มแถว ตัวเล็ก ไม่มีเส้นใต้ */
+  const kvHead =
+    "max-sm:col-span-2 max-sm:border-b-0! max-sm:pt-3 max-sm:pb-0.5! max-sm:text-[12.5px]! max-sm:text-[#8A7E81]";
   const lb = "mb-1.5 block text-[12.5px] font-semibold text-muted-foreground";
   const dt = "text-[12.5px] font-semibold text-muted-foreground";
 
@@ -463,17 +469,22 @@ function WorkDialog({
 
       {form === null && (
         <>
-          <dl className="grid grid-cols-[150px_minmax(0,1fr)] gap-x-3.5 gap-y-2 text-[13.5px] max-sm:grid-cols-1">
+          {/* มือถือ: โจทย์เป็นกล่องเด่นบนสุด ข้อมูลที่เหลือเป็นแถวในแผงสีเทา (ต้นแบบ psw-detail) */}
+          <dl
+            className={`grid grid-cols-[150px_minmax(0,1fr)] gap-x-3.5 gap-y-2 text-[13.5px] max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-0 max-sm:rounded-[14px] max-sm:bg-[#FAF6F7] max-sm:px-3.5 ${kv}`}
+          >
+            <dt className={`${dt} ${kvHead}`}>โจทย์จากลูกค้า</dt>
+            <dd className="break-words max-sm:col-span-2 max-sm:pt-0! max-sm:pb-3 max-sm:text-left! max-sm:text-[15.5px] max-sm:leading-[1.5] max-sm:font-bold">
+              {r.problem}
+            </dd>
             {/* ประเภทงานกับผู้รับผิดชอบเป็นคนละเรื่อง แยกบรรทัดกันไม่ให้อ่านปนกัน */}
             <dt className={dt}>ประเภทงาน</dt>
-            <dd className="flex flex-wrap items-center gap-2">
+            <dd className="flex flex-wrap items-center gap-2 max-sm:justify-end">
               <KindTag kind={r.kind} full />
-              <span className="text-[12px] text-muted-foreground">ประเภทติดกับตัวงาน ไม่เปลี่ยนตามคนที่รับ</span>
+              <span className="text-[12px] text-muted-foreground max-sm:hidden">ประเภทติดกับตัวงาน ไม่เปลี่ยนตามคนที่รับ</span>
             </dd>
             <dt className={dt}>ผู้รับผิดชอบ</dt>
             <dd className="break-words">{psOwner(r)}</dd>
-            <dt className={dt}>โจทย์จากลูกค้า</dt>
-            <dd className="break-words">{r.problem}</dd>
             <dt className={dt}>ความเร่งด่วน</dt>
             <dd>
               {r.urgency}
@@ -486,7 +497,7 @@ function WorkDialog({
             {r.attachments.length > 0 && (
               <>
                 <dt className={dt}>ไฟล์แนบจากฝ่ายขาย</dt>
-                <dd className="flex flex-col gap-0.5">
+                <dd className="flex flex-col gap-0.5 max-sm:items-end">
                   {r.attachments.map((a) =>
                     /^https?:\/\//.test(a) ? (
                       <a key={a} href={a} target="_blank" rel="noreferrer" className="break-all underline">
@@ -515,19 +526,24 @@ function WorkDialog({
 
           {rounds.length > 0 && (
             <>
-              <p className="mt-[18px] mb-2 text-[13px] font-bold">ข้อเสนอที่ส่งแล้ว</p>
-              <ul>
+              <p className="mt-[18px] mb-2 text-[13px] font-bold max-sm:text-[14px]">ข้อเสนอที่ส่งแล้ว</p>
+              <ul className="max-sm:flex max-sm:flex-col max-sm:gap-2">
                 {rounds.map((x) => {
                   const meta = [thaiDate(x.at)];
                   if (x.files && x.files.length > 1) meta.push(`แนบ ${x.files.length} รายการ`);
                   if (x.hours > 0) meta.push(`${x.hours} ชม.`);
                   if (x.note && x.note !== "—") meta.push(x.note);
                   return (
-                    <li key={x.id} className="flex flex-col gap-0.5 border-t border-border py-[9px]">
-                      <b className="text-[13px] font-semibold break-all">
+                    <li
+                      key={x.id}
+                      className="flex flex-col gap-0.5 border-t border-border py-[9px] max-sm:rounded-[14px] max-sm:border-0 max-sm:bg-[#FAF6F7] max-sm:p-3.5 max-sm:first:bg-[#FDF0F2]"
+                    >
+                      <b className="text-[13px] font-semibold break-all max-sm:text-[14px] max-sm:font-bold">
                         รอบที่ {x.round} · {x.file}
                       </b>
-                      <span className="text-[12px] text-muted-foreground">{meta.join(" · ")}</span>
+                      <span className="text-[12px] text-muted-foreground max-sm:text-[12.5px] max-sm:leading-[1.5]">
+                        {meta.join(" · ")}
+                      </span>
                     </li>
                   );
                 })}
