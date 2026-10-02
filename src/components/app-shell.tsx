@@ -114,6 +114,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   /* บทบาทอ่านจาก localStorage ฝั่งเซิร์ฟเวอร์ยังไม่รู้ จึงเช็คสิทธิ์หลัง hydrate เท่านั้น
      ไม่งั้น PM จะเห็นหน้ากันแวบหนึ่งทุกครั้งที่รีเฟรช เพราะค่าเริ่มต้นฝั่งเซิร์ฟเวอร์เป็นฝ่ายขาย */
   const hydrated = useHydrated();
+  /* นับว่าเดินเข้ามากี่ชั้นในแอป — ใช้ตัดสินว่าปุ่มย้อนกลับบนมือถือจะถอยกลับหรือไปหน้าหลัก */
+  const depth = useRef(0);
+  const backing = useRef(false);
+  const lastPath = useRef(pathname);
+  useEffect(() => {
+    if (lastPath.current === pathname) return;
+    lastPath.current = pathname;
+    if (backing.current) backing.current = false;
+    else depth.current += 1;
+  }, [pathname]);
   const blocked = hydrated && !canVisitAny(pathname, roles, access, route, empType);
   const router = useRouter();
 
@@ -348,7 +358,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 type="button"
                 aria-label="ย้อนกลับ"
                 onClick={() => {
-                  if (!runMobileBack()) router.push(tabHome.href);
+                  if (runMobileBack()) return;
+                  /* มาจากหน้าอื่นในแอป = ถอยกลับหน้านั้น ไม่ใช่เด้งไปหน้าหลักแล้วหลงที่
+                     (เจ้าของแจ้ง 2 ต.ค. 2569) · เปิดหน้านี้มาตรง ๆ ค่อยไปหน้าหลัก */
+                  if (depth.current > 0) {
+                    depth.current -= 1;
+                    backing.current = true;
+                    router.back();
+                    return;
+                  }
+                  router.push(tabHome.href);
                 }}
                 className="grid size-11 flex-none place-items-center rounded-full bg-card text-foreground shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-18px_rgba(120,20,35,.3)] active:bg-muted"
               >

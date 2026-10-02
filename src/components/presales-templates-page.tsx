@@ -147,7 +147,19 @@ export function PresalesTemplatesPage() {
                 rows.map((t) => (
                   <tr key={t.id}>
                     <td className="min-w-[240px] max-sm:!block max-sm:!text-left max-sm:[&>*]:!text-left">
-                      <b className="font-semibold break-words">{t.name}</b>
+                      {/* กดชื่อเทมเพลตแล้วเปิดได้เลย ไม่ต้องเล็งปุ่มเล็ก ๆ ด้านล่าง (ตรวจการกด 2 ต.ค. 2569) */}
+                      {t.url ? (
+                        <a
+                          href={t.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold break-words hover:text-primary hover:underline max-sm:-my-1.5 max-sm:inline-flex max-sm:min-h-9 max-sm:items-center"
+                        >
+                          {t.name}
+                        </a>
+                      ) : (
+                        <b className="font-semibold break-words">{t.name}</b>
+                      )}
                       <span className="why">{t.note || (t.url ? t.url : t.file)}</span>
                     </td>
                     <td data-label="บริการ">
