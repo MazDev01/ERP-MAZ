@@ -65,6 +65,18 @@ function iconKeyOf(href: string): keyof typeof ICONS {
   return "home";
 }
 
+/**
+ * ป้ายเวลาบนการ์ด "ต้องทำ" — บอกว่าเหลืออีกกี่วันหรือเลยมากี่วัน (ต้นแบบ home-presales.html)
+ * ไม่มีวันที่ของเรื่องนั้นก็ไม่ต้องขึ้นป้าย
+ */
+function dueText(date: string) {
+  if (!date) return "";
+  const d = daysBetween(todayIso(), date);
+  if (d === 0) return "วันนี้";
+  if (d === 1) return "พรุ่งนี้";
+  return d > 0 ? `อีก ${d} วัน` : `เลย ${-d} วัน`;
+}
+
 /* พื้นหลังการ์ด "ต้องทำ" — ไล่สีตามระดับความเร่งด่วนของเรื่องนั้น */
 const CARD_BG: Record<Notice["level"], string> = {
   late: "linear-gradient(160deg,#F4A0AC,#8E0012)",
@@ -437,10 +449,11 @@ export function MobileHome({
                       className="absolute inset-0"
                       style={{ background: "linear-gradient(to top, rgba(38,16,22,.92) 0%, rgba(38,16,22,.5) 45%, rgba(38,16,22,.05) 75%)" }}
                     />
-                    {/* ป้ายมุมบน = เรื่องที่ค้าง · ท้ายการ์ด = หน้าที่จะพาไป (ต้นแบบ home-glass.html) */}
-                    <span className="absolute top-2.5 right-2.5 left-2.5 flex h-7 items-center gap-1 rounded-full bg-white/85 px-2.5 text-[11.5px] font-bold text-[#4A2B31] shadow-[0_4px_10px_-6px_rgb(60_10_20/0.6)]">
-                      <Icon className="size-3 flex-none" strokeWidth={2.2} />
-                      <span className="min-w-0 truncate">{n.group}</span>
+                    {/* ป้ายมุมขวาบน = เหลือเวลาอีกเท่าไร · ท้ายการ์ด = หน้าที่จะพาไป
+                        (ต้นแบบ home-presales.html 2 ต.ค. 2569 — เดิมใส่ชื่อหมวดซ้ำกับท้ายการ์ด) */}
+                    <span className="absolute top-2.5 right-2.5 flex h-7 max-w-[calc(100%-20px)] items-center gap-1.5 rounded-full border border-white/45 bg-white/28 px-2.5 text-[12px] font-bold text-white backdrop-blur-[10px]">
+                      <Icon className="size-[13px] flex-none" strokeWidth={2.2} />
+                      <span className="min-w-0 truncate">{dueText(n.date)}</span>
                     </span>
                     <span className="absolute inset-x-3 bottom-3 flex flex-col gap-2">
                       <span className="line-clamp-3 text-[15px] leading-tight font-bold">{n.title}</span>
