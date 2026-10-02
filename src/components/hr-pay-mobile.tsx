@@ -292,14 +292,32 @@ export function useGroupBack(active: boolean, onBack: () => void) {
 }
 
 /** ชื่อกลุ่มที่เปิดอยู่ พร้อมจำนวนคน — ย้อนกลับด้วยปุ่มบนแถบหัว */
-export function GroupBack({ label, count, unit = "คน" }: { label: string; count: number; unit?: string }) {
+export function GroupBack({
+  label,
+  count,
+  unit = "คน",
+  onBack,
+}: {
+  label: string;
+  count: number;
+  unit?: string;
+  /** กดชื่อกลุ่มเพื่อกลับไปหน้าเลือกกลุ่ม — ปุ่มย้อนกลับบนแถบหัวพาออกจากหน้าไปเลย
+      (เจ้าของสั่ง 2 ต.ค. 2569 ว่าปุ่มย้อนกลับต้องกลับหน้าก่อนหน้า ไม่ใช่เมนูในหน้าเดียวกัน) */
+  onBack?: () => void;
+}) {
   return (
-    <p className="flex h-9 items-center text-[16px] font-bold md:hidden">
+    <button
+      type="button"
+      onClick={onBack}
+      disabled={!onBack}
+      className="flex h-9 items-center text-[16px] font-bold md:hidden"
+    >
+      {onBack && <ChevronLeftIcon className="mr-1 -ml-1 size-4 text-muted-foreground" strokeWidth={2.4} />}
       {label}
       <small className="num ml-2 text-[12.5px] font-medium text-muted-foreground">
         {count} {unit}
       </small>
-    </p>
+    </button>
   );
 }
 

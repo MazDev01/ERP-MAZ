@@ -55,7 +55,7 @@ import {
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
-import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupBack, useGroupUrl } from "./hr-pay-mobile";
+import { CycleSheet, GroupBack, GroupTiles, PayHead, useGroupUrl } from "./hr-pay-mobile";
 import { useComSource, useHrTime } from "@/lib/hr-link";
 import {
   BanIcon,
@@ -112,7 +112,6 @@ export function HrPayslipPage() {
   const [cal, setCal] = useState(false);
   /* ปุ่มย้อนกลับบนแถบหัว: อยู่ในกลุ่ม = กลับไปหน้าเลือกกลุ่ม */
   const syncGroupUrl = useGroupUrl();
-  useGroupBack(mgroup !== null, () => { setMgroup(null); syncGroupUrl(null); });
 
   const payrun = hr.payruns.find((p) => p.month === month);
   const slip = hr.slips.find((s) => s.month === month);
@@ -225,6 +224,7 @@ export function HrPayslipPage() {
         <GroupBack
           label={mgroup === "month" ? "พนักงาน" : "ทดลองงาน"}
           count={mgroup === "month" ? monthlyCount : dailyCount}
+          onBack={() => { setMgroup(null); syncGroupUrl(null); }}
         />
       )}
 
