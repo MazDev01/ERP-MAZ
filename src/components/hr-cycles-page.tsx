@@ -76,6 +76,9 @@ export function HrCyclesPage() {
 
   return (
     <div className="space-y-4">
+      {/* มือถือ: ชื่อรอบที่กรองอยู่ + ปุ่มปฏิทิน เหมือนอีกสามขั้นในสายเดียวกัน */}
+      <PayHead title={only ? thaiMonth(only) : "ทุกรอบที่ปิดแล้ว"} onCal={() => setCal(true)} />
+
       {mgroup === null && (
         <GroupTiles
           onPick={(g) => {
@@ -88,9 +91,6 @@ export function HrCyclesPage() {
           daily={{ n: hr.payruns.filter((p) => p.dayClosed).length, unit: "รอบ", note: "ปิดรอบแล้ว" }}
         />
       )}
-
-      {/* มือถือ: ชื่อรอบที่กรองอยู่ + ปุ่มปฏิทิน เหมือนอีกสามขั้นในสายเดียวกัน */}
-      <PayHead title={only ? thaiMonth(only) : "ทุกรอบที่ปิดแล้ว"} onCal={() => setCal(true)} />
 
       {cal && (
         <CycleSheet
