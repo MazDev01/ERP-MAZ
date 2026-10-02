@@ -370,7 +370,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {current?.sub && (
-          <div className="app-sub px-4 pt-[18px] sm:px-[30px]">
+          /* มือถือไม่มีแถบหน้าย่อย — ต้นแบบ attendance.html สั่งซ่อน .ptabs ไว้ หน้าตอกบัตรคือหน้าหลักของมือถือ
+             ตารางเวลาทั้งเดือนเข้าได้จากปุ่มใต้หน้าตอกบัตร */
+          <div className="app-sub px-4 pt-[18px] max-sm:hidden! sm:px-[30px]">
             <SubNav items={current.sub} pathname={pathname} />
           </div>
         )}

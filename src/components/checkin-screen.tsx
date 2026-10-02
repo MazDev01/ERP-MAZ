@@ -441,12 +441,15 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         </div>
 
 
-        {!embedded && (
-          <Link href="/records" className="btn glass-thin btn-mini w-full justify-center">
-            ดูตารางเวลาทำงานทั้งเดือน
-            <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
-          </Link>
-        )}
+        {/* บนมือถือแถบหน้าย่อยถูกซ่อนตามต้นแบบ attendance.html ปุ่มนี้จึงเป็นทางเดียวที่เข้าดูทั้งเดือน
+           จอใหญ่ยังมีชิป "บันทึกเวลาของฉัน" อยู่ ปุ่มนี้เลยซ่อนเมื่อฝังอยู่ในหน้าตอกบัตร */}
+        <Link
+          href="/records"
+          className={`btn glass-thin btn-mini w-full justify-center ${embedded ? "sm:hidden" : ""}`}
+        >
+          ดูตารางเวลาทำงานทั้งเดือน
+          <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
+        </Link>
       </div>
 
       <main
