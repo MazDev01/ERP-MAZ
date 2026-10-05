@@ -38,6 +38,18 @@ function fromOthers(who: string, talks: TaskTalk[]) {
   return talks.filter((m) => m.who !== who).length;
 }
 
+/* ── ใช้กับสายสนทนาอื่นที่ไม่ใช่งานในโปรเจค (เช่น คำขอก่อนการขาย) ──
+   ส่ง "คีย์ของสาย" กับ "จำนวนข้อความของอีกฝ่าย" มาเอง */
+
+export function markReadKey(who: string, key: string, othersTotal: number) {
+  if ((store.get()[who]?.[key] ?? 0) === othersTotal) return;
+  store.update((s) => ({ ...s, [who]: { ...(s[who] ?? {}), [key]: othersTotal } }));
+}
+
+export function unreadByKey(marks: ReadMarks, who: string, key: string, othersTotal: number) {
+  return Math.max(0, othersTotal - (marks[who]?.[key] ?? 0));
+}
+
 /** เปิดอ่านสายข้อความแล้ว — จำว่าอ่านข้อความของอีกฝ่ายไปกี่ข้อความ */
 export function markTalkRead(who: string, deal: string, taskName: string, talks: TaskTalk[]) {
   const seen = fromOthers(who, talks);

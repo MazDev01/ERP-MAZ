@@ -12,14 +12,17 @@ import {
   type PresalesStatus,
 } from "@/lib/crm-data";
 import { closePresales, replyPresalesInfo, useCrm } from "@/lib/crm-store";
+import { useProfile } from "@/lib/profile-data";
 import { daysBetween, thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import { psEventsOf, type PmEvent } from "@/lib/pm-schedule-data";
 import { useSchedule } from "@/lib/pm-schedule-store";
-import { psKindText, psLastAsk, psThreadOf, usePsThreads, addPsReply } from "@/lib/presales-work";
+import { psFromOthers, psKindText, psLastAsk, psThreadKey, psThreadOf, usePsThreads, addPsReply } from "@/lib/presales-work";
+import { markReadKey, unreadByKey, useTalkRead } from "@/lib/talk-read";
+import { useHydrated } from "@/lib/pwa";
 import { ChevronDownIcon, ClockIcon, DownloadIcon, FileIcon, LinkIcon, PlusIcon, QuotationIcon } from "./icons";
 import { ConfirmDialog } from "./confirm-dialog";
 import { Sheet } from "./lead-dialogs";
-import { PsThread } from "./presales-work-page";
+import { PsChatBox, PsThread } from "./presales-work-page";
 import { ProposalDialog, isCanva } from "./proposal-doc";
 import { Pager, SearchBox, TabStrip, Who, usePaged } from "./sales-ui";
 
@@ -36,9 +39,28 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "ปิดคำขอ", label: "ปิดคำขอ" },
 ];
 
+/**
+ * แถวที่กางอยู่ถือว่าอ่านสายสนทนาแล้ว — จุดแดงหายเองโดยไม่ต้องกดอะไรเพิ่ม
+ * (ลิงก์ ?find= กางแถวให้เองโดยไม่มีการคลิก จึงดักที่ตอนแสดงผล ไม่ใช่ตอนคลิก)
+ */
+function PsReadMark({ no, others }: { no: string; others: number }) {
+  useEffect(() => {
+    markReadKey("sales", psThreadKey(no), others);
+  }, [no, others]);
+  return null;
+}
+
 export function PresalesPage() {
   const crm = useCrm();
   const threads = usePsThreads();
+  /* ชื่อคนที่พิมพ์ — ติดไปกับข้อความในสายสนทนา */
+  const me = useProfile();
+  /* ข้อความใหม่จากทีมก่อนการขายที่ยังไม่ได้อ่าน — รอ hydrate ก่อนค่อยขึ้นป้าย */
+  const marks = useTalkRead();
+  const hydrated = useHydrated();
+  /** ข้อความใหม่ของใบนี้ — ฝั่งเซิร์ฟเวอร์ยังไม่รู้ จึงให้เป็นศูนย์ไว้ก่อน */
+  const newFor = (no: string, others: number) =>
+    hydrated ? unreadByKey(marks, "sales", psThreadKey(no), others) : 0;
   /* นัดที่ทีมก่อนการขายตั้งไว้กับใบนี้ — ฝ่ายขายเจ้าของผู้สนใจต้องเห็น (เจ้าของตัดสิน 25 ก.ย. 2569) */
   const sc = useSchedule();
   const [tab, setTab] = useState<TabKey>("all");
@@ -226,6 +248,12 @@ export function PresalesPage() {
                       >
                         <td className="num muted whitespace-nowrap">
                           {r.no}
+                          {/* ข้อความใหม่จากทีมก่อนการขายที่ยังไม่ได้อ่าน */}
+                          {newFor(r.no, psFromOthers(thread, "sales")) > 0 && (
+                            <i className="num ml-1.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground not-italic">
+                              {newFor(r.no, psFromOthers(thread, "sales"))}
+                            </i>
+                          )}
                           {/* ประเภทเป็นเนื้องานของใบนี้ (SA/BD) ติดไว้ที่ใบงาน ไม่ใช่ที่คนรับ
                               ใครรับไปทำอยู่คอลัมน์ผู้รับผิดชอบ */}
                           <span className="why">{psKindText(r.kind)}</span>
@@ -310,7 +338,10 @@ export function PresalesPage() {
                               <RoundTable rounds={rounds} onOpen={(x) => setDoc({ request: r, round: x })} />
                             )}
                             {meets.length > 0 && <PsMeetings events={meets} />}
-                            {thread.length > 0 && <PsThread notes={thread} />}
+                            {thread.length > 0 && <PsThread notes={thread} me="sales" />}
+                            <PsReadMark no={r.no} others={psFromOthers(thread, "sales")} />
+                            {/* คุยกับทีมก่อนการขายได้เลย ไม่ต้องรอปุ่มตอบข้อมูล (เจ้าของสั่ง 5 ต.ค. 2569) */}
+                            {r.status !== "ปิดคำขอ" && <PsChatBox no={r.no} side="sales" by={me.name} />}
                           </td>
                         </tr>
                       )}
@@ -339,9 +370,16 @@ export function PresalesPage() {
                     <Link href={`/leads/${r.customerCode}`} className="min-w-0">
                       <Who name={nameOf.get(r.customerCode) ?? r.customerCode} sub={r.no} />
                     </Link>
-                    <span className={`tag shrink-0 ${PRESALES_STATUS[r.status]}`}>
-                      <i />
-                      {r.status}
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      {newFor(r.no, psFromOthers(thread, "sales")) > 0 && (
+                        <i className="num inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground not-italic">
+                          {newFor(r.no, psFromOthers(thread, "sales"))}
+                        </i>
+                      )}
+                      <span className={`tag ${PRESALES_STATUS[r.status]}`}>
+                        <i />
+                        {r.status}
+                      </span>
                     </span>
                   </div>
                   <p className="mt-2 text-sm break-words">{r.problem}</p>
@@ -385,7 +423,9 @@ export function PresalesPage() {
                     <RoundCards rounds={rounds} onOpen={(x) => setDoc({ request: r, round: x })} />
                   )}
                   {open[r.no] && meets.length > 0 && <PsMeetings events={meets} />}
-                  {open[r.no] && thread.length > 0 && <PsThread notes={thread} />}
+                  {open[r.no] && thread.length > 0 && <PsThread notes={thread} me="sales" />}
+                  {open[r.no] && <PsReadMark no={r.no} others={psFromOthers(thread, "sales")} />}
+                  {open[r.no] && r.status !== "ปิดคำขอ" && <PsChatBox no={r.no} side="sales" by={me.name} />}
                   {/* มือถือ: ปุ่มสูง 40px งานหลักเป็นปุ่มทึบกว้างเต็มแถว */}
                   {r.status !== "ปิดคำขอ" && (
                     <div className="mt-3 flex flex-wrap gap-2 sm:hidden">

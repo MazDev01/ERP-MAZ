@@ -15,6 +15,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
+import { useHydrated } from "@/lib/pwa";
 import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
 import { addDays, bkkNow, bkkStamp, daysBetween, initials, pad2, thaiDate, thaiStamp, toIsoDate, todayIso } from "@/lib/format";
@@ -832,8 +833,9 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
   /* งานที่กำลังทวง — ทวงจากการ์ดงานใบนั้นตรง ๆ ไม่ใช่พิมพ์ลอย ๆ ในแชทโปรเจคที่ทีมเปิดไม่ได้ */
   const [nudging, setNudging] = useState<string | null>(null);
   const talks = usePm().talks;
-  /* ข้อความที่ PM ยังไม่ได้อ่านของแต่ละงาน */
+  /* ข้อความที่ PM ยังไม่ได้อ่านของแต่ละงาน — รอ hydrate ก่อนค่อยขึ้นป้าย (ฝั่งเซิร์ฟเวอร์ไม่มีค่านี้) */
   const marks = useTalkRead();
+  const hydrated = useHydrated();
   return (
     <section>
       <BlockTitle count={`${count} งาน`}>งานในโปรเจค</BlockTitle>
@@ -855,7 +857,7 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
             const taskTalkList = talks[`${project.deal}|${t.name}`] ?? [];
             const talkCount = taskTalkList.length;
             /* ข้อความใหม่จากผู้รับงานที่ PM ยังไม่ได้อ่าน */
-            const unread = unreadCount(marks, "PM", project.deal, t.name, taskTalkList);
+            const unread = hydrated ? unreadCount(marks, "PM", project.deal, t.name, taskTalkList) : 0;
             return (
               <article
                 key={`${t.name}-${i}`}

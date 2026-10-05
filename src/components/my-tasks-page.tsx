@@ -17,6 +17,7 @@ import { fileKindLabel, lastSub, projName, type Project, type ProjectTask } from
 import { memberName, openNudge, postTaskTalk, submitWork, taskTalks, usePm, type TaskTalk } from "@/lib/pm-store";
 import { useProfile } from "@/lib/profile-data";
 import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
+import { useHydrated } from "@/lib/pwa";
 import { FileDrop, type PickedFile } from "./file-drop";
 import { Field, Sheet } from "./lead-dialogs";
 import { SearchBox } from "./sales-ui";
@@ -105,8 +106,10 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
   const pm = usePm();
   const me = useProfile();
   const today = todayIso();
-  /* ข้อความที่ยังไม่ได้อ่านของแต่ละงาน — ใช้ขึ้นจุดแดงบนปุ่มคุยกับ PM */
+  /* ข้อความที่ยังไม่ได้อ่านของแต่ละงาน — ใช้ขึ้นจุดแดงบนปุ่มคุยกับ PM
+     อ่านจากเครื่อง ฝั่งเซิร์ฟเวอร์จึงไม่มี ต้องรอ hydrate ก่อนค่อยขึ้นป้าย ไม่งั้น React ฟ้องว่าวาดไม่ตรงกัน */
   const marks = useTalkRead();
+  const hydrated = useHydrated();
 
   const [stage, setStage] = useState<Stage>(initialStage);
   const [query, setQuery] = useState(initialQuery);
@@ -211,7 +214,7 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
               row={x}
               today={today}
               talks={taskTalks(pm, x.p.deal, x.t.name)}
-              unread={unreadCount(marks, me.employeeId, x.p.deal, x.t.name, taskTalks(pm, x.p.deal, x.t.name))}
+              unread={hydrated ? unreadCount(marks, me.employeeId, x.p.deal, x.t.name, taskTalks(pm, x.p.deal, x.t.name)) : 0}
               nudge={openNudge(pm, x.p.deal, x.t.name)}
               onOpen={() => setViewing(x)}
               onSend={() => setSending(x)}

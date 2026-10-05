@@ -21,15 +21,20 @@ import { countTemplateUse, useTemplates } from "@/lib/presales-templates";
 import {
   addPsAsk,
   usePsMe,
+  postPsMessage,
   psBucket as bucket,
+  psFromOthers,
   psKindText,
   psMine as mine,
   psOwner,
+  psThreadKey,
   psThreadOf,
   usePsThreads,
   type PsNote,
   type PsTab as Tab,
 } from "@/lib/presales-work";
+import { markReadKey, unreadByKey, useTalkRead } from "@/lib/talk-read";
+import { useHydrated } from "@/lib/pwa";
 import { FileDrop, type PickedFile } from "./file-drop";
 import { Sheet } from "./lead-dialogs";
 import { useAddOption } from "./add-option";
@@ -87,6 +92,13 @@ export function PresalesWorkPage() {
   /* SA หรือ BD — คนที่เลือกไว้ในเมนูบัญชีของฉัน */
   const ME = usePsMe();
   const crm = useCrm();
+  /* สายสนทนาของทุกใบ + จุดแดงบอกว่ามีข้อความใหม่จากฝ่ายขาย (รอ hydrate ก่อนค่อยขึ้นป้าย) */
+  const threads = usePsThreads();
+  const marks = useTalkRead();
+  const hydrated = useHydrated();
+  /** ข้อความใหม่จากฝ่ายขายของใบนี้ — ฝั่งเซิร์ฟเวอร์ยังไม่รู้ จึงให้เป็นศูนย์ไว้ก่อน */
+  const newFor = (r: PresalesRequest) =>
+    hydrated ? unreadByKey(marks, "ps", psThreadKey(r.no), psFromOthers(psThreadOf(threads, r), "ps")) : 0;
   const today = todayIso();
   /* GM เปิดหน้านี้ได้แบบดูอย่างเดียว และเห็นคำขอทุกใบ ไม่ใช่เฉพาะของทีมก่อนการขาย */
   const ro = usePmReadOnly();
@@ -258,7 +270,15 @@ export function PresalesWorkPage() {
                         }
                       }}
                     >
-                      <td className="num">{r.no}</td>
+                      <td className="num">
+                        {r.no}
+                        {/* ข้อความใหม่จากฝ่ายขายที่ยังไม่ได้อ่าน */}
+                        {newFor(r) > 0 && (
+                          <i className="num ml-1.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground not-italic">
+                            {newFor(r)}
+                          </i>
+                        )}
+                      </td>
                       <td className="max-[1000px]:hidden">
                         <KindTag kind={r.kind} />
                       </td>
@@ -339,6 +359,11 @@ function WorkDialog({
   const ro = usePmReadOnly();
   /* ถามตอบกับฝ่ายขายทั้งสายของคำขอใบนี้ */
   const thread = psThreadOf(usePsThreads(), r);
+  /* เปิดอ่านแล้ว — จุดแดงของใบนี้หายไป */
+  const otherCount = psFromOthers(thread, "ps");
+  useEffect(() => {
+    markReadKey("ps", psThreadKey(r.no), otherCount);
+  }, [r.no, otherCount]);
   /* ไฟล์และลิงก์ที่แนบในรอบนี้ — ต้องมีอย่างน้อยหนึ่งรายการ */
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [hours, setHours] = useState("");
@@ -524,8 +549,10 @@ function WorkDialog({
           {/* แผนงานของข้อเสนอ (Full Proposal · M2) — วางเป็นช่วงสัปดาห์ PM แปลงเป็นวันจริงตอนรับงาน */}
           <ProposalPlan request={r} readOnly={ro} />
 
-          {/* ถามตอบกับฝ่ายขายทั้งสาย — ทั้งสองฝั่งอ่านชุดเดียวกัน จะได้ไม่ต้องไปตามกันในไลน์ */}
-          <PsThread notes={thread} />
+          {/* ถามตอบกับฝ่ายขายทั้งสาย — ทั้งสองฝั่งอ่านชุดเดียวกัน จะได้ไม่ต้องไปตามกันในไลน์
+              คุยต่อได้ในกล่องข้างล่างโดยไม่ต้องเปลี่ยนสถานะใบงาน */}
+          <PsThread notes={thread} me="ps" />
+          {!ro && <PsChatBox no={r.no} side="ps" by={ME.name} />}
 
           {rounds.length > 0 && (
             <>
@@ -653,31 +680,93 @@ function WorkDialog({
  * คำถามของทีมอยู่ซ้าย คำตอบของฝ่ายขายอยู่ขวา พร้อมชื่อคนพิมพ์และเวลา
  * ไม่มีชื่อกับเวลาแล้วอ่านไม่ออกว่าใครถามและถามไว้นานแค่ไหน
  */
-export function PsThread({ notes }: { notes: PsNote[] }) {
-  if (notes.length === 0) return null;
+/**
+ * สายสนทนาของคำขอหนึ่งใบ — วางเป็นแชทเหมือนสายข้อความของงาน (เจ้าของสั่ง 5 ต.ค. 2569)
+ * me = ฝั่งของคนที่กำลังดู ("ps" ทีมก่อนการขาย · "sales" ฝ่ายขาย) ข้อความของตัวเองชิดขวา
+ */
+export function PsThread({ notes, me }: { notes: PsNote[]; me?: PsNote["side"] }) {
+  const end = useRef<HTMLDivElement>(null);
+  const count = notes.length;
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "nearest" });
+  }, [count]);
+
+  if (count === 0) return null;
   return (
     <section className="mt-[18px]">
       <p className="mb-2 text-[13px] font-bold">ถามตอบข้อมูลเพิ่ม</p>
-      <ul className="flex flex-col gap-2">
-        {notes.map((n, i) => (
-          <li
-            key={`${n.at}-${i}`}
-            className={`rounded-[12px] px-3.5 py-2.5 ${
-              n.side === "ps"
-                ? "bg-[var(--warning-soft)]"
-                : "bg-muted sm:ml-6"
-            }`}
-          >
-            <p className="flex flex-wrap items-baseline gap-x-2 text-[11.5px] text-muted-foreground">
-              <b className="font-semibold text-foreground">{n.by}</b>
-              <span>{n.side === "ps" ? "ขอข้อมูลเพิ่ม" : "ตอบข้อมูล"}</span>
-              {n.at && <span className="num">{thaiStamp(n.at)} น.</span>}
-            </p>
-            <p className="mt-1 text-[13px] leading-relaxed break-words">{n.tx}</p>
-          </li>
-        ))}
+      <ul className="flex max-h-[42dvh] flex-col gap-2.5 overflow-y-auto pr-0.5">
+        {notes.map((n, i) => {
+          const mine = me !== undefined && n.side === me;
+          return (
+            <li key={`${n.at}-${i}`} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+              <span className="px-1 text-[11px] text-muted-foreground">
+                {mine ? "คุณ" : n.by}
+                <span className="ml-1.5">{n.side === "ps" ? "· ทีมก่อนการขาย" : "· ฝ่ายขาย"}</span>
+              </span>
+              <div
+                className={`max-w-[86%] rounded-[16px] px-3.5 py-2 ${
+                  mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                }`}
+              >
+                <p className="text-[13.5px] leading-relaxed break-words whitespace-pre-wrap">{n.tx}</p>
+              </div>
+              {n.at && (
+                <span className="num px-1 text-[10.5px] text-muted-foreground">{thaiStamp(n.at)} น.</span>
+              )}
+            </li>
+          );
+        })}
+        <div ref={end} />
       </ul>
     </section>
+  );
+}
+
+/**
+ * ช่องพิมพ์คุยกันในใบคำขอ — ใช้ได้ทั้งสองฝั่ง ส่งแล้วไม่ปิดหน้าต่าง
+ * ข้อความนี้ไม่เปลี่ยนสถานะใบงาน (ขอข้อมูล/ตอบข้อมูล ยังเป็นปุ่มของมันเหมือนเดิม)
+ */
+export function PsChatBox({ no, side, by }: { no: string; side: PsNote["side"]; by: string }) {
+  const [tx, setTx] = useState("");
+  const [err, setErr] = useState(false);
+
+  function send() {
+    const v = tx.trim();
+    if (!v) return setErr(true);
+    postPsMessage(no, side, v, by);
+    setTx("");
+  }
+
+  return (
+    <div className="mt-3">
+      <label htmlFor={`ps-chat-${no}`} className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">
+        {side === "ps" ? "ข้อความถึงฝ่ายขาย" : "ข้อความถึงทีมก่อนการขาย"}
+      </label>
+      <div className="flex items-end gap-2">
+        <textarea
+          id={`ps-chat-${no}`}
+          rows={2}
+          value={tx}
+          onChange={(e) => {
+            setTx(e.target.value);
+            setErr(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder="พิมพ์ข้อความแล้วกด Enter"
+          className="field-control min-w-0 flex-1 resize-y py-2.5 text-[13.5px] leading-relaxed"
+        />
+        <button type="button" className="btn solid btn-solid flex-none" onClick={send}>
+          ส่ง
+        </button>
+      </div>
+      {err && <p className="mt-2 text-[12.5px] text-destructive">เขียนข้อความก่อนส่ง</p>}
+    </div>
   );
 }
 

@@ -169,6 +169,24 @@ export function addPsReply(no: string, tx: string) {
   addPsNote(no, { side: "sales", by: USERS.sales.name, at: bkkStamp(), tx });
 }
 
+/**
+ * ส่งข้อความคุยกันธรรมดา ไม่เปลี่ยนสถานะใบงาน (เจ้าของสั่ง 5 ต.ค. 2569 — ให้คุยได้เหมือนแชท)
+ * ต่างจาก addPsAsk/addPsReply ตรงที่สองตัวนั้นผูกกับการเปลี่ยนขั้นของใบงาน
+ */
+export function postPsMessage(no: string, side: PsNote["side"], tx: string, by: string) {
+  addPsNote(no, { side, by, at: bkkStamp(), tx });
+}
+
+/** คีย์ของสายสนทนาคำขอหนึ่งใบ — ใช้กับตัวจำว่าอ่านถึงไหนแล้ว */
+export function psThreadKey(no: string) {
+  return `presales|${no}`;
+}
+
+/** ข้อความของอีกฝ่ายในสายนี้มีกี่ข้อความ (ใช้คู่กับ unreadByKey) */
+export function psFromOthers(notes: PsNote[], side: PsNote["side"]) {
+  return notes.filter((n) => n.side !== side).length;
+}
+
 function addPsNote(no: string, note: PsNote) {
   threads.update((all) => ({ ...all, [no]: [...(all[no] ?? []), note] }));
 }
