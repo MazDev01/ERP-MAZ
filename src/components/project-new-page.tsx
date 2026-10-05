@@ -9,6 +9,9 @@
  */
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createOwnProject } from "@/lib/pm-store";
+import { useProfile } from "@/lib/profile-data";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { useHydrated } from "@/lib/pwa";
@@ -30,6 +33,7 @@ import {
   removePhase,
   removeTask,
   renamePhase,
+  resetNewProject,
   setField,
   useNewProject,
   type NewPhase,
@@ -75,6 +79,33 @@ function Body() {
   const card = "panel glass rounded-2xl px-4 py-5 sm:px-6";
   const paneClass = (p: Pane) => (pane === p ? "" : "max-md:hidden!");
 
+  /* ─── เปิดเป็นโปรเจคจริง (ตรวจระบบ 5 ต.ค. 2569 — เดิมเป็นร่างอย่างเดียว ไม่มีทางไปต่อ) ─── */
+  const router = useRouter();
+  const me = useProfile();
+  const [opening, setOpening] = useState(false);
+  /* ต้องมีชื่อโปรเจคกับงานอย่างน้อยหนึ่งงาน ไม่งั้นเปิดไปก็เป็นโปรเจคเปล่า */
+  const missing = !project.name.trim() ? "ตั้งชื่อโปรเจคก่อน" : count.tasks === 0 ? "เพิ่มงานอย่างน้อยหนึ่งงานก่อน" : "";
+
+  function openProject() {
+    if (missing || opening) return;
+    setOpening(true);
+    /* เฟสของร่างไม่มีวันเริ่ม-จบของตัวเอง ใช้ช่วงของโปรเจคไปก่อน แก้ได้ในหน้าวางแผน */
+    const deal = createOwnProject({
+      name: project.name.trim(),
+      cus: project.cus.trim(),
+      scope: project.desc.trim() || project.note.trim(),
+      start: project.start,
+      due: project.due,
+      pm: me.name,
+      phases: project.phases.map((ph) => ({ name: ph.name.trim() || "เฟส", start: project.start, end: project.due })),
+      tasks: project.phases.flatMap((ph, i) =>
+        ph.tasks.map((t) => ({ name: t.name.trim() || "งาน", phase: i, due: t.due || project.due, done: t.done })),
+      ),
+    });
+    resetNewProject();
+    router.push(`/pm/projects?deal=${encodeURIComponent(deal)}`);
+  }
+
   return (
     <div className="space-y-4">
       <div className="bar">
@@ -103,7 +134,21 @@ function Body() {
             {saved && <b className="ml-2 font-semibold text-[var(--success)]">· {saved}</b>}
           </p>
         </div>
+        <div className="tools">
+          <button
+            type="button"
+            className="btn solid btn-solid disabled:opacity-50"
+            disabled={Boolean(missing) || opening}
+            title={missing || "เปิดเป็นโปรเจคจริงแล้วมอบหมายงานให้ทีมได้"}
+            onClick={openProject}
+          >
+            {opening ? "กำลังเปิด…" : "เปิดเป็นโปรเจค"}
+          </button>
+        </div>
       </div>
+      {missing && (
+        <p className="text-[12.5px] text-muted-foreground">ยังเปิดเป็นโปรเจคไม่ได้ — {missing}</p>
+      )}
 
       {/* มือถือ: สลับดูทีละส่วน */}
       <div className="grid grid-cols-3 gap-1 rounded-2xl bg-muted p-1 md:hidden">

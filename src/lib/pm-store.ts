@@ -516,6 +516,66 @@ export function confirmPlan(
 }
 
 /**
+ * เปิดโปรเจคที่ PM ตั้งเองจากหน้า "โปรเจคใหม่" (ไม่ได้มาจากดีลของฝ่ายขาย)
+ * ใช้กับงานภายในหรืองานที่ยังไม่มีใบเสนอราคา — ยอดเงินและเลขใบเสนอราคาจึงว่าง
+ * เลขโปรเจคออกเป็น PRJ-ปี-ลำดับ เพื่อไม่ชนกับเลขดีลของฝ่ายขาย
+ */
+export function createOwnProject(input: {
+  name: string;
+  cus: string;
+  scope: string;
+  start: string;
+  due: string;
+  pm: string;
+  phases: { name: string; start: string; end: string }[];
+  tasks: { name: string; phase: number; due: string; done: boolean }[];
+}) {
+  const at = bkkStamp();
+  const day = today();
+  let created = "";
+  store.update((s) => {
+    /* เลขปีพุทธศักราชเต็ม ให้รูปแบบเดียวกับเลขดีล (DL-2569-0018) */
+    const year = Number(day.slice(0, 4)) + 543;
+    const seq = s.projects.filter((p) => p.deal.startsWith("PRJ-")).length + 1;
+    const deal = `PRJ-${year}-${String(seq).padStart(4, "0")}`;
+    created = deal;
+    const tones = ["a", "b", "c"] as const;
+    const project: Project = {
+      deal,
+      /* งานที่ตั้งเองยังไม่รู้ประเภทบริการ ใช้ค่าตั้งต้นให้การ์ดมีไอคอน แล้ว PM แก้ทีหลังได้ */
+      service: "website",
+      name: input.name,
+      cus: input.cus,
+      quo: "",
+      net: 0,
+      scope: input.scope,
+      pm: input.pm,
+      start: input.start || day,
+      due: input.due || input.phases.reduce((m, ph) => (ph.end > m ? ph.end : m), ""),
+      status: "running",
+      updated: day,
+      tone: tones[s.projects.length % tones.length],
+      phases: input.phases.map((ph) => ({ name: ph.name, role: "ba" as const, start: ph.start, end: ph.end })),
+      tasks: input.tasks.map<ProjectTask>((t) => ({
+        name: t.name,
+        phase: t.phase,
+        /* ยังไม่ได้มอบหมายให้ใคร — PM มอบหมายทีหลังในหน้าโปรเจค */
+        whos: [],
+        start: input.start || day,
+        due: t.due,
+        status: t.done ? "done" : "todo",
+        pct: t.done ? 100 : 0,
+        files: [],
+      })),
+      chat: [],
+      acts: [{ kind: "status", who: "PM", at, tx: "เปิดโปรเจคที่ตั้งเอง ยังไม่ได้มอบหมายงาน" }],
+    };
+    return { ...s, projects: [project, ...s.projects] };
+  });
+  return created;
+}
+
+/**
  * แก้แผนของโปรเจคที่ยืนยันไปแล้ว (ปุ่ม "วางแผนงาน" ในหน้ารายละเอียดโปรเจค)
  *
  * งานเดิมเก็บสถานะ ความคืบหน้า ไฟล์ และรอบส่งงานไว้ทั้งหมด เปลี่ยนแค่ชื่อ เฟส คน และวัน
