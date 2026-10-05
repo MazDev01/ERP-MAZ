@@ -411,6 +411,14 @@ const EXTRA_PAGES: Record<string, NavItem> = {
     /* จัดคิวงานเป็นขั้นหนึ่งของโปรเจค (โฟลเดอร์ → รายละเอียด → จัดคิว) ตามต้นแบบ เมนูจึงค้างที่ "โปรเจค" */
     parent: "/pm/projects",
   },
+  /* โปรเจคใหม่เข้าจากปุ่มในหน้ารายการโปรเจค เมนูจึงค้างที่ "โปรเจค" (ต้นแบบ project-new.html) */
+  "/pm/projects/new": {
+    group: "โปรเจค",
+    label: "โปรเจคใหม่",
+    icon: "project",
+    href: "/pm/projects/new",
+    parent: "/pm/projects",
+  },
   "/hr/payroll": {
     group: "ฝ่ายบุคคล",
     label: "คำนวณเงินเดือน",

@@ -20,6 +20,7 @@ import { ReadOnlyNote } from "./pm-readonly";
 import { useRole } from "@/lib/role";
 import { USERS } from "@/lib/mock-data";
 import { SearchIcon } from "./icons";
+import { NewProjectButton } from "./project-new-page";
 
 type FolderKey = "all" | "plan" | "run" | "late" | "done" | "cancelled";
 
@@ -112,6 +113,8 @@ export function PmProjectsPage() {
               autoComplete="off"
             />
           </span>
+          {/* โปรเจคที่ไม่ได้มาจากดีล เช่นงานภายใน ตั้งเองได้จากที่นี่ (ต้นแบบ project-new.html) */}
+          {!mine && <NewProjectButton />}
         </div>
       </div>
       <ReadOnlyNote />
