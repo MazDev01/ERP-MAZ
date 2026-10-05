@@ -70,12 +70,14 @@ export function Pager({
 }) {
   return (
     <div className="pages justify-center sm:justify-start">
+      {/* กดไม่ได้ต้องบอกเหตุผล ไม่ปล่อยให้เป็นปุ่มจาง ๆ เฉย ๆ (ตรวจระบบ 5 ต.ค. 2569 · S-01) */}
       <button
         type="button"
         className="glass-thin"
         disabled={page === 1}
         onClick={() => onChange(page - 1)}
-        aria-label="ก่อนหน้า"
+        aria-label={page === 1 ? "ก่อนหน้า (อยู่หน้าแรกแล้ว)" : "ก่อนหน้า"}
+        title={page === 1 ? "อยู่หน้าแรกแล้ว" : "ไปหน้าก่อนหน้า"}
       >
         ‹
       </button>
@@ -94,7 +96,8 @@ export function Pager({
         className="glass-thin"
         disabled={page === maxPage}
         onClick={() => onChange(page + 1)}
-        aria-label="ถัดไป"
+        aria-label={page === maxPage ? "ถัดไป (อยู่หน้าสุดท้ายแล้ว)" : "ถัดไป"}
+        title={page === maxPage ? "อยู่หน้าสุดท้ายแล้ว" : "ไปหน้าถัดไป"}
       >
         ›
       </button>

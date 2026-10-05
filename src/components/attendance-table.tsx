@@ -338,6 +338,7 @@ export function AttendanceTable() {
               disabled={safePage === 1}
               onClick={() => setPage(safePage - 1)}
               aria-label="ก่อนหน้า"
+              title="ไปหน้าก่อนหน้า"
             >
               ‹
             </button>
@@ -357,6 +358,7 @@ export function AttendanceTable() {
               disabled={safePage === maxPage}
               onClick={() => setPage(safePage + 1)}
               aria-label="ถัดไป"
+              title="ไปหน้าถัดไป"
             >
               ›
             </button>
