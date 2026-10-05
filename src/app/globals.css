@@ -512,8 +512,9 @@ body {
 .pages button:disabled { opacity: 0.35; cursor: default; }
 
 /* ---------- ปุ่มไอคอน ---------- */
+/* ปุ่มไอคอนเป็นวงกลมทุกที่ (ผู้ใช้สั่ง 5 ต.ค. 2569) — รวมกระดิ่งบนแถบหัวที่เดิมเป็นสี่เหลี่ยมมุมมน */
 .iconbtn {
-  width: 34px; height: 34px; border-radius: 9px;
+  width: 34px; height: 34px; border-radius: 50%;
   color: var(--muted-foreground);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; position: relative; flex: none;

@@ -128,8 +128,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const PAY_STEPS = ["/hr/timesheet", "/hr/payroll", "/hr/payslip", "/hr/cycles"];
   const listHref =
     current && current.href !== "/" && pathname.startsWith(current.href + "/") ? current.href : undefined;
+  /* หน้าย่อยของเมนูเดียวกัน เช่น "บันทึกเวลาของฉัน" ใต้ "เวลาทำงาน" — ย้อนกลับไปหน้าหลักของเมนูนั้น
+     (เจ้าของแจ้ง 5 ต.ค. 2569 ว่ากดย้อนจากบันทึกเวลาแล้วไปโผล่หน้าแรก ไม่ใช่หน้าตอกบัตร) */
+  const subHref =
+    current && current.href !== pathname && current.sub?.some((x) => x.href === pathname)
+      ? current.href
+      : undefined;
   const backHref =
-    (PAY_STEPS.includes(pathname) ? undefined : current?.parent) ?? listHref ?? mobileHomeOf(role);
+    (PAY_STEPS.includes(pathname) ? undefined : current?.parent) ??
+    subHref ??
+    listHref ??
+    mobileHomeOf(role);
   /* มือถือ: เปิดแอปครั้งแรกของรอบที่หน้า "/" (start_url) ให้เด้งหน้าหลักการ์ดเมนูก่อน (ผู้ใช้สั่ง 22 ก.ย. 2569)
      จดไว้ใน sessionStorage ตั้งแต่หน้าแรกที่เปิด กดการ์ด "เวลาทำงาน" ทีหลังจะเข้าหน้าตอกบัตรได้ตามปกติ */
   const firstOpen = useRef<boolean | null>(null);
