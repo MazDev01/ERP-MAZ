@@ -40,7 +40,7 @@ import { approveOt, rejectOt, useAllOt } from "@/lib/ot-store";
 import { approvesFor, useApprovalRoute, type Role } from "@/lib/role";
 import { formatMinutesOfDay, minutesOfDay } from "@/lib/work-schedule";
 import { ConfirmDialog } from "./confirm-dialog";
-import { ChevronLeftIcon } from "./icons";
+import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { OtActualFields, useOtDecision, type OtReq } from "./ot-actual-fields";
 
 type Kind = "leave" | "ot" | "expense";
@@ -356,25 +356,47 @@ export function CeoApprovalsPage() {
         </div>
       </div>
 
-      {/* มือถือ: สองช่องใหญ่ให้เลือกก่อน มีป้ายบอกจำนวนที่ค้าง */}
+      {/* มือถือ: สองช่องให้เลือกก่อน หน้าตาเดียวกับการ์ดกลุ่มในสายรอบเงินเดือน (เจ้าของสั่ง 5 ต.ค. 2569) */}
       {mPane === "" && !mobileRoom && (
         <div className="grid grid-cols-2 gap-3 sm:hidden">
           {([
-            { k: "pay", label: "อนุมัติเงินเดือน", n: payWaiting },
-            { k: "req", label: "คำขอของพนักงาน", n: reqWaiting },
+            {
+              k: "pay",
+              label: "อนุมัติเงินเดือน",
+              sub: "ยอดจากฝ่ายบุคคล",
+              n: payWaiting,
+              unit: "รอบ",
+              note: payWaiting ? "รออนุมัติ" : "อนุมัติครบแล้ว",
+            },
+            {
+              k: "req",
+              label: "คำขอของพนักงาน",
+              sub: "ลา โอที เบิก",
+              n: reqWaiting,
+              unit: "รายการ",
+              note: reqWaiting ? "รอพิจารณา" : "พิจารณาครบแล้ว",
+            },
           ] as const).map((t) => (
             <button
               key={t.k}
               type="button"
               onClick={() => setPane(t.k)}
-              className="relative grid h-[min(46dvh,300px)] place-items-center rounded-[24px] bg-card p-4 text-[19px] leading-snug font-bold shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_24px_-20px_rgb(90_20_35/0.45)]"
+              className="flex min-h-[132px] flex-col items-start rounded-[24px] bg-card p-4 text-left shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_24px_-20px_rgb(90_20_35/0.45)] active:bg-accent/60"
             >
-              <span className="text-center">{t.label}</span>
-              {t.n > 0 && (
-                <i className="num absolute top-3.5 right-3.5 grid h-6 min-w-6 place-items-center rounded-full bg-primary px-1.5 text-[12.5px] font-bold text-primary-foreground not-italic">
+              <span className="flex w-full items-start justify-between gap-2">
+                <span className="min-w-0">
+                  <b className="block text-[18px] leading-tight font-bold">{t.label}</b>
+                  <small className="mt-0.5 block text-[12px] text-muted-foreground">{t.sub}</small>
+                </span>
+                <ChevronRightIcon className="mt-1 size-4 flex-none text-muted-foreground" strokeWidth={2.2} />
+              </span>
+              <span className="mt-auto flex flex-col gap-0.5 pt-3">
+                <b className="num text-[22px] leading-none font-bold">
                   {t.n}
-                </i>
-              )}
+                  <small className="ml-1 text-[12px] font-medium text-muted-foreground">{t.unit}</small>
+                </b>
+                <small className="text-[12px] text-muted-foreground">{t.note}</small>
+              </span>
             </button>
           ))}
         </div>
