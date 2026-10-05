@@ -470,6 +470,8 @@ body {
 /* รหัสในตาราง — เป็นลิงก์ไปยังรายการนั้น ไม่ใช่ปุ่มสั่งงาน */
 .lnk-code { font-weight: 600; color: var(--primary); }
 .lnk-code:hover { text-decoration: underline; }
+/* ลิงก์ในบรรทัดสูงแค่ 20px กดยากบนมือถือ — เพิ่มพื้นที่กดโดยไม่ขยับหน้าตา (ตรวจหน้ามือถือ 5 ต.ค. 2569) */
+.lnk-code { padding-block: 7px; margin-block: -7px; }
 
 /* ---------- ป้ายสถานะ ---------- */
 .tag {
@@ -684,6 +686,8 @@ body {
   outline: none;
   font: inherit;
   color: inherit;
+  /* เหมือน .search input — กดขอบบนล่างของกรอบก็โฟกัสได้ */
+  align-self: stretch;
 }
 .field-shell input::placeholder { color: var(--muted-foreground); }
 
@@ -701,6 +705,8 @@ body {
 .search input {
   min-width: 0; flex: 1; border: none; background: none; outline: none;
   font: inherit; color: var(--foreground);
+  /* สูงเต็มกรอบ — นิ้วกดตรงไหนของแถบก็โฟกัสได้ ไม่ใช่ต้องกดกลางแถวพอดี */
+  align-self: stretch;
 }
 .search input::placeholder { color: var(--muted-foreground); }
 .search:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px rgb(208 2 27 / 0.09); }
@@ -843,7 +849,10 @@ table.sheet .del {
   width: 28px; height: 28px; border-radius: 7px; border: none; background: none;
   color: var(--muted-foreground); cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
+  position: relative;
 }
+/* พื้นที่กดกว้างกว่าปุ่ม 6px รอบด้าน — ปุ่มลบในตารางเล็กเกินกดด้วยนิ้ว */
+table.sheet .del::before { content: ""; position: absolute; inset: -6px; }
 table.sheet .del:hover { color: var(--destructive); background: var(--destructive-soft); }
 
 .note-red { margin-top: 14px; font-size: 12px; line-height: 1.6; color: var(--destructive); }
@@ -1563,6 +1572,8 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   }
   /* จอแคบ: โลโก้กับข้อความชิดซ้ายบน ตัวละครไปอยู่ขวาสุดของแถบแดง (ตามไฟล์ตัวอย่าง) */
   .login-brand { top: 24px; left: 24px; width: auto; max-width: 58%; gap: 12px; }
+  /* จอแคบ: ประโยคแนะนำตัวจะไปทับภาพสามมิติ ต้นแบบ login.html บนมือถือก็มีแต่โลโก้ */
+  .login-brand p { display: none; }
   .login-canvas { height: 330px; }
   .login-sheet {
     position: relative;
@@ -1639,4 +1650,12 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     clip-path: inset(50%);
     white-space: nowrap;
   }
+}
+
+/*
+ * ช่องติ๊กบนเครื่องที่ใช้นิ้ว — ตัวช่องสูงแค่ 16–18px ป้ายกำกับก็สูงราว 21px
+ * เพิ่มพื้นที่กดขึ้นล่างอย่างละ 7px แล้วหักระยะห่างคืนเท่ากัน หน้าตาจึงเท่าเดิม
+ */
+@media (pointer: coarse) {
+  label:has(> input[type="checkbox"]) { padding-block: 7px; margin-block: -7px; }
 }

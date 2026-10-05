@@ -130,7 +130,8 @@ export function Switch({
       disabled={disabled}
       title={title}
       onClick={onToggle}
-      className={`relative h-[25px] w-11 shrink-0 rounded-[14px] transition-colors disabled:opacity-40 ${
+      /* before = พื้นที่กดที่กว้างกว่าตัวสวิตช์ (สูง 41px) — หน้าตาเท่าเดิมแต่กดบนมือถือไม่พลาด */
+      className={`relative h-[25px] w-11 shrink-0 rounded-[14px] transition-colors before:absolute before:inset-x-0 before:-inset-y-2 before:content-[''] disabled:opacity-40 ${
         on ? "bg-primary" : "bg-[#dde2e9]"
       }`}
     >

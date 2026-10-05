@@ -270,7 +270,7 @@ export function DashSection({
       <div className="flex items-center justify-between">
         <h3 className="text-[16px] font-bold">{title}</h3>
         {href && canLink && (
-          <Link href={href} className="-my-1.5 inline-flex min-h-9 items-center px-1 text-[12.5px] font-semibold text-primary">
+          <Link href={href} className="-mx-2 -my-1.5 inline-flex min-h-9 items-center px-2 text-[12.5px] font-semibold text-primary">
             {linkLabel}
           </Link>
         )}

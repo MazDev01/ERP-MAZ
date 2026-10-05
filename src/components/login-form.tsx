@@ -393,7 +393,7 @@ export function LoginForm() {
             </div>
 
             {/* จดจำอุปกรณ์ — เครื่องส่วนตัวจะได้ไม่ต้องพิมพ์ชื่อผู้ใช้ทุกครั้ง */}
-            <label className="mt-2.5 flex w-fit cursor-pointer items-center gap-2 text-[13px] text-muted-foreground">
+            <label className="mt-0.5 -mb-2 flex w-fit cursor-pointer items-center gap-2 py-2 text-[13px] text-muted-foreground">
               <input
                 type="checkbox"
                 checked={remember}
@@ -406,7 +406,7 @@ export function LoginForm() {
             {/* ทางออกเมื่อเข้าไม่ได้ — ต้องมีให้กดจากหน้านี้ ไม่ใช่รู้ URL เอง */}
             <Link
               href="/set-password"
-              className="mt-1 block text-right text-[13px] text-muted-foreground hover:text-primary"
+              className="-mt-0.5 -mb-1.5 block py-1.5 text-right text-[13px] text-muted-foreground hover:text-primary"
             >
               ลืมรหัสผ่าน?
             </Link>
@@ -437,7 +437,7 @@ export function LoginForm() {
 
           <Link
             href="/install"
-            className="mt-2.5 flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-primary"
+            className="mt-0.5 -mb-2 flex items-center justify-center gap-1.5 py-2 text-[12.5px] font-medium text-muted-foreground hover:text-primary"
           >
             <DownloadIcon className="size-4" />
             ติดตั้งลงหน้าจอโฮม

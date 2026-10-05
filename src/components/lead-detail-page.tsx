@@ -232,7 +232,7 @@ export function LeadDetailPage({ code }: { code: string }) {
       )}
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2.05fr)_minmax(0,1fr)]">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {/* ── การ์ดโปรไฟล์: ตัวตนลูกค้าซ้าย ข้อมูลติดต่อที่แก้ได้ขวา ── */}
           <section className="glass rounded-2xl px-4 py-5 sm:px-[22px]">
             <div className="grid gap-[22px] lg:grid-cols-[210px_minmax(0,1fr)]">
@@ -358,7 +358,7 @@ export function LeadDetailPage({ code }: { code: string }) {
           </section>
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <section className="glass rounded-2xl px-4 py-5 sm:px-[22px]">
             <h2 className="flex items-center gap-2 text-[15px] font-semibold">
               บันทึกล่าสุด
