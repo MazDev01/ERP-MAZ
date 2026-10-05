@@ -26,6 +26,7 @@ import {
 } from "@/lib/presales-templates";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FileDrop, type PickedFile } from "./file-drop";
+import { openStoredFile } from "@/lib/file-store";
 import { PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { useAddOption } from "./add-option";
@@ -63,6 +64,8 @@ export function PresalesTemplatesPage() {
   /* หน้าต่างเพิ่ม/แก้ไข — "new" = เพิ่มใหม่ · อื่น ๆ = รหัสเทมเพลตที่แก้ */
   const [editing, setEditing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<PresalesTemplate | null>(null);
+  /** เปิดไฟล์ไม่ได้เพราะอะไร — เช่น อัปโหลดจากเครื่องอื่นหรือล้างข้อมูลไปแล้ว */
+  const [openError, setOpenError] = useState("");
 
   /* กรองด้วยบริการกับคำค้นก่อน แล้วค่อยแบ่งแท็บ ตัวเลขบนแท็บจะได้ตรงกับที่กรองอยู่ */
   const q = query.trim().toLowerCase();
@@ -76,6 +79,11 @@ export function PresalesTemplatesPage() {
 
   return (
     <div className="space-y-4">
+      {openError && (
+        <p role="alert" className="rounded-xl bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] font-medium text-destructive">
+          {openError}
+        </p>
+      )}
       <div className="bar">
         <div>
           <p>เทมเพลตข้อเสนอที่ใช้ซ้ำได้ {list.length} รายการ</p>
@@ -191,13 +199,25 @@ export function PresalesTemplatesPage() {
                           >
                             เปิด
                           </a>
+                        ) : t.fileId ? (
+                          /* ไฟล์ที่อัปโหลดเองเก็บไว้ในเครื่อง เปิดดูได้จริง (ตรวจระบบ 5 ต.ค. 2569) */
+                          <button
+                            type="button"
+                            className="btn glass-thin btn-mini"
+                            onClick={async () => {
+                              const why = await openStoredFile(t.fileId!);
+                              if (why) setOpenError(why);
+                            }}
+                          >
+                            เปิด
+                          </button>
                         ) : (
-                          /* ยังไม่มีที่เก็บไฟล์จริง — เปิดไฟล์ได้เมื่อต่อ backend แล้ว */
+                          /* เทมเพลตชุดตั้งต้นมีแต่ชื่อไฟล์ ยังไม่มีตัวไฟล์ให้เปิด */
                           <button
                             type="button"
                             className="btn glass-thin btn-mini opacity-50"
                             disabled
-                            title="ยังเปิดไฟล์ไม่ได้ จนกว่าจะต่อที่เก็บไฟล์"
+                            title="เทมเพลตชุดตั้งต้นยังไม่มีไฟล์จริง — อัปโหลดไฟล์ใหม่แล้วจะเปิดได้"
                           >
                             เปิด
                           </button>
@@ -251,7 +271,7 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
   /* เพิ่มบริการใหม่ได้จากหน้างาน (ข้อมูลหลัก · หัวข้อบริการ HR-16) */
   const addSvc = useAddOption({ catalog: "services" }, setService);
   const [files, setFiles] = useState<PickedFile[]>(() =>
-    t ? [{ id: `cur-${t.id}`, name: t.url ?? t.file, size: t.size ?? 0, url: t.url }] : [],
+    t ? [{ id: `cur-${t.id}`, name: t.url ?? t.file, size: t.size ?? 0, url: t.url, fileId: t.fileId }] : [],
   );
   const [note, setNote] = useState(t?.note ?? "");
   /* ขึ้นข้อความเตือนหลังกดบันทึกครั้งแรก ไม่ใช่ตั้งแต่เปิดหน้าต่าง */
@@ -274,6 +294,7 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
       file: f.name,
       url: f.url,
       size: f.url ? undefined : f.size,
+      fileId: f.url ? undefined : (f.fileId ?? t?.fileId),
       note: note.trim(),
     };
     if (t) updateTemplate(t.id, input);

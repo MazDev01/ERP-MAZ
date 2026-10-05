@@ -11,10 +11,14 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { putFile, removeStoredFile } from "@/lib/file-store";
 import { CloseIcon, TrashIcon, UploadIcon } from "./icons";
 
-/** ไฟล์ที่แนบไว้ — id ไว้จับคู่กับความคืบหน้า เพราะชื่อซ้ำกันได้ · url = แนบเป็นลิงก์ (ขนาด 0) */
-export type PickedFile = { id: string; name: string; size: number; url?: string };
+/**
+ * ไฟล์ที่แนบไว้ — id ไว้จับคู่กับความคืบหน้า เพราะชื่อซ้ำกันได้ · url = แนบเป็นลิงก์ (ขนาด 0)
+ * fileId = รหัสไฟล์จริงที่เก็บไว้ในเครื่อง (file-store.ts) มีไว้ให้เปิดไฟล์กลับมาดูได้
+ */
+export type PickedFile = { id: string; name: string; size: number; url?: string; fileId?: string };
 
 /** อัปโหลดจำลองนานเท่าไร และขยับทุกกี่มิลลิวินาที */
 const UPLOAD_MS = 1200;
@@ -117,11 +121,12 @@ export function FileDrop({
 
   function add(list: FileList | null) {
     if (!list) return;
-    const added = Array.from(list).map((f) => ({
-      id: newId(),
-      name: f.name,
-      size: f.size,
-    }));
+    const added = Array.from(list).map((f) => {
+      const id = newId();
+      /* เก็บตัวไฟล์ไว้ในเครื่องด้วย จะได้เปิดกลับมาดูได้ ไม่ใช่จำแค่ชื่อ (ตรวจระบบ 5 ต.ค. 2569) */
+      void putFile(id, f);
+      return { id, name: f.name, size: f.size, fileId: id };
+    });
     setDone((prev) => {
       const next = { ...prev };
       for (const f of added) next[f.id] = 0;
@@ -131,6 +136,8 @@ export function FileDrop({
   }
 
   function drop(id: string) {
+    const gone = files.find((f) => f.id === id);
+    if (gone?.fileId) void removeStoredFile(gone.fileId);
     onChange(files.filter((f) => f.id !== id));
   }
 
