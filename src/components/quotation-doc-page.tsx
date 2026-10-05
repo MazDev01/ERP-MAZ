@@ -11,12 +11,26 @@ import { BillQuotationDialog } from "./quotation-dialogs";
 import { QuotationPaper } from "./quotation-paper";
 
 /**
- * ceo = เปิดจากหน้าดีลของ CEO (/ceo/sales/quotations/<เลขที่>) — ลิงก์ทุกตัวพากลับหน้าของ CEO เอง
- * ไม่พาไปหน้าของฝ่ายขาย (กติกาห้ามลิงก์ข้ามบทบาท) · ชื่อลูกค้าเป็นข้อความธรรมดา
+ * ceo = เปิดจากหน้าดีลของ CEO (/ceo/sales/quotations/<เลขที่>) · acc = เปิดจากใบเสนอราคาของบัญชี
+ * ลิงก์ทุกตัวพากลับหน้าของบทบาทตัวเอง ไม่พาไปหน้าของฝ่ายขาย (กติกาห้ามลิงก์ข้ามบทบาท)
  */
-export function QuotationDocPage({ no, rev, ceo = false }: { no: string; rev?: number; ceo?: boolean }) {
-  const back = ceo ? "/ceo/deals" : "/quotations";
-  const docHref = ceo ? `/ceo/sales/quotations/${encodeURIComponent(no)}` : `/quotations/${encodeURIComponent(no)}`;
+export function QuotationDocPage({
+  no,
+  rev,
+  ceo = false,
+  acc = false,
+}: {
+  no: string;
+  rev?: number;
+  ceo?: boolean;
+  acc?: boolean;
+}) {
+  const back = ceo ? "/ceo/deals" : acc ? "/acc/quotations" : "/quotations";
+  const docHref = ceo
+    ? `/ceo/sales/quotations/${encodeURIComponent(no)}`
+    : acc
+      ? `/acc/quotations/${encodeURIComponent(no)}`
+      : `/quotations/${encodeURIComponent(no)}`;
   const crm = useCrm();
   /* ทุกใบมีเลขที่เสมอ — เผื่อลิงก์เก่าที่อ้างด้วยรหัสของใบ ก็ยังเปิดได้ */
   const current = crm.quotations.find((x) => x.no === no) ?? crm.quotations.find((x) => x.id === no);
@@ -32,13 +46,22 @@ export function QuotationDocPage({ no, rev, ceo = false }: { no: string; rev?: n
   const deal = crm.deals.find((d) => d.quotationNo === no);
   /* ส่งไปวางบิลจากหน้าเอกสาร (ต้นแบบ quotation-view.html) — เงื่อนไขเดียวกับหน้ารายการ */
   const [billing, setBilling] = useState(false);
-  const canBill = Boolean(current) && !old && !ceo && canBillQuotation(current!, Boolean(deal), todayIso());
-  const docLink = (n: string) =>
-    ceo ? (
-      <Link href={`/ceo/sales/quotations/${encodeURIComponent(n)}`} className="lnk-code">{n}</Link>
-    ) : (
-      <Link href={`/quotations/${encodeURIComponent(n)}`} className="lnk-code">{n}</Link>
-    );
+  const canBill =
+    Boolean(current) && !old && !ceo && !acc && canBillQuotation(current!, Boolean(deal), todayIso());
+  const docLink = (n: string) => (
+    <Link
+      href={
+        ceo
+          ? `/ceo/sales/quotations/${encodeURIComponent(n)}`
+          : acc
+            ? `/acc/quotations/${encodeURIComponent(n)}`
+            : `/quotations/${encodeURIComponent(n)}`
+      }
+      className="lnk-code"
+    >
+      {n}
+    </Link>
+  );
 
   if (!q) {
     return (
@@ -61,7 +84,7 @@ export function QuotationDocPage({ no, rev, ceo = false }: { no: string; rev?: n
           </Link>
           <h1 className="num">{q.no || "ร่าง"}</h1>
           <p>
-            {ceo ? (
+            {ceo || acc ? (
               customer?.name ?? q.customerCode
             ) : (
               <Link href={`/leads/${q.customerCode}`} className="lnk-code">
@@ -90,7 +113,7 @@ export function QuotationDocPage({ no, rev, ceo = false }: { no: string; rev?: n
                 <>
                   {(q.replacedBy || q.replaces) && " · "}
                   อ้างอิงคำขอ{" "}
-                  {ceo ? (
+                  {ceo || acc ? (
                     q.ps
                   ) : (
                     <Link href={findLink("/presales", q.ps)} className="lnk-code">
@@ -105,15 +128,19 @@ export function QuotationDocPage({ no, rev, ceo = false }: { no: string; rev?: n
         <div className="tools w-full flex-wrap sm:w-auto">
           {deal && (
             <Link
-              href={`${ceo ? "/ceo/deals" : "/deals"}?find=${encodeURIComponent(deal.no)}`}
+              href={`${ceo ? "/ceo/deals" : acc ? "/acc/billing" : "/deals"}?find=${encodeURIComponent(deal.no)}`}
               className="btn glass-thin"
             >
-              ดูดีล {deal.no}
+              {acc ? `ดูงวดของดีล ${deal.no}` : `ดูดีล ${deal.no}`}
             </Link>
           )}
-          {!ceo && !old && q.no && (
-            <Link href={`/quotations/new?from=${encodeURIComponent(q.no)}`} className="btn glass-thin">
-              ออกใบใหม่จากใบนี้
+          {/* แก้ใบเดิมไม่ได้ — เปลี่ยนอะไรต้องออกใบใหม่แทนใบนี้ */}
+          {!ceo && !old && q.no && !q.replacedBy && (
+            <Link
+              href={`${acc ? "/acc" : ""}/quotations/new?replace=${encodeURIComponent(q.no)}`}
+              className="btn glass-thin"
+            >
+              ออกใบใหม่แทนใบนี้
             </Link>
           )}
           {canBill && (

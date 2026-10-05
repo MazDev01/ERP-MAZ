@@ -388,7 +388,7 @@ export function QuotationsPage() {
  * ประวัติของสายใบ — ออกใบใหม่แทนกันมากี่ฉบับ ยอดต่างกันเท่าไร (ต้นแบบ quotations.html table.revs)
  * chain เรียงจากใบที่ใช้อยู่ไปใบเก่าสุด
  */
-function ChainTable({ chain }: { chain: Quotation[] }) {
+export function ChainTable({ chain }: { chain: Quotation[] }) {
   return (
     <div className="px-4 py-3">
       <h4 className="pb-2 text-[11.5px] font-semibold text-muted-foreground">

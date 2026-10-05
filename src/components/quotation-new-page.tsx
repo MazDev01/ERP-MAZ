@@ -73,14 +73,17 @@ function initialOf(crm: CrmState, mode: Mode, presetCustomer?: string, ps?: stri
   };
 }
 
-export function QuotationNewPage() {
+/** acc = ฝั่งบัญชี เลือกได้เฉพาะลูกค้าที่ปิดการขายแล้ว ห้ามมีผู้สนใจปน และลิงก์อยู่ในหน้าของบัญชี */
+export function QuotationNewPage({ acc = false }: { acc?: boolean }) {
   /* รอ hydrate ก่อน — ร่างและใบที่สร้างในเครื่องอยู่ใน localStorage ตอนเรนเดอร์ฝั่งเซิร์ฟเวอร์ยังหาไม่เจอ
      แล้วโหมด/ค่าตั้งต้นของฟอร์มจะถูกจำเป็นค่าว่างไปตลอด */
   const hydrated = useHydrated();
-  return hydrated ? <NewPageBody /> : null;
+  return hydrated ? <NewPageBody acc={acc} /> : null;
 }
 
-function NewPageBody() {
+function NewPageBody({ acc }: { acc: boolean }) {
+  const home = acc ? "/acc/quotations" : "/quotations";
+  const who = acc ? "ลูกค้า" : "ผู้สนใจ";
   const crm = useCrm();
   const params = useSearchParams();
   const router = useRouter();
@@ -110,7 +113,7 @@ function NewPageBody() {
     <div className="space-y-4">
       <div className="bar">
         <div className="min-w-0">
-          <Link href="/quotations" className="btn glass-thin btn-mini mb-1.5">
+          <Link href={home} className="btn glass-thin btn-mini mb-1.5">
             <ChevronLeftIcon className="size-3.5" strokeWidth={2.4} />
             ใบเสนอราคา
           </Link>
@@ -132,6 +135,9 @@ function NewPageBody() {
       <QuotationForm
         key={formKey}
         crm={crm}
+        acc={acc}
+        home={home}
+        who={who}
         today={today}
         mode={effective}
         ps={fresh ? "" : ps}
@@ -147,7 +153,7 @@ function NewPageBody() {
         }}
         /* ยกเลิก = ออกจากฟอร์ม กลับไปหน้ารายการใบเสนอราคา (เจ้าของแจ้ง 25 ก.ย. 2569)
            เดิมล้างฟอร์มให้ว่างเฉย ๆ ฟอร์มที่ยังไม่ได้กรอกอะไรกดแล้วจึงเหมือนปุ่มเสีย */
-        onReset={() => router.push("/quotations")}
+        onReset={() => router.push(home)}
       />
     </div>
   );
@@ -173,6 +179,9 @@ function FromLine({ mode, ps }: { mode: Mode; ps: string }) {
 }
 
 function QuotationForm({
+  acc,
+  home,
+  who,
   crm,
   today,
   mode,
@@ -183,6 +192,11 @@ function QuotationForm({
 }: {
   crm: CrmState;
   today: string;
+  acc: boolean;
+  /** หน้ารายการของบทบาทที่เปิดฟอร์มนี้ */
+  home: string;
+  /** คำเรียกคู่ค้าในหน้านี้ — ฝั่งขายคือผู้สนใจ ฝั่งบัญชีคือลูกค้า */
+  who: string;
   mode: Mode;
   ps: string;
   presetCustomer?: string;
@@ -240,7 +254,8 @@ function QuotationForm({
       (q) =>
         q.customerCode === customer.code &&
         (canBillQuotation(q, hasDeal(q), today) ||
-          (mode.kind === "from" && q.id === mode.src.id && Boolean(q.no) && !q.replacedBy && !hasDeal(q))),
+          /* ใบที่กด "ออกใบใหม่แทนใบนี้" มาต้องเลือกแทนได้เสมอ แม้ตอบรับหรือมีดีลแล้ว ขอแค่ยังไม่ถูกแทน */
+          (mode.kind === "from" && q.id === mode.src.id && Boolean(q.no) && !q.replacedBy)),
     );
   }, [crm.quotations, crm.deals, customer, mode, today]);
   const repValue = rep && (rep === "new" || waiting.some((q) => q.no === rep)) ? rep : null;
@@ -254,7 +269,7 @@ function QuotationForm({
     items: !htmlToText(body) || totals.gross <= 0,
   };
   const miss = [
-    problems.customer && "ผู้สนใจ",
+    problems.customer && who,
     problems.service && "บริการ",
     problems.rep && "ออกแทนใบเดิม",
     problems.issuer && "ออกในนาม",
@@ -297,10 +312,10 @@ function QuotationForm({
     onSaved(
       <>
         ออกเลขที่ <b className="num">{no}</b> แล้ว · รวมทั้งสิ้น {baht(totals.grand)} บาท · แก้ไขไม่ได้อีก
-        <Link href={`/quotations/${encodeURIComponent(no)}`} className="font-semibold underline">
+        <Link href={`${home}/${encodeURIComponent(no)}`} className="font-semibold underline">
           เปิดเอกสารไปส่งลูกค้า
         </Link>
-        <Link href="/quotations" className="font-semibold underline">
+        <Link href={home} className="font-semibold underline">
           กลับไปรายการใบเสนอราคา
         </Link>
       </>,
@@ -321,11 +336,14 @@ function QuotationForm({
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           <section className={card}>
-            <h2 className={h2}>ผู้สนใจ</h2>
-            <Field label="ผู้สนใจ" required error={touched && problems.customer ? "เลือกลูกค้าก่อน" : undefined}>
+            <h2 className={h2}>{who}</h2>
+            <Field label={who} required error={touched && problems.customer ? "เลือกลูกค้าก่อน" : undefined}>
               <CustomerCombo
-                /* ต้นแบบ quotation-new ไม่มีรายที่ปฏิเสธแล้วในรายการ · เลือกแล้วแสดงแค่ชื่อ · มีป้ายไม่มีเลขภาษี */
-                customers={crm.customers.filter((c) => c.status !== "ปฏิเสธ")}
+                /* ต้นแบบ quotation-new ไม่มีรายที่ปฏิเสธแล้วในรายการ · เลือกแล้วแสดงแค่ชื่อ · มีป้ายไม่มีเลขภาษี
+                   ฝั่งบัญชีออกเอกสารให้ลูกค้าที่ปิดการขายแล้วเท่านั้น (ต้นแบบ acc-quotation-new.html) */
+                customers={crm.customers.filter((c) =>
+                  acc ? c.status === "ปิดงาน" : c.status !== "ปฏิเสธ",
+                )}
                 nameOnly
                 taxFlag
                 value={customer}
@@ -338,7 +356,7 @@ function QuotationForm({
               />
               {customer && !customer.taxId && (
                 <p className="mt-2.5 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-[12.5px] leading-relaxed text-[var(--warning)]">
-                  ผู้สนใจรายนี้ยังไม่มีเลขประจำตัวผู้เสียภาษี
+                  {who}รายนี้ยังไม่มีเลขประจำตัวผู้เสียภาษี
                 </p>
               )}
             </Field>

@@ -148,6 +148,8 @@ const STAFF: NavItem[] = [
 
 const ACC: NavItem[] = [
   { group: "บัญชี", label: "แดชบอร์ด", icon: "accboard", href: "/acc/dashboard" },
+  /* ใบเสนอราคาของบัญชี — ออกให้ลูกค้าที่ปิดการขายแล้วเท่านั้น (ต้นแบบ acc-quotations.html) */
+  { group: "บัญชี", label: "ใบเสนอราคา", icon: "quotation", href: "/acc/quotations" },
   { group: "บัญชี", label: "วางบิล", icon: "billing", href: "/acc/billing" },
   { group: "บัญชี", label: "ใบเสร็จรับเงิน", icon: "receipt", href: "/acc/receipts" },
   { group: "บัญชี", label: "หัก ณ ที่จ่าย", icon: "tax", href: "/acc/wht" },
