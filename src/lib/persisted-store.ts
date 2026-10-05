@@ -1,7 +1,15 @@
 /*
  * ตัวช่วยสร้าง store ที่ทุกหน้าอ่านร่วมกันและเก็บลง localStorage
  * ใช้กับ useSyncExternalStore ได้ตรง ๆ (React 19 ห้าม setState ใน effect)
+ *
+ * เปิดหลายแท็บพร้อมกันได้ (ตรวจระบบ 5 ต.ค. 2569 · BUG-001)
+ * เดิมอ่าน localStorage ครั้งเดียวแล้วจำไว้ แท็บที่เปิดค้างจึงถือข้อมูลเก่า
+ * พอบันทึกก็เขียนทับของที่อีกแท็บเพิ่งเพิ่มไปจนหายถาวร แก้สองทาง
+ *   1. ก่อนเขียนทุกครั้ง อ่านค่าล่าสุดจากเครื่องก่อน ไม่ใช้ค่าที่จำไว้
+ *   2. ฟัง event "storage" — แท็บอื่นเขียนเมื่อไร ทิ้งค่าที่จำไว้แล้ววาดใหม่
  */
+import { reportStorageError } from "./storage-health";
+
 export type PersistedStore<T> = {
   subscribe: (onChange: () => void) => () => void;
   get: () => T;
@@ -25,11 +33,13 @@ export function createPersistedStore<T>(
 ): PersistedStore<T> {
 
   let cache: T | undefined;
+  /** ข้อความดิบที่เราเขียนลงเครื่องครั้งล่าสุด — ใช้เทียบว่า event storage เป็นของเราเองหรือของแท็บอื่น */
+  let lastRaw: string | null = null;
   const listeners = new Set<() => void>();
+  let watching = false;
 
-  function read(): T {
+  function parse(raw: string | null): T {
     try {
-      const raw = window.localStorage.getItem(key);
       if (!raw) return initial;
       const parsed: unknown = JSON.parse(raw);
       if (!isValid(parsed)) return initial;
@@ -39,11 +49,24 @@ export function createPersistedStore<T>(
     }
   }
 
-  function write(value: T) {
+  function read(): T {
     try {
-      window.localStorage.setItem(key, JSON.stringify(value));
+      const raw = window.localStorage.getItem(key);
+      lastRaw = raw;
+      return parse(raw);
     } catch {
-      // โควตาเต็มหรือโหมดส่วนตัว — ยังให้หน้าจอเปลี่ยนตามได้
+      return initial;
+    }
+  }
+
+  function write(value: T) {
+    const raw = JSON.stringify(value);
+    try {
+      window.localStorage.setItem(key, raw);
+      lastRaw = raw;
+    } catch (error) {
+      /* โควตาเต็มหรือโหมดส่วนตัว — หน้าจอยังเปลี่ยนตามได้ แต่ต้องบอกผู้ใช้ว่าข้อมูลไม่ได้ถูกเก็บ */
+      reportStorageError(error);
     }
   }
 
@@ -51,8 +74,23 @@ export function createPersistedStore<T>(
     for (const listener of listeners) listener();
   }
 
+  /** แท็บอื่นเขียนคีย์เดียวกัน — ทิ้งค่าที่จำไว้แล้วให้หน้าจอวาดใหม่จากของจริง */
+  function watch() {
+    if (watching || typeof window === "undefined") return;
+    watching = true;
+    window.addEventListener("storage", (e) => {
+      if (e.key !== null && e.key !== key) return;
+      /* ค่าที่เราเพิ่งเขียนเอง ไม่ต้องวาดใหม่ */
+      if (e.newValue === lastRaw) return;
+      lastRaw = e.newValue;
+      cache = parse(e.newValue);
+      notify();
+    });
+  }
+
   return {
     subscribe(onChange) {
+      watch();
       listeners.add(onChange);
       return () => {
         listeners.delete(onChange);
@@ -71,8 +109,8 @@ export function createPersistedStore<T>(
       notify();
     },
     update(fn) {
-      cache ??= read();
-      cache = fn(cache);
+      /* อ่านของล่าสุดจากเครื่องก่อนเสมอ — แท็บอื่นอาจเพิ่งเพิ่มข้อมูลไป ถ้าใช้ค่าที่จำไว้จะเขียนทับจนหาย */
+      cache = fn(read());
       write(cache);
       notify();
     },
@@ -80,6 +118,7 @@ export function createPersistedStore<T>(
       cache = initial;
       try {
         window.localStorage.removeItem(key);
+        lastRaw = null;
       } catch {
         // ไม่เป็นไร ค่าในหน่วยความจำถูกรีเซ็ตแล้ว
       }

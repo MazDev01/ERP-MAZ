@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { bottomNav, canVisitAny, findItem, homeOf, mobileHomeOf, navGroupsOf, navItemsOf, pageTitle, useMenuAccess, type IconName, type NavItem } from "@/lib/nav";
+import { bottomNav, canVisitAny, findItem, homeOf, isKnownPage, mobileHomeOf, navGroupsOf, navItemsOf, pageTitle, useMenuAccess, type IconName, type NavItem } from "@/lib/nav";
 import { BillingNavDot } from "./acc-ui";
 import { useMyRoles } from "@/lib/hr-link";
 import { useMyEmpType } from "@/lib/leave-policy";
 import { thaiDate, todayIso } from "@/lib/format";
 import { useHydrated } from "@/lib/pwa";
 import { lockScroll } from "@/lib/scroll-lock";
+import { clearStorageTrouble, troubleText, useStorageTrouble } from "@/lib/storage-health";
 import { runMobileBack } from "@/lib/mobile-back";
 import { roleLabel, useApprovalRoute, useRole, type Role } from "@/lib/role";
 import {
@@ -115,6 +116,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
      ไม่งั้น PM จะเห็นหน้ากันแวบหนึ่งทุกครั้งที่รีเฟรช เพราะค่าเริ่มต้นฝั่งเซิร์ฟเวอร์เป็นฝ่ายขาย */
   const hydrated = useHydrated();
   const blocked = hydrated && !canVisitAny(pathname, roles, access, route, empType);
+  /* พิมพ์ที่อยู่ผิด = ไม่มีหน้านี้จริง ๆ ไม่ใช่เรื่องสิทธิ์ ต้องบอกคนละแบบ (BUG-004) */
+  const missing = blocked && !isKnownPage(pathname);
+  /* บันทึกลงเครื่องไม่สำเร็จ — ขึ้นแถบเตือนคาดไว้บนสุด ไม่ให้ผู้ใช้เข้าใจว่าข้อมูลถูกเก็บแล้ว (BUG-003) */
+  const trouble = useStorageTrouble();
   const router = useRouter();
 
   /* บทบาทที่ไม่มีหน้าตอกบัตร (ผู้ดูแลระบบ) เปิด "/" แล้วพาไปหน้าแรกของตัวเอง ไม่ขึ้นหน้าห้ามเข้า */
@@ -401,12 +406,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main id="main" className="w-full min-w-0 flex-1 px-4 pt-[18px] pb-10 max-md:pb-[calc(94px+env(safe-area-inset-bottom))] sm:px-[30px]">
           {/* จอคอมไม่มีปุ่มย้อนกลับแล้ว (เจ้าของสั่ง 30 ก.ย. 2569) — กลับด้วยเมนูซ้ายหรือปุ่มของเบราว์เซอร์
               บนมือถือยังมีปุ่มวงกลมที่หัวจอเหมือนเดิม เพราะไม่มีเมนูซ้ายให้กด */}
+          {trouble && (
+            <div role="alert" className="mb-4 flex items-start gap-3 rounded-[14px] bg-[var(--destructive-soft)] px-4 py-3 text-[13px] text-destructive">
+              <span className="min-w-0 flex-1 leading-relaxed">{troubleText(trouble)}</span>
+              <button
+                type="button"
+                onClick={clearStorageTrouble}
+                className="flex-none rounded-full px-2 py-1 text-[12.5px] font-semibold underline"
+              >
+                ปิด
+              </button>
+            </div>
+          )}
           {blocked ? (
             /* ทุกบทบาทอยู่ในหน้าของตัวเองเท่านั้น — ลิงก์เก่าหรือพิมพ์ที่อยู่เองก็เข้าหน้าของบทบาทอื่นไม่ได้ */
             <section className="glass mx-auto mt-10 max-w-[520px] rounded-[16px] px-6 py-12 text-center">
-              <h1 className="text-lg font-bold">หน้านี้ไม่ได้อยู่ในเมนูของ{roleLabel(role)}</h1>
+              <h1 className="text-lg font-bold">
+                {missing ? "ไม่พบหน้านี้" : `หน้านี้ไม่ได้อยู่ในเมนูของ${roleLabel(role)}`}
+              </h1>
               <p className="mt-2 text-[13.5px] text-muted-foreground">
-                แต่ละบทบาทเปิดได้เฉพาะหน้าในเมนูของตัวเอง หรือผู้ดูแลระบบปิดเมนูนี้ไว้
+                {missing
+                  ? "ที่อยู่นี้ไม่มีอยู่ในระบบ ลองตรวจตัวสะกดของลิงก์ หรือกลับไปเริ่มจากเมนู"
+                  : "แต่ละบทบาทเปิดได้เฉพาะหน้าในเมนูของตัวเอง หรือผู้ดูแลระบบปิดเมนูนี้ไว้"}
               </p>
               {items[0] && (
                 <Link href={items[0].href} className="btn solid btn-solid mt-5 inline-flex">

@@ -532,6 +532,15 @@ export function canVisit(
  * ชื่อหน้าบนแถบบนไม่ขึ้นกับว่าเมนูถูกปิดหรือไม่ — ค้นจากเมนูทั้งหมดของทุกบทบาท
  * หน้าที่ถูกปิดยังต้องมีชื่อบนแถบบน ตอนขึ้นหน้าแจ้งว่าเข้าไม่ได้
  */
+/**
+ * ที่อยู่นี้มีหน้าอยู่จริงไหม (ตรวจระบบ 5 ต.ค. 2569 · BUG-004)
+ * ใช้แยก "พิมพ์ที่อยู่ผิด ไม่มีหน้านี้" ออกจาก "มีหน้าแต่ไม่ใช่ของบทบาทนี้"
+ * สองเรื่องนี้ผู้ใช้ต้องทำคนละอย่าง จะได้ไม่งงว่าตัวเองไม่มีสิทธิ์ทั้งที่พิมพ์ผิด
+ */
+export function isKnownPage(pathname: string) {
+  return SHARED_PAGES.includes(pathname) || Boolean(findItem(pathname, "sales"));
+}
+
 export function findItem(pathname: string, role: Role): NavItem | undefined {
   const own = [...configurableItems(role), { ...APPROVALS_ITEM, group: BY_ROLE[role].group }];
   const everyRole = Object.values(BY_ROLE).flatMap((r) => r.work);

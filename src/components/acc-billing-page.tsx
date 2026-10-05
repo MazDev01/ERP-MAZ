@@ -1007,6 +1007,13 @@ function PlanDialog({
       onClose={onClose}
       footer={
         <>
+          {/* บอกเหตุผลที่ปุ่มกดไม่ได้ ไม่ปล่อยให้เป็นปุ่มเทาเฉย ๆ (ตรวจระบบ 5 ต.ค. 2569 · BUG-005) */}
+          {diff !== 0 && (
+            <p className="mr-auto max-w-[250px] text-left text-[12px] leading-snug text-destructive max-sm:w-full">
+              ยอดทุกงวดต้องรวมกันเท่ากับยอดสุทธิ {baht(deal.net)} บาท (สัดส่วนรวม 100%) ตอนนี้ยัง
+              {diff > 0 ? "ขาด" : "เกิน"} {baht(Math.abs(diff))} บาท
+            </p>
+          )}
           <button type="button" className="btn glass-thin" onClick={onClose}>
             ยกเลิก
           </button>
@@ -1014,6 +1021,7 @@ function PlanDialog({
             type="button"
             className="btn solid btn-solid disabled:opacity-45"
             disabled={diff !== 0}
+            title={diff !== 0 ? "ยอดทุกงวดต้องรวมกันเท่ากับยอดสุทธิก่อนจึงจะบันทึกได้" : undefined}
             onClick={() => {
               savePlan(
                 deal.no,

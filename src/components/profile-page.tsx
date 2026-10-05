@@ -13,7 +13,7 @@ import {
   useNotifySettings,
   type NotifySettings,
 } from "@/lib/notify-settings";
-import { setProfilePhoto, useProfilePhoto } from "@/lib/profile-store";
+import { checkPhotoFile, setProfilePhoto, useProfilePhoto } from "@/lib/profile-store";
 import { setMobileBack } from "@/lib/mobile-back";
 import Link from "next/link";
 import {
@@ -148,15 +148,22 @@ function ProfileHub({ panes, onPane }: { panes: typeof PANES; onPane: (p: Pane) 
   const photo = useProfilePhoto();
   const fileRef = useRef<HTMLInputElement>(null);
   const [cropping, setCropping] = useState<string | null>(null);
+  /** ข้อความบอกว่าทำไมรูปที่เลือกใช้ไม่ได้ */
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const short = me.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
   const rows = panes.filter((p) => p.key !== "profile");
 
+  /* เลือกไฟล์ที่ไม่ใช่รูปหรือรูปใหญ่เกิน ต้องบอกเหตุผล ไม่ใช่เงียบ (ตรวจระบบ 5 ต.ค. 2569 · BUG-002) */
   function pick(file: File | undefined) {
+    if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
+    const bad = checkPhotoFile(file);
+    setPhotoError(bad);
+    if (bad) return;
     const reader = new FileReader();
     reader.onload = () => setCropping(String(reader.result));
+    reader.onerror = () => setPhotoError("อ่านไฟล์รูปไม่สำเร็จ ลองเลือกไฟล์อื่น");
     reader.readAsDataURL(file);
-    if (fileRef.current) fileRef.current.value = "";
   }
 
   return (
@@ -182,12 +189,17 @@ function ProfileHub({ panes, onPane }: { panes: typeof PANES; onPane: (p: Pane) 
           <input
             ref={fileRef}
             type="file"
-            accept="image/jpeg,image/png,image/gif"
+            accept="image/jpeg,image/png,image/gif,image/webp"
             aria-label="เลือกไฟล์รูปโปรไฟล์"
             className="sr-only"
             onChange={(e) => pick(e.target.files?.[0])}
           />
         </span>
+        {photoError && (
+          <p role="alert" className="mt-2.5 rounded-xl bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] font-medium text-destructive">
+            {photoError}
+          </p>
+        )}
         <h2 className="mt-4 text-[19px] font-bold">{me.name}</h2>
         <p className="mt-1.5 text-[13px] text-muted-foreground">{me.position}</p>
         <button
@@ -251,13 +263,19 @@ function ProfileCard({
   const photo = useProfilePhoto();
   const fileRef = useRef<HTMLInputElement>(null);
   const [cropping, setCropping] = useState<string | null>(null);
+  /** ข้อความบอกว่าทำไมรูปที่เลือกใช้ไม่ได้ */
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
-  async function pick(file: File | undefined) {
+  function pick(file: File | undefined) {
+    if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
+    const bad = checkPhotoFile(file);
+    setPhotoError(bad);
+    if (bad) return;
     const reader = new FileReader();
     reader.onload = () => setCropping(String(reader.result));
+    reader.onerror = () => setPhotoError("อ่านไฟล์รูปไม่สำเร็จ ลองเลือกไฟล์อื่น");
     reader.readAsDataURL(file);
-    if (fileRef.current) fileRef.current.value = "";
   }
 
   const me = useProfile();
@@ -292,12 +310,18 @@ function ProfileCard({
         <input
           ref={fileRef}
           type="file"
-          accept="image/jpeg,image/png,image/gif"
+          accept="image/jpeg,image/png,image/gif,image/webp"
           aria-label="เลือกไฟล์รูปโปรไฟล์"
           className="sr-only"
           onChange={(e) => pick(e.target.files?.[0])}
         />
       </span>
+
+        {photoError && (
+          <p role="alert" className="mt-2.5 w-full rounded-xl bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] font-medium text-destructive">
+            {photoError}
+          </p>
+        )}
 
         {/* ผู้ดูแลระบบไม่มีชื่อคนและไม่มีตำแหน่ง — บรรทัดเดียวว่า "ผู้ดูแลระบบ" พอ (เจ้าของสั่ง 25 ก.ย. 2569) */}
         <div className="min-w-0 lg:mt-3.5">
