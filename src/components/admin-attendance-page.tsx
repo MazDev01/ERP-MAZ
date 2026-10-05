@@ -382,7 +382,7 @@ export function AdminAttendancePage() {
               <AreaMap
                 lat={lat}
                 lng={lng}
-                radius={Number.isFinite(km) && km > 0 ? km * 1000 : 150}
+                radius={Number.isFinite(km) && km > 0 ? km * 1000 : 1000}
                 onPick={(la, ln) =>
                   setD((x) => ({ ...x, lat: String(la), lng: String(ln) }))
                 }
