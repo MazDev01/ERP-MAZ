@@ -20,7 +20,7 @@ import { thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import { countTemplateUse, useTemplates } from "@/lib/presales-templates";
 import {
   addPsAsk,
-  PS_ME as ME,
+  usePsMe,
   psBucket as bucket,
   psKindText,
   psMine as mine,
@@ -84,6 +84,8 @@ function KindTag({ kind, full }: { kind: PresalesRequest["kind"]; full?: boolean
 }
 
 export function PresalesWorkPage() {
+  /* SA หรือ BD — คนที่เลือกไว้ในเมนูบัญชีของฉัน */
+  const ME = usePsMe();
   const crm = useCrm();
   const today = todayIso();
   /* GM เปิดหน้านี้ได้แบบดูอย่างเดียว และเห็นคำขอทุกใบ ไม่ใช่เฉพาะของทีมก่อนการขาย */
@@ -329,6 +331,7 @@ function WorkDialog({
   /** งานย้ายขั้นแล้ว — ส่งแท็บที่ต้องสลับไปมาด้วย (ไม่ส่ง = อยู่แท็บเดิม) · keepOpen = ไม่ปิดหน้าต่าง */
   onMoved: (tab?: Tab, keepOpen?: boolean) => void;
 }) {
+  const ME = usePsMe();
   const crm = useCrm();
   const templates = useTemplates();
   const rounds = crm.presalesRounds.filter((x) => x.requestNo === r.no).sort((a, b) => b.round - a.round);

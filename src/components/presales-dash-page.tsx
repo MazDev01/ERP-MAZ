@@ -19,7 +19,7 @@ import type { PresalesRequest } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
 import { daysBetween, todayIso } from "@/lib/format";
 import { DashWrap, DashHero, DashSection } from "./mobile-dash";
-import { PS_ME as ME, psMine as mine, psOwner, psWorkLink } from "@/lib/presales-work";
+import { usePsMe, psMine as mine, psOwner, psWorkLink } from "@/lib/presales-work";
 
 /** รายการในการ์ด "ต้องส่งเร็ว ๆ นี้" */
 const SOON_CAP = 5;
@@ -28,6 +28,8 @@ type Result = "won" | "lost" | "wait";
 const RESULT_LABEL: Record<Result, string> = { won: "ได้ดีล", lost: "ลูกค้าปฏิเสธ", wait: "รอผล" };
 
 export function PresalesDashPage() {
+  /* SA หรือ BD — คนที่เลือกไว้ในเมนูบัญชีของฉัน */
+  const ME = usePsMe();
   const crm = useCrm();
   const today = todayIso();
   const nameOf = useMemo(() => new Map(crm.customers.map((c) => [c.code, c.name])), [crm.customers]);

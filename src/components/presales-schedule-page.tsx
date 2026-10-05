@@ -37,7 +37,7 @@ import {
 } from "@/lib/pm-schedule-data";
 import { addEvent, cancelEvent, editEvent, useSchedule } from "@/lib/pm-schedule-store";
 import { usePm, useTeam } from "@/lib/pm-store";
-import { PS_ME as ME, psMine as mine, psWorkLink } from "@/lib/presales-work";
+import { usePsMe, psMine as mine, psWorkLink } from "@/lib/presales-work";
 import { AppointmentSheet } from "./appointment-sheet";
 import { Sheet } from "./lead-dialogs";
 import { ThaiDatePicker } from "./thai-date-picker";
@@ -74,6 +74,8 @@ const shortDate = (day: string) => {
 };
 
 export function PresalesSchedulePage() {
+  /* SA หรือ BD — คนที่เลือกไว้ในเมนูบัญชีของฉัน */
+  const ME = usePsMe();
   const crm = useCrm();
   const pm = usePm();
   const leave = useLeaveRecords();
@@ -151,7 +153,7 @@ export function PresalesSchedulePage() {
         data: e,
       });
     return out;
-  }, [crm.customers, crm.presales, crm.presalesRounds, pm.projects, leave, sc.events]);
+  }, [crm.customers, crm.presales, crm.presalesRounds, pm.projects, leave, sc.events, ME.employeeId]);
 
   return (
     <div className="space-y-4">
@@ -225,6 +227,7 @@ function PsEventForm({
   onClose: () => void;
   onSaved: (date: string) => void;
 }) {
+  const ME = usePsMe();
   /* เชิญได้เฉพาะคนที่ยังอยู่ และไม่ใช่ PM (นัดกลุ่มนี้ไม่ขึ้นในปฏิทินของ PM) */
   const team = useTeam().filter(
     (m) => !m.left && m.id !== USERS.pm.employeeId && m.id !== ME.employeeId,

@@ -11,14 +11,20 @@ import type { PresalesRequest } from "./crm-data";
 import { bkkStamp, daysBetween } from "./format";
 import { USERS } from "./mock-data";
 import { createPersistedStore } from "./persisted-store";
+import { psEmployeeId, psMeOf, usePsEmployeeId } from "./ps-identity";
 
-/** ชื่อในคิวงานตามต้นแบบ "ปิยะวัฒน์ (SA)" — ชื่อต้นกับตำแหน่งของคนที่ล็อกอิน */
-export const PS_ME = {
-  name: `${USERS.ps.name.split(" ")[0]} (${USERS.ps.position})`,
-  full: USERS.ps.name,
-  employeeId: USERS.ps.employeeId,
-  kind: (USERS.ps.position === "BD" ? "BD" : "SA") as "SA" | "BD",
-};
+/**
+ * คนในทีมก่อนการขายที่ใช้ระบบอยู่ — SA หรือ BD สลับได้ที่เมนูบัญชีของฉัน (ดู ps-identity.ts)
+ * เดิมตรึงไว้ที่ SA คนเดียว ชื่อผู้รับงานจึงเป็นของ SA เสมอแม้ BD เป็นคนกดรับ
+ */
+export function usePsMe() {
+  return psMeOf(usePsEmployeeId());
+}
+
+/** อ่านนอก React — ใช้ตอนบันทึกชื่อผู้บันทึกข้อความ */
+export function psMe() {
+  return psMeOf(psEmployeeId());
+}
 
 /** ประเภทคำขอที่กล่องงานก่อนการขายรับผิดชอบ — ตอนนี้รับทั้งสองประเภท */
 export const PS_KINDS: PresalesRequest["kind"][] = ["SA", "BD"];
@@ -155,7 +161,7 @@ export function psLastAsk(all: Record<string, PsNote[]>, r: PresalesRequest) {
 
 /** ทีมก่อนการขายถามข้อมูลเพิ่ม — เรียกคู่กับ askPresalesInfo ใน crm-store */
 export function addPsAsk(no: string, tx: string) {
-  addPsNote(no, { side: "ps", by: PS_ME.name, at: bkkStamp(), tx });
+  addPsNote(no, { side: "ps", by: psMe().name, at: bkkStamp(), tx });
 }
 
 /** ฝ่ายขายตอบข้อมูลเพิ่ม — เรียกคู่กับ replyPresalesInfo ใน crm-store */

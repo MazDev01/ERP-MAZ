@@ -11,6 +11,7 @@
 import { USERS } from "./mock-data";
 import { HR_EMP, HR_EMPTYPE, hrDept, hrPos } from "./hr-data";
 import { staffEmployeeId, subscribeStaffEmployee } from "./staff-identity";
+import { psEmployeeId, subscribePsEmployee } from "./ps-identity";
 import { createPersistedStore } from "./persisted-store";
 import { currentRole, subscribeRole, type Role } from "./role";
 import { useSyncExternalStore } from "react";
@@ -71,13 +72,21 @@ const store = createPersistedStore<ProfileByRole>(
  * จึงต้องอ่านจากต้นทางเสมอ ไม่ใช่จากที่เก็บไว้ในเครื่อง
  * ไม่งั้นพอต้นทางแก้ (เช่น ย้ายฝ่าย) คนที่เคยเปิดแอปแล้วจะเห็นของเก่าค้างตลอดไป
  */
+/** บทบาทที่ไม่ได้ผูกกับคนเดียว — คืนรหัสพนักงานที่เลือกไว้ ที่เหลือคืนค่าว่าง */
+function pickedId(role: Role): string | null {
+  if (role === "staff") return staffEmployeeId();
+  /* ทีมก่อนการขายมี SA กับ BD (เจ้าของถาม 5 ต.ค. 2569 "แล้วของ BD ล่ะ") */
+  if (role === "ps") return psEmployeeId();
+  return null;
+}
+
 function hrOwned(role: Role) {
   /*
    * บทบาท "พนักงาน" ไม่ได้ผูกกับคนเดียว — มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
    * ชื่อกับตำแหน่งจึงมาจากคนที่เลือกไว้ในทะเบียนฝ่ายบุคคล ไม่ใช่ค่าตายตัวใน USERS (เจ้าของสั่ง 29 ก.ย. 2569)
    */
-  if (role === "staff") {
-    const e = HR_EMP.find((x) => x.id === staffEmployeeId());
+  if (role === "staff" || role === "ps") {
+    const e = HR_EMP.find((x) => x.id === pickedId(role));
     if (e) {
       const boss = HR_EMP.find((x) => x.id === e.boss);
       return {
@@ -87,7 +96,7 @@ function hrOwned(role: Role) {
         supervisor: boss ? `${boss.name} (${hrPos(boss.pos).label})` : "",
         startDate: e.startedAt,
         employmentType: HR_EMPTYPE[e.type].label,
-        workSchedule: USERS.staff.workSchedule,
+        workSchedule: USERS[role].workSchedule,
       };
     }
   }
@@ -113,7 +122,7 @@ let seenStaff: string | null = null;
 
 function pick(all: ProfileByRole, role: Role): EmployeeProfile {
   /* พนักงานสลับคนได้ จึงต้องคิดใหม่เมื่อคนเปลี่ยนด้วย ไม่ใช่เฉพาะตอนสลับบทบาท */
-  const staffId = role === "staff" ? staffEmployeeId() : null;
+  const staffId = pickedId(role);
   if (all !== seenAll || role !== seenRole || staffId !== seenStaff) {
     seenAll = all;
     seenRole = role;
@@ -136,7 +145,12 @@ const getMergedServer = () => pick(store.getServer(), "sales");
 
 /* โปรไฟล์เปลี่ยนได้สองทาง — แก้ข้อมูลเอง หรือสลับบทบาท จึงต้องฟังทั้งคู่ */
 function subscribeBoth(onChange: () => void) {
-  const off = [store.subscribe(onChange), subscribeRole(onChange), subscribeStaffEmployee(onChange)];
+  const off = [
+    store.subscribe(onChange),
+    subscribeRole(onChange),
+    subscribeStaffEmployee(onChange),
+    subscribePsEmployee(onChange),
+  ];
   return () => off.forEach((fn) => fn());
 }
 

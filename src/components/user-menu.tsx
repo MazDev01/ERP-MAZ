@@ -8,6 +8,7 @@ import { useMyRoles } from "@/lib/hr-link";
 import { rolesLabel, useRole } from "@/lib/role";
 import { hrPos } from "@/lib/hr-data";
 import { setStaffEmployee, staffTeam, useStaffEmployeeId } from "@/lib/staff-identity";
+import { psTeam, setPsEmployee, usePsEmployeeId } from "@/lib/ps-identity";
 import { useProfilePhoto } from "@/lib/profile-store";
 import { ConfirmDialog } from "./confirm-dialog";
 import { DownloadIcon, LockIcon, LogoutIcon, UserIcon } from "./icons";
@@ -30,9 +31,13 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
      ต้องเห็นว่าตอนนี้ทำงานในบทบาทไหน และตัวเองถือบทบาทอะไรอีกบ้าง
      ไม่งั้นพอคิวอนุมัติหรือเมนูไม่เหมือนที่คิด ก็เดาไม่ออกว่าเพราะสวมหมวกผิดใบ */
   const role = useRole();
-  /* พนักงานสลับคนได้ — รายชื่อจากทะเบียนฝ่ายบุคคล ไม่ใช่รายชื่อตายตัวในหน้านี้ */
+  /* บทบาทที่ไม่ได้ผูกกับคนเดียวสลับคนได้ — รายชื่อจากทะเบียนฝ่ายบุคคล ไม่ใช่รายชื่อตายตัวในหน้านี้
+     พนักงาน = ทุกตำแหน่งที่ไม่มีหน้าจอของตัวเอง · ทีมก่อนการขาย = SA กับ BD (เจ้าของถาม 5 ต.ค. 2569) */
   const staffId = useStaffEmployeeId();
-  const team = role === "staff" ? staffTeam() : [];
+  const psId = usePsEmployeeId();
+  const team = role === "staff" ? staffTeam() : role === "ps" ? psTeam() : [];
+  const pickedId = role === "ps" ? psId : staffId;
+  const pickPerson = role === "ps" ? setPsEmployee : setStaffEmployee;
   const myRoles = useMyRoles();
   const dual = myRoles.length > 1;
   const photo = useProfilePhoto();
@@ -137,21 +142,21 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
             สลับได้ว่ากำลังใช้ระบบเป็นใคร — งานที่ได้รับ เวลาทำงาน ใบลา โอที ใบเบิก เป็นของคนนั้น
             (เจ้าของสั่ง 29 ก.ย. 2569 · ยังไม่มีหลังบ้าน จึงเป็นตัวเลือกในเครื่อง)
           */}
-          {role === "staff" && team.length > 1 && (
+          {team.length > 1 && (
             <>
               <p className="px-2.5 pt-1 pb-1.5 text-[11px] font-bold text-muted-foreground">
                 เข้าใช้งานเป็น
               </p>
               <div className="scroll-stable max-h-[184px] overflow-y-auto">
                 {team.map((e) => {
-                  const on = e.id === staffId;
+                  const on = e.id === pickedId;
                   return (
                     <button
                       key={e.id}
                       type="button"
                       role="menuitem"
                       onClick={() => {
-                        setStaffEmployee(e.id);
+                        pickPerson(e.id);
                         setOpen(false);
                       }}
                       className={`flex w-full items-center gap-2.5 rounded-[9px] px-[11px] py-2 text-left text-[13px] transition-colors hover:bg-accent ${

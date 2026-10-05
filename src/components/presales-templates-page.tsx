@@ -14,7 +14,7 @@
 import { useState } from "react";
 import { thaiDate } from "@/lib/format";
 import { serviceLabel, services } from "@/lib/pm-data";
-import { PS_ME as ME } from "@/lib/presales-work";
+import { usePsMe } from "@/lib/presales-work";
 import {
   addTemplate,
   linkKind,
@@ -245,6 +245,7 @@ export function PresalesTemplatesPage() {
 
 /** หน้าต่างเพิ่ม/แก้ไขเทมเพลต — ไฟล์หรือลิงก์ได้ทีละหนึ่งรายการ แนบใหม่แทนของเดิมเลย */
 function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate; onClose: () => void }) {
+  const ME = usePsMe();
   const [name, setName] = useState(t?.name ?? "");
   const [service, setService] = useState(t?.service ?? "");
   /* เพิ่มบริการใหม่ได้จากหน้างาน (ข้อมูลหลัก · หัวข้อบริการ HR-16) */
