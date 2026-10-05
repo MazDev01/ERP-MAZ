@@ -6,6 +6,7 @@ import { cloneElement, isValidElement, useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom";
 import { todayIso } from "@/lib/format";
 import { lockScroll } from "@/lib/scroll-lock";
+import { pushMobileBack } from "@/lib/mobile-back";
 import { CloseIcon } from "./icons";
 
 import { DateField } from "./thai-date-picker";
@@ -43,9 +44,12 @@ export function Sheet({
     };
     document.addEventListener("keydown", onKey);
     const unlock = lockScroll();
+    /* ปุ่มย้อนกลับบนแถบหัวมือถือต้องปิดกล่องก่อน ไม่ใช่พาออกจากหน้าไปเลย */
+    const popBack = pushMobileBack(onClose);
     return () => {
       document.removeEventListener("keydown", onKey);
       unlock();
+      popBack();
     };
   }, [onClose]);
 

@@ -9,15 +9,30 @@
  */
 
 let handler: (() => void) | null = null;
+/* กล่องที่เปิดซ้อนอยู่ — ปิดจากใบบนสุดลงมา (เจ้าของแจ้ง 5 ต.ค. 2569 ว่ากดย้อนตอนเปิดกล่องขอโอทีแล้วเด้งออกจากหน้า) */
+const sheets: (() => void)[] = [];
 
 /** ฝากทางกลับของหน้าซ้อน — ส่ง null เมื่อปิดหน้าซ้อนแล้ว */
 export function setMobileBack(fn: (() => void) | null) {
   handler = fn;
 }
 
+/**
+ * ฝากทางปิดของกล่องที่เพิ่งเปิด — คืนฟังก์ชันเอาออกตอนกล่องปิด
+ * ซ้อนกันได้หลายใบ ปุ่มย้อนกลับจะปิดใบบนสุดก่อนเสมอ
+ */
+export function pushMobileBack(fn: () => void) {
+  sheets.push(fn);
+  return () => {
+    const i = sheets.lastIndexOf(fn);
+    if (i >= 0) sheets.splice(i, 1);
+  };
+}
+
 /** เรียกทางกลับที่ฝากไว้ · คืน true ถ้ามีคนรับไปแล้ว แถบหัวจะได้ไม่พากลับหน้าหลักซ้ำ */
 export function runMobileBack() {
-  if (!handler) return false;
-  handler();
+  const top = sheets[sheets.length - 1] ?? handler;
+  if (!top) return false;
+  top();
   return true;
 }

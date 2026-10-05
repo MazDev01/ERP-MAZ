@@ -19,8 +19,8 @@ import { useOtRecords } from "@/lib/ot-store";
 import { leavesOnDate, useLeaveRecords } from "@/lib/leave-store";
 import {
   formatMinutesOfDay,
-  hoursText,
   leaveWindowOf,
+  formatMinutes,
   minutesOfTime,
   shiftOf,
   actualMinutesOf,
@@ -195,12 +195,10 @@ export function AttendanceTable() {
       <section className="grid grid-cols-[minmax(0,1fr)_104px] items-center gap-3 rounded-[24px] border border-white/95 bg-white/72 p-[18px] shadow-[0_12px_30px_-22px_rgb(140_20_40/0.45)] backdrop-blur-[18px] md:hidden">
         <div className="min-w-0">
           <small className="text-[12.5px] font-semibold text-muted-foreground">ชั่วโมงทำงานเดือนนี้</small>
-          <p className="num text-[30px] leading-tight font-bold">
-            {(sum.worked / 60).toFixed(1)}
-            <span className="ml-1 text-[14px] font-semibold text-muted-foreground">ชม.</span>
-          </p>
+          {/* บอกเป็นชั่วโมงกับนาที ไม่ใช่ทศนิยม — 8.5 ชม. อ่านแล้วนึกว่า 8 ชม. 5 นาที (เจ้าของสั่ง 5 ต.ค. 2569) */}
+          <p className="num text-[26px] leading-tight font-bold">{formatMinutes(sum.worked)}</p>
           <p className="num text-[12px] text-muted-foreground">
-            จาก {(sum.required / 60).toFixed(1)} ชม. ใน {sum.days} วันทำงาน
+            จาก {formatMinutes(sum.required)} ใน {sum.days} วันทำงาน
           </p>
         </div>
         <div className="relative size-[104px]">
@@ -329,7 +327,7 @@ export function AttendanceTable() {
               : `แสดง ${from + 1}–${from + list.length} จาก ${scoped.length} วัน`}
           </span>
           <span className="sum">
-            ชั่วโมงทำงานรวม<b>{(totalMinutes / 60).toFixed(1)}</b> ชม.
+            ชั่วโมงทำงานรวม<b>{formatMinutes(totalMinutes)}</b>
           </span>
           <div className="pages justify-center sm:justify-start">
             <button
@@ -405,7 +403,7 @@ function Row({ row }: { row: DayRow }) {
       </td>
       <td className="c num">
         {worked > 0 ? (
-          <b className="font-semibold">{hoursText(worked)}</b>
+          <b className="font-semibold">{formatMinutes(worked)}</b>
         ) : (
           "—"
         )}
@@ -485,7 +483,7 @@ function MobileRow({ row }: { row: DayRow }) {
         <div>
           <dt className="text-[10.5px] text-muted-foreground">ทำงาน</dt>
           <dd className="num mt-0.5 text-[13.5px] font-semibold">
-            {worked > 0 ? hoursText(worked) : "—"}
+            {worked > 0 ? formatMinutes(worked) : "—"}
           </dd>
         </div>
       </dl>

@@ -161,6 +161,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       firstOpen.current = false;
       return;
     }
+    /* กดจากแจ้งเตือนถือว่าผู้ใช้เลือกหน้าปลายทางมาแล้ว ต้องอยู่หน้านั้น ไม่ใช่เด้งไปหน้าหลัก */
+    const fromPush = (() => {
+      try {
+        return new URLSearchParams(window.location.search).has("n");
+      } catch {
+        return false;
+      }
+    })();
+    if (fromPush) {
+      firstOpen.current = false;
+      return;
+    }
     if (firstOpen.current && window.matchMedia("(max-width: 640px)").matches) {
       firstOpen.current = false;
       router.replace(mobileHomeOf(role));

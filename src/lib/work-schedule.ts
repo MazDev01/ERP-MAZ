@@ -225,7 +225,3 @@ export function actualMinutesOf(inMin: number | null, outMin: number | null) {
   return outMin - inMin - lunch;
 }
 
-/** ชั่วโมงเป็นข้อความสั้น เช่น "7.5 ชม." */
-export function hoursText(minutes: number) {
-  return `${(minutes / 60).toFixed(1)} ชม.`;
-}

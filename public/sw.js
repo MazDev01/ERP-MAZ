@@ -178,7 +178,16 @@ self.addEventListener("message", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const d = event.notification.data || {};
-  const target = d.url ? new URL(d.url, self.location.origin).href : null;
+  /*
+   * ติดเครื่องหมาย n= ไปด้วย เพื่อบอกแอปว่ามาจากการกดแจ้งเตือน (เจ้าของแจ้ง 5 ต.ค. 2569)
+   * ไม่งั้นแจ้งเตือนที่ชี้มาหน้าตอกบัตร "/" จะโดนกติกา "เปิดแอปครั้งแรกให้ไปหน้าหลัก" พาไปหน้าอื่น
+   */
+  let target = null;
+  if (d.url) {
+    const u = new URL(d.url, self.location.origin);
+    u.searchParams.set("n", d.id || "1");
+    target = u.href;
+  }
 
   event.waitUntil(
     (async () => {
