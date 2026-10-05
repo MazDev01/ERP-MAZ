@@ -13,8 +13,11 @@
  */
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
+import { latestRound, roundStatus, useClientReviews } from "@/lib/client-review-store";
+import { ClientFeedbackSheet, ClientRoundChip, ClientSendSheet } from "./client-review-pm";
 import { useHydrated } from "@/lib/pwa";
 import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
@@ -836,6 +839,13 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
   /* ข้อความที่ PM ยังไม่ได้อ่านของแต่ละงาน — รอ hydrate ก่อนค่อยขึ้นป้าย (ฝั่งเซิร์ฟเวอร์ไม่มีค่านี้) */
   const marks = useTalkRead();
   const hydrated = useHydrated();
+  /* ลูกค้าตรวจงานผ่านลิงก์ — ส่งให้ลูกค้า (ชื่องาน) · ความเห็นจากลูกค้า (token)
+     ลิงก์จากกระดิ่ง ?review=<token> เปิดกล่องความเห็นให้เลย */
+  const reviews = useClientReviews();
+  const [sending, setSending] = useState<string | null>(null);
+  const reviewParam = useSearchParams().get("review");
+  const [feedback, setFeedback] = useState<string | null>(reviewParam);
+  const sendTask = sending ? project.tasks.find((t) => t.name === sending) : undefined;
   return (
     <section>
       <BlockTitle count={`${count} งาน`}>งานในโปรเจค</BlockTitle>
@@ -858,6 +868,12 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
             const talkCount = taskTalkList.length;
             /* ข้อความใหม่จากผู้รับงานที่ PM ยังไม่ได้อ่าน */
             const unread = hydrated ? unreadCount(marks, "PM", project.deal, t.name, taskTalkList) : 0;
+            const latest = latestRound(reviews, project.deal, t.name);
+            /* ส่งให้ลูกค้าได้เมื่อ PM ตรวจผ่านแล้ว และไม่มีรอบที่ลูกค้ายังตรวจค้างอยู่ / ปิดไปแล้ว */
+            const canSendClient =
+              project.status !== "cancelled" &&
+              t.status === "done" &&
+              (!latest || (roundStatus(latest) !== "open" && !latest.closedAt));
             return (
               <article
                 key={`${t.name}-${i}`}
@@ -925,6 +941,19 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
                     )}
                   </button>
                 )}
+
+                {/* ลูกค้าตรวจงานผ่านลิงก์ — ป้ายของรอบล่าสุด (กดดูความเห็น) และปุ่มส่งรอบใหม่หลัง PM ตรวจผ่าน */}
+                {latest && <ClientRoundChip round={latest} onOpen={() => setFeedback(latest.token)} />}
+                {canSendClient && (
+                  <button
+                    type="button"
+                    data-ro-hide
+                    onClick={() => setSending(t.name)}
+                    className="mt-2.5 h-8 w-full rounded-[9px] border border-primary/40 text-[11.5px] font-semibold text-primary hover:bg-accent max-sm:h-10 max-sm:text-[13px]"
+                  >
+                    ส่งให้ลูกค้าตรวจ{latest ? ` · รอบที่ ${latest.round + 1}` : ""}
+                  </button>
+                )}
               </article>
             );
           })}
@@ -934,6 +963,8 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
       {nudging && (
         <TaskTalkDialog project={project} taskName={nudging} onClose={() => setNudging(null)} />
       )}
+      {sendTask && <ClientSendSheet project={project} task={sendTask} onClose={() => setSending(null)} />}
+      {feedback && <ClientFeedbackSheet token={feedback} onClose={() => setFeedback(null)} />}
     </section>
   );
 }

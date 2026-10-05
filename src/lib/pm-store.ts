@@ -875,6 +875,31 @@ export function sendBackWork(deal: string, taskName: string, why: string, stamp:
   );
 }
 
+/**
+ * PM ส่งงานที่ตรวจผ่านแล้วให้ลูกค้าตรวจผ่านลิงก์ (client-review-store) — งานเป็น "รอลูกค้าตรวจ"
+ * ลูกค้าอนุมัติแล้ว PM ปิดด้วย approveWork · ลูกค้ามีความเห็นก็ตีกลับด้วย sendBackWork ตามทางเดิม
+ * (ยกมาจากระบบต้นฉบับ ERP_Test 5 ต.ค. 2569 — ปรับให้อ้างโปรเจคด้วยเลขที่ดีลตามโครงสร้างของเรา)
+ */
+export function sendToClientWork(deal: string, taskName: string, round: number, stamp: string) {
+  store.update((s) =>
+    patchTask(
+      s,
+      deal,
+      taskName,
+      (t) => ({ ...t, status: "wait" as const, back: undefined }),
+      { kind: "status", who: "PM", at: stamp, tx: `ส่ง ${taskName} ให้ลูกค้าตรวจ รอบที่ ${round}` },
+    ),
+  );
+}
+
+/** ลงกิจกรรมของโปรเจคจากนอกสโตร์ — ใช้กับลูกค้าที่ส่งความเห็นผ่านลิงก์ตรวจงาน */
+export function addProjectAct(deal: string, act: Activity) {
+  store.update((s) => ({
+    ...s,
+    projects: s.projects.map((p) => (p.deal === deal ? { ...p, acts: [act, ...p.acts], updated: today() } : p)),
+  }));
+}
+
 export function postChat(
   deal: string,
   text: string,

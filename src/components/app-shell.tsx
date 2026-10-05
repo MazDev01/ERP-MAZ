@@ -247,7 +247,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
   const settingsKey = settingsId(liveSettings);
 
-  if (BARE_PAGES.includes(pathname)) return <Fragment key={settingsKey}>{children}</Fragment>;
+  /* /review/<token> = หน้าลูกค้าตรวจงาน เปิดจากลิงก์โดยไม่ล็อกอิน ต้องไม่มีเมนูของระบบ */
+  if (BARE_PAGES.includes(pathname) || pathname.startsWith("/review/"))
+    return <Fragment key={settingsKey}>{children}</Fragment>;
 
   return (
     <div className="flex min-h-dvh">
