@@ -453,13 +453,10 @@ export function closePresales(no: string) {
 // ─── ใบเสนอราคา ───────────────────────────────────────────────────
 /*
  * วงจรตามต้นแบบ quotations.html — ใบเสนอราคาไม่มีช่องสถานะให้กดเปลี่ยน ระบบอนุมานจากข้อมูลเอง
- *   บันทึกร่าง (ยังไม่มีเลขที่ แก้/ลบได้) → ออกเลขที่เอกสาร → ฝ่ายขายส่งไฟล์ให้ลูกค้าเอง
- *   แล้วกด "บันทึกว่าส่งแล้ว" (วันมีผลเริ่มนับจากวันนี้)
+ *   บันทึก = ออกเลขที่เอกสารทันทีและนับว่าส่งให้ลูกค้าแล้ว (ไม่มีขั้นร่าง · เจ้าของแจ้ง 5 ต.ค. 2569)
  *   → ลูกค้าตกลง = "ส่งไปวางบิล" (เกิดดีล) · ลูกค้าไม่เอา = "ลูกค้าปฏิเสธ" พร้อมเหตุผล
- *   ส่งแล้วแก้ไม่ได้ ต้อง "ออกใบใหม่" เลขใหม่ ใบเดิมจำว่าถูกแทนด้วยใบไหน (replacedBy)
- * ร่าง (ยังไม่มีเลขที่ ตามกติกา SL-03) — แก้ไขร่าง · ออกเลขที่เอกสาร · ลบร่าง
- * เลขที่ออกตอน "ออกเลขที่เอกสาร" เท่านั้น เปลี่ยนใจตอนเป็นร่างจึงไม่กินเลข ลำดับเดินหน้าอย่างเดียว ไม่มีเลขข้ามและไม่นำกลับมาใช้ซ้ำ
- * ช่อง status ยังเก็บไว้ให้หน้าของฝ่ายอื่นที่อ่านอยู่ (ร่าง/ส่งแล้ว/ตอบรับ/ปฏิเสธ/หมดอายุ)
+ *   แก้ใบเดิมไม่ได้เลย ต้อง "ออกใบใหม่แทนใบนี้" เลขใหม่ ใบเดิมเป็น "แทนที่แล้ว" และจำว่าถูกแทนด้วยใบไหน (replacedBy)
+ * ลำดับเลขเดินหน้าอย่างเดียว ไม่มีเลขข้ามและไม่นำกลับมาใช้ซ้ำ
  */
 export type QuotationInput = {
   customerCode: string;
@@ -479,33 +476,9 @@ export type QuotationInput = {
 };
 
 /**
- * บันทึกเป็นร่าง — ยังไม่ออกเลขที่เอกสาร (กติกา SL-03) แก้ต่อและลบได้
- * คืน id เพราะร่างยังไม่มีเลขที่ให้อ้างถึง
+ * บันทึกใบเสนอราคาใหม่ — ออกเลขที่เอกสารทันทีและนับว่าส่งให้ลูกค้าแล้ว (วันยืนราคาเริ่มนับวันนี้)
+ * ออกแทนใบเดิมได้ ใบเดิมจะกลายเป็น "แทนที่แล้ว" · คืนเลขที่ที่ออก
  */
-export function addQuotationDraft(input: QuotationInput) {
-  const id = newId("Q");
-  store.update((s) => {
-    const { replaces, ps, ...rest } = input;
-    const draft: Quotation = {
-      id,
-      no: "",
-      ...rest,
-      /* วันที่ออกและวันมีผลคิดตอนออกเลขที่ ไม่ใช่ตอนบันทึกร่าง ร่างที่ค้างไว้นานจึงไม่หมดอายุไปเอง */
-      issued: "",
-      validUntil: "",
-      status: "ร่าง",
-      revision: 1,
-      createdAt: today(),
-      ...(ps ? { ps } : {}),
-      /* ตั้งใจออกแทนใบเดิม — จำไว้ก่อน ใบเดิมจะถูกแทนจริงตอนร่างนี้ได้เลขที่ */
-      ...(replaces ? { replaces } : {}),
-    };
-    return { ...s, quotations: [draft, ...s.quotations] };
-  });
-  return id;
-}
-
-/** บันทึกใบเสนอราคาใหม่พร้อมออกเลขที่เอกสารทันที (ข้ามขั้นร่าง) — คืนเลขที่ที่ออก */
 export function addQuotation(input: QuotationInput) {
   let no = "";
   store.update((s) => {
@@ -523,6 +496,8 @@ export function addQuotation(input: QuotationInput) {
       status: "ส่งแล้ว",
       revision: 1,
       createdAt: issued,
+      /* ออกเลขแล้วถือว่าส่งให้ลูกค้าเลย ไม่มีขั้น "บันทึกว่าส่งแล้ว" อีก */
+      sentAt: issued,
       ...(ps ? { ps } : {}),
       ...(old ? { replaces: old.no } : {}),
     };
@@ -531,80 +506,12 @@ export function addQuotation(input: QuotationInput) {
       quotations: [
         quotation,
         ...s.quotations.map((q) =>
-          old && q.id === old.id ? { ...q, replacedBy: no, status: "หมดอายุ" as const } : q,
+          old && q.id === old.id ? { ...q, replacedBy: no, status: "แทนที่แล้ว" as const } : q,
         ),
       ],
     };
   });
   return no;
-}
-
-/** แก้ไขร่างที่บันทึกไว้ (?draft=) — ยังเป็นร่างเหมือนเดิม ออกเลขที่จากหน้ารายการ */
-export function updateDraft(id: string, input: QuotationInput) {
-  const { customerCode, issuer, buyer, service, validDays, amount, discount, wht, body, terms, ps } = input;
-  store.update((s) => ({
-    ...s,
-    quotations: s.quotations.map((q) =>
-      q.id === id && q.status === "ร่าง"
-        ? {
-            ...q, customerCode, issuer, buyer, service, validDays, amount, discount, wht, body, terms,
-            ...(ps ? { ps } : {}),
-          }
-        : q,
-    ),
-  }));
-}
-
-/**
- * ออกเลขที่เอกสารให้ร่าง — วันที่ออกคือวันนี้ ยังไม่นับว่าส่งให้ลูกค้าแล้ว
- * ย้อนไม่ได้ ใบนี้แก้และลบไม่ได้อีก · คืนเลขที่ที่ออก (ว่าง = ไม่ได้ออกเพราะไม่ใช่ร่างแล้ว)
- */
-export function issueDraft(id: string) {
-  let no = "";
-  store.update((s) => {
-    const target = s.quotations.find((q) => q.id === id);
-    if (!target || target.status !== "ร่าง") return s;
-    no = nextNo(issuerOf(target.issuer).prefix, s.quotations.map((q) => q.no));
-    const issued = today();
-    /* ร่างที่ตั้งใจออกแทนใบเดิม — ใบเดิมถูกแทนตอนนี้ ไม่ใช่ตอนบันทึกร่าง (ร่างอาจถูกลบทิ้งก็ได้) */
-    const old = target.replaces
-      ? s.quotations.find((q) => q.no === target.replaces && !q.replacedBy)
-      : undefined;
-    const issuedNo = no;
-    return {
-      ...s,
-      quotations: s.quotations.map((q) => {
-        if (q.id === id)
-          return { ...q, no: issuedNo, issued, validUntil: addDays(issued, q.validDays), status: "ส่งแล้ว" as const };
-        if (old && q.id === old.id) return { ...q, replacedBy: issuedNo, status: "หมดอายุ" as const };
-        return q;
-      }),
-    };
-  });
-  return no;
-}
-
-/** ลบร่าง — ลบได้เพราะยังไม่ได้ออกเลขเอกสาร */
-export function deleteDraft(id: string) {
-  store.update((s) => ({
-    ...s,
-    quotations: s.quotations.filter((q) => !(q.id === id && q.status === "ร่าง")),
-  }));
-}
-
-/**
- * บันทึกว่าส่งให้ลูกค้าแล้ว — ส่งกันนอกระบบ (อีเมลหรือไลน์) ฝ่ายขายจึงกดบันทึกเอง
- * วันมีผลเริ่มนับจากวันนี้ ไม่ใช่วันที่ออกเอกสาร
- */
-export function markQuotationSent(id: string) {
-  store.update((s) => ({
-    ...s,
-    quotations: s.quotations.map((q) =>
-      q.id === id && q.no && q.status !== "ร่าง" && !q.sentAt && !q.replacedBy
-        ? { ...q, sentAt: today(), validUntil: addDays(today(), q.validDays) }
-        : q,
-    ),
-  }));
 }
 
 /** ผู้สนใจที่ปิดการขายได้กลายเป็นลูกค้า — รหัส LEAD- เปลี่ยนเป็น CUS- ทุกที่ที่อ้างถึงในสายงานขาย */

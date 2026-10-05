@@ -18,10 +18,8 @@ export function QuotationDocPage({ no, rev, ceo = false }: { no: string; rev?: n
   const back = ceo ? "/ceo/deals" : "/quotations";
   const docHref = ceo ? `/ceo/sales/quotations/${encodeURIComponent(no)}` : `/quotations/${encodeURIComponent(no)}`;
   const crm = useCrm();
-  /* ร่างยังไม่มีเลขที่ — หน้ารายการเปิดร่างด้วยรหัสของใบ (ต้นแบบ quotations.html กดแถวร่างได้) */
-  const current =
-    crm.quotations.find((x) => x.no === no) ??
-    crm.quotations.find((x) => !x.no && x.status === "ร่าง" && x.id === no);
+  /* ทุกใบมีเลขที่เสมอ — เผื่อลิงก์เก่าที่อ้างด้วยรหัสของใบ ก็ยังเปิดได้ */
+  const current = crm.quotations.find((x) => x.no === no) ?? crm.quotations.find((x) => x.id === no);
   /* ฉบับเก่าเปิดจากสำเนาที่เก็บไว้ตอนแก้ไข — ไม่มีสำเนาก็แสดงฉบับปัจจุบัน */
   const old =
     current && rev && rev !== current.revision

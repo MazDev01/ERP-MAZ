@@ -20,14 +20,13 @@ import {
   type Quotation,
 } from "@/lib/crm-data";
 import { NO_WHT_NOTE } from "@/lib/acc-data";
-import { addQuotation, addQuotationDraft, issueDraft, updateDraft, useCrm, type CrmState } from "@/lib/crm-store";
+import { addQuotation, useCrm, type CrmState } from "@/lib/crm-store";
 import { services, type ServiceKey } from "@/lib/pm-data";
 import { addDays, baht, commaInput, round2, thaiDate, todayIso } from "@/lib/format";
 import { cleanHtml, htmlToText } from "@/lib/rich-text";
 import { CustomerCombo } from "./customer-combo";
 import { CheckIcon, ChevronLeftIcon, CloseIcon, EyeIcon } from "./icons";
 import { Field } from "./lead-dialogs";
-import { IssueNumberDialog } from "./quotation-dialogs";
 import { QuotationPaper } from "./quotation-paper";
 import { RichEditor } from "./rich-editor";
 import { ADD_VALUE, useAddOption } from "./add-option";
@@ -38,18 +37,13 @@ import { IssuerAddDialog } from "./issuer-add";
  *
  *   ?customer=<รหัส>  เปิดจากหน้าผู้สนใจ เลือกลูกค้าไว้ให้
  *   ?ps=<เลขที่คำขอ>   ออกจากคำขอก่อนการขาย — ใบที่ออกผูกกับคำขอนั้น เอกสารของคำขอจึงตามไปถึง PM
- *   ?from=<เลขที่>     ออกใบใหม่จากใบเดิม คัดลอกเฉพาะเนื้อหา เลขที่ วันที่ และภาษีคิดใหม่เสมอ
- *   ?draft=<id>       แก้ไขร่างที่บันทึกไว้ (ร่างยังไม่มีเลขที่ จึงอ้างด้วย id)
+ *   ?from= / ?replace=<เลขที่>  ออกใบใหม่แทนใบเดิม คัดลอกเฉพาะเนื้อหา เลขที่ วันที่ และภาษีคิดใหม่เสมอ
  *
- * บันทึกสองทาง (ผู้ใช้กำหนด 23 ก.ย. 2569 · กติกา SL-03)
- *   "บันทึกร่าง"        ยังไม่ออกเลขที่ กลับมาแก้หรือลบได้ เปลี่ยนใจแล้วไม่กินเลข
- *   "ออกเลขที่เอกสาร"   ออกเลขทันที ย้อนไม่ได้ จึงถามยืนยันก่อนเสมอ
+ * บันทึกทางเดียว (เจ้าของแจ้ง 5 ต.ค. 2569) — กด "ออกใบเสนอราคา" แล้วออกเลขที่ทันที
+ * ไม่มีร่าง ไม่มีการแก้ใบเดิม จะเปลี่ยนอะไรต้องออกใบใหม่แทนใบเดิม
  */
 
-type Mode =
-  | { kind: "new" }
-  | { kind: "from"; src: Quotation }
-  | { kind: "draft"; src: Quotation };
+type Mode = { kind: "new" } | { kind: "from"; src: Quotation };
 
 /** ค่าตั้งต้นของฟอร์มตามโหมดที่เปิดมา */
 function initialOf(crm: CrmState, mode: Mode, presetCustomer?: string, ps?: string) {
@@ -69,9 +63,9 @@ function initialOf(crm: CrmState, mode: Mode, presetCustomer?: string, ps?: stri
     buyer: (src?.buyer ?? customer?.type ?? "juristic") as BuyerType,
     validDays: String(src?.validDays ?? 30),
     body: src?.body ?? "",
-    amount: !src ? "" : commaInput(String(mode.kind === "draft" ? src.amount : round2(src.amount - src.discount))),
+    amount: !src ? "" : commaInput(String(round2(src.amount - src.discount))),
     /* ต้นแบบคัดลอกยอดก่อนภาษีมาเป็นจำนวนเงิน ส่วนลดเริ่มว่าง · ร่างแก้ของเดิมต่อ จึงเก็บส่วนลดไว้ */
-    discount: mode.kind === "draft" && src?.discount ? commaInput(String(src.discount)) : "",
+    discount: "",
     terms: src?.terms ?? "",
     wht: src?.wht ?? false,
     /* อัตราของใบเดิม ถ้าเป็นใบใหม่ใช้อัตรามาตรฐานเป็นค่าตั้งต้น */
@@ -92,14 +86,12 @@ function NewPageBody() {
   const router = useRouter();
   const today = todayIso();
 
-  const fromNo = params.get("from") ?? "";
-  const draftId = params.get("draft") ?? "";
+  /* ?replace= มาจากปุ่ม "ออกใบใหม่แทนใบนี้" ในหน้ารายการ (ชื่อเดียวกับต้นแบบ) · ?from= คือลิงก์เดิม */
+  const fromNo = params.get("replace") ?? params.get("from") ?? "";
   const ps = params.get("ps") ?? "";
   const presetCustomer = params.get("customer") ?? undefined;
 
   const mode: Mode = useMemo(() => {
-    const draft = draftId ? crm.quotations.find((q) => q.id === draftId && q.status === "ร่าง") : undefined;
-    if (draft) return { kind: "draft", src: draft };
     const from = fromNo ? crm.quotations.find((q) => q.no === fromNo) : undefined;
     if (from) return { kind: "from", src: from };
     return { kind: "new" };
@@ -122,7 +114,7 @@ function NewPageBody() {
             <ChevronLeftIcon className="size-3.5" strokeWidth={2.4} />
             ใบเสนอราคา
           </Link>
-          <p>บันทึกเป็นร่างไว้ก่อนได้ เลขที่เอกสารออกเมื่อกด “ออกเลขที่เอกสาร”</p>
+          <p>กดบันทึกแล้วออกเลขที่เอกสารทันที แก้ไม่ได้อีก ถ้าต้องเปลี่ยนให้ออกใบใหม่</p>
           {!fresh && <FromLine mode={mode} ps={ps} />}
         </div>
       </div>
@@ -147,7 +139,7 @@ function NewPageBody() {
         onSaved={(msg, keep) => {
           setDone(msg);
           window.scrollTo({ top: 0, behavior: "smooth" });
-          /* ร่างแก้ต่อได้ที่เดิม · ใบใหม่ล้างฟอร์มกันบันทึกซ้ำเป็นอีกเลขที่ */
+          /* ออกใบแล้วล้างฟอร์ม กันบันทึกซ้ำเป็นอีกเลขที่ */
           if (!keep) {
             setFresh(true);
             setFormKey((k) => k + 1);
@@ -164,10 +156,9 @@ function NewPageBody() {
 /** บรรทัดบอกที่มาของฟอร์มใต้หัวเรื่อง ตามต้นแบบ (.qn-from) */
 function FromLine({ mode, ps }: { mode: Mode; ps: string }) {
   const lines: string[] = [];
-  if (mode.kind === "draft") lines.push(`กำลังแก้ไขร่างที่บันทึกไว้เมื่อ ${thaiDate(mode.src.createdAt)}`);
   if (mode.kind === "from")
     lines.push(
-      `คัดลอกจากใบ ${mode.src.no} ลงวันที่ ${thaiDate(mode.src.issued)} ยอด ${baht(quotationTotals(mode.src).grand)} บาท`,
+      `ออกแทนใบ ${mode.src.no} ลงวันที่ ${thaiDate(mode.src.issued)} ยอด ${baht(quotationTotals(mode.src).grand)} บาท`,
     );
   if (ps) lines.push(`ออกจากคำขอก่อนการขาย ${ps}`);
   return (
@@ -198,7 +189,6 @@ function QuotationForm({
   onSaved: (msg: ReactNode, keep: boolean) => void;
   onReset: () => void;
 }) {
-  const router = useRouter();
   const init = useMemo(() => initialOf(crm, mode, presetCustomer, ps), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [customer, setCustomer] = useState<Customer | null>(init.customer);
   const [service, setService] = useState<ServiceKey | "">(init.service);
@@ -220,11 +210,6 @@ function QuotationForm({
   const [rep, setRep] = useState<string | null>(mode.kind === "from" ? mode.src.no : null);
   const [touched, setTouched] = useState(false);
   const [preview, setPreview] = useState(false);
-  /* ร่างที่ฟอร์มนี้ผูกอยู่ — เปิดมาจาก ?draft= หรือเพิ่งกด "บันทึกร่าง" ครั้งแรก
-     บันทึกซ้ำจึงทับร่างเดิม ไม่แตกเป็นร่างใหม่ทุกครั้งที่กด */
-  const [draftId, setDraftId] = useState(mode.kind === "draft" ? mode.src.id : "");
-  /* ยืนยันก่อนออกเลขที่ — ขั้นนี้ย้อนไม่ได้ */
-  const [confirming, setConfirming] = useState(false);
   const summaryRef = useRef<HTMLParagraphElement>(null);
 
   const days = Number(validDays.replace(/\D/g, "")) || 0;
@@ -249,7 +234,7 @@ function QuotationForm({
    * มีเมื่อไรต้องเลือกว่าออกเป็นใบใหม่แยก หรือออกแทนใบเดิม · ใบต้นทางของ ?from= อยู่ในรายการเสมอถ้ายังแทนได้
    */
   const waiting = useMemo(() => {
-    if (!customer || mode.kind === "draft") return [];
+    if (!customer) return [];
     const hasDeal = (q: Quotation) => crm.deals.some((d) => d.quotationNo === q.no);
     return crm.quotations.filter(
       (q) =>
@@ -277,7 +262,7 @@ function QuotationForm({
     problems.items && "รายละเอียดและจำนวนเงิน",
   ].filter((x): x is string => Boolean(x));
 
-  /** ค่าที่จะบันทึก — ใช้ทั้งตอนบันทึกร่างและตอนออกเลขที่ กติกาคิดยอดจึงเป็นชุดเดียวกัน */
+  /** ค่าที่จะบันทึกลงใบใหม่ */
   function inputOf(c: Customer, iss: IssuerCode, svc: ServiceKey) {
     return {
       customerCode: c.code,
@@ -291,7 +276,7 @@ function QuotationForm({
       whtPct,
       body: cleanHtml(body),
       terms: terms.trim(),
-      ps: ps || (mode.kind === "new" ? undefined : mode.src.ps),
+      ps: ps || (mode.kind === "from" ? mode.src.ps : undefined),
       replaces: repValue && repValue !== "new" ? repValue : undefined,
     };
   }
@@ -304,42 +289,11 @@ function QuotationForm({
     return null;
   }
 
-  /* บันทึกร่าง — ยังไม่ออกเลขที่ กลับมาแก้หรือลบได้ (กติกา SL-03) */
-  function saveDraft() {
-    const ok = ready();
-    if (!ok) return;
-    const input = inputOf(ok.customer, ok.issuer, ok.service);
-    if (draftId) {
-      updateDraft(draftId, input);
-    } else {
-      const id = addQuotationDraft(input);
-      setDraftId(id);
-      /* ผูก URL กับร่างที่เพิ่งได้ — ปิดหน้าไปแล้วกลับมาโหลดใหม่ก็ยังแก้ร่างเดิมต่อ ไม่สร้างใบซ้ำ */
-      router.replace(`/quotations/new?draft=${encodeURIComponent(id)}`, { scroll: false });
-    }
-    onSaved(
-      <>
-        บันทึกร่างแล้ว · ยังไม่ออกเลขที่เอกสาร · รวมทั้งสิ้น {baht(totals.grand)} บาท
-        <span className="font-normal">แก้ต่อได้ที่หน้านี้ หรือกด “ออกเลขที่เอกสาร” เมื่อพร้อมส่งลูกค้า</span>
-      </>,
-      true,
-    );
-  }
-
-  /* ออกเลขที่เอกสาร — ย้อนไม่ได้ ผ่านกล่องยืนยันมาแล้วเท่านั้น */
+  /* ออกใบเสนอราคา — ออกเลขที่ทันที แก้ไม่ได้อีก (เจ้าของแจ้ง 5 ต.ค. 2569 จึงไม่มีกล่องยืนยันคั่น) */
   function issueNow() {
     const ok = ready();
     if (!ok) return;
-    setConfirming(false);
-    const input = inputOf(ok.customer, ok.issuer, ok.service);
-    let no: string;
-    if (draftId) {
-      /* บันทึกสิ่งที่แก้ล่าสุดลงร่างก่อน แล้วค่อยออกเลข เลขจะได้ตรงกับที่เห็นบนจอ */
-      updateDraft(draftId, input);
-      no = issueDraft(draftId);
-    } else {
-      no = addQuotation(input);
-    }
+    const no = addQuotation(inputOf(ok.customer, ok.issuer, ok.service));
     onSaved(
       <>
         ออกเลขที่ <b className="num">{no}</b> แล้ว · รวมทั้งสิ้น {baht(totals.grand)} บาท · แก้ไขไม่ได้อีก
@@ -354,10 +308,9 @@ function QuotationForm({
     );
   }
 
-  /* กด Enter ในช่องกรอก = บันทึกร่าง ซึ่งเป็นทางที่ย้อนได้ ไม่ใช่ออกเลขที่ */
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    saveDraft();
+    issueNow();
   }
 
   const card = "glass rounded-2xl px-4 py-5 sm:px-6";
@@ -637,17 +590,8 @@ function QuotationForm({
                 ดูตัวอย่างเอกสาร
               </button>
               {/* ทางที่ย้อนได้อยู่ก่อน — เก็บเป็นร่างไว้ไม่กินเลขที่ */}
-              <button type="submit" className="btn glass-thin w-full justify-center">
-                บันทึกร่าง
-              </button>
-              <button
-                type="button"
-                className="btn solid btn-solid w-full justify-center"
-                onClick={() => {
-                  if (ready()) setConfirming(true);
-                }}
-              >
-                ออกเลขที่เอกสาร
+              <button type="submit" className="btn solid btn-solid w-full justify-center">
+                ออกใบเสนอราคา
               </button>
             </div>
             {touched && miss.length > 0 && (
@@ -665,8 +609,8 @@ function QuotationForm({
               </p>
             )}
             <p className="mt-3 text-center text-[11.5px] leading-relaxed text-muted-foreground">
-              ร่างยังไม่มีเลขที่เอกสาร แก้และลบได้ · ออกเลขที่แล้วย้อนไม่ได้ จากนั้นดาวน์โหลดไฟล์ไปส่งลูกค้าเอง
-              แล้วกด “บันทึกว่าส่งแล้ว” ในหน้ารายการ
+              กดแล้วออกเลขที่เอกสารทันทีและนับว่าส่งให้ลูกค้าแล้ว แก้ไม่ได้อีก
+              ถ้าต้องเปลี่ยนให้ออกใบใหม่แทนใบเดิม
             </p>
           </section>
         </aside>
@@ -679,30 +623,11 @@ function QuotationForm({
           <small className="block text-[11.5px] text-muted-foreground">รวมทั้งสิ้น</small>
           <b className="num block truncate text-[17px] font-bold">{baht(totals.grand)}</b>
         </span>
-        {/* มือถือ: ปุ่มร่างเป็นปุ่มรอง ปุ่มออกเลขที่เป็นปุ่มทึบ ชุดเดียวกับในการ์ดสรุปยอด */}
-        <button type="submit" className="btn glass-thin h-11 shrink-0 justify-center px-4">
-          บันทึกร่าง
-        </button>
-        <button
-          type="button"
-          className="btn solid btn-solid h-11 shrink-0 justify-center px-4"
-          onClick={() => {
-            if (ready()) setConfirming(true);
-          }}
-        >
-          ออกเลขที่
+        {/* มือถือ: ปุ่มเดียว ชุดเดียวกับในการ์ดสรุปยอด */}
+        <button type="submit" className="btn solid btn-solid h-11 shrink-0 justify-center px-4">
+          ออกใบเสนอราคา
         </button>
       </div>
-
-      {confirming && customer && issuer && (
-        <IssueNumberDialog
-          customerName={customer.name}
-          issuer={issuerOf(issuer).name}
-          total={totals.grand}
-          onGo={issueNow}
-          onClose={() => setConfirming(false)}
-        />
-      )}
 
       {/* ตัวอย่างเอกสาร — ยิงออกไปที่ body เพราะกล่องที่มี backdrop-filter เป็นกรอบอ้างอิงของ position: fixed */}
       {preview &&

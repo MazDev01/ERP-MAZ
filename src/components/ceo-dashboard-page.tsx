@@ -121,11 +121,10 @@ export function CeoDashboardPage() {
   /* ── ประสิทธิภาพ ── */
   const closed = crm.customers.filter((c) => c.status === "ปิดงาน").length;
   /* ตาม mockup: ลูกค้าตัดสินแล้ว = มีดีลอ้างถึง หรือลูกค้าปฏิเสธ หรือเลยวันที่มีผลโดยไม่ถูกออกใบใหม่แทน
-     ตกลง = มีดีล · ร่างยังไม่ออกเลขจึงไม่นับ */
+     ตกลง = มีดีล */
   const dealQuotes = new Set(crm.deals.map((d) => d.quotationNo));
   const decided = crm.quotations.filter(
     (q) =>
-      q.status !== "ร่าง" &&
       Boolean(q.no) &&
       (dealQuotes.has(q.no) || Boolean(q.rejectedAt) || (!q.replacedBy && quotationValidUntil(q) < today)),
   );

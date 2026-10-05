@@ -309,14 +309,15 @@ export const PRESALES_ROUNDS: PresalesRound[] = [
 ];
 
 // ═══ ใบเสนอราคา ═══════════════════════════════════════════════
-export type QuotationStatus = "ร่าง" | "ส่งแล้ว" | "ตอบรับ" | "ปฏิเสธ" | "หมดอายุ";
+/* ไม่มีสถานะร่าง — บันทึกแล้วออกเลขที่ทันที แก้ใบเดิมไม่ได้ ต้องออกใบใหม่แทน (ใบเดิมเป็น "แทนที่แล้ว") */
+export type QuotationStatus = "ส่งแล้ว" | "ตอบรับ" | "ปฏิเสธ" | "หมดอายุ" | "แทนที่แล้ว";
 
 export const QUOTATION_STATUS: Record<QuotationStatus, string> = {
-  ร่าง: "t-miss",
   ส่งแล้ว: "t-info",
   ตอบรับ: "t-ok",
   ปฏิเสธ: "t-late",
   หมดอายุ: "t-early",
+  แทนที่แล้ว: "t-miss",
 };
 
 /** รหัสผู้ออกเอกสาร — ผู้ดูแลระบบเพิ่มได้ที่ /admin/company */
@@ -341,7 +342,7 @@ export const EXPIRING_DAYS = 7;
 
 export type Quotation = {
   id: string;
-  /** เลขที่เอกสาร — ว่างตอนเป็นร่าง ออกเลขเมื่อกดส่ง */
+  /** เลขที่เอกสาร — ออกทันทีที่บันทึก ทุกใบจึงมีเลขที่เสมอ */
   no: string;
   customerCode: string;
   issuer: IssuerCode;
@@ -368,7 +369,7 @@ export type Quotation = {
   status: QuotationStatus;
   revision: number;
   createdAt: string;
-  /** วันที่ส่งให้ลูกค้าจริง ("บันทึกว่าส่งแล้ว") — วันยืนราคาเริ่มนับจากวันนี้ · ว่าง = ออกเลขแล้วแต่ยังไม่ได้ส่ง */
+  /** วันที่ส่งให้ลูกค้า = วันที่ออกเอกสาร (ออกแล้วถือว่าส่งเลย) — วันยืนราคาเริ่มนับจากวันนี้ */
   sentAt?: string;
   /** อ้างอิงคำขอก่อนการขาย (PS-…) */
   ps?: string;
@@ -452,11 +453,9 @@ export function quotationValidUntil(q: Quotation) {
  * ใช้ขึ้นป้ายในหน้าที่สรุปรายการสั้น ๆ เช่นการ์ดใบเสนอราคาในหน้าผู้สนใจ
  */
 export function quotationStateOf(q: Quotation, hasDeal: boolean, today: string): { label: string; cls: string } {
-  if (q.status === "ร่าง") return { label: "ร่าง", cls: "t-miss" };
   if (hasDeal) return { label: "ส่งไปวางบิลแล้ว", cls: "t-ok" };
   if (q.rejectedAt) return { label: "ลูกค้าปฏิเสธ", cls: "t-late" };
-  if (q.replacedBy) return { label: "ออกใบใหม่แทนแล้ว", cls: "t-job" };
-  if (!q.sentAt) return { label: "ยังไม่ได้ส่ง", cls: "t-miss" };
+  if (q.replacedBy) return { label: "แทนที่แล้ว", cls: "t-miss" };
   return quotationValidUntil(q) < today
     ? { label: "หมดอายุ", cls: "t-early" }
     : { label: "รอคำตอบ", cls: "t-info" };
@@ -469,25 +468,47 @@ export function quotationStateOf(q: Quotation, hasDeal: boolean, today: string):
  */
 export function canBillQuotation(q: Quotation, hasDeal: boolean, today: string) {
   return (
-    q.status !== "ร่าง" && Boolean(q.no) && Boolean(q.sentAt) && !hasDeal &&
+    Boolean(q.no) && Boolean(q.sentAt) && !hasDeal &&
     !q.replacedBy && !q.rejectedAt && quotationValidUntil(q) >= today
   );
 }
 
+/**
+ * สายใบที่ออกแทนกันมา — ใบล่าสุดอยู่หน้าสุด ไล่ย้อนไปใบเก่าที่สุด (ต้นแบบ quotations.html chainOf)
+ * ใบเสนอราคาแก้ไม่ได้ ประวัติจึงไม่ใช่การแก้ในใบเดิม แต่เป็นจำนวนใบที่ออกแทนกันมา
+ */
+export function quotationChain(all: Quotation[], no: string): Quotation[] {
+  const byNo = new Map(all.filter((q) => q.no).map((q) => [q.no, q]));
+  const cur = byNo.get(no);
+  if (!cur) return [];
+  const chain = [cur];
+  let prev = cur.replaces;
+  /* เผื่อข้อมูลวนกันเอง (ไม่ควรเกิด) — จำกัดด้วยจำนวนใบที่มี */
+  while (prev && byNo.has(prev) && chain.length <= all.length) {
+    const old = byNo.get(prev)!;
+    chain.push(old);
+    prev = old.replaces;
+  }
+  return chain;
+}
+
+/** ใบล่าสุดของสาย = ยังไม่มีใบอื่นมาออกแทน */
+export function isLatestQuotation(all: Quotation[], q: Quotation) {
+  return !q.replacedBy && !all.some((x) => x.replaces === q.no);
+}
+
 export const QUOTATIONS: Quotation[] = [
-  /* ต้นแบบ dose-erp-maz/quotations.html (12 ใบ รวมร่าง 2 ใบ) — ลูกค้าไม่ตกลงให้ออกใบใหม่เลขใหม่ (replaces / replacedBy) */
-  { id: "Q1", no: "", customerCode: "LEAD-6908-002", issuer: "MAZ", buyer: "individual", service: "seo", issued: "", validDays: 30, validUntil: "", amount: 35000, discount: 0, wht: false, body: "<p>SEO เว็บไซต์ที่พักและเพจ</p><ul><li>ปรับโครงสร้างเว็บไซต์ให้ค้นหาเจอ</li><li>เขียนบทความ 3 เดือน</li></ul>", terms: "มัดจำ 50% ก่อนเริ่มงาน", status: "ร่าง", revision: 1, createdAt: "2026-09-05" },
-  { id: "Q2", no: "", customerCode: "LEAD-6909-001", issuer: "MAZ", buyer: "juristic", service: "branding", issued: "", validDays: 30, validUntil: "", amount: 80000, discount: 0, wht: false, body: "<p>ออกแบบอัตลักษณ์องค์กร</p><ul><li>โลโก้และชุดสี</li><li>นามบัตรและหัวจดหมาย</li><li>คู่มือการใช้แบรนด์</li></ul>", terms: "แบ่งชำระ 2 งวด", status: "ร่าง", revision: 1, createdAt: "2026-09-06" },
+  /* ต้นแบบ dose-erp-maz/quotations.html — ออกเลขทันทีทุกใบ แก้ไม่ได้ เปลี่ยนแปลงคือออกใบใหม่แทน (replaces / replacedBy) */
   { id: "Q3", no: "MAZ-2569-0042", customerCode: "CUS-6908-021", issuer: "MAZ", buyer: "juristic", service: "website", issued: "2026-08-28", validDays: 30, validUntil: "2026-09-27", amount: 320000, discount: 0, wht: false, body: "<p>เว็บไซต์บริษัท ระบบสต๊อกวัตถุดิบ เชื่อมบัญชีเดิม และอบรม</p><ul><li>เว็บไซต์บริษัท</li><li>ระบบจัดการสต๊อกวัตถุดิบ</li><li>เชื่อมต่อข้อมูลกับระบบบัญชีเดิม</li><li>อบรมการใช้งานและคู่มือ</li></ul>", terms: "มัดจำ 50% ก่อนเริ่มงาน", status: "ตอบรับ", revision: 1, createdAt: "2026-08-28", sentAt: "2026-08-28", ps: "PS-2569-0031" },
   { id: "Q4", no: "MAZ-2569-0041", customerCode: "LEAD-6908-030", issuer: "MAZ", buyer: "juristic", service: "dataviz", issued: "2026-08-30", validDays: 10, validUntil: "2026-09-09", amount: 128000, discount: 0, wht: true, whtPct: 3, body: "<p>แดชบอร์ดติดตามรถขนส่ง</p><ul><li>ติดตามตำแหน่งแบบเรียลไทม์</li><li>รายงานระยะทางรายคัน</li><li>ติดตั้งหน้างาน 1 ครั้ง</li></ul>", terms: "ชำระเต็มจำนวนเมื่อส่งมอบ", status: "ส่งแล้ว", revision: 1, createdAt: "2026-08-30", sentAt: "2026-08-30", ps: "PS-2569-0030", replaces: "MAZ-2569-0035" },
   { id: "Q5", no: "MAZ-2569-0040", customerCode: "CUS-6908-027", issuer: "MAZ", buyer: "juristic", service: "dm", issued: "2026-08-27", validDays: 30, validUntil: "2026-09-26", amount: 175000, discount: 0, wht: false, body: "<p>ต่อยอดระบบเดิม เพิ่มโมดูลรายงานผู้บริหาร</p><ul><li>วางแผนแคมเปญ</li><li>แดชบอร์ดสรุปยอดขาย</li><li>รายงานผู้บริหารรายเดือน</li><li>ส่งออกไฟล์ Excel</li><li>อบรมผู้ใช้</li></ul>", terms: "มัดจำ 30% ก่อนเริ่มงาน", status: "ตอบรับ", revision: 1, createdAt: "2026-08-27", sentAt: "2026-08-27", ps: "PS-2569-0026" },
   { id: "Q6", no: "MAZ-2569-0038", customerCode: "CUS-6905-007", issuer: "MAZ", buyer: "juristic", service: "website", issued: "2026-08-14", validDays: 30, validUntil: "2026-09-13", amount: 39000, discount: 0, wht: true, whtPct: 3, body: "<p>เว็บไซต์บริษัทและระบบฟอร์มติดต่อ</p><ul><li>เว็บไซต์บริษัท 5 หน้า</li><li>ระบบฟอร์มติดต่อและอีเมลแจ้งเตือน</li></ul>", terms: "มัดจำ 50% ก่อนเริ่มงาน", status: "ตอบรับ", revision: 1, createdAt: "2026-08-14", sentAt: "2026-08-14", ps: "PS-2569-0019" },
   { id: "Q7", no: "MAZ-2569-0036", customerCode: "CUS-6906-004", issuer: "IND", buyer: "individual", service: "website", issued: "2026-08-10", validDays: 30, validUntil: "2026-09-09", amount: 26000, discount: 0, wht: false, body: "<p>เว็บไซต์ร้านอาหาร 5 หน้า พร้อมระบบเมนูออนไลน์</p>", terms: "ชำระเต็มจำนวนก่อนเริ่มงาน", status: "ตอบรับ", revision: 1, createdAt: "2026-08-10", sentAt: "2026-08-10" },
-  { id: "Q8", no: "MAZ-2569-0035", customerCode: "LEAD-6908-030", issuer: "MAZ", buyer: "juristic", service: "dataviz", issued: "2026-08-22", validDays: 30, validUntil: "2026-09-21", amount: 110280.37, discount: 0, wht: true, whtPct: 3, body: "<p>แดชบอร์ดติดตามรถขนส่ง</p><ul><li>ติดตามตำแหน่งแบบเรียลไทม์</li><li>รายงานระยะทางรายคัน</li><li>แจ้งเตือนรถออกนอกเส้นทาง</li></ul>", terms: "ชำระเต็มจำนวนเมื่อส่งมอบ", status: "หมดอายุ", revision: 1, createdAt: "2026-08-22", sentAt: "2026-08-22", ps: "PS-2569-0030", replacedBy: "MAZ-2569-0041" },
+  { id: "Q8", no: "MAZ-2569-0035", customerCode: "LEAD-6908-030", issuer: "MAZ", buyer: "juristic", service: "dataviz", issued: "2026-08-22", validDays: 30, validUntil: "2026-09-21", amount: 110280.37, discount: 0, wht: true, whtPct: 3, body: "<p>แดชบอร์ดติดตามรถขนส่ง</p><ul><li>ติดตามตำแหน่งแบบเรียลไทม์</li><li>รายงานระยะทางรายคัน</li><li>แจ้งเตือนรถออกนอกเส้นทาง</li></ul>", terms: "ชำระเต็มจำนวนเมื่อส่งมอบ", status: "แทนที่แล้ว", revision: 1, createdAt: "2026-08-22", sentAt: "2026-08-22", ps: "PS-2569-0030", replacedBy: "MAZ-2569-0041" },
   { id: "Q9", no: "MAZ-2569-0034", customerCode: "LEAD-6908-008", issuer: "MAZ", buyer: "individual", service: "seo", issued: "2026-07-28", validDays: 30, validUntil: "2026-08-27", amount: 41000, discount: 0, wht: false, body: "<p>SEO เว็บไซต์ร้านเบเกอรี่</p><ul><li>ปรับเว็บไซต์ให้ค้นหาเจอ</li><li>ดูแลบทความ 3 เดือน</li></ul>", terms: "มัดจำ 50% ก่อนเริ่มงาน", status: "หมดอายุ", revision: 1, createdAt: "2026-07-28", sentAt: "2026-07-28" },
   { id: "Q10", no: "MAZ-2569-0031", customerCode: "LEAD-6907-018", issuer: "MAZ", buyer: "individual", service: "branding", issued: "2026-07-16", validDays: 30, validUntil: "2026-08-15", amount: 48000, discount: 0, wht: false, body: "<p>ออกแบบแบรนด์คลินิก</p><ul><li>โลโก้และชุดสี</li><li>ป้ายหน้าร้าน</li><li>สื่อออนไลน์ชุดแรก</li></ul>", terms: "มัดจำ 50% ก่อนเริ่มงาน", status: "ปฏิเสธ", revision: 1, createdAt: "2026-07-16", sentAt: "2026-07-16", rejectedAt: "2026-08-12", rejectReason: "เลือกผู้เสนอรายอื่นที่ราคาถูกกว่า" },
   { id: "Q11", no: "MAZ-2569-0029", customerCode: "CUS-6906-019", issuer: "MAZ", buyer: "individual", service: "complan", issued: "2026-07-02", validDays: 30, validUntil: "2026-08-01", amount: 95000, discount: 0, wht: false, body: "<p>แผนการสื่อสาร ระบบจัดการงานซ่อม</p><ul><li>วิเคราะห์กลุ่มลูกค้า</li><li>วางแผนสื่อ 6 เดือน</li><li>ผลิตสื่อชุดแรก</li><li>สรุปผลรายเดือน</li></ul>", terms: "มัดจำ 40% ก่อนเริ่มงาน", status: "ตอบรับ", revision: 1, createdAt: "2026-07-02", sentAt: "2026-07-02" },
-  { id: "Q12", no: "B1-2569-0007", customerCode: "LEAD-6908-014", issuer: "B1", buyer: "juristic", service: "website", issued: "2026-08-20", validDays: 30, validUntil: "2026-09-19", amount: 85000, discount: 0, wht: true, whtPct: 3, body: "<p>เว็บไซต์องค์กร อัลฟ่าคอร์ป</p><ul><li>เว็บไซต์ 6 หน้า</li><li>ระบบข่าวสาร</li></ul>", terms: "ชำระ 30 วันหลังส่งมอบ", status: "ส่งแล้ว", revision: 1, createdAt: "2026-08-20" },
+  { id: "Q12", no: "B1-2569-0007", customerCode: "LEAD-6908-014", issuer: "B1", buyer: "juristic", service: "website", issued: "2026-08-20", validDays: 30, validUntil: "2026-09-19", amount: 85000, discount: 0, wht: true, whtPct: 3, body: "<p>เว็บไซต์องค์กร อัลฟ่าคอร์ป</p><ul><li>เว็บไซต์ 6 หน้า</li><li>ระบบข่าวสาร</li></ul>", terms: "ชำระ 30 วันหลังส่งมอบ", status: "ส่งแล้ว", revision: 1, createdAt: "2026-08-20", sentAt: "2026-08-20" },
 ];
 
 export const QUOTATION_REVISIONS: QuotationRevision[] = [];

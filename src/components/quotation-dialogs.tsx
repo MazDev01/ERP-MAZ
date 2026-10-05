@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { canBillQuotation, quotationTotals, type Quotation } from "@/lib/crm-data";
-import { deleteDraft, rejectQuotation, useCrm } from "@/lib/crm-store";
+import { rejectQuotation, useCrm } from "@/lib/crm-store";
 import { acceptQuotationFlow } from "@/lib/flow";
 import { baht, todayIso } from "@/lib/format";
 import { Sheet } from "./lead-dialogs";
@@ -65,74 +65,6 @@ function KvSheet({
       </dl>
       {children}
     </Sheet>
-  );
-}
-
-/** ลบร่าง — ลบได้เพราะยังไม่ได้ออกเลขเอกสาร */
-export function DeleteDraftDialog({
-  quotation,
-  customerName,
-  onClose,
-}: {
-  quotation: Quotation;
-  customerName: string;
-  onClose: () => void;
-}) {
-  return (
-    <KvSheet
-      title="ลบร่างใบเสนอราคา"
-      rows={[
-        ["ผู้สนใจ", customerName],
-        ["ยอดรวม", `${baht(quotationTotals(quotation).grand)} บาท`],
-      ]}
-      go="ลบร่าง"
-      onGo={() => {
-        deleteDraft(quotation.id);
-        onClose();
-      }}
-      onClose={onClose}
-    />
-  );
-}
-
-/**
- * ยืนยันออกเลขที่เอกสาร — ขั้นที่ย้อนไม่ได้ จึงต้องเตือนก่อนเสมอ
- * ออกแล้วเลขนั้นเป็นของใบนี้ตลอด แก้ไขและลบไม่ได้อีก ต้องออกใบใหม่เลขใหม่แทน
- * ใช้ทั้งจากหน้าสร้างใบเสนอราคาและปุ่ม "ออกเลขที่เอกสาร" ของร่างในหน้ารายการ
- */
-export function IssueNumberDialog({
-  customerName,
-  issuer,
-  total,
-  onGo,
-  onClose,
-}: {
-  customerName: string;
-  issuer: string;
-  /** ยอดรวมทั้งสิ้น (บาท) */
-  total: number;
-  onGo: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <KvSheet
-      title="ออกเลขที่เอกสาร"
-      rows={[
-        ["ผู้สนใจ", customerName],
-        ["ออกในนาม", issuer],
-        ["ยอดรวม", `${baht(total)} บาท`],
-      ]}
-      go="ออกเลขที่เอกสาร"
-      onGo={onGo}
-      onClose={onClose}
-    >
-      <p className="mt-4 rounded-[11px] bg-[var(--destructive-soft)] px-3.5 py-3 text-[12.5px] leading-relaxed font-semibold text-destructive">
-        ออกเลขที่แล้วย้อนกลับไม่ได้ ใบนี้จะแก้ไขหรือลบไม่ได้อีก ถ้าต้องแก้ต้องออกใบใหม่เป็นเลขใหม่
-        <span className="mt-1 block font-normal">
-          ยังไม่พร้อมก็กดปิดแล้วเก็บไว้เป็นร่างต่อได้ ร่างยังไม่กินเลขที่
-        </span>
-      </p>
-    </KvSheet>
   );
 }
 

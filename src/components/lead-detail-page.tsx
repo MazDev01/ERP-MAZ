@@ -397,11 +397,8 @@ export function LeadDetailPage({ code }: { code: string }) {
               const st = quotationStateOf(q, hasDeal(q.no), today);
               return {
                 key: q.id,
-                href:
-                  q.status === "ร่าง"
-                    ? `/quotations/new?draft=${encodeURIComponent(q.id)}`
-                    : `/quotations/${encodeURIComponent(q.no)}`,
-                main: q.status === "ร่าง" ? "ยังไม่ออกเลขที่ (ร่าง)" : q.no,
+                href: `/quotations/${encodeURIComponent(q.no)}`,
+                main: q.no,
                 sub: `${baht(quotationTotals(q).grand)} บาท`,
                 tag: st.label,
                 cls: st.cls,

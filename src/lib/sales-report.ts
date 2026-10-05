@@ -307,9 +307,9 @@ export function buildAgenda(crm: CrmState): AgendaEvent[] {
     });
   }
 
-  /* ใบที่ยังรอคำตอบ (ยังไม่มีดีล ไม่ถูกแทน ไม่ถูกปฏิเสธ) — รวมใบที่ออกเลขแล้วแต่ยังไม่ได้ส่ง */
+  /* ใบที่ยังรอคำตอบ (ยังไม่มีดีล ไม่ถูกแทน ไม่ถูกปฏิเสธ) */
   for (const q of crm.quotations) {
-    if (q.status === "ร่าง" || !q.no || q.replacedBy || q.rejectedAt) continue;
+    if (!q.no || q.replacedBy || q.rejectedAt) continue;
     if (crm.deals.some((d) => d.quotationNo === q.no)) continue;
     events.push({
       id: `q-${q.id}`,

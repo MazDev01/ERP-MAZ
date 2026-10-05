@@ -7,21 +7,17 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   EXPIRING_DAYS,
   canBillQuotation,
-  issuerOf,
+  isLatestQuotation,
+  quotationChain,
   quotationTotals,
   quotationValidUntil,
   type Quotation,
 } from "@/lib/crm-data";
-import { issueDraft, markQuotationSent, useCrm } from "@/lib/crm-store";
+import { useCrm } from "@/lib/crm-store";
 import { serviceLabel } from "@/lib/pm-data";
 import { baht, daysBetween, thaiDate, todayIso } from "@/lib/format";
-import { CheckIcon, ClockIcon, EyeIcon, FileIcon, PlusIcon } from "./icons";
-import {
-  BillQuotationDialog,
-  DeleteDraftDialog,
-  IssueNumberDialog,
-  RejectQuotationDialog,
-} from "./quotation-dialogs";
+import { ChevronDownIcon, ClockIcon, EyeIcon, FileIcon, PlusIcon, RotateIcon } from "./icons";
+import { BillQuotationDialog, RejectQuotationDialog } from "./quotation-dialogs";
 import { Pager, SearchBox, Who, usePaged } from "./sales-ui";
 import { QuotationsMobile } from "./quotations-mobile";
 
@@ -29,8 +25,9 @@ const PER_PAGE = 7;
 
 /*
  * รายการใบเสนอราคา — ตามต้นแบบ quotations.html
- * ไม่มีแท็บสถานะ ใบเสนอราคาไม่มีช่องสถานะ ระบบอนุมานจาก ส่งแล้วหรือยัง / มีดีล / ถูกแทน / ถูกปฏิเสธ
- * มีตัวกรองเดียวคือ "ใกล้หมดอายุ"
+ * ไม่มีร่างและแก้ใบเดิมไม่ได้ ถ้าต้องเปลี่ยนให้ "ออกใบใหม่แทนใบนี้" ใบเดิมกลายเป็นแทนที่แล้ว
+ * ประวัติคือจำนวนใบที่ออกแทนกันมา กดชิป "ฉบับที่ N" กางดูได้
+ * ไม่มีแท็บสถานะ ระบบอนุมานจาก มีดีล / ถูกแทน / ถูกปฏิเสธ / เลยวันมีผล · มีตัวกรองเดียวคือ "ใกล้หมดอายุ"
  */
 export function QuotationsPage() {
   const crm = useCrm();
@@ -40,13 +37,10 @@ export function QuotationsPage() {
   const find = useFindParam();
   const [query, setQuery] = useState(find);
   const [soonOnly, setSoonOnly] = useState(false);
-  const [deleting, setDeleting] = useState<Quotation | null>(null);
   const [rejecting, setRejecting] = useState<Quotation | null>(null);
   const [billing, setBilling] = useState<Quotation | null>(null);
-  /* ร่างที่กำลังจะออกเลขที่ — ขั้นนี้ย้อนไม่ได้ จึงถามยืนยันก่อนเสมอ */
-  const [issuing, setIssuing] = useState<Quotation | null>(null);
-  /* ออกเลขที่แล้วต้องบอกว่าได้เลขอะไร และพาไปดูเอกสาร ไม่ใช่ให้แถวเปลี่ยนไปเงียบ ๆ */
-  const [issued, setIssued] = useState<string>("");
+  /* สายใบที่กางดูประวัติอยู่ — เก็บเป็นเลขที่ใบ */
+  const [openChain, setOpenChain] = useState<string>("");
   const today = todayIso();
 
   /* ลิงก์เดิม ?new=1&customer=&from=<คำขอ> — ฟอร์มย้ายไปเป็นหน้าเต็ม /quotations/new แล้ว */
@@ -89,32 +83,16 @@ export function QuotationsPage() {
   const paged = usePaged(rows, PER_PAGE);
   const total = rows.reduce((sum, q) => sum + quotationTotals(q).grand, 0);
 
-  /* ทุกแถวเปิดเอกสารได้ ร่างด้วย (ต้นแบบ) — ร่างยังไม่มีเลขที่ จึงเปิดด้วยรหัสของใบแทน */
-  const docHref = (q: Quotation) => `/quotations/${encodeURIComponent(q.no || q.id)}`;
+  const docHref = (q: Quotation) => `/quotations/${encodeURIComponent(q.no)}`;
   const openDoc = (q: Quotation) => router.push(docHref(q));
-  const isDraft = (q: Quotation) => q.status === "ร่าง";
+  /** สายใบที่ออกแทนกันมาของใบนี้ — ยาวกว่า 1 ใบ = มีประวัติให้กางดู */
+  const chainOf = (q: Quotation) => quotationChain(crm.quotations, q.no);
+  /** ออกใบใหม่แทนได้เฉพาะใบล่าสุดของสายที่ยังไม่ถูกแทน */
+  const canReplace = (q: Quotation) => isLatestQuotation(crm.quotations, q);
 
   /** ปุ่มจัดการตามต้นแบบ — ขึ้นตามข้อมูลของใบ ไม่ใช่ตามสถานะที่กดเลือก */
   const actions = (q: Quotation) => (
     <>
-      {isDraft(q) && (
-        <>
-          <Link href={`/quotations/new?draft=${encodeURIComponent(q.id)}`} className="lnk">
-            แก้ไขร่าง
-          </Link>
-          <button type="button" className="lnk" onClick={() => setIssuing(q)}>
-            ออกเลขที่เอกสาร
-          </button>
-          <button type="button" className="lnk" onClick={() => setDeleting(q)}>
-            ลบร่าง
-          </button>
-        </>
-      )}
-      {!isDraft(q) && !q.sentAt && !q.replacedBy && (
-        <button type="button" className="lnk" onClick={() => markQuotationSent(q.id)}>
-          บันทึกว่าส่งแล้ว
-        </button>
-      )}
       {canBill(q) && (
         <>
           <button type="button" className="lnk" onClick={() => setBilling(q)}>
@@ -125,15 +103,15 @@ export function QuotationsPage() {
           </button>
         </>
       )}
-      {/* ใบที่ส่งแล้วแก้ไม่ได้ตามกติกาเอกสาร — แก้ราคาหรือขอบเขตต้องออกฉบับแก้แทนใบเดิม
-          ใบที่ปิดไปแล้ว (มีดีล/ปฏิเสธ/หมดอายุ) แทนไม่ได้ ปุ่มจึงเป็นการคัดลอกไปออกใบใหม่เฉย ๆ */}
-      {!isDraft(q) && (
+      {/* แก้ใบเดิมไม่ได้เลย — เปลี่ยนอะไรก็ออกใบใหม่แทนใบนี้ ใบเดิมกลายเป็น "แทนที่แล้ว" */}
+      {canReplace(q) && (
         <Link
-          href={`/quotations/new?from=${encodeURIComponent(q.no)}`}
-          className="lnk quiet"
-          title={canBill(q) ? "คัดลอกใบนี้ไปออกฉบับแก้ แล้วให้ใบเดิมถูกแทน" : "คัดลอกใบนี้ไปออกใบใหม่"}
+          href={`/quotations/new?replace=${encodeURIComponent(q.no)}`}
+          className="lnk"
+          title="ออกใบใหม่แทนใบนี้ (ใบนี้แก้ไม่ได้)"
         >
-          {canBill(q) ? "ออกฉบับแก้" : "ออกใบใหม่"}
+          <RotateIcon className="size-3.5" strokeWidth={2} />
+          ออกใบใหม่แทนใบนี้
         </Link>
       )}
       {/* ปุ่มเอกสาร + ปุ่มดูรายละเอียด ขึ้นทุกแถวตามต้นแบบ */}
@@ -166,26 +144,6 @@ export function QuotationsPage() {
     const main = `${base} solid btn-solid`;
     const danger = `${plain} !text-destructive`;
     const items: ReactNode[] = [];
-    if (isDraft(q)) {
-      items.push(
-        <button key="issue" type="button" className={main} onClick={() => setIssuing(q)}>
-          ออกเลขที่เอกสาร
-        </button>,
-        <Link key="edit" href={`/quotations/new?draft=${encodeURIComponent(q.id)}`} className={plain}>
-          แก้ไขร่าง
-        </Link>,
-        <button key="del" type="button" className={danger} onClick={() => setDeleting(q)}>
-          ลบร่าง
-        </button>,
-      );
-    }
-    if (!isDraft(q) && !q.sentAt && !q.replacedBy) {
-      items.push(
-        <button key="sent" type="button" className={main} onClick={() => markQuotationSent(q.id)}>
-          บันทึกว่าส่งแล้ว
-        </button>,
-      );
-    }
     if (canBill(q)) {
       items.push(
         <button key="bill" type="button" className={main} onClick={() => setBilling(q)}>
@@ -196,10 +154,10 @@ export function QuotationsPage() {
         </button>,
       );
     }
-    if (!isDraft(q)) {
+    if (canReplace(q)) {
       items.push(
-        <Link key="re" href={`/quotations/new?from=${encodeURIComponent(q.no)}`} className={plain}>
-          {canBill(q) ? "ออกฉบับแก้" : "ออกใบใหม่"}
+        <Link key="re" href={`/quotations/new?replace=${encodeURIComponent(q.no)}`} className={plain}>
+          ออกใบใหม่แทนใบนี้
         </Link>,
       );
     }
@@ -224,24 +182,19 @@ export function QuotationsPage() {
   /** บรรทัดความสัมพันธ์ใต้เลขที่ — ใบใหม่แทน · แทนใบ · อ้างอิงคำขอ · ลูกค้าปฏิเสธ */
   const relations = (q: Quotation) => (
     <>
-      {q.replacedBy && <span className="why">ออกใบใหม่แทน {q.replacedBy}</span>}
+      {q.replacedBy && <span className="why">ถูกแทนด้วยใบ {q.replacedBy}</span>}
       {q.replaces && <span className="why">แทนใบ {q.replaces}</span>}
       {q.ps && <span className="why">อ้างอิงคำขอ {q.ps}</span>}
       {q.rejectedAt && <span className="why text-destructive">ลูกค้าปฏิเสธ {thaiDate(q.rejectedAt)}</span>}
     </>
   );
 
-  const validCell = (q: Quotation) =>
-    isDraft(q) ? (
-      <span className="why">ยังไม่ออกเลขที่</span>
-    ) : q.sentAt ? (
-      <>
-        {thaiDate(validOf(q))}
-        {isSoon(q) && <span className="diff early">อีก {daysLeft(q)} วัน</span>}
-      </>
-    ) : (
-      <span className="why">ยังไม่ได้ส่งให้ลูกค้า</span>
-    );
+  const validCell = (q: Quotation) => (
+    <>
+      {thaiDate(validOf(q))}
+      {isSoon(q) && <span className="diff early">อีก {daysLeft(q)} วัน</span>}
+    </>
+  );
 
   return (
     <div className="space-y-4">
@@ -266,19 +219,6 @@ export function QuotationsPage() {
           </Link>
         </div>
       </div>
-
-      {issued && (
-        <p
-          role="status"
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[14px] bg-[var(--success-soft)] px-4 py-3 text-[13.5px] font-semibold text-[var(--success)]"
-        >
-          <CheckIcon className="size-4 shrink-0" strokeWidth={2.4} />
-          ออกเลขที่ <b className="num">{issued}</b> แล้ว · แก้ไขไม่ได้อีก
-          <Link href={`/quotations/${encodeURIComponent(issued)}`} className="font-semibold underline">
-            เปิดเอกสารไปส่งลูกค้า
-          </Link>
-        </p>
-      )}
 
       {/* มือถือดูเป็น "รายลูกค้า" ตามต้นแบบ quotations-mobile.html · จอคอมยังเป็นตารางรายใบเหมือนเดิม */}
       <QuotationsMobile />
@@ -322,19 +262,32 @@ export function QuotationsPage() {
                   </td>
                 </tr>
               ) : (
-                paged.list.map((q) => (
+                paged.list.flatMap((q) => {
+                  const chain = chainOf(q);
+                  const open = openChain === q.no;
+                  const rowsOut = [
                   <tr
                     key={q.id}
                     onClick={() => openDoc(q)}
                     style={{ cursor: "pointer" }}
                   >
                     <td className="num muted">
-                      {isDraft(q) ? (
-                        <span className="inline-flex h-[22px] items-center rounded-full bg-[#F5F0FF] px-[9px] text-[11.5px] font-semibold text-[#6B4FBF]">
-                          ร่าง
-                        </span>
-                      ) : (
-                        q.no
+                      {q.no}
+                      {chain.length > 1 && (
+                        <button
+                          type="button"
+                          className={`ml-1.5 inline-flex h-[22px] items-center gap-1 rounded-full border px-[9px] text-[10.5px] font-semibold ${
+                            open ? "border-primary bg-accent text-primary" : "border-border text-muted-foreground"
+                          }`}
+                          title="ดูประวัติใบที่ออกแทนกันมา"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenChain(open ? "" : q.no);
+                          }}
+                        >
+                          ฉบับที่ {chain.length}
+                          <ChevronDownIcon className={`size-2.5 ${open ? "rotate-180" : ""}`} strokeWidth={3} />
+                        </button>
                       )}
                       {relations(q)}
                     </td>
@@ -351,8 +304,19 @@ export function QuotationsPage() {
                     <td onClick={(e) => e.stopPropagation()}>
                       <span className="flex flex-wrap items-center justify-end gap-1.5">{actions(q)}</span>
                     </td>
-                  </tr>
-                ))
+                  </tr>,
+                  ];
+                  /* ประวัติ = สายใบที่ออกแทนกันมา ไม่ใช่การแก้ในใบเดิม */
+                  if (open && chain.length > 1)
+                    rowsOut.push(
+                      <tr key={`${q.id}-chain`}>
+                        <td colSpan={8} className="bg-muted/40 p-0">
+                          <ChainTable chain={chain} />
+                        </td>
+                      </tr>,
+                    );
+                  return rowsOut;
+                })
               )}
             </tbody>
           </table>
@@ -368,10 +332,7 @@ export function QuotationsPage() {
               <li key={q.id} className="px-5 py-4 max-sm:px-4">
                 <div className="flex items-start justify-between gap-3">
                   <Link href={`/leads/${q.customerCode}`} className="min-w-0">
-                    <Who
-                      name={nameOf.get(q.customerCode) ?? q.customerCode}
-                      sub={isDraft(q) ? "ร่าง" : q.no}
-                    />
+                    <Who name={nameOf.get(q.customerCode) ?? q.customerCode} sub={q.no} />
                   </Link>
                   <b className="money num shrink-0 text-[15px]">{baht(quotationTotals(q).grand)}</b>
                 </div>
@@ -379,15 +340,12 @@ export function QuotationsPage() {
                   {q.service ? serviceLabel(q.service) : "—"} · ออกในนาม {q.issuer}
                   {q.issued && ` · ออก ${thaiDate(q.issued)}`}
                 </p>
-                {/* ใบที่ยังไม่มีวันหมดอายุจริง (ร่าง / ยังไม่ได้ส่ง) ไม่ต้องขึ้นคำว่า "มีผลถึง" ค้างไว้
-                    เดิมขึ้นเป็น "มีผลถึง" แล้วบรรทัดล่างว่างเปล่าตามด้วยสถานะ อ่านแล้วงง */}
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {isDraft(q)
-                    ? "ยังไม่ออกเลขที่เอกสาร"
-                    : q.sentAt
-                      ? <>มีผลถึง {validCell(q)}</>
-                      : "ยังไม่ได้ส่งให้ลูกค้า"}
-                </p>
+                <p className="mt-1 text-xs text-muted-foreground">มีผลถึง {validCell(q)}</p>
+                {chainOf(q).length > 1 && (
+                  <p className="text-xs text-muted-foreground">
+                    ออกแทนกันมาแล้ว {chainOf(q).length} ฉบับ
+                  </p>
+                )}
                 {relations(q)}
                 <div className="mt-2.5 flex flex-wrap gap-2 max-sm:hidden">{actions(q)}</div>
                 {phoneActions(q)}
@@ -408,26 +366,6 @@ export function QuotationsPage() {
         </div>
       </section>
 
-      {deleting && (
-        <DeleteDraftDialog
-          quotation={deleting}
-          customerName={nameOf.get(deleting.customerCode) ?? deleting.customerCode}
-          onClose={() => setDeleting(null)}
-        />
-      )}
-      {issuing && (
-        <IssueNumberDialog
-          customerName={nameOf.get(issuing.customerCode) ?? issuing.customerCode}
-          issuer={issuerOf(issuing.issuer).name}
-          total={quotationTotals(issuing).grand}
-          onGo={() => {
-            const no = issueDraft(issuing.id);
-            setIssuing(null);
-            if (no) setIssued(no);
-          }}
-          onClose={() => setIssuing(null)}
-        />
-      )}
       {rejecting && (
         <RejectQuotationDialog
           quotation={rejecting}
@@ -442,6 +380,74 @@ export function QuotationsPage() {
           onClose={() => setBilling(null)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * ประวัติของสายใบ — ออกใบใหม่แทนกันมากี่ฉบับ ยอดต่างกันเท่าไร (ต้นแบบ quotations.html table.revs)
+ * chain เรียงจากใบที่ใช้อยู่ไปใบเก่าสุด
+ */
+function ChainTable({ chain }: { chain: Quotation[] }) {
+  return (
+    <div className="px-4 py-3">
+      <h4 className="pb-2 text-[11.5px] font-semibold text-muted-foreground">
+        ออกใบมาแล้ว {chain.length} ฉบับ
+      </h4>
+      <table className="data-table w-full rounded-xl bg-card">
+        <thead>
+          <tr>
+            <th style={{ width: 68 }}>ฉบับที่</th>
+            <th style={{ width: 150 }}>เลขที่เอกสาร</th>
+            <th style={{ width: 110 }}>วันที่ออก</th>
+            <th>สถานะ</th>
+            <th className="r" style={{ width: 120 }}>ยอดรวม</th>
+            <th className="r" style={{ width: 110 }}>ส่วนต่าง</th>
+            <th style={{ width: 92 }} />
+          </tr>
+        </thead>
+        <tbody>
+          {chain.map((r, i) => {
+            const older = chain[i + 1];
+            const diff = older ? quotationTotals(r).grand - quotationTotals(older).grand : null;
+            const cur = i === 0;
+            return (
+              <tr key={r.id}>
+                <td>
+                  <span
+                    className={`inline-flex h-[23px] min-w-[30px] items-center justify-center rounded-[7px] px-2 text-[11.5px] font-semibold ${
+                      cur ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"
+                    }`}
+                  >
+                    {chain.length - i}
+                  </span>
+                </td>
+                <td className="num">{r.no}</td>
+                <td className="num muted">{thaiDate(r.issued)}</td>
+                <td className="muted">
+                  {cur ? <b className="text-foreground">ฉบับที่ใช้อยู่</b> : `ถูกแทนที่ด้วย ${chain[i - 1].no}`}
+                </td>
+                <td className="r money">{baht(quotationTotals(r).grand)}</td>
+                <td className="r num">
+                  {diff === null ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <span className={diff > 0 ? "text-[var(--warn)]" : "text-[var(--success)]"}>
+                      {diff > 0 ? "+" : ""}
+                      {baht(diff)}
+                    </span>
+                  )}
+                </td>
+                <td className="r">
+                  <Link href={`/quotations/${encodeURIComponent(r.no)}`} className="lnk">
+                    ดูเอกสาร
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

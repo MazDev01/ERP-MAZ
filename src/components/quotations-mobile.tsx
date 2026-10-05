@@ -104,7 +104,7 @@ export function QuotationsMobile() {
 
   /** สถานะของใบล่าสุด — คิดจากดีล วันหมดอายุ และการปฏิเสธ ไม่ได้เก็บเป็นช่องแยก */
   function stateOf(q: Quotation): [string, string] {
-    if (q.status === "ร่าง") return [CHIP.grey, "ฉบับร่าง"];
+    if (q.status === "แทนที่แล้ว") return [CHIP.grey, "ออกใบใหม่แทนแล้ว"];
     if (hasDeal.has(q.no)) return [CHIP.mint, "ได้งานแล้ว"];
     if (q.status === "ปฏิเสธ") return [CHIP.rose, "ลูกค้าปฏิเสธใบนี้"];
     if (!canBillQuotation(q, false, today)) return [CHIP.grey, "หมดอายุแล้ว"];
@@ -223,7 +223,7 @@ export function QuotationsMobile() {
                     {q && (
                       <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
                         <FileIcon className="size-[15px] flex-none text-primary" strokeWidth={2} />
-                        <span className="truncate">{q.status === "ร่าง" ? `ร่าง ${q.id}` : q.no}</span>
+                        <span className="truncate">{q.no}</span>
                         <i className="size-1 flex-none rounded-full bg-muted-foreground/60" />
                         <span className="truncate">{q.service ? serviceLabel(q.service) : "—"}</span>
                       </p>
@@ -282,20 +282,16 @@ export function QuotationsMobile() {
                 ) : q ? (
                   <div className="mt-3.5 flex justify-center gap-2">
                     <Link
-                      href={`/quotations/${encodeURIComponent(q.no || q.id)}`}
+                      href={`/quotations/${encodeURIComponent(q.no)}`}
                       className="btn glass-thin h-9! justify-center rounded-[10px]! px-3.5 text-[13px]"
                     >
                       ดูรายละเอียด
                     </Link>
                     <Link
-                      href={
-                        q.no
-                          ? `/quotations/new?from=${encodeURIComponent(q.no)}`
-                          : `/quotations/new?draft=${encodeURIComponent(q.id)}`
-                      }
+                      href={`/quotations/new?replace=${encodeURIComponent(q.no)}`}
                       className="btn solid btn-solid h-9! justify-center rounded-[10px]! px-3.5 text-[13px]"
                     >
-                      {q.no ? "สร้างฉบับใหม่" : "แก้ไขร่าง"}
+                      ออกใบใหม่แทนใบนี้
                     </Link>
                   </div>
                 ) : (
