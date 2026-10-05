@@ -330,10 +330,11 @@ function Detail({ project }: { project: Project }) {
 // ─── โอนโปรเจค ────────────────────────────────────────────────────
 /*
  * โอนโปรเจคให้คนใหม่ (Proposal · PM — Transfer Project)
- * รับโอนได้เฉพาะตำแหน่ง PM และ SA ตามที่ระบุไว้ใน proposal ("PM การตลาด · PM เว็บ · SA ที่รับโอนโปรเจค")
+ * รับโอนได้เฉพาะ PM, SA และ BD — ข้อเสนอโครงการเขียนไว้แค่ SA แต่เจ้าของสั่งเพิ่ม BD (5 ต.ค. 2569)
+ * เพราะ BD ก็รับงานโปรเจคเหมือนกัน (docs/ตำแหน่งและหน้าที่.md)
  * ต้องใส่เหตุผลเสมอ เพราะเป็นการเปลี่ยนตัวคนรับผิดชอบ ไม่ใช่แก้ข้อมูลเฉย ๆ
  */
-const TRANSFER_POS = ["pm", "sa"];
+const TRANSFER_POS = ["pm", "sa", "bd"];
 
 function TransferDialog({ project, onClose }: { project: Project; onClose: () => void }) {
   const hr = useHr();
