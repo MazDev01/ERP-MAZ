@@ -110,7 +110,15 @@ export function createPersistedStore<T>(
     },
     update(fn) {
       /* อ่านของล่าสุดจากเครื่องก่อนเสมอ — แท็บอื่นอาจเพิ่งเพิ่มข้อมูลไป ถ้าใช้ค่าที่จำไว้จะเขียนทับจนหาย */
-      cache = fn(read());
+      const current = read();
+      const next = fn(current);
+      /* คืนก้อนเดิมแปลว่าไม่มีอะไรเปลี่ยน ไม่ต้องเขียนและไม่ต้องบอกใคร
+         (ถ้าแจ้งทุกครั้ง หน้าที่เรียก update ใน effect จะวนเรนเดอร์ไม่จบ) */
+      if (next === current) {
+        cache = current;
+        return;
+      }
+      cache = next;
       write(cache);
       notify();
     },

@@ -16,6 +16,7 @@ import { bkkStamp, daysBetween, thaiDate, thaiStamp, todayIso } from "@/lib/form
 import { fileKindLabel, lastSub, projName, type Project, type ProjectTask } from "@/lib/pm-data";
 import { memberName, openNudge, postTaskTalk, submitWork, taskTalks, usePm, type TaskTalk } from "@/lib/pm-store";
 import { useProfile } from "@/lib/profile-data";
+import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
 import { FileDrop, type PickedFile } from "./file-drop";
 import { Field, Sheet } from "./lead-dialogs";
 import { SearchBox } from "./sales-ui";
@@ -104,6 +105,8 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
   const pm = usePm();
   const me = useProfile();
   const today = todayIso();
+  /* ข้อความที่ยังไม่ได้อ่านของแต่ละงาน — ใช้ขึ้นจุดแดงบนปุ่มคุยกับ PM */
+  const marks = useTalkRead();
 
   const [stage, setStage] = useState<Stage>(initialStage);
   const [query, setQuery] = useState(initialQuery);
@@ -208,6 +211,7 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
               row={x}
               today={today}
               talks={taskTalks(pm, x.p.deal, x.t.name)}
+              unread={unreadCount(marks, me.employeeId, x.p.deal, x.t.name, taskTalks(pm, x.p.deal, x.t.name))}
               nudge={openNudge(pm, x.p.deal, x.t.name)}
               onOpen={() => setViewing(x)}
               onSend={() => setSending(x)}
@@ -226,10 +230,8 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
           row={talking}
           me={me.employeeId}
           onClose={() => setTalking(null)}
-          onSent={() => {
-            setTalking(null);
-            setToast("ส่งข้อความถึง PM แล้ว");
-          }}
+          /* ส่งแล้วกล่องยังเปิดอยู่ คุยต่อได้เลย (เจ้าของสั่ง 5 ต.ค. 2569 — ให้เหมือนแชททั่วไป) */
+          onSent={() => setToast("ส่งข้อความถึง PM แล้ว")}
         />
       )}
 
@@ -315,6 +317,7 @@ function TaskCard({
   today,
   talks,
   nudge,
+  unread,
   onOpen,
   onSend,
   onTalk,
@@ -322,6 +325,8 @@ function TaskCard({
   row: Row;
   today: string;
   talks: TaskTalk[];
+  /** ข้อความใหม่จาก PM ที่ยังไม่ได้อ่าน */
+  unread: number;
   /** ทวงล่าสุดที่ยังไม่ได้ตอบ */
   nudge?: TaskTalk;
   onOpen: () => void;
@@ -416,6 +421,12 @@ function TaskCard({
             >
               {nudge ? "ตอบ PM" : "คุยกับ PM เรื่องงานนี้"}
               {talks.length > 0 ? ` (${talks.length})` : ""}
+              {/* มีข้อความใหม่จาก PM — จุดแดงพร้อมจำนวน เหมือนแอปแชท */}
+              {unread > 0 && (
+                <i className="num ml-1.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground not-italic">
+                  {unread}
+                </i>
+              )}
             </button>
             {canSend && (
               <button
@@ -740,6 +751,23 @@ function TalkDialog({
   const [tx, setTx] = useState("");
   const [err, setErr] = useState(false);
 
+  /* เปิดอ่านแล้วถือว่าอ่านถึงข้อความล่าสุด — จุดแดงบนปุ่มจะได้หายไป */
+  const talkCount = talks.length;
+  useEffect(() => {
+    markTalkRead(me, p.deal, t.name, talks);
+    /* ใช้จำนวนข้อความเป็นตัวกระตุ้น ไม่ใช่ตัวอาเรย์ที่สร้างใหม่ทุกครั้งที่วาดจอ */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, p.deal, t.name, talkCount]);
+
+  /* ส่งแล้วไม่ปิดกล่อง ข้อความต่อท้ายให้เห็นทันทีเหมือนแอปแชท (เจ้าของสั่ง 5 ต.ค. 2569) */
+  function send() {
+    const v = tx.trim();
+    if (!v) return setErr(true);
+    postTaskTalk(p.deal, t.name, me, v, bkkStamp());
+    setTx("");
+    onSent();
+  }
+
   return (
     <Sheet
       title={t.name}
@@ -753,12 +781,7 @@ function TalkDialog({
           <button
             type="button"
             className="btn solid btn-solid flex-1 justify-center sm:flex-none"
-            onClick={() => {
-              const v = tx.trim();
-              if (!v) return setErr(true);
-              postTaskTalk(p.deal, t.name, me, v, bkkStamp());
-              onSent();
-            }}
+            onClick={send}
           >
             ส่งถึง PM
           </button>
@@ -768,10 +791,10 @@ function TalkDialog({
       <p className="text-[12.5px] text-muted-foreground">
         {projName(p)} · กำหนดส่ง {thaiDate(t.due)}
       </p>
-      <TalkList talks={talks} pmName={p.pm} />
+      <TalkList talks={talks} pmName={p.pm} me={me} />
       <div className="mt-4">
         <label htmlFor="talk-tx" className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">
-          ตอบ PM
+          ข้อความถึง PM
         </label>
         <textarea
           id="talk-tx"
@@ -782,7 +805,14 @@ function TalkDialog({
             setTx(e.target.value);
             setErr(false);
           }}
-          placeholder="เช่น ติดรอไฟล์จากลูกค้า จะส่งได้พรุ่งนี้บ่าย"
+          placeholder="พิมพ์ข้อความถึง PM แล้วกด Enter"
+          onKeyDown={(e) => {
+            /* Enter ส่งเลย · Shift+Enter ขึ้นบรรทัดใหม่ — เหมือนแอปแชททั่วไป */
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
           className="field-control w-full resize-y py-2.5 text-[13.5px] leading-relaxed"
         />
         {err && <p className="mt-2 text-[12.5px] text-destructive">เขียนข้อความก่อนส่ง</p>}

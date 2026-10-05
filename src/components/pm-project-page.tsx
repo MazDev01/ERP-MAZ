@@ -14,6 +14,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
 import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
 import { addDays, bkkNow, bkkStamp, daysBetween, initials, pad2, thaiDate, thaiStamp, toIsoDate, todayIso } from "@/lib/format";
@@ -831,6 +832,8 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
   /* งานที่กำลังทวง — ทวงจากการ์ดงานใบนั้นตรง ๆ ไม่ใช่พิมพ์ลอย ๆ ในแชทโปรเจคที่ทีมเปิดไม่ได้ */
   const [nudging, setNudging] = useState<string | null>(null);
   const talks = usePm().talks;
+  /* ข้อความที่ PM ยังไม่ได้อ่านของแต่ละงาน */
+  const marks = useTalkRead();
   return (
     <section>
       <BlockTitle count={`${count} งาน`}>งานในโปรเจค</BlockTitle>
@@ -849,7 +852,10 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
               lastSub(t)?.at.split(" ")[0] ??
               (t.status === "done" ? (t.doneAt?.slice(0, 10) ?? addDays(t.due, -1)) : "");
             const first = t.whos[0] ? (memberOf(t.whos[0])?.name ?? t.whos[0]) : "";
-            const talkCount = (talks[`${project.deal}|${t.name}`] ?? []).length;
+            const taskTalkList = talks[`${project.deal}|${t.name}`] ?? [];
+            const talkCount = taskTalkList.length;
+            /* ข้อความใหม่จากผู้รับงานที่ PM ยังไม่ได้อ่าน */
+            const unread = unreadCount(marks, "PM", project.deal, t.name, taskTalkList);
             return (
               <article
                 key={`${t.name}-${i}`}
@@ -910,6 +916,11 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
                   >
                     {n < 0 ? "ทวงงานนี้" : "คุยเรื่องงานนี้"}
                     {talkCount > 0 ? ` · ${talkCount}` : ""}
+                    {unread > 0 && (
+                      <i className="num ml-1.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground not-italic">
+                        {unread}
+                      </i>
+                    )}
                   </button>
                 )}
               </article>
@@ -946,16 +957,24 @@ function TaskTalkDialog({
   const [tx, setTx] = useState("");
   const [err, setErr] = useState(false);
 
+  /* เปิดอ่านแล้วถือว่าอ่านถึงข้อความล่าสุด */
+  const talkCount = talks.length;
+  useEffect(() => {
+    markTalkRead("PM", project.deal, taskName, talks);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.deal, taskName, talkCount]);
+
+  /* ส่งแล้วกล่องยังเปิด คุยต่อได้ทันที (เจ้าของสั่ง 5 ต.ค. 2569 — ให้เหมือนแชททั่วไป) */
   function send() {
     const v = tx.trim();
     if (!v) return setErr(true);
     nudgeTask(project.deal, taskName, v, bkkStamp());
-    onClose();
+    setTx("");
   }
 
   return (
     <Sheet
-      title={`ทวงงาน · ${taskName}`}
+      title={`คุยเรื่องงาน · ${taskName}`}
       onClose={onClose}
       footer={
         ro ? (
@@ -965,7 +984,7 @@ function TaskTalkDialog({
         ) : (
           <>
             <button type="button" className="btn glass-thin flex-1 justify-center sm:flex-none" onClick={onClose}>
-              ยกเลิก
+              ปิด
             </button>
             <button type="button" className="btn solid btn-solid flex-1 justify-center sm:flex-none" onClick={send}>
               ส่งถึงผู้รับงาน
@@ -985,7 +1004,7 @@ function TaskTalkDialog({
         ข้อความนี้ขึ้นที่หน้างานของผู้รับงานโดยตรง และเข้าแชทโปรเจคด้วย
       </p>
 
-      <TalkList talks={talks} pmName={project.pm} />
+      <TalkList talks={talks} pmName={project.pm} me="PM" />
 
       {!ro && (
         <div className="mt-4">
@@ -1001,7 +1020,14 @@ function TaskTalkDialog({
               setTx(e.target.value);
               setErr(false);
             }}
-            placeholder="เช่น งานนี้เลยกำหนดมา 2 วันแล้ว ส่งได้เมื่อไร"
+            placeholder="พิมพ์ข้อความถึงผู้รับงาน แล้วกด Enter"
+            onKeyDown={(e) => {
+              /* Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่ */
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
             className="field-control w-full resize-y py-2.5 text-[13.5px] leading-relaxed"
           />
           {err && <p className="mt-2 text-[12.5px] text-destructive">เขียนข้อความก่อนส่ง</p>}
@@ -1011,30 +1037,56 @@ function TaskTalkDialog({
   );
 }
 
-/** สายข้อความของงานใบหนึ่ง — ใช้ทั้งฝั่ง PM และฝั่งผู้รับงาน (my-tasks) */
-export function TalkList({ talks, pmName }: { talks: TaskTalk[]; pmName: string }) {
-  if (talks.length === 0) {
-    return <p className="mt-4 text-[12.5px] text-muted-foreground">ยังไม่มีข้อความเรื่องงานใบนี้</p>;
+/**
+ * สายข้อความของงานใบหนึ่ง — ใช้ทั้งฝั่ง PM และฝั่งผู้รับงาน (my-tasks)
+ *
+ * วางเป็นแชทจริง ๆ ตามที่เจ้าของสั่ง (5 ต.ค. 2569): ของเราชิดขวาสีแดง ของอีกฝ่ายชิดซ้ายสีเทา
+ * ข้อความใหม่ไหลลงล่างสุดเองเหมือนแอปแชททั่วไป ไม่ต้องเลื่อนหาเอง
+ */
+export function TalkList({ talks, pmName, me }: { talks: TaskTalk[]; pmName: string; me?: string }) {
+  const end = useRef<HTMLDivElement>(null);
+  const count = talks.length;
+  useEffect(() => {
+    /* เลื่อนไปข้อความล่าสุดทุกครั้งที่มีข้อความเพิ่ม — instant ตอนเปิดครั้งแรก ไม่ให้เห็นภาพกระตุก */
+    end.current?.scrollIntoView({ block: "nearest" });
+  }, [count]);
+
+  if (count === 0) {
+    return (
+      <p className="mt-4 rounded-[14px] bg-muted/60 px-3.5 py-6 text-center text-[12.5px] text-muted-foreground">
+        ยังไม่มีข้อความเรื่องงานใบนี้ — พิมพ์ข้อความแรกได้เลย
+      </p>
+    );
   }
   return (
-    <ul className="mt-4 flex flex-col gap-2">
-      {talks.map((m, i) => (
-        <li
-          key={`${m.at}-${i}`}
-          className={`rounded-[12px] px-3.5 py-2.5 ${
-            m.nudge ? "bg-[var(--warning-soft)]" : "bg-muted"
-          }`}
-        >
-          <p className="flex flex-wrap items-baseline gap-x-2 text-[11.5px] text-muted-foreground">
-            <b className="font-semibold text-foreground">
-              {m.who === "PM" ? pmName : (memberOf(m.who)?.name ?? m.who)}
-            </b>
-            {m.nudge && <span className="font-semibold text-[var(--warning)]">ทวงงาน</span>}
-            <span className="num">{thaiStamp(m.at)} น.</span>
-          </p>
-          <p className="mt-1 text-[13px] leading-relaxed break-words">{m.tx}</p>
-        </li>
-      ))}
+    <ul className="mt-4 flex max-h-[46dvh] flex-col gap-2.5 overflow-y-auto pr-0.5">
+      {talks.map((m, i) => {
+        const mine = me !== undefined && m.who === me;
+        const name = m.who === "PM" ? pmName : (memberOf(m.who)?.name ?? m.who);
+        return (
+          <li key={`${m.at}-${i}`} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+            <span className="px-1 text-[11px] text-muted-foreground">
+              {mine ? "คุณ" : name}
+              {m.nudge && <b className="ml-1.5 font-semibold text-[var(--warning)]">ทวงงาน</b>}
+            </span>
+            <div
+              className={`max-w-[86%] rounded-[16px] px-3.5 py-2 ${
+                m.nudge
+                  ? "bg-[var(--warning-soft)] text-foreground"
+                  : mine
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-foreground"
+              }`}
+            >
+              <p className="text-[13.5px] leading-relaxed break-words whitespace-pre-wrap">{m.tx}</p>
+            </div>
+            <span className={`num px-1 text-[10.5px] text-muted-foreground ${mine ? "text-right" : ""}`}>
+              {thaiStamp(m.at)} น.
+            </span>
+          </li>
+        );
+      })}
+      <div ref={end} />
     </ul>
   );
 }
