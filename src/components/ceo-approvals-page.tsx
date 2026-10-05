@@ -40,7 +40,7 @@ import { approveOt, rejectOt, useAllOt } from "@/lib/ot-store";
 import { approvesFor, useApprovalRoute, type Role } from "@/lib/role";
 import { formatMinutesOfDay, minutesOfDay } from "@/lib/work-schedule";
 import { ConfirmDialog } from "./confirm-dialog";
-import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { ChevronRightIcon } from "./icons";
 import { OtActualFields, useOtDecision, type OtReq } from "./ot-actual-fields";
 
 type Kind = "leave" | "ot" | "expense";
@@ -312,8 +312,11 @@ export function CeoApprovalsPage() {
   useEffect(() => {
     if (!sel && !pane) return;
     setMobileBack(() => {
-      if (sel) setSel(null);
-      else setPane("");
+      if (sel) {
+        setSel(null);
+        /* ปิดช่องพิมพ์เหตุผลที่ค้างอยู่ด้วย ไม่งั้นกลับเข้าห้องแล้วเจอช่องเปิดค้าง */
+        setReplying(null);
+      } else setPane("");
     });
     return () => setMobileBack(null);
   }, [sel, pane]);
@@ -402,21 +405,12 @@ export function CeoApprovalsPage() {
         </div>
       )}
 
-      {/* มือถือ: อยู่ในส่วนย่อยแล้ว มีหัวเรื่องกับปุ่มกลับไปหน้าเลือก */}
+      {/* มือถือ: บอกว่าอยู่ส่วนไหน — ย้อนกลับใช้ปุ่มบนแถบหัว ไม่ต้องมีปุ่มซ้ำในเนื้อหา
+          (เจ้าของสั่ง 5 ต.ค. 2569 · แบบเดียวกับ GroupBack ในสายรอบเงินเดือน) */}
       {mPane !== "" && !mobileRoom && (
-        <div className="flex items-center gap-2.5 sm:hidden">
-          <button
-            type="button"
-            onClick={() => setPane("")}
-            aria-label="กลับไปหน้าเลือก"
-            className="grid size-9 flex-none place-items-center rounded-full border border-border bg-card"
-          >
-            <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
-          </button>
-          <b className="text-[16px] font-bold">
-            {mPane === "pay" ? "อนุมัติเงินเดือน" : "คำขอของพนักงาน"}
-          </b>
-        </div>
+        <p className="flex h-9 items-center text-[16px] font-bold sm:hidden">
+          {mPane === "pay" ? "อนุมัติเงินเดือน" : "คำขอของพนักงาน"}
+        </p>
       )}
 
       {/* empty:hidden — ไม่มียอดรออนุมัติ กล่องว่างจะได้ไม่กินระยะห่างเพิ่ม */}
@@ -500,19 +494,6 @@ export function CeoApprovalsPage() {
           ) : (
             <>
               <div className="flex items-center gap-3 border-b border-border px-4 py-3 max-sm:sticky max-sm:top-[72px] max-sm:z-10 max-sm:bg-card">
-                <span className="md:hidden">
-                  <button
-                    type="button"
-                    className="btn glass-thin btn-mini max-sm:!size-10 max-sm:!justify-center max-sm:!p-0 max-sm:text-[20px]"
-                    onClick={() => {
-                      setSel(null);
-                      setReplying(null);
-                    }}
-                    aria-label="กลับไปรายการห้อง"
-                  >
-                    ‹
-                  </button>
-                </span>
                 <Face name={person(room.emp).name} size={38} />
                 <span className="min-w-0">
                   <b className="block truncate text-[14.5px] font-semibold">{person(room.emp).name}</b>
