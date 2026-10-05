@@ -22,24 +22,27 @@ import { HR_EMP, ROLE_EMPLOYEE } from "./hr-data";
  */
 export type Role = "sales" | "ps" | "pm" | "acc" | "hr" | "staff" | "gm" | "ceo";
 
-/* en ใช้เฉพาะการ์ดเลือกบทบาทในหน้าเข้าสู่ระบบ — ที่อื่นในระบบยังใช้ชื่อภาษาไทย (label) */
-export const ROLES: { key: Role; label: string; note: string; en: string }[] = [
-  { key: "sales", label: "พนักงานขาย", note: "ดูแลผู้สนใจ ใบเสนอราคา และดีล",
+/*
+ * en ใช้เฉพาะการ์ดเลือกบทบาทในหน้าเข้าสู่ระบบ — ที่อื่นในระบบยังใช้ชื่อภาษาไทย (label)
+ * short = ชื่อฝ่ายสั้น ๆ ใช้ตอนคนเดียวทำสองฝ่าย จะได้เขียนรวบเป็น "บัญชีและบุคคล"
+ */
+export const ROLES: { key: Role; label: string; short: string; note: string; en: string }[] = [
+  { key: "sales", label: "พนักงานขาย", short: "ขาย", note: "ดูแลผู้สนใจ ใบเสนอราคา และดีล",
     en: "Sales" },
   /* ทีมก่อนการขาย (SA/BD) — รับคำขอก่อนการขายจากฝ่ายขาย ทำข้อเสนอแล้วส่งกลับ (ต้นแบบ presales-work.html) */
-  { key: "ps", label: "ทีมก่อนการขาย", note: "รับคำขอจากฝ่ายขาย จัดทำข้อเสนอแล้วส่งกลับ",
+  { key: "ps", label: "ทีมก่อนการขาย", short: "ก่อนการขาย", note: "รับคำขอจากฝ่ายขาย จัดทำข้อเสนอแล้วส่งกลับ",
     en: "Presales (SA/BD)" },
-  { key: "pm", label: "ผู้จัดการโครงการ", note: "รับใบงานแล้วมอบหมายให้ทีม",
+  { key: "pm", label: "ผู้จัดการโครงการ", short: "โปรเจค", note: "รับใบงานแล้วมอบหมายให้ทีม",
     en: "Project Manager" },
-  { key: "acc", label: "พนักงานบัญชี", note: "วางบิล ติดตามหนี้ ออกใบเสร็จ และยื่นภาษี",
+  { key: "acc", label: "พนักงานบัญชี", short: "บัญชี", note: "วางบิล ติดตามหนี้ ออกใบเสร็จ และยื่นภาษี",
     en: "Accountant" },
-  { key: "hr", label: "ฝ่ายบุคคล", note: "ดูแลข้อมูลพนักงาน เวลาทำงาน และเงินเดือน",
+  { key: "hr", label: "ฝ่ายบุคคล", short: "บุคคล", note: "ดูแลข้อมูลพนักงาน เวลาทำงาน และเงินเดือน",
     en: "Human Resources" },
-  { key: "staff", label: "พนักงาน", note: "รับงานจาก PM ลงมือทำ แล้วส่งผลงานให้ตรวจ",
+  { key: "staff", label: "พนักงาน", short: "พนักงาน", note: "รับงานจาก PM ลงมือทำ แล้วส่งผลงานให้ตรวจ",
     en: "Employee" },
-  { key: "gm", label: "ผู้จัดการทั่วไป (GM)", note: "อนุมัติใบลาของพนักงานทั่วไป",
+  { key: "gm", label: "ผู้จัดการทั่วไป (GM)", short: "ผู้จัดการทั่วไป", note: "อนุมัติใบลาของพนักงานทั่วไป",
     en: "General Manager" },
-  { key: "ceo", label: "ผู้บริหาร", note: "อนุมัติคำขอที่ขึ้นถึงผู้บริหาร และอนุมัติยอดเงินเดือน",
+  { key: "ceo", label: "ผู้บริหาร", short: "ผู้บริหาร", note: "อนุมัติคำขอที่ขึ้นถึงผู้บริหาร และอนุมัติยอดเงินเดือน",
     en: "CEO" },
 ];
 
@@ -74,6 +77,15 @@ export const subscribeRole = store.subscribe;
 
 export function roleLabel(role: Role) {
   return ROLES.find((r) => r.key === role)!.label;
+}
+
+/**
+ * ชื่อฝ่ายของคนคนหนึ่ง — ทำฝ่ายเดียวใช้ชื่อตำแหน่งเต็ม ทำสองฝ่ายเขียนรวบด้วย "และ"
+ * เช่น "บัญชีและบุคคล" (เจ้าของสั่ง 5 ต.ค. 2569 — เดิมเขียนว่า "ควบ 2 ตำแหน่ง · …" ยาวและอ่านยาก)
+ */
+export function rolesLabel(roles: Role[]) {
+  if (roles.length < 2) return roleLabel(roles[0]);
+  return roles.map((r) => ROLES.find((x) => x.key === r)!.short).join("และ");
 }
 
 /**

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useProfile } from "@/lib/profile-data";
 import { useMyRoles } from "@/lib/hr-link";
-import { roleLabel, useRole } from "@/lib/role";
+import { rolesLabel, useRole } from "@/lib/role";
 import { hrPos } from "@/lib/hr-data";
 import { setStaffEmployee, staffTeam, useStaffEmployeeId } from "@/lib/staff-identity";
 import { useProfilePhoto } from "@/lib/profile-store";
@@ -90,11 +90,8 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
           {/* ชื่อกับบทบาทโผล่เฉพาะจอกว้าง จอแคบเหลือแค่รูปกลม */}
           <span className="hidden min-w-0 text-left leading-tight sm:block">
             <b className="block max-w-[140px] truncate text-[13.5px] font-semibold">{me.name}</b>
-            <span
-              className="block max-w-[140px] truncate text-[11.5px] text-muted-foreground"
-              title={dual ? `ควบ ${myRoles.length} ตำแหน่ง: ${myRoles.map(roleLabel).join(" · ")}` : undefined}
-            >
-              {dual ? `${roleLabel(role)} · ควบ ${myRoles.length}` : me.position}
+            <span className="block max-w-[140px] truncate text-[11.5px] text-muted-foreground">
+              {dual ? rolesLabel(myRoles) : me.position}
             </span>
           </span>
         </button>
@@ -126,22 +123,10 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
               <b className="block truncate text-[13.5px] font-semibold">
                 {me.name}
               </b>
+              {/* คนเดียวทำสองฝ่าย — บอกสั้น ๆ ว่าฝ่ายไหนบ้าง เช่น "บัญชีและบุคคล" */}
               <span className="mt-0.5 block truncate text-[11.5px] text-muted-foreground">
-                {me.position}
+                {dual ? rolesLabel(myRoles) : me.position}
               </span>
-              {dual && (
-                <span className="mt-1 block text-[11.5px] leading-relaxed text-muted-foreground">
-                  ควบ {myRoles.length} ตำแหน่ง ·{" "}
-                  {myRoles.map((r, i) => (
-                    <span key={r}>
-                      {i > 0 && " · "}
-                      <span className={r === role ? "font-semibold text-primary" : undefined}>
-                        {roleLabel(r)}
-                      </span>
-                    </span>
-                  ))}
-                </span>
-              )}
             </span>
           </div>
 
