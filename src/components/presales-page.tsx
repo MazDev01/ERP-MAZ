@@ -538,7 +538,8 @@ function ReplyDialog({ request, onClose }: { request: PresalesRequest; onClose: 
  */
 function LatestButton({ round, onOpen }: { round: PresalesRound; onOpen: () => void }) {
   const cls =
-    "inline-flex h-[30px] items-center gap-[7px] rounded-[9px] border bg-white px-3 text-xs font-semibold whitespace-nowrap transition-colors";
+    /* มือถือสูง 38px ให้นิ้วกดง่าย จอที่ใช้เมาส์คง 30px ตามต้นแบบ */
+    "inline-flex h-[30px] max-sm:h-[38px] items-center gap-[7px] rounded-[9px] border bg-white px-3 text-xs font-semibold whitespace-nowrap transition-colors";
   if (isCanva(round)) {
     return (
       <a

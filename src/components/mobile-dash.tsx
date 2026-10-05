@@ -199,7 +199,7 @@ export function DashWeek({
             type="button"
             aria-label="สัปดาห์ก่อน"
             onClick={() => setOffset((v) => v - 1)}
-            className="grid size-[34px] place-items-center rounded-full border-[1.5px] border-border bg-card text-muted-foreground"
+            className="grid size-[42px] place-items-center rounded-full border-[1.5px] border-border bg-card text-muted-foreground"
           >
             <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
           </button>
@@ -207,7 +207,7 @@ export function DashWeek({
             type="button"
             aria-label="สัปดาห์ถัดไป"
             onClick={() => setOffset((v) => v + 1)}
-            className="grid size-[34px] place-items-center rounded-full border-[1.5px] border-border bg-card text-muted-foreground"
+            className="grid size-[42px] place-items-center rounded-full border-[1.5px] border-border bg-card text-muted-foreground"
           >
             <ChevronRightIcon className="size-4" strokeWidth={2.4} />
           </button>

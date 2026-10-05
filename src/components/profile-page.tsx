@@ -175,7 +175,7 @@ function ProfileHub({ panes, onPane }: { panes: typeof PANES; onPane: (p: Pane) 
             type="button"
             onClick={() => fileRef.current?.click()}
             aria-label="เปลี่ยนรูปโปรไฟล์"
-            className="absolute -right-0.5 -bottom-0.5 grid size-8 place-items-center rounded-full border-[3px] border-white bg-foreground text-white"
+            className="absolute -right-0.5 -bottom-0.5 grid size-9 place-items-center rounded-full border-[3px] border-white bg-foreground text-white"
           >
             <CameraIcon className="size-[15px]" strokeWidth={2.2} />
           </button>
