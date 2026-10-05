@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { pdfName, savePdf } from "@/lib/pdf";
 import { canBillQuotation, quotationTotals } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
 import { findLink } from "@/lib/deep-link";
@@ -46,6 +47,10 @@ export function QuotationDocPage({
   const deal = crm.deals.find((d) => d.quotationNo === no);
   /* ส่งไปวางบิลจากหน้าเอกสาร (ต้นแบบ quotation-view.html) — เงื่อนไขเดียวกับหน้ารายการ */
   const [billing, setBilling] = useState(false);
+  /* ดาวน์โหลดเป็นไฟล์ PDF จริง ไม่ใช่สั่งพิมพ์แล้วให้ผู้ใช้เลือกบันทึกเอง (ข้อเสนอโครงการ · Export PDF) */
+  const paper = useRef<HTMLDivElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   const canBill =
     Boolean(current) && !old && !ceo && !acc && canBillQuotation(current!, Boolean(deal), todayIso());
   const docLink = (n: string) => (
@@ -154,11 +159,19 @@ export function QuotationDocPage({
           </button>
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile shrink-0"
-            onClick={() => window.print()}
+            className="btn solid btn-solid btn-block-mobile shrink-0 disabled:opacity-60"
+            disabled={saving}
+            onClick={async () => {
+              if (!paper.current || saving) return;
+              setSaving(true);
+              setPdfError("");
+              const res = await savePdf(paper.current, pdfName(["ใบเสนอราคา", q.no, customer?.name]));
+              setSaving(false);
+              if (!res.ok) setPdfError(`ดาวน์โหลดไม่สำเร็จ: ${res.error} — ใช้ปุ่มพิมพ์แล้วเลือกบันทึกเป็น PDF แทนได้`);
+            }}
           >
             <DownloadIcon className="size-[15px]" strokeWidth={2} />
-            ดาวน์โหลด PDF
+            {saving ? "กำลังสร้างไฟล์…" : "ดาวน์โหลด PDF"}
           </button>
         </div>
       </div>
@@ -172,7 +185,13 @@ export function QuotationDocPage({
         />
       )}
 
-      <div className="flex flex-col items-center gap-5">
+      {pdfError && (
+        <p role="alert" className="no-print rounded-xl bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] font-medium text-destructive">
+          {pdfError}
+        </p>
+      )}
+
+      <div ref={paper} className="flex flex-col items-center gap-5">
         <QuotationPaper
           doc={{
             no: q.no,

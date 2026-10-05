@@ -11,6 +11,7 @@ import { setStaffEmployee, staffTeam, useStaffEmployeeId } from "@/lib/staff-ide
 import { psTeam, setPsEmployee, usePsEmployeeId } from "@/lib/ps-identity";
 import { useProfilePhoto } from "@/lib/profile-store";
 import { ConfirmDialog } from "./confirm-dialog";
+import { clearAllLocal, clearSession } from "@/lib/local-data";
 import { DownloadIcon, LockIcon, LogoutIcon, UserIcon } from "./icons";
 
 /** ตัวย่อชื่อสองตัวอักษรแรกของชื่อจริง */
@@ -26,6 +27,8 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
   const [open, setOpen] = useState(false);
   /* ออกจากระบบแล้วย้อนกลับเองไม่ได้ ต้องถามก่อนเสมอ */
   const [askLogout, setAskLogout] = useState(false);
+  /* เครื่องที่ใช้ร่วมกัน ควรล้างข้อมูลที่เก็บไว้ในเครื่องด้วย (ตรวจระบบ 5 ต.ค. 2569 · SEC-002) */
+  const [wipe, setWipe] = useState(false);
   const me = useProfile();
   /* คนหนึ่งควบได้หลายบทบาท (เช่น บัญชี + บุคคล + ผู้ดูแลระบบ)
      ต้องเห็นว่าตอนนี้ทำงานในบทบาทไหน และตัวเองถือบทบาทอะไรอีกบ้าง
@@ -216,12 +219,37 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
         open={askLogout}
         title="ออกจากระบบ"
         description="คุณต้องการออกจากระบบใช่หรือไม่"
+        detail={
+          <label className="mt-1 flex cursor-pointer items-start gap-2 rounded-xl bg-muted/60 px-3 py-2.5 text-left text-[12.5px] leading-relaxed">
+            <input
+              type="checkbox"
+              checked={wipe}
+              onChange={(e) => setWipe(e.target.checked)}
+              className="mt-0.5 size-4 flex-none accent-[var(--primary)]"
+            />
+            <span>
+              ล้างข้อมูลของระบบในเครื่องนี้ด้วย
+              <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+                เลือกข้อนี้เมื่อใช้เครื่องร่วมกับคนอื่น — ข้อมูลที่บันทึกไว้ในเครื่องนี้ (รวมไฟล์โปรเจคและหน้าที่เก็บไว้ใช้ตอนออฟไลน์) จะถูกลบทั้งหมด
+              </span>
+            </span>
+          </label>
+        }
         confirmLabel="ยืนยัน"
         cancelLabel="ยกเลิก"
         onCancel={() => setAskLogout(false)}
         onConfirm={() => {
           setAskLogout(false);
-          router.push("/login");
+          /* ลืมว่าใครล็อกอินอยู่เสมอ ส่วนข้อมูลงานล้างเฉพาะที่ผู้ใช้สั่ง */
+          clearSession();
+          const done = wipe ? clearAllLocal() : Promise.resolve();
+          void done.then(() => {
+            /* ล้างแล้วต้องโหลดใหม่ทั้งหน้า ไม่งั้นสโตร์ในหน่วยความจำยังถือข้อมูลเดิมอยู่
+               (router.push ไม่พอ เพราะ JavaScript ตัวเดิมยังทำงานอยู่) */
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+            if (wipe) window.location.href = "/login";
+            else router.push("/login");
+          });
         }}
       />
     </div>

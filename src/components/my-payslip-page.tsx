@@ -13,7 +13,8 @@
  * รอบที่ปิดไว้ก่อนระบบจะเก็บยอด (ไม่มี snapshot) จึงค่อยคิดด้วย payOf ตัวเดียวกับที่ฝ่ายบุคคลใช้
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { pdfName, savePdf } from "@/lib/pdf";
 import { baht, thaiDate, thaiMonth } from "@/lib/format";
 import {
   cutOf,
@@ -319,6 +320,11 @@ function SlipDialog({
   ];
   const cut = cutOf(x);
 
+  /* กล่องเนื้อหาสลิปสำหรับทำไฟล์ PDF */
+  const slip = useRef<HTMLDivElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [pdfError, setPdfError] = useState("");
+
   function download() {
     countDownload(row.month, emp.id);
     downloadCsv(
@@ -353,12 +359,35 @@ function SlipDialog({
           <button type="button" className="btn glass-thin" onClick={onClose}>
             ปิด
           </button>
-          <button type="button" className="btn solid btn-solid" onClick={download}>
-            ดาวน์โหลด
+          <button type="button" className="btn glass-thin" onClick={download}>
+            ดาวน์โหลด CSV
+          </button>
+          {/* สลิปเป็นเอกสารที่พนักงานต้องเก็บไว้ยื่นที่อื่น ต้องได้ไฟล์ PDF จริง (ข้อเสนอโครงการ · Export PDF) */}
+          <button
+            type="button"
+            className="btn solid btn-solid disabled:opacity-60"
+            disabled={saving}
+            onClick={async () => {
+              if (!slip.current || saving) return;
+              setSaving(true);
+              setPdfError("");
+              countDownload(row.month, emp.id);
+              const res = await savePdf(slip.current, pdfName(["สลิปเงินเดือน", thaiMonth(row.month), emp.name]));
+              setSaving(false);
+              if (!res.ok) setPdfError(`ดาวน์โหลดไม่สำเร็จ: ${res.error}`);
+            }}
+          >
+            {saving ? "กำลังสร้างไฟล์…" : "ดาวน์โหลด PDF"}
           </button>
         </>
       }
     >
+      {pdfError && (
+        <p role="alert" className="mb-3 rounded-xl bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] font-medium text-destructive">
+          {pdfError}
+        </p>
+      )}
+      <div ref={slip} className="bg-card">
       <Sect title="ข้อมูลพนักงาน">
         <Row2 k="ชื่อ" v={emp.name} />
         <Row2 k="ตำแหน่ง" v={hrPos(emp.pos).label} />
@@ -396,6 +425,7 @@ function SlipDialog({
       <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
         ตัวเลขชุดเดียวกับที่ฝ่ายบุคคลปิดรอบไว้ ถ้าเห็นว่าไม่ตรงให้แจ้งฝ่ายบุคคลก่อนสิ้นรอบถัดไป
       </p>
+      </div>
     </Sheet>
   );
 }
