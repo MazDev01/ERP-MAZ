@@ -18,7 +18,7 @@ import { projName, projectProgress, type InboxJob, type Project } from "@/lib/pm
 import { usePm, type PlanDraft } from "@/lib/pm-store";
 import { ReadOnlyNote } from "./pm-readonly";
 import { useRole } from "@/lib/role";
-import { USERS } from "@/lib/mock-data";
+import { usePsMe } from "@/lib/presales-work";
 import { SearchIcon } from "./icons";
 import { NewProjectButton } from "./project-new-page";
 
@@ -50,7 +50,9 @@ export function PmProjectsPage() {
    * โปรเจคของคนอื่นไม่ใช่เรื่องของ SA จึงกรองตั้งแต่ต้นทาง ไม่ใช่ซ่อนแค่บนหน้าจอ
    */
   const role = useRole();
-  const mine = role === "ps" ? USERS.ps.name : "";
+  /* สลับคนในทีมก่อนการขายได้แล้ว (SA/BD) — ต้องกรองตามคนที่ใช้อยู่ ไม่ใช่ SA ตายตัว */
+  const psMe = usePsMe();
+  const mine = role === "ps" ? psMe.full : "";
   const [folder, setFolder] = useState<FolderKey>("all");
   const [query, setQuery] = useState("");
 
