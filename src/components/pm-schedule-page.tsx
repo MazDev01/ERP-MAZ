@@ -24,9 +24,9 @@
  * ทุกลิงก์ในหน้านี้อยู่ในหน้าของ PM เท่านั้น ไม่พาข้ามไปหน้าของบทบาทอื่น
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { projName } from "@/lib/pm-data";
-import { thaiDate } from "@/lib/format";
+import { bkkNow, thaiDate, toIsoDate } from "@/lib/format";
 import { usePm, useTeam } from "@/lib/pm-store";
 import { USERS } from "@/lib/mock-data";
 import { useCrm } from "@/lib/crm-store";
@@ -54,10 +54,10 @@ import {
   type EventDraft,
 } from "@/lib/pm-schedule-store";
 import { AppointmentSheet } from "./appointment-sheet";
-import { PlusIcon } from "./icons";
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, MenuIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
-import { ScheduleBoard, useBoardNav, type BoardEvent, type BoardKind } from "./schedule-board";
+import { ScheduleBoard, boardOn, useBoardNav, type BoardEvent, type BoardKind, type BoardNav } from "./schedule-board";
 import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select } from "./ui";
 import { useAddOption } from "./add-option";
@@ -121,7 +121,10 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="bar max-sm:hidden!">
+      {/* มือถือ (< md) ใช้ปฏิทินแบบแอปแทนหัวเรื่องกับกระดานของจอกว้าง (ยกจากระบบต้นฉบับ)
+          ซ่อนที่กล่องนอก เพราะ .bar ประกาศ display ไว้ใน globals.css นอก @layer */}
+      <div className="max-md:hidden">
+      <div className="bar">
         <div>
           <p>
             {canEdit
@@ -150,9 +153,20 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
           </div>
         )}
       </div>
+      </div>
 
       <ReadOnlyNote />
 
+      <PmMobileCalendar
+        sales={sales}
+        nav={nav}
+        events={events}
+        canEdit={canEdit}
+        onOpen={openEvent}
+        onAdd={(day) => setEditing({ date: day })}
+      />
+
+      <div className="max-md:hidden">
       <ScheduleBoard
         nav={nav}
         events={events}
@@ -166,6 +180,7 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
         onOpen={(e) => openEvent(e.data)}
         onAdd={canEdit ? (day) => setEditing({ date: day }) : undefined}
       />
+      </div>
 
       {viewing && (
         <AppointmentSheet
@@ -193,6 +208,376 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
   );
 }
 
+
+// ─── ปฏิทินแบบแอปบนมือถือ (ต้นแบบ pm-schedule.html .ms) ─────────────
+
+const M_DW = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+const M_DW_FULL = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+const M_MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+/** เส้นเวลาของมุมมองสัปดาห์ 08:00–19:00 · หนึ่งชั่วโมงสูง 64px */
+const M_H0 = 8;
+const M_H1 = 19;
+const M_ROW = 64;
+const M_RED = "#C8102E";
+const M_CIRCLE =
+  "grid size-9 flex-none place-items-center rounded-full border border-[#EFE3E5] bg-white text-[#2A1F22] shadow-[0_3px_8px_-4px_rgba(90,20,35,.25)]";
+
+const iso = (d: Date) => toIsoDate(d);
+const dateOf = (s: string) => new Date(`${s}T00:00:00`);
+function addDays(d: Date, n: number) {
+  const x = new Date(d.getTime());
+  x.setDate(x.getDate() + n);
+  return x;
+}
+const minOf = (t?: string) => {
+  if (!t) return null;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + (m || 0);
+};
+/** อักษรย่อของชื่อ — ข้ามสระหน้า (เ แ โ ใ ไ) ไม่งั้นได้สระลอย ๆ ตัวเดียว */
+function initialOf(name: string) {
+  const n = name.replace(/^(นาย|นางสาว|นาง)\s*/, "").trim();
+  return /^[เแโใไ]/.test(n) ? n.slice(0, 2) : n.slice(0, 1);
+}
+
+/*
+ * มือถือ (< md) — ปฏิทินแบบแอปตามต้นแบบ ใช้สถานะเดียวกับกระดานจอกว้าง (useBoardNav)
+ * ชื่อหน้าและปุ่มย้อนกลับอยู่ในแถบบนของเปลือกแอปแล้ว หัวของส่วนนี้จึงมีแค่วันที่ที่เลือกกับปุ่มเลื่อน
+ * กดนัด = เปิดฟอร์มแก้ (หรือดูอย่างเดียว) ชุดเดียวกับจอกว้าง · ปุ่ม + ลอย = เพิ่มนัดของวันที่เลือก
+ */
+function PmMobileCalendar({
+  sales = false,
+  nav,
+  events,
+  canEdit,
+  onOpen,
+  onAdd,
+}: {
+  sales?: boolean;
+  nav: BoardNav;
+  events: BoardEvent<PmEvent>[];
+  canEdit: boolean;
+  onOpen: (e: PmEvent) => void;
+  onAdd: (day: string) => void;
+}) {
+  const team = useTeam();
+  const customers = useCrm().customers;
+  /* นัดของฝ่ายขาย ผู้เข้าร่วมคือผู้สนใจ */
+  const people = sales ? customers.map((c) => ({ id: c.code, name: c.name })) : team;
+  const { view, cursor, sel, todayKey } = nav;
+  const [menu, setMenu] = useState(false);
+  const touch = useRef<{ x: number; y: number } | null>(null);
+
+  const selD = dateOf(sel);
+  const dayRows = boardOn(events, sel);
+  const live = events.filter((e) => !e.cancelled);
+
+  /* เดือน: เลื่อนทีละเดือนและพาวันที่เลือกไปด้วย (วันเดียวกันของเดือนใหม่) หัวจะได้ไม่ค้างวันเก่า
+     สัปดาห์: เลื่อนทีละ 7 วันตาม useBoardNav */
+  function step(n: number) {
+    if (view === "week") return nav.step(n);
+    const y = cursor.getFullYear();
+    const m = cursor.getMonth() + n;
+    const last = new Date(y, m + 1, 0).getDate();
+    nav.pickDay(iso(new Date(y, m, Math.min(selD.getDate(), last))));
+  }
+
+  const kindLabel = (e: BoardEvent<PmEvent>) => eventKind(e.data.kind).label;
+  const timeText = (e: BoardEvent<PmEvent>) => (e.time ? `${e.time}${e.timeEnd ? ` – ${e.timeEnd}` : ""} น.` : "ทั้งวัน");
+
+  /* ── มุมมองเดือน ── */
+  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const gridStart = addDays(first, -first.getDay());
+  const nDays = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+  const cells = Array.from({ length: Math.ceil((first.getDay() + nDays) / 7) * 7 }, (_, i) => addDays(gridStart, i));
+
+  /* ── มุมมองสัปดาห์ ── */
+  const weekStart = addDays(selD, -selD.getDay());
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const hours = Array.from({ length: M_H1 - M_H0 + 1 }, (_, i) => M_H0 + i);
+  const now = bkkNow();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const dayBtn = (on: boolean, today: boolean) =>
+    `grid size-[34px] place-items-center rounded-full text-[14px] font-semibold ${
+      on ? "bg-white text-[#C8102E]" : "text-white"
+    } ${today && !on ? "shadow-[inset_0_0_0_1.5px_#fff]" : ""}`;
+
+  return (
+    <section
+      className="relative md:hidden"
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        touch.current = { x: t.clientX, y: t.clientY };
+      }}
+      onTouchEnd={(e) => {
+        const s = touch.current;
+        touch.current = null;
+        if (!s) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - s.x;
+        const dy = t.clientY - s.y;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
+      }}
+    >
+      {/* หัว — วันที่เลือก · ก่อนหน้า / ถัดไป · เมนูมุมมอง */}
+      <div className="mb-3.5 flex items-center gap-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[20px] leading-tight font-bold text-[#2A1F22]">
+            {selD.getDate()} {M_MON[selD.getMonth()]} {selD.getFullYear() + 543}{" "}
+            <span className="text-[15px] font-medium text-[#8A7E81]">วัน{M_DW_FULL[selD.getDay()]}</span>
+          </p>
+        </div>
+        <button type="button" className={M_CIRCLE} aria-label="ก่อนหน้า" onClick={() => step(-1)}>
+          <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
+        </button>
+        <button type="button" className={M_CIRCLE} aria-label="ถัดไป" onClick={() => step(1)}>
+          <ChevronRightIcon className="size-4" strokeWidth={2.4} />
+        </button>
+        <div className="relative">
+          <button
+            type="button"
+            className={M_CIRCLE}
+            aria-label="เลือกมุมมอง"
+            aria-haspopup="menu"
+            aria-expanded={menu}
+            onClick={() => setMenu((v) => !v)}
+          >
+            <MenuIcon className="size-4" strokeWidth={2.2} />
+          </button>
+          {menu && (
+            <>
+              <div className="fixed inset-0 z-40" aria-hidden="true" onClick={() => setMenu(false)} />
+              <div
+                role="menu"
+                className="absolute top-[calc(100%+8px)] right-0 z-50 min-w-[150px] rounded-[16px] bg-white p-1.5 shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-12px_rgba(120,20,35,.35)]"
+              >
+                {(
+                  [
+                    ["month", "รายเดือน"],
+                    ["week", "รายสัปดาห์"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={view === k}
+                    className={`flex h-[42px] w-full items-center rounded-[12px] px-3 text-left text-[14px] font-semibold ${
+                      view === k ? "bg-[#FDECEE] text-[#C8102E]" : "text-[#2A1F22]"
+                    }`}
+                    onClick={() => {
+                      nav.setView(k);
+                      setMenu(false);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {view === "month" ? (
+        <>
+          <div className="rounded-[22px] bg-[#C8102E] px-2 pt-3 pb-2.5 shadow-[0_14px_26px_-18px_rgba(200,16,46,.9)]">
+            <div className="grid grid-cols-7 pb-1.5">
+              {M_DW.map((d) => (
+                <span key={d} className="text-center text-[12px] font-semibold text-white/75">
+                  {d}
+                </span>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {cells.map((d) => {
+                const k = iso(d);
+                const inMonth = d.getMonth() === cursor.getMonth();
+                const n = inMonth ? Math.min(3, boardOn(live, k).length) : 0;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-label={`เลือกวันที่ ${thaiDate(k)}`}
+                    aria-pressed={k === sel}
+                    onClick={() => nav.pickDay(k)}
+                    className={`flex h-[46px] flex-col items-center justify-start ${inMonth ? "" : "opacity-35"}`}
+                  >
+                    <span className={dayBtn(k === sel, k === todayKey)}>{d.getDate()}</span>
+                    <span className="mt-[1px] flex h-[5px] gap-[3px]" aria-hidden="true">
+                      {Array.from({ length: n }, (_, i) => (
+                        <i key={i} className={`size-[5px] rounded-full ${k === sel ? "bg-white" : "bg-white/90"}`} />
+                      ))}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-5 flex items-baseline justify-between gap-3">
+            <h2 className="text-[17px] font-bold text-[#2A1F22]">
+              {sel === todayKey ? "นัดหมายวันนี้" : `นัดหมาย ${selD.getDate()} ${M_MON[selD.getMonth()]}`}
+            </h2>
+            <span className="text-[12.5px] text-[#8A7E81]">{dayRows.length} รายการ</span>
+          </div>
+          {dayRows.length === 0 ? (
+            <p className="py-6 text-center text-[13.5px] text-[#8A7E81]">ไม่มีนัดหมาย</p>
+          ) : (
+            <ul className="mt-1">
+              {dayRows.map((e) => (
+                <li key={e.id} className="border-b border-[#F2EAEC]">
+                  <button
+                    type="button"
+                    onClick={() => onOpen(e.data)}
+                    className="flex w-full items-center gap-3 px-0.5 py-3.5 text-left"
+                  >
+                    <span
+                      className="grid size-[34px] flex-none place-items-center rounded-full"
+                      style={{ background: `color-mix(in srgb, ${e.dot} 10%, transparent)`, color: e.dot }}
+                      aria-hidden="true"
+                    >
+                      <CalendarIcon className="size-4" strokeWidth={2.2} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[11.5px] text-[#9A8E91]">
+                        {kindLabel(e)}
+                        {e.cancelled ? " · ยกเลิกแล้ว" : ""}
+                      </span>
+                      <b
+                        className={`block truncate text-[14.5px] font-bold ${
+                          e.cancelled ? "text-[#9A8E91] line-through" : "text-[#2A1F22]"
+                        }`}
+                      >
+                        {e.title}
+                      </b>
+                      <span className="num block text-[12.5px] text-[#6E6164]">{timeText(e)}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-7 rounded-[22px] bg-[#C8102E] px-1.5 py-1.5 shadow-[0_14px_26px_-18px_rgba(200,16,46,.9)]">
+            {weekDays.map((d) => {
+              const k = iso(d);
+              const on = k === sel;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  aria-label={`เลือกวันที่ ${thaiDate(k)}`}
+                  aria-pressed={on}
+                  onClick={() => nav.pickDay(k)}
+                  className={`flex h-[62px] flex-col items-center justify-center gap-0.5 rounded-[16px] ${
+                    on ? "bg-white" : ""
+                  } ${k === todayKey && !on ? "shadow-[inset_0_0_0_1.5px_#fff]" : ""}`}
+                >
+                  <span className={`text-[11.5px] font-semibold ${on ? "text-[#C8102E]/75" : "text-white/75"}`}>
+                    {M_DW[d.getDay()]}
+                  </span>
+                  <span className={`text-[16px] font-bold ${on ? "text-[#C8102E]" : "text-white"}`}>{d.getDate()}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {dayRows.every((e) => e.cancelled) && (
+            <p className="mt-3 text-center text-[13.5px] text-[#8A7E81]">ไม่มีนัดหมาย</p>
+          )}
+
+          {/* เส้นเวลา 08:00–19:00 ของวันที่เลือก */}
+          <div className="relative mt-5" style={{ height: (M_H1 - M_H0) * M_ROW + 24 }}>
+            {hours.map((h, i) => (
+              <div key={h} className="absolute right-0 left-0 flex" style={{ top: i * M_ROW }}>
+                <span className="num w-[44px] flex-none -translate-y-1/2 text-[11.5px] text-[#9A8E91]">
+                  {String(h).padStart(2, "0")}:00
+                </span>
+                <span className="mt-0 flex-1 border-t border-[#F2EAEC]" />
+              </div>
+            ))}
+
+            {sel === todayKey && nowMin >= M_H0 * 60 && nowMin <= M_H1 * 60 && (
+              <div
+                className="absolute right-0 left-[52px] z-10 border-t-[1.5px] border-dashed border-[#C8102E]"
+                style={{ top: ((nowMin - M_H0 * 60) / 60) * M_ROW }}
+                aria-label="ตอนนี้"
+              />
+            )}
+
+            {dayRows
+              .filter((e) => !e.cancelled)
+              .map((e) => {
+                const s = minOf(e.time) ?? M_H0 * 60;
+                const f = minOf(e.timeEnd) ?? s + 60;
+                const top = Math.max(0, ((s - M_H0 * 60) / 60) * M_ROW);
+                const h = Math.max(46, ((Math.max(f, s + 30) - s) / 60) * M_ROW);
+                const tall = h >= 96;
+                const who = e.data.who
+                  .map((id) => people.find((m) => m.id === id))
+                  .filter((m): m is NonNullable<typeof m> => Boolean(m));
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => onOpen(e.data)}
+                    className="absolute right-0 left-[52px] flex flex-col overflow-hidden rounded-[14px] px-3 py-2 text-left"
+                    style={{
+                      top,
+                      height: h,
+                      background: `color-mix(in srgb, ${e.dot} 12%, transparent)`,
+                    }}
+                  >
+                    <span className="block text-[11.5px]" style={{ color: e.dot }}>
+                      {kindLabel(e)}
+                    </span>
+                    <b className="block truncate text-[13.5px] font-bold text-[#2A1F22]">{e.title}</b>
+                    {tall && (
+                      <span className="mt-auto flex items-center justify-between gap-2">
+                        <span className="num flex items-center gap-1 text-[12px] text-[#6E6164]">
+                          <ClockIcon className="size-3.5" strokeWidth={2.2} />
+                          {timeText(e)}
+                        </span>
+                        <span className="flex -space-x-1.5">
+                          {who.slice(0, 3).map((m) => (
+                            <span
+                              key={m.id}
+                              title={m.name}
+                              className="grid size-[22px] place-items-center rounded-full border-2 border-white text-[10px] font-bold text-white"
+                              style={{ background: e.dot }}
+                            >
+                              {initialOf(m.name)}
+                            </span>
+                          ))}
+                        </span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+          </div>
+        </>
+      )}
+
+      {/* ปุ่ม + ลอย — เพิ่มนัดของวันที่เลือก (เฉพาะคนที่แก้ได้) */}
+      {canEdit && (
+        <button
+          type="button"
+          aria-label={`เพิ่มนัดหมายวันที่ ${thaiDate(sel)}`}
+          onClick={() => onAdd(sel)}
+          className="fixed right-[18px] bottom-[calc(100px+env(safe-area-inset-bottom))] z-30 grid size-[58px] place-items-center rounded-full text-white shadow-[0_14px_26px_-12px_rgba(200,16,46,.9)]"
+          style={{ background: M_RED }}
+        >
+          <PlusIcon className="size-6" strokeWidth={2.4} />
+        </button>
+      )}
+    </section>
+  );
+}
 
 /*
  * เหตุผลตอนยกเลิกเป็นของบังคับ (เจ้าของสั่ง 24 ก.ย. 2569)
