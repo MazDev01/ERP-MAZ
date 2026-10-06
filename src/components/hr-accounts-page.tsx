@@ -102,15 +102,15 @@ export function HrAccountsPage() {
 
       <section className="panel glass flex flex-col">
         <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">
-          <table className="data-table cards-sm min-w-[860px]">
+          <table className="data-table cards-sm min-w-[1000px]">
             <thead>
               <tr>
                 <th>พนักงาน</th>
-                <th style={{ width: 170 }}>ชื่อผู้ใช้</th>
-                <th style={{ width: 210 }}>เมนูที่ใช้ได้</th>
-                <th style={{ width: 150 }}>สถานะบัญชี</th>
-                <th style={{ width: 150 }}>สร้างเมื่อ</th>
-                <th className="c" style={{ width: 240 }} aria-label="จัดการ" />
+                <th style={{ width: 150 }}>ชื่อผู้ใช้</th>
+                <th style={{ width: 160 }}>เมนูที่ใช้ได้</th>
+                <th style={{ width: 120 }}>สถานะบัญชี</th>
+                <th style={{ width: 120 }}>สร้างเมื่อ</th>
+                <th style={{ width: 320 }} aria-label="จัดการ" />
               </tr>
             </thead>
             <tbody>
@@ -234,22 +234,20 @@ function AccountRow({
     <tr>
       <td data-label="พนักงาน">
         <b className="block text-[13.5px] font-semibold">{emp.name}</b>
-        {/* ตอนสร้างบัญชีต้องเห็นว่าคนนี้ตำแหน่งอะไรและจ้างแบบไหน (เจ้าของถาม 30 ก.ย. 2569) */}
-        {/* ยังไม่มีตำแหน่ง — ข้อความตาม mockup (posLabel) */}
+        {/* ใต้ชื่อบอกตำแหน่งอย่างเดียวตามต้นแบบ — ประเภทการจ้างดูที่หน้าข้อมูลพนักงาน */}
         <span className="why">
           {emp.pos ? posOf(emp).map((v) => hrPos(v).label).join(" · ") : "ยังไม่ได้กรอกข้อมูล"}
-          {` · ${HR_EMPTYPE[emp.type].label}`}
         </span>
       </td>
-      <td data-label="ชื่อผู้ใช้" className="num">
+      <td data-label="ชื่อผู้ใช้" className="font-mono text-[13px]">
         {a?.user ?? "—"}
       </td>
       <td data-label="เมนูที่ใช้ได้">
         {a ? (
           accountRoles(a).length ? (
-            <span className="flex flex-wrap gap-1">
+            <span className="block">
               {accountRoles(a).map((r) => (
-                <em key={r} className="rounded-full bg-muted px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground not-italic">
+                <em key={r} className="block leading-[1.6] whitespace-nowrap not-italic">
                   {roleLabel(r)}
                 </em>
               ))}
@@ -274,9 +272,9 @@ function AccountRow({
       <td data-label="สร้างเมื่อ" className="num muted">
         {a ? thaiDate(a.createdAt) : "—"}
       </td>
-      <td data-label="จัดการ" className="c">
+      <td data-label="จัดการ">
         {a ? (
-          <span className="flex flex-wrap justify-center gap-1.5">
+          <span className="flex flex-wrap justify-end gap-2">
             <button type="button" className="btn glass-thin btn-mini" onClick={onRoles}>
               เมนูที่ใช้ได้
             </button>
