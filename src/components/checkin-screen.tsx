@@ -452,7 +452,10 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         </Link>
       </div>
 
-      <main
+      {/* การ์ดตอกบัตรของจอกว้าง — เป็น section ไม่ใช่ main เพราะหน้านี้อยู่ใน <main> ของเปลือกแอปอยู่แล้ว
+          <main> ซ้อน <main> ผิดมาตรฐาน HTML และโปรแกรมอ่านหน้าจอจะเจอจุดหลักสองจุดในหน้าเดียว */}
+      <section
+        aria-label="ตอกบัตรเข้า-ออกงาน"
         className={`glass w-full overflow-hidden max-md:hidden lg:grid lg:grid-cols-2 ${
           embedded
             ? "rounded-2xl"
@@ -538,7 +541,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
           )}
 
         </section>
-      </main>
+      </section>
 
       {/* กล่องตอกบัตร — ยิงออกไปที่ body เพราะการ์ดตอกบัตรมี backdrop-filter
           ซึ่งกลายเป็นกรอบอ้างอิงของ position: fixed ทำให้ฉากหลังคลุมแค่การ์ด */}
