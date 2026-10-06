@@ -407,6 +407,14 @@ export function bottomNav(
  * จึงไม่อยู่ในเมนูซ้าย แต่ยังต้องมีชื่อบนแถบบนตอนเปิดอยู่
  */
 const EXTRA_PAGES: Record<string, NavItem> = {
+  /* หน้ารวมผู้สนใจและใบเสนอราคาของมือถือ (ยกมาจากระบบต้นฉบับ) — จอคอมยังใช้สองเมนูเดิม */
+  "/leads-quotes": {
+    group: "งานขาย",
+    label: "ผู้สนใจและใบเสนอราคา",
+    icon: "quotation",
+    href: "/leads-quotes",
+    parent: "/quotations",
+  },
   "/pm/plan": {
     group: "โปรเจค",
     label: "จัดคิวงาน",
@@ -511,6 +519,7 @@ const EXTRA_OWNER: Record<string, Role | Role[]> = {
   "/ceo/deals": "ceo",
   "/ceo/home": "ceo",
   "/my-home": "staff",
+  "/leads-quotes": "sales",
   /* ทุกบทบาทเปิด /home ได้ — บทบาทที่มีหน้าหลักของตัวเอง (พนักงาน · CEO) ถูกพาไปหน้านั้นต่อ (HomePage) */
   "/home": ["sales", "ps", "pm", "acc", "hr", "gm", "staff", "ceo"],
 };

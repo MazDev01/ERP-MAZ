@@ -8,7 +8,7 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { mobileHomeOf, navItemsOf, useMenuAccess } from "@/lib/nav";
 import { useMyEmpType } from "@/lib/leave-policy";
 import { useMyRoles } from "@/lib/hr-link";
@@ -54,7 +54,18 @@ export function RoleHomePage() {
      (เดิมตัดโอทีกับสลิปเงินเดือนของพนักงานออกตามต้นแบบ my-home.html ที่มีแค่ห้าการ์ด
       แต่ต้นแบบนั้นไม่มีสองเมนูนี้ในเมนูข้างด้วย พอระบบจริงมี คนที่ใช้แต่มือถือจึงหาสลิปของตัวเองไม่เจอ) */
   /* ประเภทการจ้างตัดเมนู "ของฉัน" เหมือนแถบซ้าย (เจ้าของสั่ง 30 ก.ย. 2569) */
-  const items = navItemsOf(roles, access, route, useMyEmpType());
+  const menu = navItemsOf(roles, access, route, useMyEmpType());
+  /* การ์ดหน้าหลัก (มือถือ) รวม "ผู้สนใจ" กับ "ใบเสนอราคา" เป็นการ์ดเดียว (ยกมาจากระบบต้นฉบับ)
+     จอคอมยังใช้สองเมนูเดิมในแถบข้าง — รวมเฉพาะเมื่อเห็นทั้งสองเมนู (ผู้ดูแลอาจปิดเมนูใดเมนูหนึ่งไว้) */
+  const items = useMemo(() => {
+    const lead = menu.find((i) => i.href === "/leads");
+    if (!lead || !menu.some((i) => i.href === "/quotations")) return menu;
+    return menu
+      .filter((i) => i.href !== "/quotations")
+      .map((i) =>
+        i === lead ? { ...i, label: "ผู้สนใจและใบเสนอราคา", icon: "quotation" as const, href: "/leads-quotes" } : i,
+      );
+  }, [menu]);
   const notices = useNotices();
   /* บนจอกว้างไปเมนูแรกที่เป็นงานของบทบาท — ข้ามหน้าตอกบัตรเพราะมีแถบข้างอยู่แล้ว */
   const first = items.find((i) => i.href !== "/")?.href ?? "/";
