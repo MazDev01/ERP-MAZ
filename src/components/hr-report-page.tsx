@@ -19,7 +19,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { thaiDate, TH_MONTHS_FULL } from "@/lib/format";
+import { TH_MONTHS_FULL } from "@/lib/format";
 import { hrCutDay, hrCycle, hrDept, hrPos, type Cycle, type TimeRec } from "@/lib/hr-data";
 import { useHr } from "@/lib/hr-store";
 import { useHrTime } from "@/lib/hr-link";
@@ -81,9 +81,6 @@ export function HrReportPage() {
     ];
   }, [hr.periods]);
 
-  /* คนที่ยังอยู่วันนี้ — ใช้บอกว่ายอดรวมของหน้านี้ต่างจากแดชบอร์ดฝ่ายบุคคลเพราะอะไร */
-  const activeCount = hr.emp.filter((e) => e.status === "active").length;
-
   const [sel, setSel] = useState(options[0]?.v ?? "");
   const [by, setBy] = useState<By>("emp");
   const r = useMemo(() => rangeOf(sel), [sel]);
@@ -137,16 +134,7 @@ export function HrReportPage() {
   return (
     <div className="space-y-4">
       <div className="bar">
-        {/* มือถือไม่ต้องมีบรรทัดอธิบายยิบย่อย (เจ้าของสั่ง 2 ต.ค. 2569) — ช่วงเวลาดูได้จากดรอปดาวน์ด้านล่าง
-            จอคอมยังบอกฐานที่นับไว้ เพราะตัวเลขหน้านี้นับทั้งทะเบียนรวมผู้พ้นสภาพ ต่างจากแดชบอร์ดฝ่ายบุคคล */}
-        <div className="max-md:hidden">
-          <p>
-            สรุปการลา มาสาย และทำงานล่วงเวลา · {thaiDate(r.from)} – {thaiDate(r.to)}
-            <br />
-            นับทั้งทะเบียน {hr.emp.length} คน — คนที่ยังอยู่ {activeCount} คน · พ้นสภาพแล้ว{" "}
-            {hr.emp.length - activeCount} คน
-          </p>
-        </div>
+        <div />
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <label className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-none">
             <span className="text-[12px] font-semibold text-muted-foreground">ช่วงเวลา</span>

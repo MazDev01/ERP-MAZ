@@ -288,8 +288,11 @@ export function Field({
    * ผูกเฉพาะตอนลูกเป็นช่องกรอกเดี่ยวที่ยังไม่มี id — ลูกที่เป็นกล่องห่อหลายชิ้นต้องใส่ aria-label เอง
    */
   const auto = useId();
-  const id = htmlFor ?? auto;
-  const kid = fieldControl(children) && !children.props.id ? cloneElement(children, { id }) : children;
+  const own = fieldControl(children) ? (children.props.id as string | undefined) : undefined;
+  /* ลูกที่ไม่ใช่ช่องกรอกเดี่ยว (เช่น ตัวเลือกวันที่ไทย) ไม่มี id ให้ผูก — ปล่อย htmlFor ว่างไว้
+     ไม่งั้นป้ายจะชี้ไปยัง id ที่ไม่มีอยู่จริง กดป้ายแล้วไม่เกิดอะไรขึ้น */
+  const id = htmlFor ?? own ?? (fieldControl(children) ? auto : undefined);
+  const kid = fieldControl(children) && !own ? cloneElement(children, { id }) : children;
 
   return (
     <div className={className}>
