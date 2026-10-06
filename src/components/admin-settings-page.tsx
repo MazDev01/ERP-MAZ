@@ -19,6 +19,9 @@ import { AdminAttendancePage } from "./admin-attendance-page";
 import { AdminRatesPage } from "./admin-rates-page";
 import { AdminBotnavPage } from "./admin-botnav-page";
 import { AdminCompanyPage } from "./admin-company-page";
+import { AdminDocNumbersPage } from "./admin-doc-numbers-page";
+import { AdminLogPage } from "./admin-log-page";
+import { AdminDataPage } from "./admin-data-page";
 
 /* ไอคอนของแต่ละหัวข้อตามต้นแบบ hr-settings.html */
 const SEC_ICON: Record<string, IconName> = {
@@ -32,6 +35,9 @@ const SEC_ICON: Record<string, IconName> = {
   wht: "tax",
   issuer: "receipt",
   botnav: "pin",
+  docs: "billing",
+  log: "shield",
+  data: "accboard",
 };
 
 type SecKey =
@@ -44,7 +50,10 @@ type SecKey =
   | "payroll"
   | "wht"
   | "issuer"
-  | "botnav";
+  | "botnav"
+  | "docs"
+  | "log"
+  | "data";
 
 const GROUPS: { title: string; items: { key: SecKey; label: string }[] }[] = [
   {
@@ -70,6 +79,15 @@ const GROUPS: { title: string; items: { key: SecKey; label: string }[] }[] = [
       { key: "payroll", label: "การคำนวณเงินเดือน" },
       { key: "wht", label: "หัก ณ ที่จ่าย" },
       { key: "issuer", label: "ข้อมูลผู้ออกเอกสาร" },
+      { key: "docs", label: "เลขที่เอกสาร" },
+    ],
+  },
+  /* กลุ่มระบบ — ยกมาจากระบบต้นฉบับ ERP_Test (6 ต.ค. 2569) */
+  {
+    title: "ระบบ",
+    items: [
+      { key: "log", label: "ประวัติการตั้งค่า" },
+      { key: "data", label: "ข้อมูลตัวอย่าง" },
     ],
   },
 ];
@@ -96,6 +114,12 @@ function Section({ sec }: { sec: SecKey }) {
       return <AdminCompanyPage />;
     case "botnav":
       return <AdminBotnavPage />;
+    case "docs":
+      return <AdminDocNumbersPage />;
+    case "log":
+      return <AdminLogPage />;
+    case "data":
+      return <AdminDataPage />;
   }
 }
 
