@@ -905,8 +905,10 @@ export function postChat(
   text: string,
   stamp: string,
   files: { n: string; sz: string }[] = [],
+  /** ผู้ส่ง — "PM" หรือรหัสพนักงานของทีมงานที่ส่งจากหน้างานที่ได้รับ (ยกจากระบบต้นฉบับ 6 ต.ค. 2569) */
+  who = "PM",
 ) {
-  const message: ChatMessage = { who: "PM", at: stamp, tx: text, files: files.length ? files : undefined };
+  const message: ChatMessage = { who, at: stamp, tx: text, files: files.length ? files : undefined };
   const act = files.length ? `ส่งไฟล์ในแชทโปรเจค ${files.length} ไฟล์` : "ส่งข้อความในแชทโปรเจค";
   /* ไฟล์ที่ส่งในแชทเก็บเข้าไฟล์ของโปรเจคด้วย จะได้หาเจอโดยไม่ต้องไล่อ่านแชท (ตามต้นแบบ) */
   const kept: TaskFile[] = files.map((f) => ({ n: f.n, k: fileKind(f.n), sz: f.sz, at: stamp.slice(0, 10), by: "PM" }));

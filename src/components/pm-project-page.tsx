@@ -18,10 +18,11 @@ import { useEffect, useRef, useState } from "react";
 import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
 import { latestRound, roundStatus, useClientReviews } from "@/lib/client-review-store";
 import { ClientFeedbackSheet, ClientRoundChip, ClientSendSheet } from "./client-review-pm";
+import { ProjectChat } from "./project-chat";
 import { useHydrated } from "@/lib/pwa";
 import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
-import { addDays, bkkNow, bkkStamp, daysBetween, initials, pad2, thaiDate, thaiStamp, toIsoDate, todayIso } from "@/lib/format";
+import { addDays, bkkStamp, daysBetween, initials, thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import {
   lastSub,
   projName,
@@ -30,7 +31,6 @@ import {
   roleLabel,
   serviceLabel,
   TASK_STATUS,
-  type ChatMessage,
   type InboxJob,
   type Project,
   type TaskFile,
@@ -39,7 +39,6 @@ import {
 import {
   memberOf,
   nudgeTask,
-  postChat,
   renameProject,
   taskTalks,
   transferProject,
@@ -48,7 +47,7 @@ import {
 } from "@/lib/pm-store";
 import { hrPos } from "@/lib/hr-data";
 import { useHr } from "@/lib/hr-store";
-import { ChevronLeftIcon, CloseIcon, FileIcon, LinkIcon, PlanBoardIcon } from "./icons";
+import { ChevronLeftIcon, FileIcon, LinkIcon, PlanBoardIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { QuotationPreview } from "./pm-docs";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
@@ -93,24 +92,8 @@ export function PmProjectPage({ deal }: { deal: string }) {
 }
 
 /** รูปกลุ่มบนหัวหน้าแชท */
-function TeamGlyph() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="9" cy="8" r="3.4" />
-      <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
-      <path d="M16 4.5a3.4 3.4 0 0 1 0 6.6M18 14.8c1.8.7 3 2.5 3 5.2" />
-    </svg>
-  );
-}
 
 /** ไอคอนปุ่มแชทลอยบนมือถือ */
-function ChatGlyph() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" />
-    </svg>
-  );
-}
 
 function Detail({ project }: { project: Project }) {
   const today = todayIso();
@@ -124,8 +107,6 @@ function Detail({ project }: { project: Project }) {
 
   /* มือถือ: แชทโปรเจคเป็นปุ่มลอยมุมขวาล่าง กดแล้วเปิดหน้าต่างแชท
      (ต้นแบบ pm-project.html บล็อก pd-chat 1 ต.ค. 2569) — จอแคบมีที่ไม่พอให้แชทยาวอยู่ในหน้า */
-  const [chatOpen, setChatOpen] = useState(false);
-  const memberCount = new Set(project.tasks.flatMap((t) => t.whos)).size;
   const [renaming, setRenaming] = useState(false);
   const title = projName(project);
   /* GM เปิดดูได้อย่างเดียว — ซ่อนปุ่มแก้ชื่อและช่องแชท (ต้นแบบ pm-project.html?as=gm) */
@@ -274,9 +255,6 @@ function Detail({ project }: { project: Project }) {
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-5">
           <Tasks project={project} today={today} count={pr.all} />
-          <div className="max-sm:hidden">
-            <Chat project={project} today={today} />
-          </div>
         </div>
         <aside className="min-w-0 space-y-5">
           <SalesDocs project={project} />
@@ -285,46 +263,10 @@ function Detail({ project }: { project: Project }) {
         </aside>
       </div>
 
-      {/* ปุ่มลอยเปิดแชท + หน้าต่างแชทบนมือถือ */}
-      <button
-        type="button"
-        aria-label="เปิดแชทโปรเจค"
-        aria-expanded={chatOpen}
-        onClick={() => setChatOpen((v) => !v)}
-        className="fixed right-[18px] bottom-[calc(var(--botbar,86px)+22px)] z-60 grid size-[58px] place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_14px_24px_-10px_rgb(200_16_46/0.9)] sm:hidden"
-      >
-        <ChatGlyph />
-      </button>
-
-      {chatOpen && (
-        <div
-          role="dialog"
-          aria-label="แชทโปรเจค"
-          className="fixed inset-0 z-100 flex flex-col bg-[#F3EFF0] sm:hidden"
-        >
-          {/* หัวแบบแอปแชท: ปุ่มย้อนกลับ รูปกลุ่ม ชื่อโปรเจค และจำนวนสมาชิก */}
-          <div className="flex flex-none items-center gap-2.5 border-b border-border bg-card px-3 pt-[max(10px,env(safe-area-inset-top))] pb-2.5">
-            <button
-              type="button"
-              aria-label="กลับ"
-              onClick={() => setChatOpen(false)}
-              className="grid size-10 flex-none place-items-center rounded-full"
-            >
-              <ChevronLeftIcon className="size-[22px]" strokeWidth={2.4} />
-            </button>
-            <span aria-hidden className="grid size-[38px] flex-none place-items-center rounded-full bg-[#FCE3E7] text-primary">
-              <TeamGlyph />
-            </span>
-            <b className="min-w-0 flex-1 text-[15.5px] leading-tight">
-              <span className="block truncate">{projName(project)}</span>
-              <small className="block text-[12px] font-medium text-muted-foreground">
-                สมาชิก {memberCount} คน
-              </small>
-            </b>
-          </div>
-          <Chat project={project} today={today} fill />
-        </div>
-      )}
+      {/* แชทโปรเจคเป็นปุ่มลอยมุมขวาล่าง เปิดหน้าต่างแชทแบบเว็บทั่วไป ทุกขนาดจอ
+          จอคอมเป็นกล่องลอยเหนือปุ่ม · มือถือเต็มจอ — คอมโพเนนต์กลางใช้ร่วมกับหน้างานที่ได้รับของทีม
+          (ยกมาจากระบบต้นฉบับ ERP_Test 6 ต.ค. 2569 แทนแชทในหน้าเดิมที่ทีมเปิดไม่ได้) */}
+      <ProjectChat project={project} title={title} />
 
       {renaming && <RenameDialog project={project} onClose={() => setRenaming(false)} />}
       {transferring && <TransferDialog project={project} onClose={() => setTransferring(false)} />}
@@ -1124,243 +1066,6 @@ export function TalkList({ talks, pmName, me }: { talks: TaskTalk[]; pmName: str
   );
 }
 
-// ─── 4. แชทโปรเจค ────────────────────────────────────────────────
-
-/** วันนี้กับเมื่อวานเรียกชื่อวัน ไกลกว่านั้นบอกวันที่ */
-function dayLabel(iso: string, today: string) {
-  const d = daysBetween(iso, today);
-  if (d === 0) return "วันนี้";
-  if (d === 1) return "เมื่อวาน";
-  return thaiDate(iso);
-}
-
-function sizeOf(n: number) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function Chat({
-  project,
-  today,
-  /* โหมดเต็มจอบนมือถือ — ไม่มีหัวข้อ กล่องไม่มีขอบ และรายการข้อความยืดเต็มที่ว่าง
-     (ต้นแบบ pm-project.html บล็อก pd-chat ชุด 1 ต.ค. 2569 แชทเป็นหน้าเต็มแบบแอปแชท) */
-  fill,
-}: {
-  project: Project;
-  today: string;
-  fill?: boolean;
-}) {
-  const [draft, setDraft] = useState("");
-  /* ไฟล์ที่เลือกไว้แต่ยังไม่ได้ส่ง เอาออกได้ก่อนกดส่ง */
-  const [pick, setPick] = useState<{ n: string; sz: string }[]>([]);
-  const [dropping, setDropping] = useState(false);
-  /* ไฟล์แนบในแชทที่กดเปิดดู — เปิดแบบเดียวกับไฟล์ส่งงาน (ต้นแบบ data-file) */
-  const [viewing, setViewing] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  /* ข้อความล่าสุดอยู่ล่างสุด — เปิดหน้าหรือส่งข้อความใหม่แล้วเลื่อนลงให้เห็นเสมอ */
-  useEffect(() => {
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [project.chat.length]);
-
-  function take(list: FileList | null) {
-    if (!list) return;
-    const add = Array.from(list).map((f) => ({ n: f.name, sz: sizeOf(f.size) }));
-    setPick((p) => [...p, ...add]);
-  }
-
-  function send() {
-    const text = draft.trim();
-    if (!text && !pick.length) return;
-    const now = bkkNow();
-    postChat(project.deal, text, `${toIsoDate(now)} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`, pick);
-    setDraft("");
-    setPick([]);
-  }
-
-  /* จัดกลุ่ม — ขึ้นเส้นคั่นเมื่อข้ามวัน และคนเดิมส่งติดกันไม่ต้องขึ้นรูปกับชื่อซ้ำ */
-  const rows: { m: ChatMessage; sep: string; head: boolean }[] = [];
-  let lastDay = "";
-  let lastWho = "";
-  for (const m of project.chat) {
-    const day = m.at.split(" ")[0];
-    const sep = day !== lastDay ? dayLabel(day, today) : "";
-    if (sep) {
-      lastDay = day;
-      lastWho = "";
-    }
-    rows.push({ m, sep, head: m.who !== "PM" && m.who !== lastWho });
-    lastWho = m.who;
-  }
-
-  return (
-    <section className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
-      {!fill && <BlockTitle>แชทโปรเจค</BlockTitle>}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDropping(true);
-        }}
-        onDragLeave={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropping(false);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDropping(false);
-          take(e.dataTransfer.files);
-        }}
-        className={`flex flex-col ${
-          fill
-            ? "min-h-0 flex-1 bg-transparent p-0"
-            : `rounded-[14px] border bg-card p-3.5 ${dropping ? "border-primary ring-2 ring-primary/20" : "border-border"}`
-        }`}
-      >
-        <div
-          ref={listRef}
-          className={`flex flex-col gap-1.5 overflow-y-auto ${
-            fill ? "min-h-0 flex-1 px-3 pt-3 pb-1.5" : "max-h-[360px]"
-          }`}
-        >
-          {rows.length === 0 && (
-            <p className="w-full py-8 text-center text-[12.5px] text-muted-foreground">
-              ยังไม่มีข้อความในโปรเจคนี้
-            </p>
-          )}
-          {rows.map(({ m, sep, head }, i) => {
-            const mine = m.who === "PM";
-            const name = mine ? project.pm : (memberOf(m.who)?.name ?? m.who);
-            return (
-              <div key={`${m.at}-${i}`} className="flex flex-col">
-                {sep && (
-                  <p className="my-2 flex items-center gap-2.5 text-[11px] text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
-                    {sep}
-                  </p>
-                )}
-                <div className={`flex max-w-[78%] items-end gap-2 ${mine ? "self-end" : ""} ${head ? "mt-1.5" : ""}`}>
-                  {!mine && (
-                    <span
-                      title={name}
-                      className={`grid size-[26px] flex-none place-items-center rounded-full text-[10px] font-bold ${
-                        head ? "bg-accent text-primary" : "invisible"
-                      }`}
-                    >
-                      {initials(name)}
-                    </span>
-                  )}
-                  <div className="flex min-w-0 flex-col">
-                    {head && <b className="mb-0.5 text-[11px] font-semibold text-muted-foreground">{name}</b>}
-                    <div className={`flex items-end gap-1.5 ${mine ? "flex-row-reverse" : ""}`}>
-                      <div
-                        className={`min-w-0 rounded-[12px] px-3 py-[8px] ${mine ? "bg-primary text-white" : "bg-muted"}`}
-                      >
-                        {m.tx && <p className="text-[12.5px] leading-[1.6] break-words">{m.tx}</p>}
-                        {m.files?.map((f) => (
-                          <button
-                            key={f.n}
-                            type="button"
-                            title="เปิดดูไฟล์"
-                            onClick={() => setViewing(f.n)}
-                            className={`mt-1 flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-left text-[11.5px] hover:underline ${
-                              mine ? "bg-white/15" : "bg-card"
-                            }`}
-                          >
-                            <FileIcon className="size-3.5 flex-none" strokeWidth={2} />
-                            <span className="min-w-0">
-                              <b className="block truncate font-semibold">{f.n}</b>
-                              {f.sz && <em className="text-[10.5px] not-italic opacity-75">{f.sz}</em>}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                      <span className="num flex-none text-[10px] text-muted-foreground">
-                        {m.at.split(" ")[1]}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {pick.length > 0 && (
-          <ul className="mt-3 flex flex-wrap gap-1.5">
-            {pick.map((f, i) => (
-              <li
-                key={`${f.n}-${i}`}
-                className="flex items-center gap-1.5 rounded-full bg-muted py-1 pr-1 pl-2.5 text-[11.5px]"
-              >
-                {f.n}
-                <button
-                  type="button"
-                  aria-label={`เอา ${f.n} ออก`}
-                  onClick={() => setPick((p) => p.filter((_, x) => x !== i))}
-                  className="grid size-5 place-items-center rounded-full hover:bg-card"
-                >
-                  <CloseIcon className="size-3" strokeWidth={2.4} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <form
-          data-ro-hide
-          className={`flex gap-[9px] border-t border-border ${
-            fill
-              ? "flex-none bg-card px-2.5 pt-2.5 pb-[max(10px,env(safe-area-inset-bottom))]"
-              : "mt-[13px] pt-[13px]"
-          }`}
-          onSubmit={(e) => {
-            e.preventDefault();
-            send();
-          }}
-        >
-          <button
-            type="button"
-            aria-label="แนบไฟล์"
-            title="แนบไฟล์ (ลากไฟล์มาวางในกล่องแชทได้)"
-            onClick={() => fileRef.current?.click()}
-            className="grid size-[38px] flex-none place-items-center rounded-[11px] border border-border hover:border-primary hover:text-primary"
-          >
-            <FileIcon className="size-4" strokeWidth={2} />
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            hidden
-            aria-label="เลือกไฟล์แนบในแชท"
-            onChange={(e) => {
-              take(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="พิมพ์ข้อความถึงทีมในโปรเจคนี้"
-            aria-label={`ข้อความถึงทีมของ ${project.cus}`}
-            autoComplete="off"
-            className="field-control flex-1 rounded-[11px] text-[13px]"
-            style={{ height: 38 }}
-          />
-          <button
-            type="submit"
-            className="btn solid btn-solid px-5 disabled:opacity-45"
-            style={{ height: 38 }}
-            disabled={!draft.trim() && !pick.length}
-          >
-            ส่ง
-          </button>
-        </form>
-      </div>
-      {viewing && <FileNotice name={viewing} onClose={() => setViewing(null)} />}
-    </section>
-  );
-}
 
 // ─── 3. สมาชิกในโปรเจค ─────────────────────────────────────────────
 

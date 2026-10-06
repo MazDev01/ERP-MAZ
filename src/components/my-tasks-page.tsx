@@ -22,6 +22,7 @@ import { FileDrop, type PickedFile } from "./file-drop";
 import { Field, Sheet } from "./lead-dialogs";
 import { SearchBox } from "./sales-ui";
 import { TalkList } from "./pm-project-page";
+import { ProjectChat } from "./project-chat";
 import {
   CheckCircleIcon,
   ClockIcon,
@@ -106,6 +107,10 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
   const pm = usePm();
   const me = useProfile();
   const today = todayIso();
+  /* แชทกลุ่มของโปรเจคที่เปิดอยู่ — มีได้ทีละหน้าต่าง กดของอีกงานก็สลับสาย (ยกจากระบบต้นฉบับ 6 ต.ค. 2569) */
+  const [chatDeal, setChatDeal] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const chatProject = pm.projects.find((p) => p.deal === chatDeal);
   /* ข้อความที่ยังไม่ได้อ่านของแต่ละงาน — ใช้ขึ้นจุดแดงบนปุ่มคุยกับ PM
      อ่านจากเครื่อง ฝั่งเซิร์ฟเวอร์จึงไม่มี ต้องรอ hydrate ก่อนค่อยขึ้นป้าย ไม่งั้น React ฟ้องว่าวาดไม่ตรงกัน */
   const marks = useTalkRead();
@@ -219,6 +224,10 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
               onOpen={() => setViewing(x)}
               onSend={() => setSending(x)}
               onTalk={() => setTalking(x)}
+              onChat={() => {
+                setChatDeal(x.p.deal);
+                setChatOpen(true);
+              }}
             />
           ))
         )}
@@ -226,6 +235,18 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
 
       {viewing && (
         <DetailDialog row={viewing} today={today} onClose={() => setViewing(null)} />
+      )}
+
+      {/* แชทกลุ่มของโปรเจค — สายเดียวกับที่ PM ใช้ในหน้าโปรเจค ส่งในนามคนที่ล็อกอิน */}
+      {chatProject && (
+        <ProjectChat
+          project={chatProject}
+          title={projName(chatProject)}
+          me={me.employeeId}
+          fab={false}
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+        />
       )}
 
       {talking && (
@@ -324,6 +345,7 @@ function TaskCard({
   onOpen,
   onSend,
   onTalk,
+  onChat,
 }: {
   row: Row;
   today: string;
@@ -335,6 +357,8 @@ function TaskCard({
   onOpen: () => void;
   onSend: () => void;
   onTalk: () => void;
+  /** เปิดแชทกลุ่มของโปรเจคที่งานใบนี้อยู่ */
+  onChat: () => void;
 }) {
   const { p, t } = row;
   const stage = stageOf(t);
@@ -416,6 +440,8 @@ function TaskCard({
             >
               {whenText(t, stage, today)}
             </p>
+            {/* แชทกลุ่มของโปรเจค — สายเดียวกับที่ PM ใช้ (ยกจากระบบต้นฉบับ 6 ต.ค. 2569) */}
+            <ChatButton onClick={onChat} />
             {/* ตอบ PM ได้จากหน้าของตัวเอง ไม่ต้องเข้าหน้าโปรเจคของ PM ซึ่งบทบาทพนักงานเปิดไม่ได้ */}
             <button
               type="button"
@@ -907,3 +933,14 @@ function stamp(value: string) {
   return time ? `${thaiDate(day)} ${time} น.` : thaiDate(day);
 }
 
+/** ปุ่มเปิดแชทกลุ่มของโปรเจค (ยกจากระบบต้นฉบับ ERP_Test) */
+function ChatButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="btn glass-thin btn-mini gap-1.5 text-primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" />
+      </svg>
+      แชทโปรเจค
+    </button>
+  );
+}
