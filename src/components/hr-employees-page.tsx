@@ -31,7 +31,9 @@ import {
   hrPos,
   holdsPos,
   posOf,
+  rolesOfEmployee,
   rolesOfPosition,
+  suggestUserOf,
   probDaysLeft,
   probLine,
   type DeptKey,
@@ -45,6 +47,7 @@ import { roleLabel } from "@/lib/role";
 import {
   addEmployee,
   changePosition,
+  createAccount,
   lockedUntil,
   passProbation,
   setEmpLeft,
@@ -63,6 +66,16 @@ import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select, Textarea } from "./ui";
 import { ADD_VALUE, useAddOption } from "./add-option";
 
+/** รหัสชั่วคราว — ตัดตัวอักษรที่อ่านสลับกันง่าย (O 0 I l 1) ออก จะได้บอกทางโทรศัพท์ได้ */
+function tempPass() {
+  const up = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const low = "abcdefghijkmnpqrstuvwxyz";
+  const num = "23456789";
+  const sym = "#@!";
+  const pick = (s: string) => s.charAt(Math.floor(Math.random() * s.length));
+  return pick(up) + pick(low) + pick(low) + pick(low) + pick(num) + pick(num) + pick(sym);
+}
+
 export function HrEmployeesPage() {
   const hr = useHr();
   /* หน้าอื่นในฝ่ายบุคคลลิงก์มาหาคนเดียวด้วย ?find=<ชื่อ> ใช้ช่องค้นหาเดิมเป็นตัวกรอง */
@@ -77,6 +90,8 @@ export function HrEmployeesPage() {
   const [passing, setPassing] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  /** บัญชีของคนที่เพิ่งเพิ่ม — โชว์ชื่อผู้ใช้กับรหัสชั่วคราวครั้งเดียวหลังบันทึก */
+  const [made, setMade] = useState<{ user: string; pass: string; name: string } | null>(null);
   /** แผ่นตัวกรองสถานะ/แผนก/ตำแหน่งของมือถือเปิดอยู่หรือไม่ */
   const [sheet, setSheet] = useState(false);
   /** คนที่เพิ่งเพิ่ม — รอแถวขึ้นก่อนแล้วค่อยเลื่อนไปหา */
@@ -330,10 +345,12 @@ export function HrEmployeesPage() {
           hr={hr}
           today={today}
           onClose={() => setAdding(false)}
-          onAdded={(id) => {
+          onAdded={(id, acc) => {
             /* ตามต้นแบบ: ล้างช่องค้นหาแล้วเลื่อนไปที่การ์ดของคนที่เพิ่งเพิ่ม */
             justAdded.current = id;
             setQuery("");
+            /* แล้วโชว์ชื่อผู้ใช้กับรหัสชั่วคราวให้ฝ่ายบุคคลส่งต่อให้พนักงาน */
+            setMade(acc);
           }}
         />
       )}
@@ -347,6 +364,8 @@ export function HrEmployeesPage() {
           onClose={() => setViewing(null)}
         />
       )}
+
+      {made && <NewAccountDialog acc={made} onClose={() => setMade(null)} />}
 
       {passEmp && (
         <PassDialog emp={passEmp} today={today} onClose={() => setPassing(null)} />
@@ -966,6 +985,63 @@ function isoAfter(iso: string) {
 
 // ─── บันทึกผ่านทดลองงาน ──────────────────────────────────────────
 
+/*
+ * บัญชีที่สร้างพร้อมพนักงาน — โชว์ชื่อผู้ใช้กับรหัสชั่วคราวครั้งเดียว (ต้นแบบ 6 ต.ค. 2569)
+ * ปิดกล่องแล้วดูรหัสนี้อีกไม่ได้ ต้องรีเซ็ตใหม่ที่หน้าจัดการบัญชีผู้ใช้ จึงมีปุ่มคัดลอกไว้ให้
+ */
+function NewAccountDialog({
+  acc,
+  onClose,
+}: {
+  acc: { user: string; pass: string; name: string };
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Sheet
+      title="เพิ่มพนักงานแล้ว"
+      onClose={onClose}
+      footer={
+        <>
+          <button
+            type="button"
+            className="btn glass-thin"
+            onClick={() => {
+              const text = `ชื่อผู้ใช้: ${acc.user}
+รหัสผ่าน: ${acc.pass}`;
+              void navigator.clipboard?.writeText(text).then(
+                () => setCopied(true),
+                () => setCopied(false),
+              );
+            }}
+          >
+            {copied ? "คัดลอกแล้ว" : "คัดลอก"}
+          </button>
+          <button type="button" className="btn solid btn-solid" onClick={onClose}>
+            เสร็จ
+          </button>
+        </>
+      }
+    >
+      <p className="text-[14px] font-semibold">{acc.name}</p>
+      <dl className="mt-3 grid grid-cols-[120px_minmax(0,1fr)] items-center gap-y-2.5 text-[13.5px]">
+        <dt className="text-[12.5px] font-semibold text-muted-foreground">ชื่อผู้ใช้</dt>
+        <dd className="num font-bold">{acc.user}</dd>
+        <dt className="text-[12.5px] font-semibold text-muted-foreground">รหัสผ่านชั่วคราว</dt>
+        <dd>
+          <span className="num inline-block rounded-[9px] border border-border bg-muted/60 px-3 py-1 text-[14px] font-bold tracking-wide">
+            {acc.pass}
+          </span>
+        </dd>
+      </dl>
+      <p className="mt-3 text-[12.5px] leading-relaxed text-muted-foreground">
+        ส่งให้พนักงานแล้วให้เข้าระบบตั้งรหัสใหม่เอง · ปิดกล่องนี้แล้วจะดูรหัสนี้อีกไม่ได้
+        ถ้าหายต้องรีเซ็ตใหม่ที่หน้าจัดการบัญชีผู้ใช้
+      </p>
+    </Sheet>
+  );
+}
+
 function PassDialog({ emp, today, onClose }: { emp: Employee; today: string; onClose: () => void }) {
   const [at, setAt] = useState(today);
   const [pickAt, setPickAt] = useState(false);
@@ -1118,7 +1194,7 @@ function AddDialog({
   hr: HrState;
   today: string;
   onClose: () => void;
-  onAdded?: (id: string) => void;
+  onAdded?: (id: string, account: { user: string; pass: string; name: string }) => void;
 }) {
   const [f, setF] = useState({
     /* กรอกแยกช่อง และมีภาษาอังกฤษไว้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี (เจ้าของสั่ง 29 ก.ย. 2569) */
@@ -1148,6 +1224,10 @@ function AddDialog({
   const addDoc = useAddOption({ catalog: "docs" }, (v) => setDocs((x) => (x.includes(v) ? x : [...x, v])));
   const [picker, setPicker] = useState<"" | "birth" | "start">("");
   const [warn, setWarn] = useState("");
+  /* บัญชีเข้าระบบสร้างพร้อมพนักงาน ไม่มีที่สร้างที่สอง (ต้นแบบ hr-employees-grid 6 ต.ค. 2569)
+     ชื่อผู้ใช้ระบบเสนอให้จากชื่อที่พิมพ์ จนกว่าฝ่ายบุคคลจะแก้ช่องนี้เอง */
+  const [userRaw, setUserRaw] = useState("");
+  const [pass, setPass] = useState(tempPass);
 
   const set =
     (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -1164,6 +1244,13 @@ function AddDialog({
    */
   const lock = lockedUntil(hr);
   const minStart = lock ? isoAfter(lock) : "";
+
+  const taken = hr.emp.filter((e) => e.account).map((e) => e.account!.user);
+  const suggested = suggestUserOf(
+    { name: `${f.first} ${f.last}`.trim(), firstEn: f.firstEn.trim(), lastEn: f.lastEn.trim() },
+    taken,
+  );
+  const user = userRaw || (f.first.trim() || f.firstEn.trim() ? suggested : "");
 
   function save() {
     const first = f.first.trim();
@@ -1187,6 +1274,8 @@ function AddDialog({
     if (!f.phone.trim()) return setWarn("กรอกเบอร์โทร");
     /* ชื่อซ้ำตรวจเป็นข้อสุดท้าย — ช่องที่ยังว่างต้องบอกก่อน (ลำดับตามต้นแบบ) */
     if (hr.emp.some((e) => e.name === name)) return setWarn("มีพนักงานชื่อนี้ในระบบแล้ว ตรวจสอบก่อนบันทึก");
+    if (user.trim().length < 4) return setWarn("ชื่อผู้ใช้ต้องยาวอย่างน้อย 4 ตัวอักษร");
+    if (taken.includes(user.trim())) return setWarn("ชื่อผู้ใช้นี้มีคนใช้แล้ว");
 
     const id = addEmployee({
       name,
@@ -1211,8 +1300,11 @@ function AddDialog({
       /* ฝึกงานไม่มีค่าจ้าง — บันทึกเป็น 0 ไม่ใช่ปล่อยค่าที่ค้างในช่อง */
       salary: f.type === "intern" ? 0 : salary,
     });
+    /* บัญชีสร้างพร้อมพนักงานเสมอ — เมนูที่ใช้ได้ตั้งตามตำแหน่งให้เลย แก้ทีหลังที่หน้าจัดการบัญชีผู้ใช้
+       TODO: ต่อ backend แล้วต้องสร้างพนักงานกับบัญชีในธุรกรรมเดียว ไม่ให้มีพนักงานที่ไม่มีบัญชีค้างอยู่ */
+    if (id) createAccount(id, user.trim(), today, rolesOfEmployee({ pos: f.pos as PosKey }));
     onClose();
-    if (id) onAdded?.(id);
+    if (id) onAdded?.(id, { user: user.trim(), pass, name });
   }
 
   return (
@@ -1400,6 +1492,39 @@ function AddDialog({
               <Input value={f.sosPhone} onChange={set("sosPhone")} aria-label="เบอร์โทรผู้ติดต่อฉุกเฉิน" />
             </Field>
           </div>
+        </Sect>
+
+        {/* บัญชีเข้าระบบ — สร้างพร้อมพนักงาน ชื่อผู้ใช้เสนอให้จากชื่อที่กรอก (ต้นแบบ 6 ต.ค. 2569) */}
+        <Sect title="บัญชีเข้าระบบ">
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <Field label="ชื่อผู้ใช้" required>
+              <Input
+                value={user}
+                onChange={(e) => {
+                  setUserRaw(e.target.value);
+                  setWarn("");
+                }}
+                placeholder="ระบบเสนอให้จากชื่อ"
+                aria-label="ชื่อผู้ใช้"
+                autoComplete="off"
+                spellCheck={false}
+                className="num"
+              />
+            </Field>
+            <Field label="รหัสผ่านชั่วคราว">
+              <span className="flex items-center gap-2">
+                <span className="num flex h-9 flex-1 items-center rounded-[10px] border border-border bg-muted/60 px-3 text-[14px] font-bold tracking-wide">
+                  {pass}
+                </span>
+                <button type="button" className="btn glass-thin btn-mini" onClick={() => setPass(tempPass())}>
+                  สุ่มใหม่
+                </button>
+              </span>
+            </Field>
+          </div>
+          <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+            บันทึกแล้วจะเห็นชื่อผู้ใช้กับรหัสชั่วคราวให้ส่งต่อให้พนักงาน · เข้าระบบครั้งแรกต้องตั้งรหัสใหม่เอง
+          </p>
         </Sect>
 
         <Sect title="เอกสารที่ได้รับแล้ว">

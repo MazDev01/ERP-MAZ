@@ -212,9 +212,11 @@ export function withLoginAccounts(emp: Employee[]): Employee[] {
   const taken = emp.flatMap((e) => (e.account ? [e.account.user] : []));
   return emp.map((e) => {
     const role = roleOf.get(e.id);
-    if (!role) return e;
-    const roles = ACCOUNT_ROLE_SEED[e.id] ?? [role];
+    /* พนักงานหนึ่งคนมีบัญชีหนึ่งบัญชีเสมอ สร้างพร้อมข้อมูลพนักงาน (ต้นแบบ hr-accounts 6 ต.ค. 2569)
+       คนที่ยังไม่ได้ผูกกับบทบาทไหน ใช้บทบาทตามตำแหน่งงานของตัวเอง */
+    const roles = ACCOUNT_ROLE_SEED[e.id] ?? (role ? [role] : rolesOfEmployee(e));
     if (e.account) {
+      if (!role) return e;
       if (!e.account.roles?.length)
         return { ...e, account: { ...e.account, roles, seeded: ROLE_SEED_VERSION } };
       /* ชุดตั้งต้นใส่ให้รุ่นละครั้ง — ผู้ดูแลระบบเอาบทบาทออกแล้วต้องไม่เด้งกลับมาทุกครั้งที่โหลด */
@@ -226,7 +228,15 @@ export function withLoginAccounts(emp: Employee[]): Employee[] {
     taken.push(user);
     return {
       ...e,
-      account: { user, roles, seeded: ROLE_SEED_VERSION, status: "active", mustChange: false, createdAt: e.startedAt },
+      account: {
+        user,
+        roles,
+        seeded: ROLE_SEED_VERSION,
+        /* คนที่พ้นสภาพไปแล้วต้องเข้าระบบไม่ได้ */
+        status: e.status === "left" ? "suspended" : "active",
+        mustChange: false,
+        createdAt: e.startedAt,
+      },
     };
   });
 }

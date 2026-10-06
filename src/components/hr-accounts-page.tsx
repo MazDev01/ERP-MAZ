@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { thaiDate, todayIso } from "@/lib/format";
+import { thaiDate } from "@/lib/format";
 import {
   HR_ACC_STATUS,
   HR_EMPTYPE,
@@ -22,22 +22,22 @@ import {
   type EmpAccount,
   type Employee,
 } from "@/lib/hr-data";
-import { HR_ME, createAccount, deleteAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
-import { rolesOfEmployee, suggestUserOf } from "@/lib/hr-data";
+import { resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
+import { rolesOfEmployee } from "@/lib/hr-data";
 import { ROLES, roleLabel, type Role } from "@/lib/role";
-import { ConfirmDialog } from "./confirm-dialog";
 import { Sheet } from "./lead-dialogs";
 import { Field, Input, Select } from "./ui";
 import { SearchBox } from "./sales-ui";
 import { PhoneCard, PhoneList } from "./acchr-phone";
 
-type Filter = "all" | "active" | "suspended" | "none";
+/* พนักงานหนึ่งคนมีบัญชีหนึ่งบัญชีเสมอ สร้างพร้อมข้อมูลพนักงาน (ต้นแบบ 6 ต.ค. 2569)
+   จึงไม่มีสถานะ "ยังไม่มีบัญชี" และไม่มีปุ่มสร้าง/ลบบัญชีในหน้านี้อีก */
+type Filter = "all" | "active" | "suspended";
 
 const FILTER_LABEL: Record<Filter, string> = {
   all: "ทั้งหมด",
   active: "ใช้งานอยู่",
   suspended: "ถูกระงับ",
-  none: "ยังไม่มีบัญชี",
 };
 
 /** รหัสชั่วคราว — ตัดตัวอักษรที่อ่านสลับกันง่าย (O 0 I l 1) ออก จะได้อ่านทางโทรศัพท์ได้ */
@@ -53,21 +53,17 @@ function tempPass() {
 export function HrAccountsPage() {
   /* กล่องกำหนดบทบาทของบัญชี — เดิมอยู่หน้าบทบาทและสิทธิ์ที่ยุบทิ้งไปแล้ว (29 ก.ย. 2569) */
   const [roling, setRoling] = useState<string | null>(null);
-  /* บัญชีที่กำลังจะลบบนมือถือ — ยืนยันในกล่อง เพราะการ์ดไม่มีที่ให้กดสองครั้ง */
-  const [deleting, setDeleting] = useState<string | null>(null);
   const hr = useHr();
-  const today = todayIso();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  /* กล่องเดียวใช้ทั้งสร้างบัญชีและตั้งรหัสใหม่ — ต่างกันแค่ว่ามีบัญชีอยู่แล้วหรือยัง */
+  /** บัญชีที่กำลังตั้งรหัสใหม่ */
   const [editing, setEditing] = useState<{ id: string; reset: boolean } | null>(null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return hr.emp.filter((e) => {
-      if (e.status !== "active") return false;
-      const st: Filter = e.account ? e.account.status : "none";
-      if (filter !== "all" && st !== filter) return false;
+      if (e.status !== "active" || !e.account) return false;
+      if (filter !== "all" && e.account.status !== filter) return false;
       if (q && !`${e.name} ${e.account?.user ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -111,7 +107,7 @@ export function HrAccountsPage() {
               <tr>
                 <th>พนักงาน</th>
                 <th style={{ width: 170 }}>ชื่อผู้ใช้</th>
-                <th style={{ width: 210 }}>ตำแหน่งในระบบ</th>
+                <th style={{ width: 210 }}>เมนูที่ใช้ได้</th>
                 <th style={{ width: 150 }}>สถานะบัญชี</th>
                 <th style={{ width: 150 }}>สร้างเมื่อ</th>
                 <th className="c" style={{ width: 240 }} aria-label="จัดการ" />
@@ -129,14 +125,11 @@ export function HrAccountsPage() {
                   <AccountRow
                     key={e.id}
                     emp={e}
-                    onNew={() => setEditing({ id: e.id, reset: false })}
                     onReset={() => setEditing({ id: e.id, reset: true })}
                     onRoles={() => setRoling(e.id)}
                     onToggle={() =>
                       setAccountStatus(e.id, e.account?.status === "active" ? "suspended" : "active")
                     }
-                    onDelete={() => deleteAccount(e.id)}
-                    mine={e.id === HR_ME}
                   />
                 ))
               )}
@@ -155,15 +148,10 @@ export function HrAccountsPage() {
                 title={e.name}
                 sub={e.pos ? hrPos(e.pos).label : "ยังไม่ได้กรอกข้อมูล"}
                 badge={
-                  st ? (
+                  st && (
                     <span className={`tag ${st.cls}`}>
                       <i />
                       {st.label}
-                    </span>
-                  ) : (
-                    <span className="tag t-miss">
-                      <i />
-                      ยังไม่มีบัญชี
                     </span>
                   )
                 }
@@ -176,8 +164,15 @@ export function HrAccountsPage() {
                     : undefined
                 }
                 actions={
-                  a ? (
+                  a && (
                     <>
+                      <button
+                        type="button"
+                        className="btn glass-thin"
+                        onClick={() => setRoling(e.id)}
+                      >
+                        เมนูที่ใช้ได้
+                      </button>
                       <button
                         type="button"
                         className="btn glass-thin"
@@ -194,24 +189,7 @@ export function HrAccountsPage() {
                       >
                         {a.status === "active" ? "ระงับบัญชี" : "คืนสิทธิ์"}
                       </button>
-                      {e.id !== HR_ME && (
-                        <button
-                          type="button"
-                          className="btn glass-thin !text-destructive"
-                          onClick={() => setDeleting(e.id)}
-                        >
-                          ลบบัญชี
-                        </button>
-                      )}
                     </>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn solid btn-solid"
-                      onClick={() => setEditing({ id: e.id, reset: false })}
-                    >
-                      สร้างบัญชี
-                    </button>
                   )
                 }
               />
@@ -222,31 +200,14 @@ export function HrAccountsPage() {
 
       {target && editing && (
         <AccountDialog
-          key={`${target.id}-${editing.reset}`}
+          key={target.id}
           emp={target}
-          reset={editing.reset}
           taken={hr.emp
             .filter((x) => x.id !== target.id && x.account)
             .map((x) => x.account!.user)}
-          today={today}
           onClose={() => setEditing(null)}
         />
       )}
-
-      {/* ยืนยันลบบัญชี — ใช้จากการ์ดบนมือถือ (ตารางบนจอคอมกดปุ่มซ้ำสองครั้งแทน) */}
-      <ConfirmDialog
-        open={Boolean(deleting)}
-        title="ลบบัญชีผู้ใช้"
-        description={`ลบบัญชีของ ${hr.emp.find((e) => e.id === deleting)?.name ?? ""}`}
-        detail="คนนี้จะเข้าระบบไม่ได้จนกว่าจะสร้างบัญชีใหม่ · ข้อมูลพนักงาน เวลาทำงาน และเงินเดือนยังอยู่ครบ"
-        confirmLabel="ลบบัญชี"
-        tone="destructive"
-        onConfirm={() => {
-          if (deleting) deleteAccount(deleting);
-          setDeleting(null);
-        }}
-        onCancel={() => setDeleting(null)}
-      />
 
       {roling && hr.emp.find((e) => e.id === roling)?.account && (
         <RolesDialog emp={hr.emp.find((e) => e.id === roling)!} onClose={() => setRoling(null)} />
@@ -258,25 +219,16 @@ export function HrAccountsPage() {
 
 function AccountRow({
   emp,
-  onNew,
   onReset,
   onRoles,
   onToggle,
-  onDelete,
-  mine,
 }: {
   emp: Employee;
-  onNew: () => void;
   onReset: () => void;
   onRoles: () => void;
   onToggle: () => void;
-  onDelete: () => void;
-  /** บัญชีของคนที่กำลังใช้งานอยู่ — ลบตัวเองไม่ได้ */
-  mine: boolean;
 }) {
   const a = emp.account;
-  /* ลบต้องกดสองครั้ง — ลบพลาดแล้วคนนั้นเข้าระบบไม่ได้จนกว่าจะสร้างบัญชีใหม่ */
-  const [delAsk, setDelAsk] = useState(false);
   const st = a ? HR_ACC_STATUS[a.status] : null;
   return (
     <tr>
@@ -290,9 +242,9 @@ function AccountRow({
         </span>
       </td>
       <td data-label="ชื่อผู้ใช้" className="num">
-        {a ? a.user : <span className="muted">ยังไม่มีบัญชี</span>}
+        {a?.user ?? "—"}
       </td>
-      <td data-label="ตำแหน่งในระบบ">
+      <td data-label="เมนูที่ใช้ได้">
         {a ? (
           accountRoles(a).length ? (
             <span className="flex flex-wrap gap-1">
@@ -326,7 +278,7 @@ function AccountRow({
         {a ? (
           <span className="flex flex-wrap justify-center gap-1.5">
             <button type="button" className="btn glass-thin btn-mini" onClick={onRoles}>
-              บทบาท
+              เมนูที่ใช้ได้
             </button>
             <button type="button" className="btn glass-thin btn-mini" onClick={onReset}>
               รีเซ็ตรหัสผ่าน
@@ -334,69 +286,41 @@ function AccountRow({
             <button type="button" className="btn glass-thin btn-mini" onClick={onToggle}>
               {a.status === "active" ? "ระงับบัญชี" : "คืนสิทธิ์"}
             </button>
-            {/* ลบบัญชี ไม่ใช่ลบคน — พนักงานยังอยู่ในทะเบียน · กดสองครั้งกันพลาด */}
-            <button
-              type="button"
-              className={`btn btn-mini ${delAsk ? "solid btn-solid" : "glass-thin !text-destructive"}`}
-              title={
-                mine
-                  ? "ลบบัญชีของตัวเองไม่ได้ ไม่งั้นจะเข้าระบบไม่ได้อีก"
-                  : "ลบบัญชีผู้ใช้ของคนนี้ ข้อมูลพนักงานยังอยู่"
-              }
-              disabled={mine}
-              onClick={() => (delAsk ? onDelete() : setDelAsk(true))}
-            >
-              {delAsk ? "กดอีกครั้งเพื่อลบ" : "ลบบัญชี"}
-            </button>
           </span>
-        ) : (
-          <button type="button" className="btn solid btn-solid btn-mini" onClick={onNew}>
-            สร้างบัญชี
-          </button>
-        )}
+        ) : null}
       </td>
     </tr>
   );
 }
 
-/** สร้างบัญชีใหม่ หรือตั้งรหัสใหม่ให้บัญชีเดิม */
+/** ตั้งรหัสใหม่ให้บัญชีเดิม — บัญชีสร้างพร้อมพนักงานแล้ว จึงไม่มีการสร้างใหม่ที่นี่ */
 function AccountDialog({
   emp,
-  reset,
   taken,
-  today,
   onClose,
 }: {
   emp: Employee;
-  reset: boolean;
   taken: string[];
-  today: string;
   onClose: () => void;
 }) {
-  const [user, setUser] = useState(
-    reset ? (emp.account?.user ?? "") : suggestUserOf(emp, taken),
-  );
+  const [user, setUser] = useState(emp.account?.user ?? "");
   const [pass, setPass] = useState(tempPass);
-  /* ต้นแบบไม่มีตัวเลือกบทบาทในกล่องนี้ — บทบาทของบัญชีกำหนดที่หน้าจัดการบัญชีผู้ใช้ (ปุ่ม "บทบาท")
-     รีเซ็ตรหัสคงบทบาทเดิมไว้
-     บัญชีใหม่ตั้งบทบาทตาม "ตำแหน่ง" ให้เลย — ทุกบทบาทคือพนักงาน ต่างกันที่งานตามตำแหน่ง
-     (เจ้าของสั่ง 29 ก.ย. 2569 · ดู docs/ตำแหน่งและหน้าที่.md) แก้ทีหลังได้ที่ปุ่มบทบาท */
-  const roles = reset ? accountRoles(emp.account) : rolesOfEmployee(emp);
+  /* เมนูที่ใช้ได้แก้ที่ปุ่ม "เมนูที่ใช้ได้" — ตั้งรหัสใหม่ไม่แตะของเดิม */
+  const roles = accountRoles(emp.account);
   const [warn, setWarn] = useState("");
 
   function save() {
     const name = user.trim();
     if (name.length < 4) return setWarn("ชื่อผู้ใช้ต้องยาวอย่างน้อย 4 ตัวอักษร");
     if (taken.includes(name)) return setWarn("ชื่อผู้ใช้นี้มีคนใช้แล้ว");
-    /* TODO: ต่อ backend แล้วต้องสร้าง/รีเซ็ตบัญชีที่ระบบยืนยันตัวตนจริง แล้วบังคับตั้งรหัสใหม่ครั้งแรก */
-    if (reset) resetAccount(emp.id, name, roles);
-    else createAccount(emp.id, name, today, roles);
+    /* TODO: ต่อ backend แล้วต้องรีเซ็ตรหัสที่ระบบยืนยันตัวตนจริง แล้วบังคับตั้งรหัสใหม่ครั้งแรก */
+    resetAccount(emp.id, name, roles);
     onClose();
   }
 
   return (
     <Sheet
-      title={reset ? "รีเซ็ตรหัสผ่าน" : "สร้างบัญชีผู้ใช้"}
+      title="รีเซ็ตรหัสผ่าน"
       onClose={onClose}
       footer={
         <>
@@ -404,7 +328,7 @@ function AccountDialog({
             ยกเลิก
           </button>
           <button type="button" className="btn solid btn-solid" onClick={save}>
-            {reset ? "ตั้งรหัสใหม่" : "สร้างบัญชี"}
+            ตั้งรหัสใหม่
           </button>
         </>
       }
@@ -469,19 +393,23 @@ export type { EmpAccount };
  * บัญชีใหม่ระบบตั้งบทบาทให้ตามตำแหน่งอยู่แล้ว จอนี้ไว้แก้เป็นรายคน
  */
 function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
+  /* เมนูที่มาจากตำแหน่ง ติ๊กไว้และล็อก เอาออกไม่ได้ (ต้นแบบ hr-accounts 6 ต.ค. 2569)
+     เปลี่ยนตำแหน่งเมื่อไหร่ เมนูชุดนี้เปลี่ยนตามเอง ที่เพิ่มเองคือสิทธิ์เพิ่มเติม */
+  const own = rolesOfEmployee(emp);
   const [picked, setPicked] = useState<Role[]>(
-    accountRoles(emp.account).length ? accountRoles(emp.account) : rolesOfEmployee(emp),
+    accountRoles(emp.account).length ? accountRoles(emp.account) : own,
   );
   const [warn, setWarn] = useState("");
 
   function toggle(r: Role) {
+    if (own.includes(r)) return;
     setWarn("");
     setPicked((list) => (list.includes(r) ? list.filter((x) => x !== r) : [...list, r]));
   }
 
   return (
     <Sheet
-      title="บทบาทของบัญชีนี้"
+      title="เมนูที่ใช้ได้"
       onClose={onClose}
       footer={
         <>
@@ -511,22 +439,31 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
 
       {/* CEO ไม่อยู่ในรายการ — ไม่ใช่บัญชีพนักงานในทะเบียน */}
       <div className="mt-4 grid gap-2">
-        {ROLES.filter((r) => r.key !== "ceo").map((r) => (
-          <label
-            key={r.key}
-            className={`flex cursor-pointer items-center gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
-              picked.includes(r.key) ? "border-primary bg-primary/5" : "border-border bg-card"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={picked.includes(r.key)}
-              onChange={() => toggle(r.key)}
-              className="size-4 accent-[var(--primary)]"
-            />
-            <span className="min-w-0 text-[13.5px] font-semibold">{r.label}</span>
-          </label>
-        ))}
+        {ROLES.filter((r) => r.key !== "ceo").map((r) => {
+          const lock = own.includes(r.key);
+          return (
+            <label
+              key={r.key}
+              className={`flex items-center gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
+                lock ? "cursor-default" : "cursor-pointer"
+              } ${picked.includes(r.key) ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+            >
+              <input
+                type="checkbox"
+                checked={picked.includes(r.key)}
+                disabled={lock}
+                onChange={() => toggle(r.key)}
+                className="size-4 accent-[var(--primary)]"
+              />
+              <span className="min-w-0 text-[13.5px] font-semibold">{r.label}</span>
+              {lock && (
+                <em className="ml-auto text-[11.5px] font-semibold text-muted-foreground not-italic">
+                  มาจากตำแหน่ง
+                </em>
+              )}
+            </label>
+          );
+        })}
       </div>
       {warn && <p className="mt-3 text-[12.5px] font-semibold text-destructive">{warn}</p>}
     </Sheet>
