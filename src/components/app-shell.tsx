@@ -41,6 +41,7 @@ import {
   TasksIcon,
   TeamIcon,
   UserIcon,
+  ChevronDownIcon,
 } from "./icons";
 import { NotificationMenu } from "./notification-menu";
 import { SideSub, SubNav } from "./sub-nav";
@@ -97,6 +98,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const menuRef = useRef<HTMLDivElement>(null);
   /* บทบาทอื่นยังใช้ลิ้นชักด้านซ้ายแบบเดิม ตามที่ผู้ใช้สั่งไว้ */
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** เมนูแม่ที่ผู้ใช้พับเมนูย่อยเก็บไว้ — ตั้งต้นกางทุกอัน (เจ้าของสั่ง 6 ต.ค. 2569) */
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
   const today = todayIso();
 
   /* บทบาทเป็นตัวกำหนดว่าเมนูซ้ายมีอะไรบ้าง — เลือกไว้ตอนเข้าสู่ระบบ */
@@ -317,20 +320,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {list.map((item) => {
                 const ItemIcon = ICONS[item.icon];
                 const active = (current?.parent ?? current?.href) === item.href;
+                /* เมนูย่อยกางอยู่เป็นค่าตั้งต้น กดลูกศรพับเก็บได้ (เจ้าของสั่ง 6 ต.ค. 2569) */
+                const open = active && item.sub && !folded[item.href];
                 return (
                   <Fragment key={item.href}>
-                    <Link
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      className={`side-link${active ? " on" : ""}`}
-                    >
-                      <ItemIcon className="size-[18px] shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                      {/* ดีลใหม่ที่ฝ่ายบัญชียังไม่ได้เปิดดู (AC-BR-01) */}
-                      {item.href === "/acc/billing" && <BillingNavDot />}
-                    </Link>
+                    <div className={item.sub && active ? "side-row" : undefined}>
+                      <Link
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                        className={`side-link${active ? " on" : ""}`}
+                      >
+                        <ItemIcon className="size-[18px] shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                        {/* ดีลใหม่ที่ฝ่ายบัญชียังไม่ได้เปิดดู (AC-BR-01) */}
+                        {item.href === "/acc/billing" && <BillingNavDot />}
+                      </Link>
+                      {active && item.sub && (
+                        <button
+                          type="button"
+                          className="side-fold"
+                          aria-expanded={Boolean(open)}
+                          aria-label={`${open ? "พับ" : "กาง"}หน้าย่อยของ${item.label}`}
+                          onClick={() => setFolded((v) => ({ ...v, [item.href]: !v[item.href] }))}
+                        >
+                          <ChevronDownIcon className="size-[17px]" strokeWidth={2.2} />
+                        </button>
+                      )}
+                    </div>
                     {/* เมนูย่อยกางใต้เมนูแม่ที่เปิดอยู่ แทนแถบชิปเหนือเนื้อหา (ตามระบบต้นฉบับ) */}
-                    {active && item.sub && <SideSub items={item.sub} pathname={pathname} />}
+                    {open && <SideSub items={item.sub!} pathname={pathname} />}
                   </Fragment>
                 );
               })}
