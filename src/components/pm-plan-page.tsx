@@ -30,6 +30,7 @@ import {
   type InboxJob,
   type Member,
   type Project,
+  type ProjectDoc,
   type TaskFile,
   type TeamRole,
 } from "@/lib/pm-data";
@@ -61,6 +62,7 @@ import { fileSize } from "./file-drop";
 import { Field, Sheet } from "./lead-dialogs";
 import { ProposalPreview, QuotationPreview } from "./pm-docs";
 import { ThaiDatePicker } from "./thai-date-picker";
+import { AddDocButton, AddDocsDialog, DocChips, RenameButton, RenameDialog } from "./pm-project-tools";
 import { Select } from "./ui";
 import { useAddOption } from "./add-option";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
@@ -81,6 +83,11 @@ type Board = { phases: PlanPhase[]; plan: Draft[][] };
 type Target = {
   deal: string;
   cus: string;
+  /** ชื่อโปรเจค — ว่าง = ยังไม่ได้ตั้ง ขึ้นชื่อลูกค้าแทน (ยกมาจากระบบต้นฉบับ) */
+  name?: string;
+  scope: string;
+  /** เอกสารที่ PM/GM แนบเพิ่ม (ยกมาจากระบบต้นฉบับ) */
+  extra: ProjectDoc[];
   docs?: InboxJob;
   /** ช่วงตามใบเสนอราคา — ว่าง = คิดจากเฟสที่วางเอง */
   planStart: string;
@@ -94,6 +101,9 @@ function targetOfJob(j: InboxJob): Target {
   return {
     deal: j.deal,
     cus: j.cus,
+    name: j.name,
+    scope: j.scope,
+    extra: j.docs ?? [],
     docs: j,
     planStart: j.planStart,
     planEnd: j.planEnd,
@@ -106,6 +116,9 @@ function targetOfProject(p: Project): Target {
   return {
     deal: p.deal,
     cus: p.cus,
+    name: p.name,
+    scope: p.scope,
+    extra: p.docs ?? [],
     docs: p.source,
     planStart: "",
     planEnd: "",
@@ -177,6 +190,9 @@ export function PmPlanPage() {
   const [bulkWho, setBulkWho] = useState(team[0]?.id ?? "");
   const [open, setOpen] = useState<Spot | null>(null);
   const [doc, setDoc] = useState<"quo" | "prop" | null>(null);
+  /* แก้ชื่อโปรเจคและแนบเอกสารเพิ่มได้จากหน้านี้ (ยกมาจากระบบต้นฉบับ) */
+  const [renaming, setRenaming] = useState(false);
+  const [addingDoc, setAddingDoc] = useState(false);
   /** เฟสที่กำลังแก้ — -1 = เพิ่มเฟสใหม่ */
   const [phaseEdit, setPhaseEdit] = useState<number | null>(null);
   const [adding, setAdding] = useState<number | null>(null);
@@ -311,7 +327,16 @@ export function PmPlanPage() {
   return (
     <div className="space-y-3.5">
       <div className="bar">
-        <div>
+        <div className="min-w-0">
+          {/* หัวเป็นชื่อโปรเจค แก้ชื่อได้ตรงนี้ (ยกมาจากระบบต้นฉบับ) · เลขดีลบรรทัดล่าง */}
+          <h1 className="flex flex-wrap items-center gap-x-2">
+            {job.name?.trim() || job.cus}
+            {!ro && <RenameButton onClick={() => setRenaming(true)} />}
+          </h1>
+          <p className="num mt-1 text-[13px] font-semibold text-muted-foreground">
+            {job.deal}
+            {job.project ? " · แก้แผน" : ""}
+          </p>
         </div>
         <div className="tools w-full flex-wrap items-center sm:w-auto sm:flex-nowrap">
           <Select
@@ -378,6 +403,9 @@ export function PmPlanPage() {
             <QuotationIcon className="size-[15px]" strokeWidth={2} />
             Proposal
           </button>
+          {/* เอกสารอื่นที่แนบให้ทีมเห็น + ปุ่มแนบเพิ่ม (ยกมาจากระบบต้นฉบับ) */}
+          <DocChips deal={job.deal} docs={job.extra} canEdit={!ro} />
+          {!ro && <AddDocButton onClick={() => setAddingDoc(true)} />}
         </span>
         {/* มือถือ: กรอบเวลาเป็นแคปซูลชมพูบรรทัดเดียว (ต้นแบบ pm-plan.html) */}
         <span className="ml-auto flex items-center gap-2 rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-semibold text-primary sm:hidden">
@@ -625,6 +653,14 @@ export function PmPlanPage() {
           {doc === "quo" ? <QuotationPreview job={docs} /> : <ProposalPreview job={docs} />}
         </Sheet>
       )}
+
+      {renaming && (
+        <RenameDialog
+          project={{ deal: job.deal, name: job.name, cus: job.cus, scope: job.scope }}
+          onClose={() => setRenaming(false)}
+        />
+      )}
+      {addingDoc && <AddDocsDialog deal={job.deal} onClose={() => setAddingDoc(false)} />}
 
       {phaseEdit !== null && (
         <PhaseDialog

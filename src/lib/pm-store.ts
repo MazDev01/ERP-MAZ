@@ -17,6 +17,7 @@ import {
   type ChatMessage,
   type InboxJob,
   type Member,
+  type ProjectDoc,
   type Project,
   type ProjectPhase,
   type TaskFile,
@@ -638,6 +639,48 @@ export function renameProject(deal: string, name: string) {
     ...s,
     inbox: s.inbox.map((j) => (j.deal === deal ? { ...j, name: v } : j)),
     projects: s.projects.map((p) => (p.deal === deal ? { ...p, name: v, updated: today() } : p)),
+  }));
+}
+
+/*
+ * แนบเอกสารอื่นให้โปรเจค (ยกมาจากระบบต้นฉบับ) — ปุ่ม "+" ข้างใบเสนอราคา/Proposal
+ * งานที่ยังวางแผนอยู่เก็บที่ใบงานในกล่องเข้า (ติดไปตอนยืนยันแผน) · โปรเจคที่เดินแล้วเก็บที่โปรเจค
+ * ชื่อซ้ำกับที่มีอยู่ไม่เพิ่มซ้ำ — ลบใช้ชื่อเป็นตัวระบุ
+ */
+export function addProjectDocs(deal: string, docs: ProjectDoc[]) {
+  if (!docs.length) return;
+  const at = bkkStamp();
+  const merge = (cur: ProjectDoc[] | undefined) => {
+    const have = new Set((cur ?? []).map((d) => d.n));
+    return [...docs.filter((d) => !have.has(d.n)), ...(cur ?? [])];
+  };
+  store.update((s) => ({
+    ...s,
+    inbox: s.inbox.map((j) => (j.deal === deal ? { ...j, docs: merge(j.docs) } : j)),
+    projects: s.projects.map((p) =>
+      p.deal === deal
+        ? {
+            ...p,
+            docs: merge(p.docs),
+            updated: today(),
+            acts: [
+              { kind: "file" as const, who: "PM", at, tx: `แนบเอกสารโปรเจค ${docs.length} รายการ` },
+              ...p.acts,
+            ],
+          }
+        : p,
+    ),
+  }));
+}
+
+/** เอาเอกสารแนบของโปรเจคออก (PM/GM กดยืนยันก่อน) */
+export function removeProjectDoc(deal: string, name: string) {
+  store.update((s) => ({
+    ...s,
+    inbox: s.inbox.map((j) => (j.deal === deal ? { ...j, docs: (j.docs ?? []).filter((d) => d.n !== name) } : j)),
+    projects: s.projects.map((p) =>
+      p.deal === deal ? { ...p, docs: (p.docs ?? []).filter((d) => d.n !== name), updated: today() } : p,
+    ),
   }));
 }
 

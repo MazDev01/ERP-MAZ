@@ -2,19 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccountLocked, type LockReason } from "./account-locked";
 import { LoginScene } from "./login-scene";
-import { DownloadIcon, EyeIcon, EyeOffIcon } from "./icons";
+import "@/styles/login.css";
+import { DownloadIcon } from "./icons";
+import { setStaffEmployee, staffEmployeeId, staffLabel, staffTeam } from "@/lib/staff-identity";
+import { HR_EMPTYPE } from "@/lib/hr-data";
+import { Select } from "./ui";
 import { homeOf, navItems } from "@/lib/nav";
 import { accountKey, accountOf, markLogin } from "@/lib/accounts";
 import { useHr } from "@/lib/hr-store";
 import { accountRoles } from "@/lib/hr-data";
 import { bkkStamp } from "@/lib/format";
 import { ROLES, setRole, useRole, type Role } from "@/lib/role";
-import { setStaffEmployee, staffEmployeeId, staffLabel, staffTeam } from "@/lib/staff-identity";
-import { HR_EMPTYPE } from "@/lib/hr-data";
-import { Select } from "./ui";
 
 /** ผิดครบกี่ครั้งจึงระงับบัญชี — ยืนยันกับฝ่ายบุคคล (ต้นแบบ login.html MAX_TRIES) */
 const MAX_TRIES = 5;
@@ -101,7 +102,7 @@ export function LoginForm() {
   const [role, setPick] = useState<Role>(savedRole);
   /* พนักงานมีหลายตำแหน่ง จึงต้องเลือกด้วยว่าจะเข้าเป็นใคร (เจ้าของสั่ง 29 ก.ย. 2569) */
   const [who, setWho] = useState(() => staffEmployeeId());
-  /* การ์ดเข้าใช้งานแบบทดลองงาน/ฝึกงาน — หยิบคนแรกของแต่ละประเภทที่ยังทำงานอยู่จากทะเบียนจริง
+  /* ทางเข้าแบบทดลองงาน/ฝึกงาน — หยิบคนแรกของแต่ละประเภทที่ยังทำงานอยู่จากทะเบียนจริง
      ไม่ตั้งรหัสพนักงานตายตัว เพราะฝ่ายบุคคลเพิ่มหรือเปลี่ยนคนได้ */
   const demoTypes = (["probat", "intern"] as const)
     .map((type) => {
@@ -227,108 +228,66 @@ export function LoginForm() {
             <AccountLocked reason={locked} onBack={() => setLocked(null)} />
           ) : (
             <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/maz-logo.png" alt="MAZ" className="mx-auto h-[34px] w-auto" />
-          <p className="mt-2.5 mb-4 text-center text-[13.5px] text-muted-foreground">
+          {/* บทบาทเปลี่ยนทั้งเมนูซ้ายและหน้างาน จึงต้องเลือกก่อนเข้า — เป็นดรอปดาวน์มุมขวาบน (ผู้ใช้สั่ง 30 ก.ย. 2569)
+              เดิมเป็นการ์ดเรียงเต็มฟอร์ม บทบาทเยอะจนดันช่องกรอกลงไปไกล
+              ถูกระงับแล้วปิดแค่ปุ่มเข้าสู่ระบบตาม mockup (lockAccount) — บทบาทยังเลือกได้ */}
+          <div className="mb-2 flex justify-end">
+            <RolePicker
+              value={role}
+              who={who}
+              demos={demoTypes}
+              onChange={(r) => {
+                setPick(r);
+                if (r === "staff" && demoTypes.some((d) => d.id === who)) {
+                  /* กลับไปเป็นพนักงานประจำคนแรก ไม่ค้างอยู่ที่คนทดลองงาน/ฝึกงานที่เพิ่งเลือก */
+                  const normal = staffTeam().find((e) => !demoTypes.some((d) => d.id === e.id));
+                  if (normal) setWho(normal.id);
+                }
+              }}
+              onDemo={(id) => {
+                setPick("staff");
+                setWho(id);
+              }}
+            />
+          </div>
+          {/* โลโก้กับฟอร์มกว้างไม่เกิน 360px และอยู่กลางแผ่นขาวในแนวตั้ง ตามไฟล์ตัวอย่าง (form width:min(360px,42%) · top:50%)
+              ผู้ใช้สั่ง 2 ต.ค. 2569: ช่องยาวเกินไป และชิดโลโก้เกินไป */}
+          <div className="lg-center">
+          {/* เวิร์ดมาร์กสีแดงสูง 46px ตามไฟล์ตัวอย่าง (.logo) — รูปเดียวกับโลโก้ขาวบนแผงแดง */}
+          <svg viewBox="60 115 1560 410" className="mx-auto block h-[46px] w-auto" role="img" aria-label="MAZ">
+            <g fill="none" stroke="var(--primary)" strokeWidth="70" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="115,470 115,170 335,355 555,170 555,470" />
+              <polyline points="670,470 885,170 1105,470" />
+              <polyline points="1215,170 1565,170 1215,470 1565,470" />
+            </g>
+          </svg>
+          <p className="mt-2.5 mb-9 text-center text-[13.5px] text-muted-foreground">
             เข้าสู่ระบบเพื่อใช้งาน ERP MAZ
           </p>
 
-          <form onSubmit={submit} noValidate>
-            {/* บทบาทเปลี่ยนทั้งเมนูซ้ายและหน้างาน จึงต้องเลือกก่อนเข้า */}
-            {/* ถูกระงับแล้วปิดแค่ปุ่มเข้าสู่ระบบตาม mockup (lockAccount) — การ์ดบทบาทยังเลือกได้ */}
-            <fieldset className="mb-3">
-              <legend className="mb-1.5 text-[13px] font-medium text-muted-foreground">
-                Sign in as · เข้าใช้งานในตำแหน่ง
-              </legend>
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {ROLES.map((r) => {
-                  /* การ์ด "พนักงาน" ไม่ติดสว่างตอนเลือกทดลองงาน/ฝึกงานอยู่ ไม่งั้นดูเหมือนเลือกสองใบ */
-                  const on = role === r.key && !(r.key === "staff" && demoTypes.some((d) => d.id === who));
-                  return (
-                  <button
-                    key={r.key}
-                    type="button"
-                    onClick={() => {
-                      setPick(r.key);
-                      if (r.key === "staff" && demoTypes.some((d) => d.id === who)) {
-                        /* กลับไปเป็นพนักงานประจำคนแรก ไม่ค้างอยู่ที่คนทดลองงาน/ฝึกงานที่เพิ่งเลือก */
-                        const normal = staffTeam().find((e) => !demoTypes.some((d) => d.id === e.id));
-                        if (normal) setWho(normal.id);
-                      }
-                    }}
-                    aria-pressed={on}
-                    className={`rounded-[12px] border px-3 py-[7px] text-left transition-colors ${
-                      on
-                        ? "border-primary bg-accent text-primary"
-                        : "glass-thin hover:border-primary"
-                    }`}
-                  >
-                    {/* ชื่อบทบาทสองภาษา — อังกฤษเป็นหลัก ไทยกำกับ ไม่มีคำอธิบาย */}
-                    <b className="block text-[13px] font-semibold">{r.en}</b>
-                    <span className="block text-[11.5px] font-medium opacity-75">{r.label}</span>
-                  </button>
-                  );
-                })}
-              </div>
-              {/* ทดลองงานกับฝึกงานไม่ใช่บทบาทแยก แต่เป็นประเภทการจ้างของ "พนักงาน"
-                 กติกาวันลาและสลิปต่างกัน จึงต้องมีทางเข้าไปดูหน้าจอของคนกลุ่มนี้ (เจ้าของสั่ง 1 ต.ค. 2569) */}
-              {demoTypes.length > 0 && (
-                <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
-                  {demoTypes.map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => {
-                        setPick("staff");
-                        setWho(d.id);
-                      }}
-                      aria-pressed={role === "staff" && who === d.id}
-                      className={`rounded-[12px] border px-3 py-[7px] text-left transition-colors ${
-                        role === "staff" && who === d.id
-                          ? "border-primary bg-accent text-primary"
-                          : "glass-thin hover:border-primary"
-                      }`}
-                    >
-                      <b className="block text-[13px] font-semibold">{d.en}</b>
-                      <span className="block text-[11.5px] font-medium opacity-75">
-                        {d.label} · {d.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </fieldset>
+          {/*
+            บทบาท "พนักงาน" มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
+            เลือกได้ว่าเข้าเป็นใคร งานที่ได้รับกับตารางงานจะเป็นของคนนั้น (เจ้าของสั่ง 29 ก.ย. 2569)
+          */}
+          {role === "staff" && (
+            <div className="mb-5">
+              <label htmlFor="staff-who" className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
+                เข้าเป็นใครในทีม
+              </label>
+              <Select id="staff-who" value={who} onChange={(e) => setWho(e.target.value)} className="h-[46px] rounded-[12px]">
+                {staffTeam().map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {staffLabel(e)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
 
-            {/*
-              บทบาท "พนักงาน" มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
-              เลือกได้ว่าเข้าเป็นใคร งานที่ได้รับกับตารางงานจะเป็นของคนนั้น (เจ้าของสั่ง 29 ก.ย. 2569)
-            */}
-            {role === "staff" && (
-              <div className="mb-3">
-                <label
-                  htmlFor="staff-who"
-                  className="mb-1.5 block text-[13px] font-medium text-muted-foreground"
-                >
-                  เข้าเป็นใครในทีม
-                </label>
-                <Select
-                  id="staff-who"
-                  value={who}
-                  onChange={(e) => setWho(e.target.value)}
-                  className="h-[46px] rounded-[12px]"
-                >
-                  {staffTeam().map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {staffLabel(e)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
-
-            <div className="mb-2.5">
-              {/* ช่องกรอกแบบเส้นใต้ตามต้นแบบ login-3d-redwhite.html — คลิกแล้วเส้นแดงวิ่งออกจากกลาง */}
-              <div className={`login-field ${badUser ? "bad" : ""}`}>
+          {/* ช่องกรอกและปุ่มตามไฟล์ตัวอย่างทุกค่า (ผู้ใช้สั่ง 2 ต.ค. 2569) — เส้นใต้อย่างเดียว ไม่มีกรอบ ไม่มีไอคอน · styles/login.css */}
+          <form onSubmit={submit} noValidate className="lg-form">
+            <div className="lg-field">
+              <div className={`lg-control${badUser ? " bad" : ""}`}>
                 <input
                   ref={userRef}
                   value={username}
@@ -344,15 +303,13 @@ export function LoginForm() {
                 />
               </div>
               {/* ผิดเป็นคู่ไม่บอกช่องชื่อผู้ใช้ ข้อความไปอยู่ใต้ช่องรหัสผ่านช่องเดียว */}
-              {badUser && !credError && (
-                <p id="m-user" role="alert" className="mt-1.5 pl-1 text-[12.5px] font-medium text-destructive">
-                  {MSG_USER}
-                </p>
-              )}
+              <p id="m-user" className="lg-err" aria-live="polite">
+                {badUser && !credError ? MSG_USER : ""}
+              </p>
             </div>
 
-            <div className="mb-2.5">
-              <div className={`login-field ${badPass || credError ? "bad" : ""}`}>
+            <div className="lg-field">
+              <div className={`lg-control${badPass ? " bad" : ""}`}>
                 <input
                   ref={passRef}
                   type={show ? "text" : "password"}
@@ -375,47 +332,39 @@ export function LoginForm() {
                     }}
                     aria-label={show ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
                     aria-pressed={show}
-                    className="-mr-1.5 shrink-0 rounded-lg p-1.5 text-muted-foreground hover:text-foreground"
+                    className="lg-eye"
                   >
-                    {show ? (
-                      <EyeOffIcon className="size-[21px]" strokeWidth={1.9} />
-                    ) : (
-                      <EyeIcon className="size-[21px]" strokeWidth={1.9} />
-                    )}
+                    {/* ไอคอนตาตามไฟล์ตัวอย่าง — มีเส้นขีดทับตอนซ่อนรหัสผ่าน */}
+                    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M1.5 10C4 5 7 3.5 10 3.5S16 5 18.5 10C16 15 13 16.5 10 16.5S4 15 1.5 10Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                      <circle cx="10" cy="10" r="2.8" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                      {!show && <path d="M3 17 17 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />}
+                    </svg>
                   </button>
                 )}
               </div>
-              {(credError || badPass) && (
-                <p id="m-pass" role="alert" className="mt-1.5 pl-1 text-[12.5px] font-medium text-destructive">
-                  {credError || MSG_PASS}
-                </p>
-              )}
+              <p id="m-pass" className="lg-err" aria-live="polite">
+                {credError || (badPass ? MSG_PASS : "")}
+              </p>
             </div>
 
-            {/* จดจำอุปกรณ์ — เครื่องส่วนตัวจะได้ไม่ต้องพิมพ์ชื่อผู้ใช้ทุกครั้ง */}
-            <label className="mt-0.5 -mb-2 flex w-fit cursor-pointer items-center gap-2 py-2 text-[13px] text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setTypedRemember(e.target.checked)}
-                className="size-4 accent-[var(--primary)]"
-              />
-              จดจำอุปกรณ์นี้
-            </label>
+            {/* จดจำอุปกรณ์กับลืมรหัสผ่าน — ไม่มีในไฟล์ตัวอย่าง แต่เป็นงานจริงของระบบ จึงรวมไว้แถวเดียวให้ฟอร์มสั้นเท่าเดิม */}
+            <div className="-mt-2 flex items-center justify-between gap-3">
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setTypedRemember(e.target.checked)}
+                  className="size-4 accent-[var(--primary)]"
+                />
+                จดจำอุปกรณ์นี้
+              </label>
+              <Link href="/set-password" className="text-[13px] text-muted-foreground hover:text-primary">
+                ลืมรหัสผ่าน?
+              </Link>
+            </div>
 
-            {/* ทางออกเมื่อเข้าไม่ได้ — ต้องมีให้กดจากหน้านี้ ไม่ใช่รู้ URL เอง */}
-            <Link
-              href="/set-password"
-              className="-mt-0.5 -mb-1.5 block py-1.5 text-right text-[13px] text-muted-foreground hover:text-primary"
-            >
-              ลืมรหัสผ่าน?
-            </Link>
-
-            <button
-              type="submit"
-              disabled={busy || frozen}
-              className="btn-solid mx-auto mt-3.5 flex h-[48px] w-full items-center justify-center gap-3 rounded-[10px] text-[16px] font-semibold transition-transform active:scale-[0.98] disabled:saturate-50 lg:w-[238px]"
-            >
+            <button type="submit" disabled={busy || frozen} className="lg-primary">
               {frozen ? "บัญชีถูกระงับ" : busy ? "" : "เข้าสู่ระบบ"}
               {busy && (
                 <span
@@ -426,27 +375,158 @@ export function LoginForm() {
             </button>
           </form>
 
-          <p className="mt-3.5 text-center text-[11.5px] leading-relaxed text-muted-foreground">
-            ยังไม่มีระบบหลังบ้าน — เลือกตำแหน่งแล้วกด <b className="font-semibold">เข้าสู่ระบบ</b> ได้เลยโดยไม่ต้องกรอก
-            <br />
-            ถ้ากรอกชื่อผู้ใช้ รหัสผ่านเดโมคือ <b className="font-semibold">{DEMO_PASSWORD}</b>
-            <br />
-            พิมพ์ <b className="font-semibold">locked</b> หรือ{" "}
-            <b className="font-semibold">suspended</b> เป็นชื่อผู้ใช้ เพื่อดูหน้าบัญชีถูกระงับ
-          </p>
-
+          {/* ทางติดตั้งลงหน้าจอโฮม (PWA ของเรา) — ไม่มีในต้นแบบ แต่เป็นทางเข้าเดียวของหน้า /install */}
           <Link
             href="/install"
-            className="mt-0.5 -mb-2 flex items-center justify-center gap-1.5 py-2 text-[12.5px] font-medium text-muted-foreground hover:text-primary"
+            className="mt-4 flex items-center justify-center gap-1.5 py-2 text-[12.5px] font-medium text-muted-foreground hover:text-primary"
           >
             <DownloadIcon className="size-4" />
             ติดตั้งลงหน้าจอโฮม
           </Link>
+          </div>
+
             </>
           )}
           </div>
         </section>
       </div>
     </main>
+  );
+}
+
+/** ดรอปดาวน์เลือกบทบาท — ชื่ออังกฤษเป็นหลัก ไทยกำกับ ตามการ์ดเดิม */
+type DemoType = { id: string; name: string; label: string; en: string };
+
+function RolePicker({
+  value,
+  who,
+  demos,
+  onChange,
+  onDemo,
+}: {
+  value: Role;
+  who: string;
+  demos: DemoType[];
+  onChange: (r: Role) => void;
+  onDemo: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const demoOn = demos.find((d) => d.id === who && value === "staff");
+  const current = demoOn ?? ROLES.find((r) => r.key === value) ?? ROLES[0];
+
+  /* แตะนอกกล่องหรือกด Esc แล้วปิด */
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={box} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`บทบาท: ${current.en} ${current.label} — กดเพื่อเปลี่ยน`}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-white pr-2.5 pl-3.5 text-[12.5px] transition-colors hover:border-primary"
+      >
+        <span className="text-muted-foreground">Sign in as</span>
+        <b className="font-semibold text-primary">{current.en}</b>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className={`text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="เข้าใช้งานในบทบาท"
+          className="absolute top-[calc(100%+6px)] right-0 z-20 max-h-[min(420px,60vh)] w-[240px] list-none overflow-y-auto rounded-[14px] border border-border bg-white p-1.5 shadow-[0_18px_40px_-16px_rgba(120,20,35,.35)]"
+        >
+          {ROLES.map((r) => {
+            /* รายการ "พนักงาน" ไม่ติดสว่างตอนเลือกทดลองงาน/ฝึกงานอยู่ ไม่งั้นดูเหมือนเลือกสองอัน */
+            const on = r.key === value && !(r.key === "staff" && demos.some((d) => d.id === who));
+            return (
+              <li key={r.key} role="option" aria-selected={on}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(r.key);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left transition-colors ${
+                    on ? "bg-accent text-primary" : "hover:bg-muted"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <b className="block text-[13px] font-semibold">{r.en}</b>
+                    <span className="block text-[11.5px] font-medium opacity-75">{r.label}</span>
+                  </span>
+                  {on && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m5 12.5 4.5 4.5L19 7.5" />
+                    </svg>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+          {/* ทดลองงานกับฝึกงานไม่ใช่บทบาทแยก แต่เป็นประเภทการจ้างของ "พนักงาน"
+             กติกาวันลาและสลิปต่างกัน จึงต้องมีทางเข้าไปดูหน้าจอของคนกลุ่มนี้ (เจ้าของสั่ง 1 ต.ค. 2569) */}
+          {demos.map((d) => {
+            const on = value === "staff" && who === d.id;
+            return (
+              <li key={d.id} role="option" aria-selected={on}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDemo(d.id);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left transition-colors ${
+                    on ? "bg-accent text-primary" : "hover:bg-muted"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <b className="block text-[13px] font-semibold">{d.en}</b>
+                    <span className="block text-[11.5px] font-medium opacity-75">
+                      {d.label} · {d.name}
+                    </span>
+                  </span>
+                  {on && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m5 12.5 4.5 4.5L19 7.5" />
+                    </svg>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

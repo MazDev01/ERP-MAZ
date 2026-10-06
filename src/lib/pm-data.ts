@@ -180,6 +180,8 @@ export type InboxJob = {
   projectStart?: string;
   /** ชื่อโปรเจคที่ PM ตั้งตอนรับงาน (PM-BR-03) — ติดไปกับโปรเจคตอนยืนยันแผน */
   name?: string;
+  /** เอกสารอื่นที่ PM/GM แนบเพิ่มให้ทีมเห็น — ติดไปกับโปรเจคตอนยืนยันแผน (ยกมาจากระบบต้นฉบับ) */
+  docs?: ProjectDoc[];
   contact: string;
   phone: string;
   taxId: string;
@@ -508,6 +510,22 @@ export type Project = {
    * เก็บทุกครั้งที่โอน เพราะเป็นการเปลี่ยนตัวผู้รับผิดชอบ ต้องย้อนดูได้ว่าใครโอนให้ใครเพราะอะไร
    */
   transfers?: ProjectTransfer[];
+  /** เอกสารอื่นที่ PM/GM แนบเพิ่มให้ทีมเห็น นอกจากใบเสนอราคา/Proposal (ยกมาจากระบบต้นฉบับ) */
+  docs?: ProjectDoc[];
+};
+
+/*
+ * เอกสารแนบของโปรเจค (ยกมาจากระบบต้นฉบับ)
+ * เก็บชื่อกับขนาดเหมือนไฟล์แนบอื่นในระบบ · url มีเฉพาะที่แนบเป็นลิงก์ http(s)
+ */
+export type ProjectDoc = {
+  n: string;
+  sz: string;
+  /** ชื่อคนแนบ */
+  by: string;
+  /** "YYYY-MM-DD HH:mm" */
+  at: string;
+  url?: string;
 };
 
 export type ProjectTransfer = {

@@ -19,6 +19,7 @@ import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
 import { latestRound, roundStatus, useClientReviews } from "@/lib/client-review-store";
 import { ClientFeedbackSheet, ClientRoundChip, ClientSendSheet } from "./client-review-pm";
 import { ProjectChat } from "./project-chat";
+import { AddDocButton, AddDocsDialog, docSub, RemoveDocDialog } from "./pm-project-tools";
 import { useHydrated } from "@/lib/pwa";
 import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
@@ -450,7 +451,12 @@ function sdocKind(k: SalesDoc["k"]) {
 
 function SalesDocs({ project }: { project: Project }) {
   const crm = useCrm();
+  const ro = usePmReadOnly();
   const [open, setOpen] = useState<SalesDoc | null>(null);
+  /* เอกสารอื่นที่ PM/GM แนบเพิ่มให้ทีมเห็น (ยกมาจากระบบต้นฉบับ) */
+  const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const extra = project.docs ?? [];
 
   /* ชุดเดียวกับหน้าขายและคำขอก่อนการขาย — ใบเสนอราคา · สัญญา · ข้อเสนอทุกรอบ · ไฟล์จากลูกค้า */
   const deal = crm.deals.find((d) => d.no === project.deal);
@@ -506,9 +512,38 @@ function SalesDocs({ project }: { project: Project }) {
 
   return (
     <section>
-      <BlockTitle count={String(list.length)}>เอกสารจากฝ่ายขาย</BlockTitle>
+      <div className="flex items-start justify-between gap-2">
+        <BlockTitle count={String(list.length + extra.length)}>เอกสารจากฝ่ายขาย</BlockTitle>
+        {!ro && <AddDocButton className="h-7 px-2 max-sm:h-9" onClick={() => setAdding(true)} />}
+      </div>
       <ul className="overflow-hidden rounded-[14px] border border-border bg-card">
-        {list.length === 0 ? (
+        {extra.map((d) => (
+          <FileRow
+            key={`x-${d.n}`}
+            kind={d.url ? "link" : "pdf"}
+            name={d.n}
+            sub={["เอกสารแนบของโปรเจค", docSub(d)]}
+            tag={d.url ? "ลิงก์" : "เอกสารแนบ"}
+          >
+            {d.url ? (
+              <a href={d.url} target="_blank" rel="noreferrer" className="btn glass-thin h-7 px-2.5 text-[11.5px] max-sm:h-9 max-sm:px-3">
+                เปิด
+              </a>
+            ) : (
+              <span className="text-[11.5px] text-muted-foreground">แนบไว้ให้ทีม</span>
+            )}
+            {!ro && (
+              <button
+                type="button"
+                className="btn glass-thin h-7 px-2.5 text-[11.5px] text-destructive max-sm:h-9 max-sm:px-3"
+                onClick={() => setRemoving(d.n)}
+              >
+                เอาออก
+              </button>
+            )}
+          </FileRow>
+        ))}
+        {list.length === 0 && extra.length === 0 ? (
           <li className="px-3.5 py-3 text-[12.5px] text-muted-foreground">ยังไม่มีเอกสารจากฝ่ายขาย</li>
         ) : (
           list.map((x, i) => {
@@ -535,6 +570,9 @@ function SalesDocs({ project }: { project: Project }) {
           })
         )}
       </ul>
+
+      {adding && <AddDocsDialog deal={project.deal} onClose={() => setAdding(false)} />}
+      <RemoveDocDialog deal={project.deal} name={removing} onClose={() => setRemoving(null)} />
 
       {open?.open.t === "quo" && (
         <Sheet
