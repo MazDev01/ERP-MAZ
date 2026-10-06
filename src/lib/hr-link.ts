@@ -36,6 +36,7 @@ import {
   type PayGroup,
   type TimeRec,
 } from "./hr-data";
+import { useStaffEmployeeId } from "./staff-identity";
 import { useCrm } from "./crm-store";
 import { claimTotal, fuelTotal } from "./expense-data";
 import { useAllClaims } from "./expense-store";
@@ -458,6 +459,9 @@ export function usePayrollVoidWatch() {
 export function useMyRoles(): Role[] {
   const role = useRole();
   const hr = useHr();
+  /* บทบาทพนักงานสลับคนได้ตอนเข้าระบบ — บัญชีที่ใช้คือของคนที่เลือกไว้ ไม่ใช่คนตั้งต้นของบทบาท */
+  const staffId = useStaffEmployeeId();
+  const myId = role === "staff" ? staffId : ROLE_EMPLOYEE[role];
   return useMemo(() => {
     /* ผู้ดูแลระบบเป็นบัญชีแยก (เจ้าของสั่ง 25 ก.ย. 2569) — ผู้บริหารไม่ได้ถือสิทธิ์นี้แล้ว
        เมนูตั้งค่าจึงไม่ติดไปอยู่ในเมนูของผู้บริหารอีก
@@ -465,13 +469,13 @@ export function useMyRoles(): Role[] {
        บทบาทนี้ไม่มีกลุ่ม "ของฉัน" (NO_MINE) ถ้าดึงบทบาทฝ่ายบุคคลมาต่อ ใบลา/โอที/ใบเบิกของอรอนงค์
        จะมีสองชุดแยกตามการ์ดที่ใช้เข้าระบบ เพราะสโตร์ส่วนตัวแยกตามบทบาท (ดู role-store.ts) */
     /* บทบาทเดียวกันอาจมีหลายคนถือ (เช่น ฝ่ายบุคคลสองคน) — ยึดบัญชีของคนที่ล็อกอินอยู่ก่อน */
-    const me = hr.emp.find((e) => e.id === ROLE_EMPLOYEE[role]);
+    const me = hr.emp.find((e) => e.id === myId);
     const acc = accountRoles(me?.account).includes(role)
       ? me?.account
       : hr.emp.find((e) => accountRoles(e.account).includes(role))?.account;
     const roles = accountRoles(acc);
     return roles.length > 1 ? [role, ...roles.filter((r) => r !== role)] : [role];
-  }, [hr.emp, role]);
+  }, [hr.emp, role, myId]);
 }
 
 export function usePendingRequests(c: Cycle) {

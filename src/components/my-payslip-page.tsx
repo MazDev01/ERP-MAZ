@@ -35,6 +35,7 @@ import { countDownload, countView, useHr } from "@/lib/hr-store";
 import { ROLE_EMPLOYEE, useComSource, useHrTime } from "@/lib/hr-link";
 import { downloadCsv, toCsv } from "@/lib/report-export";
 import { useRole } from "@/lib/role";
+import { useStaffEmployeeId } from "@/lib/staff-identity";
 import { Sheet } from "./lead-dialogs";
 import { PhoneCard, PhoneList } from "./acchr-phone";
 
@@ -48,8 +49,11 @@ export function MyPayslipPage() {
   const role = useRole();
   const [open, setOpen] = useState<string | null>(null);
 
-  /* บทบาทที่ยังไม่ได้ผูกกับทะเบียนพนักงานจะไม่มีสลิป (ดู ROLE_EMPLOYEE) */
-  const myId = ROLE_EMPLOYEE[role];
+  /* บทบาทที่ยังไม่ได้ผูกกับทะเบียนพนักงานจะไม่มีสลิป (ดู ROLE_EMPLOYEE)
+     บทบาทพนักงานสลับคนได้ตอนเข้าระบบ จึงต้องยึดคนที่เลือกไว้ ไม่ใช่คนตั้งต้นของบทบาท
+     ไม่งั้นพนักงานจะเห็นเงินเดือนของคนอื่นเป็นของตัวเอง */
+  const staffId = useStaffEmployeeId();
+  const myId = role === "staff" ? staffId : ROLE_EMPLOYEE[role];
   const me = myId ? hr.emp.find((e) => e.id === myId) : undefined;
 
   const rows: Row[] = [];
