@@ -113,6 +113,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const items = navItemsOf(roles, access, route, empType);
   const groups = navGroupsOf(roles);
   const current = findItem(pathname, role);
+  /* หน้านี้มีเมนูของตัวเองในแถบข้างไหม — ใช้ตัดสินว่าจะไฮไลต์เมนูไหน */
+  const ownMenu = items.some((i) => i.href === pathname);
   const title = pageTitle(pathname, role);
   /* บทบาทอ่านจาก localStorage ฝั่งเซิร์ฟเวอร์ยังไม่รู้ จึงเช็คสิทธิ์หลัง hydrate เท่านั้น
      ไม่งั้น PM จะเห็นหน้ากันแวบหนึ่งทุกครั้งที่รีเฟรช เพราะค่าเริ่มต้นฝั่งเซิร์ฟเวอร์เป็นฝ่ายขาย */
@@ -280,8 +282,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         {/* หัวแถบ — เวิร์ดมาร์กอย่างเดียวตามดีไซน์ บทบาทไปอยู่ในเมนูผู้ใช้มุมขวาบนแทน */}
         {newMobile ? (
-          /* หัวแถบของพนักงาน — เวิร์ดมาร์กอย่างเดียวตามดีไซน์ */
-          <div className="flex flex-none items-center px-5 py-5">
+          /* หัวแถบ — เวิร์ดมาร์กอย่างเดียวตามดีไซน์ · อยู่กึ่งกลางแถบซ้ายตามระบบต้นฉบับ (เดิมชิดซ้ายเกินไป) */
+          <div className="flex flex-none items-center justify-center px-5 py-5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/maz-logo.png" alt="MAZ" className="h-[26px] w-auto" />
           </div>
@@ -318,7 +320,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="side-group first:pt-0">{group}</p>
               {list.map((item) => {
                 const ItemIcon = ICONS[item.icon];
-                const active = (current?.parent ?? current?.href) === item.href;
+                /* หน้าที่มีเมนูของตัวเอง (เช่น /ot) ไฮไลต์เมนูนั้น ไม่ใช่เมนูแม่ที่ใช้ตอนกดย้อนกลับ
+                   หน้าที่ไม่มีเมนูของตัวเอง (เช่น /leads/<รหัส>) จึงค่อยไฮไลต์เมนูแม่ (เจ้าของแจ้ง 6 ต.ค. 2569) */
+                const active = ownMenu ? current?.href === item.href : (current?.parent ?? current?.href) === item.href;
                 /* เมนูย่อยกางอยู่เป็นค่าตั้งต้น · กดชื่อเมนูที่เปิดอยู่ซ้ำ = หุบ กดอีกทีกางกลับ
                    (เจ้าของสั่ง 6 ต.ค. 2569 เอาปุ่มลูกศรออก) */
                 const open = active && item.sub && !folded[item.href];

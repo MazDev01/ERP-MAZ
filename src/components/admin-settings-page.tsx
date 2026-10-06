@@ -16,7 +16,6 @@ import { AdminLeavePage } from "./admin-leave-page";
 import { AdminHolidaysPage } from "./admin-holidays-page";
 import { AdminAttendancePage } from "./admin-attendance-page";
 import { AdminRatesPage } from "./admin-rates-page";
-import { AdminBotnavPage } from "./admin-botnav-page";
 import { AdminCompanyPage } from "./admin-company-page";
 
 type SecKey = SettingsKey;
@@ -29,8 +28,6 @@ function Section({ sec }: { sec: SecKey }) {
       return <AdminPositionsPage />;
     case "services":
       return <AdminOptionsPage only="services" />;
-    case "botnav":
-      return <AdminBotnavPage />;
     case "leave":
       return <AdminLeavePage />;
     case "holidays":

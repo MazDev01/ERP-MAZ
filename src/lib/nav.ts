@@ -61,7 +61,6 @@ export const SETTINGS_SECTIONS = [
   { key: "master", label: "ข้อมูลหลัก", group: "ข้อมูลองค์กร" },
   { key: "positions", label: "ตำแหน่งและสายอนุมัติ", group: "ข้อมูลองค์กร" },
   { key: "services", label: "บริการ", group: "ข้อมูลองค์กร" },
-  { key: "botnav", label: "แถบเมนูล่างบนมือถือ", group: "ข้อมูลองค์กร" },
   { key: "leave", label: "ประเภทการลา", group: "การลาและเวลา" },
   { key: "holidays", label: "วันหยุดบริษัท", group: "การลาและเวลา" },
   { key: "attendance", label: "เวลาทำงานและจุดลงเวลา", group: "การลาและเวลา" },
