@@ -9,11 +9,11 @@
  * รายการกลาง คำขอทุกประเภทอยู่หน้าเดียว กรองด้วยประเภท (แท็บ) สถานะ และคำค้น
  * เรียงเก่าสุดขึ้นก่อนเพราะรอมานานกว่า
  *
- * ตาราง 3 คอลัมน์ ผู้ขอ · คำขอ · ส่งเมื่อ — กดที่ไหนในแถวก็เปิดรายละเอียด (ไม่มีคอลัมน์ปุ่ม)
+ * ตาราง 4 คอลัมน์ ผู้ขอ · คำขอ · วันที่ส่ง · ส่งเมื่อ — กดที่ไหนในแถวก็เปิดรายละเอียด (ไม่มีคอลัมน์ปุ่ม)
  * การตัดสินอยู่ในกล่องเดียว: อนุมัติ = บันทึกทันที · ไม่อนุมัติ = กดครั้งแรกเปิดช่องเหตุผล กดอีกครั้งถึงบันทึก
  * คำขอที่ตัดสินแล้วเปิดดูย้อนหลังได้อย่างเดียว ไม่มีปุ่มตัดสิน
  *
- * PM / GM เห็นคำขอของพนักงานที่ยังไม่มีบัญชีเข้าระบบด้วย (emp-requests ที่ to ตรงกับบทบาท)
+ * PM / GM เห็นคำขอของทีมงานที่ยังไม่มีบัญชีเข้าระบบด้วย (emp-requests ที่ to ตรงกับบทบาท)
  * ชื่อและตำแหน่งของผู้ขออ่านจากทะเบียนฝ่ายบุคคล
  *
  * ⚠️ คิวเป็นของ "คน" ไม่ใช่ของบทบาทที่เลือกอยู่ (ผู้ใช้สั่ง 23 ก.ย. 2569)
@@ -31,7 +31,7 @@ import { useMemo, useState } from "react";
 import { decideEmpRequest, empFuelKm, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
 import { claimTotal, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
 import { hrPos } from "@/lib/hr-data";
-import { hrSnapshot, useHr } from "@/lib/hr-store";
+import { useHr } from "@/lib/hr-store";
 import { approveClaim, rejectClaim, useAllClaims } from "@/lib/expense-store";
 import { baht, daysBetween, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
 import { type LeaveRecord } from "@/lib/leave-data";
@@ -48,22 +48,25 @@ import {
 import { USERS } from "@/lib/mock-data";
 import { type OtRecord } from "@/lib/ot-data";
 import { approveOt, rejectOt, useAllOt } from "@/lib/ot-store";
-import { ROLES, approvesFor, roleLabel, useApprovalRoute, type Role } from "@/lib/role";
+import { approvesFor, roleLabel, useApprovalRoute, type Role } from "@/lib/role";
 import { useMyRoles } from "@/lib/hr-link";
 import { useSearchParams } from "next/navigation";
 import { formatMinutesOfDay, minutesOfDay } from "@/lib/work-schedule";
-import { ClockIcon, LeaveIcon, ReceiptIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
-import { OtActualFields, useOtDecision, type OtReq } from "./ot-actual-fields";
+import { OT_MIN_HOURS, OtActualFields, useOtDecision, type OtReq } from "./ot-actual-fields";
 import { SearchBox } from "./sales-ui";
+import { EyeIcon } from "./icons";
 
 type Kind = "leave" | "ot" | "expense";
 type Status = "pending" | "approved" | "rejected";
 
+/** คำขอหนึ่งใบ — ใช้ร่วมกับหน้าคำขออนุมัติของ CEO (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+export type ApprovalRequest = Request;
+
 /** คำขอหนึ่งใบ — รวมสามประเภทให้อยู่ในรูปเดียวกัน */
 type Request = {
   kind: Kind;
-  /** role = ใบของบทบาทที่ล็อกอินได้ (leave/ot/expense-store) · emp = คำขอของพนักงานตามรหัสพนักงาน */
+  /** role = ใบของบทบาทที่ล็อกอินได้ (leave/ot/expense-store) · emp = คำขอของทีมงานตามรหัสพนักงาน */
   src: "role" | "emp";
   /** บทบาทผู้ยื่น — เฉพาะ src = role */
   role?: Role;
@@ -74,6 +77,8 @@ type Request = {
   sub: string;
   /** id ของใบลา/โอที หรือเดือนของใบเบิก */
   key: string;
+  /** รหัสที่ลิงก์ ?req= ของหน้า CEO ใช้ (ใบเบิก = บทบาท-เดือน) — ไม่มีใช้ key (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  ref?: string;
   /** เลขที่เอกสาร (LV-/OT-/EX-) — เอกสารที่ใช้เบิกเงินต้องอ้างอิงได้ */
   no: string;
   status: Status;
@@ -113,18 +118,9 @@ const KIND: Record<Kind, string> = {
   expense: "เบิกค่าใช้จ่าย",
 };
 
-/** ชื่อประเภทบนการ์ดมือถือ */
-const KIND_LABEL: Record<Kind, string> = { leave: "การลา", ot: "ขอโอที", expense: "เบิกค่าใช้จ่าย" };
-/** สีป้ายประเภท — ชุดเดียวกับ .t-lv .t-ot .t-ex ของต้นแบบ */
-const KIND_TAG: Record<Kind, string> = { leave: "t-leave", ot: "t-early", expense: "t-ok" };
-/** วงกลมไอคอนหน้าการ์ด — สีตามประเภทคำขอ (ต้นแบบ pm-approvals.html) */
-const KIND_SKIN: Record<Kind, { box: string; icon: typeof ClockIcon }> = {
-  leave: { box: "bg-[#E8F0FC] text-[#1A5DB5]", icon: LeaveIcon },
-  ot: { box: "bg-[#ECE6FA] text-[#4E35A8]", icon: ClockIcon },
-  expense: { box: "bg-[#FDEDD6] text-[#94500A]", icon: ReceiptIcon },
-};
+type Tab = { key: "all" | Kind; label: string };
 
-const TABS: { key: "all" | Kind; label: string }[] = [
+export const TABS: Tab[] = [
   { key: "all", label: "ทั้งหมด" },
   { key: "leave", label: "ลา" },
   { key: "ot", label: "โอที" },
@@ -160,15 +156,7 @@ export function ApprovalsPage() {
   const hr = useHr();
   /* ลิงก์จาก LINE พามาที่แท็บและรายการที่ต้องตัดสิน — /approvals?kind=leave&find=LV-2569-0123 */
   const params = useSearchParams();
-  const wantKind = params.get("kind");
   const findId = params.get("find") ?? "";
-  const [tab, setTab] = useState<"all" | Kind>(
-    wantKind === "leave" || wantKind === "ot" || wantKind === "expense" ? wantKind : "all",
-  );
-  const [status, setStatus] = useState<Status | "">("pending");
-  const [q, setQ] = useState("");
-  const [viewing, setViewing] = useState<Request | null>(null);
-  const today = todayIso();
 
   /** คำขอประเภทไหนของใครบ้างที่เราต้องอนุมัติ — รวมทุกบทบาทที่ถืออยู่ · ว่างแปลว่าไม่ได้เป็นผู้อนุมัติของใคร */
   const route = useApprovalRoute();
@@ -187,7 +175,7 @@ export function ApprovalsPage() {
 
   const all = useMemo(() => {
     const out: Request[] = [];
-    /* ใครไม่อยู่วันไหนบ้างทั้งบริษัท — ใบลาของทุกบทบาท บวกคำขอลาของพนักงานที่ยังไม่มีบัญชี
+    /* ใครไม่อยู่วันไหนบ้างทั้งบริษัท — ใบลาของทุกบทบาท บวกคำขอลาของทีมงานที่ยังไม่มีบัญชี
        ถ้าเอาแค่ฝั่งเดียว ผู้อนุมัติจะเห็นครึ่งเดียวแล้วอนุมัติจนไม่เหลือคน */
     const spans: AwaySpan[] = [
       ...awaySpans(leaves),
@@ -202,32 +190,17 @@ export function ApprovalsPage() {
           pending: r.status === "pending",
         })),
     ];
-    /*
-     * ใบลาของนักศึกษาฝึกงานขึ้นที่ฝ่ายบุคคล ไม่ใช่สายอนุมัติปกติ
-     * (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 — ฝึกงานลากับฝ่ายบุคคล)
-     * ดูจากชื่อผู้ยื่นเทียบทะเบียน เพราะบทบาทพนักงานมีได้หลายคนหลายประเภทการจ้าง
-     */
-    const isIntern = (name: string) =>
-      hr.emp.some((e) => e.name === name && e.type === "intern");
     for (const { kind, from, as } of duties) {
       /* ใบลาที่ยกเลิกแล้วไม่เข้าคิวอนุมัติ แต่ยังอยู่ในระบบเป็นประวัติ */
       if (kind === "leave")
         for (const v of leaves[from])
-          if (v.status !== "ยกเลิก" && !isIntern(v.employee))
-            out.push(fromLeave(from, v, as, leaves[from], spans));
+          if (v.status !== "ยกเลิก") out.push(fromLeave(from, v, as, leaves[from], spans));
       if (kind === "ot")
         for (const v of ots[from]) if (v.status !== "ยกเลิก") out.push(fromOt(from, v, as));
       if (kind === "expense")
         for (const v of claims[from]) if (v.status !== "ร่าง") out.push(fromClaim(from, v, as));
     }
-    /* ฝ่ายบุคคลรับใบลาของนักศึกษาฝึกงานทุกคน ไม่ว่าสายอนุมัติปกติจะเป็นใคร */
-    if (myRoles.includes("hr"))
-      for (const role of ROLES.map((r) => r.key))
-        for (const v of leaves[role])
-          if (v.status !== "ยกเลิก" && isIntern(v.employee))
-            out.push(fromLeave(role, v, "hr", leaves[role], spans));
-
-    /* คิวของ PM / GM — คำขอของพนักงานตามรหัสพนักงาน (ต้นแบบ PM_APPROVALS · gm-approvals) */
+    /* คิวของ PM / GM — คำขอของทีมงานตามรหัสพนักงาน (ต้นแบบ PM_APPROVALS · gm-approvals) */
     for (const as of myRoles) {
       if (as !== "pm" && as !== "gm") continue;
       for (const r of extra) {
@@ -242,6 +215,7 @@ export function ApprovalsPage() {
   if (duties.length === 0 && all.length === 0) {
     return (
       <div className="space-y-4">
+        <Head />
         <section className="panel glass px-5 py-12 text-center text-[13.5px] text-muted-foreground">
           บทบาท{myRoles.map(roleLabel).join(" และ ")}ไม่ได้เป็นผู้อนุมัติของใคร
         </section>
@@ -258,6 +232,62 @@ export function ApprovalsPage() {
     const k = t.key;
     return myRoles.some((r) => !ROLE_TABS[r] || ROLE_TABS[r]!.includes(k)) || all.some((r) => r.kind === k);
   });
+
+  return (
+    <div className="space-y-4">
+      <Head />
+      <ApprovalsBoard all={all} tabs={tabs} multi={multi} findId={findId} />
+    </div>
+  );
+}
+
+/**
+ * แถบแท็บ ตัวกรอง ตาราง/รายการมือถือ และกล่องรายละเอียด — ใช้ทั้งหน้า /approvals และ /ceo/approvals?k=time
+ * (ผู้ใช้สั่ง 5 ต.ค. 2569) หน้าที่เรียกเป็นคนรวบรวมคิวของตัวเองมาให้ (all) ส่วนนี้ไม่รู้ว่าใครเป็นผู้อนุมัติ
+ *
+ * fixedOt = ผู้ตัดสินแก้ชั่วโมงโอทีไม่ได้ (CEO) — อนุมัติเท่าที่ขอทันที ไม่มีช่องกรอกชั่วโมง
+ * openId  = ลิงก์ ?req= — เปิดรายละเอียดของใบนั้นให้เลยเมื่อคิวโหลดเสร็จ
+ */
+export function ApprovalsBoard({
+  all,
+  tabs,
+  multi = false,
+  findId = "",
+  openId = "",
+  fixedOt = false,
+}: {
+  all: Request[];
+  tabs: Tab[];
+  multi?: boolean;
+  findId?: string;
+  openId?: string;
+  fixedOt?: boolean;
+}) {
+  /* ลิงก์จาก LINE พามาที่แท็บที่ต้องตัดสิน — ?kind=leave */
+  const params = useSearchParams();
+  const wantKind = params.get("kind");
+  const [tab, setTab] = useState<"all" | Kind>(
+    wantKind === "leave" || wantKind === "ot" || wantKind === "expense" ? wantKind : "all",
+  );
+  const [status, setStatus] = useState<Status | "">("pending");
+  const [q, setQ] = useState("");
+  const [viewing, setViewing] = useState<Request | null>(null);
+  /* กล่องรายละเอียดเปิดมาเพื่ออะไร — ดูอย่างเดียว · ใส่เหตุผลไม่อนุมัติ · ยืนยันชั่วโมงโอทีก่อนอนุมัติ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  const [mode, setMode] = useState<"view" | "reject" | "approve">("view");
+  const today = todayIso();
+
+  /* ?req= เปิดรายละเอียดของใบนั้นครั้งเดียว — คิวอ่านจาก localStorage จึงรอจนเจอใบก่อน
+     ปรับสถานะระหว่างเรนเดอร์ ไม่ใช่ใน effect (กฎ react-hooks ของโปรเจคนี้ห้าม setState ใน effect) */
+  const [opened, setOpened] = useState("");
+  const hitOpen = openId && opened !== openId ? all.find((r) => sameId(r, openId)) : undefined;
+  if (hitOpen) {
+    setOpened(openId);
+    /* ใบที่ตัดสินแล้วต้องเห็นในรายการด้วย — ขยายตัวกรองเป็นทุกสถานะ */
+    if (hitOpen.status !== "pending") setStatus("");
+    setMode("view");
+    setViewing(hitOpen);
+  }
+
   /* ?kind= ชี้ไปแท็บที่บทบาทนี้ไม่มี — กลับไปแท็บทั้งหมด */
   const cur = tabs.some((t) => t.key === tab) ? tab : "all";
   const byStatus = all.filter((r) => !status || r.status === status);
@@ -269,9 +299,55 @@ export function ApprovalsPage() {
       (!term || `${r.no} ${r.name} ${r.topic} ${r.line}`.toLowerCase().includes(term)),
   );
 
-  return (
-    <div className="space-y-4">
+  /* ปุ่มตัดสินในรายการ — ใช้กติกาเดียวกับกล่องรายละเอียด (ผู้ใช้สั่ง 5 ต.ค. 2569)
+     ไม่อนุมัติต้องมีเหตุผล → เปิดกล่องที่ช่องเหตุผล · โอทีที่ต้องเทียบเวลาตอกบัตร → เปิดกล่องให้ยืนยันชั่วโมงก่อน */
+  const open = (item: Request, m: "view" | "reject" | "approve" = "view") => {
+    setMode(m);
+    setViewing(item);
+  };
+  const quickApprove = (item: Request) => {
+    /* CEO แก้ชั่วโมงโอทีไม่ได้ — อนุมัติเท่าที่ขอทันที ไม่ผ่านขั้นยืนยันชั่วโมง (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+    if (item.kind === "ot" && fixedOt) return applyDecision(item, true, "", item.hours ?? 0);
+    if (item.kind === "ot" && item.ot) return open(item, "approve");
+    applyDecision(item, true, "");
+  };
+  /* ชั่วโมงที่ขอต่ำกว่าขั้นต่ำ — อนุมัติเท่าที่ขอไม่ได้ ต้องไม่อนุมัติ (กติกาเดิมของหน้า CEO) */
+  const cannotApprove = (item: Request) => fixedOt && item.kind === "ot" && (item.hours ?? 0) < OT_MIN_HOURS;
+  const decide = (item: Request, big: boolean) => (
+    <>
+      <button
+        type="button"
+        className={`btn justify-center border border-[rgba(192,18,31,.35)] bg-transparent !text-destructive hover:!border-destructive hover:bg-[var(--destructive-soft)] ${big ? "h-10 w-full rounded-[10px]" : "h-[30px] px-3"}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          open(item, "reject");
+        }}
+      >
+        ไม่อนุมัติ
+      </button>
+      <button
+        type="button"
+        className={`btn solid justify-center !bg-[#14875A] !text-white hover:!bg-[#0F7049] disabled:opacity-40 ${big ? "h-10 w-full rounded-[10px]" : "h-[30px] px-3"}`}
+        disabled={cannotApprove(item)}
+        title={
+          cannotApprove(item)
+            ? `ชั่วโมงที่ขอต่ำกว่าขั้นต่ำ ${OT_MIN_HOURS.toFixed(2)} ชม. — อนุมัติไม่ได้`
+            : item.kind === "ot" && item.ot && !fixedOt
+              ? "เปิดรายละเอียดเพื่อยืนยันชั่วโมงโอทีก่อนอนุมัติ"
+              : undefined
+        }
+        onClick={(e) => {
+          e.stopPropagation();
+          quickApprove(item);
+        }}
+      >
+        อนุมัติ
+      </button>
+    </>
+  );
 
+  return (
+    <>
       {/* แถบแท็บและตัวกรองอยู่นอกการ์ดตาราง ตามต้นแบบ (.apbar) */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="tabs">
@@ -289,13 +365,13 @@ export function ApprovalsPage() {
         {/* มือถือ: ช่องค้นหากับตัวกรองสถานะอยู่แถวเดียวกัน ค้นหากินที่ที่เหลือ */}
         <div className="flex w-full flex-wrap items-center gap-2.5 max-sm:flex-nowrap sm:ml-auto sm:w-auto sm:flex-nowrap">
           <div className="w-full max-sm:min-w-0 max-sm:flex-1 sm:w-[260px]">
-            <SearchBox className="max-sm:h-[46px] max-sm:rounded-full!" value={q} onChange={setQ} placeholder="ค้นหาผู้ขอหรือรายละเอียด" />
+            <SearchBox value={q} onChange={setQ} placeholder="ค้นหาผู้ขอหรือรายละเอียด" />
           </div>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as Status | "")}
             aria-label="กรองตามสถานะ"
-            className="field-control h-9 !w-[150px] flex-none cursor-pointer pr-8 text-[13px] max-sm:h-[46px] max-sm:rounded-full! max-sm:!w-[124px]"
+            className="field-control h-9 !w-[150px] flex-none cursor-pointer pr-8 text-[13px] max-sm:h-10 max-sm:!w-[124px]"
           >
             {STATUS_OPTS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -306,84 +382,60 @@ export function ApprovalsPage() {
         </div>
       </div>
 
-      {/* มือถือ: การ์ดละคำขอ (ต้นแบบ pm-approvals.html 2 ต.ค. 2569)
-          วงกลมไอคอนตามประเภทซ้าย · ชื่อ-ตำแหน่ง กับป้ายประเภทแถวบน · สรุปคำขอ · เส้นประ · วันที่รอกับปุ่มดูคำขอ */}
-      <section className="sm:hidden">
+      {/* มือถือ: แถวละคำขอ กดทั้งแถวเปิดรายละเอียด ชื่อผู้ขอกับเรื่องที่ขออยู่ซ้าย รอมากี่วันอยู่ขวา */}
+      <section className="panel glass sm:hidden">
         {rows.length === 0 ? (
-          <p className="rounded-[20px] bg-card px-5 py-10 text-center text-[13px] text-muted-foreground shadow-[0_1px_2px_rgb(40_20_25/0.04)]">
-            ไม่มีคำขอตามเงื่อนไขที่เลือก
-          </p>
+          <p className="py-[30px] text-center text-[13px] text-muted-foreground">ไม่มีคำขอตามเงื่อนไขที่เลือก</p>
         ) : (
-          <ul className="flex flex-col gap-2.5">
+          <ul className="divide-y divide-border">
             {rows.map((item) => {
               const wait = daysBetween(item.at.split(" ")[0], today);
               const hot = wait >= WAIT_HOT && item.status === "pending";
-              const hit = Boolean(findId) && item.key === findId;
-              const skin = KIND_SKIN[item.kind];
-              const Glyph = skin.icon;
+              const hit = sameId(item, findId);
               return (
                 <li key={`${item.kind}-${item.src}-${item.role ?? ""}-${item.key}`}>
                   <button
                     type="button"
                     aria-label={`เปิดคำขอของ ${item.name}`}
-                    onClick={() => setViewing(item)}
-                    className={`block w-full rounded-[20px] bg-card p-3.5 text-left shadow-[0_1px_2px_rgb(40_20_25/0.04)] active:bg-[#FBF5F4] ${
+                    onClick={() => open(item)}
+                    className={`flex min-h-[64px] w-full items-center gap-3 px-4 py-3 text-left active:bg-muted ${
                       hit ? "ring-2 ring-primary ring-inset" : ""
                     }`}
                   >
-                    <span className="flex gap-3">
-                      <span className={`grid size-10 flex-none place-items-center rounded-full ${skin.box}`}>
-                        <Glyph className="size-5" strokeWidth={2} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-start gap-2">
-                          <span className="min-w-0 flex-1">
-                            <b className="block truncate text-[15px] font-bold">{item.name}</b>
-                            <em className="block truncate text-[12px] text-muted-foreground not-italic">{item.sub}</em>
-                          </span>
-                          <span className={`tag shrink-0 ${KIND_TAG[item.kind]}`}>
-                            <i />
-                            {KIND_LABEL[item.kind]}
-                          </span>
-                        </span>
-                        {/* สรุปคำขอบรรทัดเดียวตามต้นแบบ — ประเภท ช่วงวัน และยอดรวม */}
-                        <span className="mt-1 block text-[13px] leading-snug text-[#6E6164]">
-                          {item.lines.length ? item.lines.join(" ") : item.topic}
-                          {cutHours(item) != null && (
-                            <span className="text-[11.5px]"> · อนุมัติ {cutHours(item)?.toFixed(2)} ชม.</span>
-                          )}
-                        </span>
+                    <span className="min-w-0 flex-1">
+                      <b className="block truncate text-[14px] font-semibold">{item.name}</b>
+                      <span className="block truncate text-[11.5px] text-muted-foreground">{item.sub}</span>
+                      <span className="mt-1 block text-[13px] leading-snug">
+                        {item.topic}
+                        {cutHours(item) != null && (
+                          <span className="text-[11.5px] text-muted-foreground"> · อนุมัติ {cutHours(item)?.toFixed(2)} ชม.</span>
+                        )}
                         {multi && (
                           <span className="block truncate text-[11.5px] text-muted-foreground">
                             มาถึงคุณในฐานะ {roleLabel(item.as)}
                           </span>
                         )}
-                        {/* เลขที่เอกสาร — เอกสารที่ใช้เบิกเงินต้องอ้างอิงได้ */}
-                        {item.no && (
-                          <span className="num block truncate text-[11.5px] text-muted-foreground">{item.no}</span>
-                        )}
+                        {/* ไม่แสดงรหัสคำขอในรายการ — ดูได้ในรายละเอียด (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                        <span className="num block truncate text-[11.5px] text-muted-foreground">
+                          ส่ง {thaiDate(item.at.split(" ")[0])}
+                        </span>
                       </span>
                     </span>
-
-                    <span className="mt-2 block border-t border-dashed border-[#ECE3E5]" />
-
-                    <span className="mt-2.5 flex items-center gap-3">
-                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] font-semibold text-[#6E6164]">
-                        <ClockIcon className="size-3.5 flex-none text-muted-foreground" strokeWidth={2.2} />
-                        <span className="num">
-                          {wait <= 0 ? "วันนี้" : wait === 1 ? "เมื่อวาน" : `${wait} วันก่อน`}
-                        </span>
-                        {hot && (
-                          <em className="num text-[11.5px] font-semibold text-destructive not-italic">
-                            รอมาแล้ว {wait} วัน
-                          </em>
-                        )}
-                      </span>
-                      <span className="grid h-9 flex-none place-items-center rounded-[10px] bg-primary px-3.5 text-[13px] font-bold text-primary-foreground">
-                        ดูคำขอ
-                      </span>
+                    <span
+                      className={`flex-none text-right text-[12px] whitespace-nowrap ${
+                        hot ? "font-semibold text-destructive" : "text-muted-foreground"
+                      }`}
+                    >
+                      {wait <= 0 ? "วันนี้" : wait === 1 ? "เมื่อวาน" : `${wait} วันก่อน`}
+                    </span>
+                    <span aria-hidden className="flex-none text-[18px] leading-none text-muted-foreground">
+                      ›
                     </span>
                   </button>
+                  {/* ปุ่มตัดสินใต้รายการที่รออนุมัติ (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                  {item.status === "pending" && (
+                    <div className="grid grid-cols-2 gap-2.5 px-4 pb-3">{decide(item, true)}</div>
+                  )}
                 </li>
               );
             })}
@@ -393,18 +445,22 @@ export function ApprovalsPage() {
 
       <section className="panel glass flex flex-col max-sm:hidden">
         <div className="scroll-stable min-h-0 flex-1 overflow-auto">
-          <table className="data-table cards-sm min-w-[560px]">
+          <table className="data-table cards-sm min-w-[820px]">
             <thead>
               <tr>
                 <th style={{ width: 210 }}>ผู้ขอ</th>
                 <th>คำขอ</th>
+                {/* วันที่ส่งแยกคอลัมน์ · ไม่แสดงรหัสคำขอ (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                <th style={{ width: 140 }}>วันที่ส่ง</th>
                 <th style={{ width: 130 }}>ส่งเมื่อ</th>
+                {/* คอลัมน์ปุ่ม: ดูรายละเอียด · ไม่อนุมัติ · อนุมัติ (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                <th style={{ width: 260 }} aria-label="จัดการ" />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="py-[30px] text-center text-muted-foreground">
+                  <td colSpan={5} className="py-[30px] text-center text-muted-foreground">
                     ไม่มีคำขอตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
@@ -412,7 +468,7 @@ export function ApprovalsPage() {
                 rows.map((item) => {
                   const wait = daysBetween(item.at.split(" ")[0], today);
                   const hot = wait >= WAIT_HOT && item.status === "pending";
-                  const hit = Boolean(findId) && item.key === findId;
+                  const hit = sameId(item, findId);
                   return (
                     <tr
                       key={`${item.kind}-${item.src}-${item.role ?? ""}-${item.key}`}
@@ -420,11 +476,12 @@ export function ApprovalsPage() {
                       style={{ cursor: "pointer" }}
                       aria-label={`เปิดคำขอของ ${item.name}`}
                       className={`hover:[&>td]:bg-[rgba(208,2,27,.04)] ${hit ? "ring-2 ring-primary ring-inset" : ""}`}
-                      onClick={() => setViewing(item)}
+                      onClick={() => open(item)}
                       onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return;
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          setViewing(item);
+                          open(item);
                         }
                       }}
                     >
@@ -438,7 +495,9 @@ export function ApprovalsPage() {
                           <span className="why block">อนุมัติ {cutHours(item)?.toFixed(2)} ชม.</span>
                         )}
                         {multi && <span className="why block">มาถึงคุณในฐานะ {roleLabel(item.as)}</span>}
-                        {item.no && <span className="why num block">{item.no}</span>}
+                      </td>
+                      <td data-label="วันที่ส่ง" className="num text-[12.5px] whitespace-nowrap text-muted-foreground">
+                        {thaiDate(item.at.split(" ")[0])}
                       </td>
                       <td
                         data-label="ส่งเมื่อ"
@@ -446,6 +505,30 @@ export function ApprovalsPage() {
                         title={hot ? `รอนานเกิน ${WAIT_HOT} วัน` : undefined}
                       >
                         {wait <= 0 ? "วันนี้" : wait === 1 ? "เมื่อวาน" : `${wait} วันก่อน`}
+                      </td>
+                      <td data-label="" className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            aria-label="ดูรายละเอียด"
+                            title="ดูรายละเอียด"
+                            className="grid size-[30px] flex-none place-items-center rounded-[8px] border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              open(item);
+                            }}
+                          >
+                            <EyeIcon className="size-4" strokeWidth={1.9} />
+                          </button>
+                          {item.status === "pending" ? (
+                            decide(item, false)
+                          ) : (
+                            <span className={`tag ${item.status === "approved" ? "t-ok" : "t-late"}`}>
+                              <i />
+                              {item.status === "approved" ? "อนุมัติแล้ว" : "ไม่อนุมัติ"}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -456,7 +539,24 @@ export function ApprovalsPage() {
         </div>
       </section>
 
-      {viewing && <RequestDialog item={viewing} onClose={() => setViewing(null)} />}
+      {viewing && (
+        <RequestDialog item={viewing} mode={mode} fixedOt={fixedOt} onClose={() => setViewing(null)} />
+      )}
+    </>
+  );
+}
+
+/** ใบนี้คือรหัสที่ลิงก์ชี้มาไหม — ?find= ของ GM ใช้ key · ?req= ของ CEO ใช้ ref */
+function sameId(item: Request, id: string) {
+  return Boolean(id) && (item.ref ?? item.key) === id;
+}
+
+function Head() {
+  return (
+    <div className="bar">
+      <div>
+        <h1>คำขออนุมัติ</h1>
+      </div>
     </div>
   );
 }
@@ -465,9 +565,24 @@ export function ApprovalsPage() {
  * รายละเอียดคำขอ + ตัดสินในกล่องเดียว
  * อนุมัติ = บันทึกทันที · ไม่อนุมัติ = กดครั้งแรกเปิดช่องเหตุผล กดอีกครั้งถึงบันทึก (ต้องมีเหตุผล)
  */
-function RequestDialog({ item, onClose }: { item: Request; onClose: () => void }) {
+function RequestDialog({
+  item,
+  mode = "view",
+  fixedOt = false,
+  onClose,
+}: {
+  item: Request;
+  /** CEO — เห็นชั่วโมงโอทีแบบอ่านอย่างเดียว อนุมัติเท่าที่ขอ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  fixedOt?: boolean;
+  /**
+   * view = ดูรายละเอียดอย่างเดียว ไม่มีปุ่มตัดสิน (ตัดสินที่ปุ่มในตาราง · ผู้ใช้สั่ง 5 ต.ค. 2569)
+   * reject = เปิดที่ช่องเหตุผล มีแค่ปุ่มยืนยันไม่อนุมัติ · approve = ยืนยันชั่วโมงโอที มีแค่ปุ่มอนุมัติ
+   */
+  mode?: "view" | "reject" | "approve";
+  onClose: () => void;
+}) {
   const done = item.status !== "pending";
-  const [rejecting, setRejecting] = useState(false);
+  const [rejecting, setRejecting] = useState(mode === "reject");
   const [why, setWhy] = useState("");
   const [warn, setWarn] = useState(false);
   /* โอทีที่รอตัดสิน — เทียบเวลาตอกบัตรจริง ให้แก้ชั่วโมงก่อนอนุมัติ */
@@ -482,7 +597,10 @@ function RequestDialog({ item, onClose }: { item: Request; onClose: () => void }
   }
 
   function approve() {
-    if (item.kind === "ot" && item.ot) {
+    if (item.kind === "ot" && item.ot && fixedOt) {
+      if (ot.tooSmall) return;
+      applyDecision(item, true, ot.comment.trim(), item.hours ?? ot.asked);
+    } else if (item.kind === "ot" && item.ot) {
       /* ต่ำกว่า 0.5 ชม. หรือยังไม่ยืนยันชั่วโมงเมื่อบัตรตอกไม่ครอบคลุม — อนุมัติไม่ได้ */
       if (!ot.ready) return;
       applyDecision(item, true, ot.finalComment(), ot.hours);
@@ -495,9 +613,17 @@ function RequestDialog({ item, onClose }: { item: Request; onClose: () => void }
       title={`${KIND[item.kind]} ${item.name}`}
       onClose={onClose}
       footer={
-        done ? null : (
-          /* ปุ่มตัดสินแบ่งครึ่งเต็มความกว้าง สูงพอให้กดง่ายทั้งเมาส์และนิ้ว */
+        done || mode === "view" ? null : (
+          /* มีแค่ปุ่มของงานที่เปิดมาทำ + ยกเลิก */
           <div className="grid w-full grid-cols-2 gap-3">
+            <button
+              type="button"
+              className="btn glass-thin h-12 w-full justify-center rounded-[12px] text-[15px]"
+              onClick={onClose}
+            >
+              ยกเลิก
+            </button>
+            {mode === "reject" ? (
             <button
               type="button"
               className="btn solid h-12 w-full justify-center rounded-[12px] !bg-primary text-[15px] !text-white hover:!bg-[#B00018]"
@@ -505,14 +631,16 @@ function RequestDialog({ item, onClose }: { item: Request; onClose: () => void }
             >
               {rejecting ? "ยืนยันไม่อนุมัติ" : "ไม่อนุมัติ"}
             </button>
+            ) : (
             <button
               type="button"
               className="btn solid h-12 w-full justify-center rounded-[12px] !bg-[#14875A] text-[15px] !text-white hover:!bg-[#0F7049]"
               onClick={approve}
-              disabled={item.kind === "ot" && Boolean(item.ot) && !ot.ready}
+              disabled={item.kind === "ot" && Boolean(item.ot) && (fixedOt ? ot.tooSmall : !ot.ready)}
             >
               อนุมัติ
             </button>
+            )}
           </div>
         )
       }
@@ -547,7 +675,8 @@ function RequestDialog({ item, onClose }: { item: Request; onClose: () => void }
           />
         )}
         {/* เหตุผลที่ผู้ยื่นเขียนมา — ตัดสินโดยไม่อ่านเหตุผลไม่ได้ */}
-        {item.kind === "leave" && (
+        {/* โอทีของคิว CEO มีเหตุผลผู้ยื่นมาด้วย (note) — คิวของ GM ใส่ note เฉพาะใบลา จึงเหมือนเดิม (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+        {(item.kind === "leave" || Boolean(item.note)) && (
           <Kv label="เหตุผลของผู้ยื่น" value={item.note || "ไม่ได้เขียนเหตุผล"} />
         )}
         <Kv label="ยื่นเมื่อ" value={thaiStamp(item.at)} />
@@ -589,7 +718,7 @@ function RequestDialog({ item, onClose }: { item: Request; onClose: () => void }
 
       {!done && item.kind === "ot" && item.ot && !rejecting && (
         <div className="mt-4 border-t border-border pt-3.5">
-          <OtActualFields d={ot} idPrefix={`appr-${item.key}`} />
+          <OtActualFields d={ot} idPrefix={`appr-${item.key}`} fixed={fixedOt} />
         </div>
       )}
 
@@ -677,17 +806,12 @@ function statusOf(s: string): Status {
 }
 
 /** ชื่อและตำแหน่งของบทบาทที่ล็อกอินได้ */
-/* บทบาทพนักงานมีหลายคน — ใบที่จำชื่อผู้ยื่นไว้ต้องขึ้นชื่อคนนั้น ไม่ใช่ชื่อตัวแทนของบทบาท
-   บรรทัดรองเป็น "ตำแหน่งงาน" ของคนนั้นตามทะเบียนฝ่ายบุคคล ให้ตรงกับคำขอที่มาจาก emp-requests
-   (เดิมขึ้นชื่อบทบาท ใบของพนักงานจึงขึ้นว่า "พนักงาน" ทั้งที่แถวอื่นบอกตำแหน่งจริง) */
-function who(role: Role, name?: string) {
-  const person = name || USERS[role].name;
-  const emp = hrSnapshot().emp.find((e) => e.name === person);
-  return { src: "role" as const, role, name: person, sub: emp ? hrPos(emp.pos).label : roleLabel(role) };
+function who(role: Role) {
+  return { src: "role" as const, role, name: USERS[role].name, sub: roleLabel(role) };
 }
 
-/** คำขอของพนักงานตามรหัสพนักงาน (emp-requests) — รูปเดียวกับใบของบทบาท */
-/** แปลงช่วงที่ไม่อยู่เป็นบรรทัดอ่านง่าย — ใช้ทั้งใบลาของบทบาทและคำขอลาของพนักงาน */
+/** คำขอของทีมงานตามรหัสพนักงาน (emp-requests) — รูปเดียวกับใบของบทบาท */
+/** แปลงช่วงที่ไม่อยู่เป็นบรรทัดอ่านง่าย — ใช้ทั้งใบลาของบทบาทและคำขอลาของทีมงาน */
 function awayList(spans: AwaySpan[], me: { id: string; who: string; date: string; toDate: string }) {
   return othersAway(spans, me).map((x) => ({
     name: x.who,
@@ -719,7 +843,7 @@ function fromEmp(r: EmpRequest, name: string, sub: string, as: Role, spans: Away
       topic: r.leaveType ?? "การลา",
       line: `${lines.join(" ")} ${r.note}`,
       lines,
-      /* สูตรเดียวกับหน้าของ CEO สำหรับคำขอของพนักงาน (quota − ที่ใช้ไปก่อนใบนี้ − ใบนี้) */
+      /* สูตรเดียวกับหน้าของ CEO สำหรับคำขอของทีมงาน (quota − ที่ใช้ไปก่อนใบนี้ − ใบนี้) */
       quota: quotaAfterUsed(r.leaveType ?? "", r.used ?? 0, r.days ?? 0),
       note: r.note,
       away: awayList(spans, {
@@ -757,7 +881,7 @@ function fromLeave(
     note: status === "rejected" ? "" : v.comment,
     away,
     kind: "leave",
-    ...who(role, v.employee),
+    ...who(role),
     as,
     key: v.id,
     no: v.id,
@@ -779,7 +903,7 @@ function fromOt(role: Role, v: OtRecord, as: Role): Request {
   ];
   return {
     kind: "ot",
-    ...who(role, v.employee),
+    ...who(role),
     as,
     key: v.id,
     no: v.id,
@@ -800,7 +924,7 @@ function fromClaim(role: Role, v: ExpenseClaim, as: Role): Request {
   const lines = [`ค่าน้ำมัน ${thaiMonth(v.month)}`, `รวม ${km.toFixed(2)} กม.`, `เป็นเงิน ${baht(claimTotal(v))} บาท`];
   return {
     kind: "expense",
-    ...who(role, v.employee),
+    ...who(role),
     as,
     key: v.month,
     no: v.no ?? "",

@@ -17,6 +17,7 @@
 
 import { useState } from "react";
 import { thaiDate, thaiMonth, todayIso } from "@/lib/format";
+import { targetWorkMs } from "@/lib/work-schedule";
 import {
   HR_ISSUE_LABEL,
   HR_LEAVE_LABEL,
@@ -54,6 +55,12 @@ import { Field, Select } from "./ui";
 import { PhoneCard, PhoneList } from "./acchr-phone";
 
 type Tab = "month" | "daily";
+/*
+ * ชั่วโมงทำงาน (ระบบต้นฉบับ 5 ต.ค. 2569) — วันทำงาน × ชั่วโมงต่อวันตามเวลางานที่ตั้งไว้ (หักพักแล้ว) − นาทีที่มาสาย
+ * ไม่รวมโอที (แยกคอลัมน์อยู่แล้ว) · ระบบยังไม่มีเวลากดออกจริงของทุกวัน จึงคิดจากตารางเวลางาน
+ */
+const workHours = (days: number, r: TimeRec) => Math.max(0, days * (targetWorkMs() / 3_600_000) - lateMin(r) / 60);
+
 type Sum = { lateMin: number; lateN: number; lv: number; ot: number };
 type Line = { e: Employee; r: TimeRec; days: number };
 
@@ -287,6 +294,7 @@ export function HrTimesheetPage() {
                 ) : (
                   <Th w={118} unit="วัน">วันที่มาทำงาน</Th>
                 )}
+                <Th w={116} unit="ชม.">ชั่วโมงทำงาน</Th>
                 <Th w={104} unit="นาที">มาสาย</Th>
                 <Th w={96} unit="วัน">ลา</Th>
                 <Th w={124} unit="ชม.">โอทีวันธรรมดา</Th>
@@ -470,6 +478,7 @@ function TimeRow({
       <td data-label={dayLabel} className="c num">
         {days}
       </td>
+      <Num label="ชั่วโมงทำงาน (ชม.)" v={workHours(days, r)} fixed2 />
       <Num label="มาสาย (นาที)" v={lateMin(r)} />
       {/* ลา = ที่อนุมัติแล้วเท่านั้น · ใบที่ยังรออนุมัติบอกไว้ข้างล่าง ยังไม่นับเป็นวันลา */}
       <td data-label="ลา (วัน)" className={`c num ${leaveDays(r) ? "" : "text-muted-foreground"}`}>
