@@ -204,7 +204,13 @@ export function HrPayslipPage() {
       )}
 
       <div className="bar max-md:hidden!">
-        <div />
+        {/* ปุ่มเลื่อนเดือนด้านขวาบอกแค่ชื่อเดือน มุมนี้จึงบอกชื่อขั้นกับช่วงวันของรอบ */}
+        <div>
+          <h1 className="text-[19px] leading-tight font-bold">ออกสลิปเงินเดือน</h1>
+          <p className="num mt-1 text-[13px] text-muted-foreground">
+            ช่วงรอบ {thaiDate(cycle.from)} – {thaiDate(cycle.to)}
+          </p>
+        </div>
         <div className="tools">
           {/* เลื่อนรอบทีละเดือนตามต้นแบบ — ไปได้เฉพาะรอบที่มีในระบบ */}
           <div className="mo glass-thin">

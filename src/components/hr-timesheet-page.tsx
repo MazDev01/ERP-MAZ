@@ -199,7 +199,13 @@ export function HrTimesheetPage() {
       )}
 
       <div className="bar max-md:hidden!">
+        {/* มุมซ้ายบอกว่ากำลังอยู่ขั้นไหนของสายรอบเงินเดือน และรอบนี้กินวันไหนถึงวันไหน
+            ดรอปดาวน์ขวาบอกแค่ชื่อเดือน ไม่ได้บอกช่วงวันของรอบ (เจ้าของสั่ง 6 ต.ค. 2569) */}
         <div>
+          <h1 className="text-[19px] leading-tight font-bold">ตรวจเวลาทำงาน</h1>
+          <p className="num mt-1 text-[13px] text-muted-foreground">
+            ช่วงรอบ {thaiDate(cycle.from)} – {thaiDate(cycle.to)}
+          </p>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="รอบเดือน">

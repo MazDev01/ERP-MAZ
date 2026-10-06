@@ -269,7 +269,12 @@ export function HrPayrollPage() {
       )}
 
       <div className="bar max-md:hidden!">
+        {/* ช่วงวันของรอบอยู่ที่ช่องวันที่ด้านขวาแล้ว มุมนี้จึงบอกชื่อขั้นกับจำนวนคนในรอบ */}
         <div>
+          <h1 className="text-[19px] leading-tight font-bold">คำนวณเงินเดือน</h1>
+          <p className="num mt-1 text-[13px] text-muted-foreground">
+            {month ? `รอบ${thaiMonth(month)} · ` : ""}{monthly.length + daily.length} คน
+          </p>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="ตั้งแต่วันที่" className="w-full sm:w-[158px]">

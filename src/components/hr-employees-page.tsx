@@ -122,7 +122,10 @@ export function HrEmployeesPage() {
   return (
     <div className="space-y-4">
       <div className="bar max-md:hidden!">
+        {/* มุมซ้ายเดิมว่างเปล่า — ใส่หัวเรื่องกับจำนวนคนที่กำลังแสดง ตามต้นแบบ (เจ้าของสั่ง 6 ต.ค. 2569) */}
         <div>
+          <h1 className="text-[19px] leading-tight font-bold">ข้อมูลพนักงาน</h1>
+          <p className="num mt-1 text-[13px] text-muted-foreground">{rows.length} คน</p>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="ค้นหา" className="max-sm:w-full">

@@ -78,7 +78,10 @@ export function HrAccountsPage() {
   return (
     <div className="space-y-4">
       <div className="bar">
-        <div>
+        {/* มุมซ้ายเดิมว่างเปล่า — ใส่หัวเรื่องกับจำนวนคนที่กำลังแสดง (เจ้าของสั่ง 6 ต.ค. 2569) */}
+        <div className="max-md:hidden">
+          <h1 className="text-[19px] leading-tight font-bold">จัดการบัญชีผู้ใช้</h1>
+          <p className="num mt-1 text-[13px] text-muted-foreground">{rows.length} คน</p>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="ค้นหา" className="max-sm:w-full">

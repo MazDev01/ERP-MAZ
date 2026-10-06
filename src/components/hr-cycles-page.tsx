@@ -105,10 +105,27 @@ export function HrCyclesPage() {
         />
       )}
 
+      {/* จอคอม: หัวเรื่องของขั้นนี้ เดิมมุมซ้ายว่างเปล่าจนไม่รู้ว่าอยู่หน้าอะไร (เจ้าของสั่ง 6 ต.ค. 2569) */}
+      <div className="bar max-md:hidden!">
+        <div>
+          <h1 className="text-[19px] leading-tight font-bold">ประวัติรอบจ่าย</h1>
+          <p className="num mt-1 text-[13px] text-muted-foreground">
+            {only ? `เฉพาะรอบ${thaiMonth(only)}` : `รอบที่ปิดแล้ว ${rows.length} รอบ`}
+          </p>
+        </div>
+        {only && (
+          <div className="tools">
+            <button type="button" className="btn glass-thin" onClick={() => setOnly("")}>
+              ดูทุกรอบ
+            </button>
+          </div>
+        )}
+      </div>
+
       {only && (
         <button
           type="button"
-          className="btn glass-thin btn-mini"
+          className="btn glass-thin btn-mini md:hidden!"
           onClick={() => setOnly("")}
         >
           ดูทุกรอบ
