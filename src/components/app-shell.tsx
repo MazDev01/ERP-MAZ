@@ -43,7 +43,7 @@ import {
   UserIcon,
 } from "./icons";
 import { NotificationMenu } from "./notification-menu";
-import { SubNav } from "./sub-nav";
+import { SideSub, SubNav } from "./sub-nav";
 import {
   BOTNAV_EMPTY,
   botnavChoices,
@@ -318,17 +318,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 const ItemIcon = ICONS[item.icon];
                 const active = (current?.parent ?? current?.href) === item.href;
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={active ? "page" : undefined}
-                    className={`side-link${active ? " on" : ""}`}
-                  >
-                    <ItemIcon className="size-[18px] shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                    {/* ดีลใหม่ที่ฝ่ายบัญชียังไม่ได้เปิดดู (AC-BR-01) */}
-                    {item.href === "/acc/billing" && <BillingNavDot />}
-                  </Link>
+                  <Fragment key={item.href}>
+                    <Link
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={`side-link${active ? " on" : ""}`}
+                    >
+                      <ItemIcon className="size-[18px] shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                      {/* ดีลใหม่ที่ฝ่ายบัญชียังไม่ได้เปิดดู (AC-BR-01) */}
+                      {item.href === "/acc/billing" && <BillingNavDot />}
+                    </Link>
+                    {/* เมนูย่อยกางใต้เมนูแม่ที่เปิดอยู่ แทนแถบชิปเหนือเนื้อหา (ตามระบบต้นฉบับ) */}
+                    {active && item.sub && <SideSub items={item.sub} pathname={pathname} />}
+                  </Fragment>
                 );
               })}
             </div>
@@ -409,10 +412,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
+        {/* แถบชิปเมนูย่อยเหลือเฉพาะมือถือ — จอคอมย้ายไปเป็นเมนูย่อยในแถบข้างแล้ว (ตามระบบต้นฉบับ) */}
         {current?.sub && (
-          /* มือถือไม่มีแถบหน้าย่อย — ต้นแบบ attendance.html สั่งซ่อน .ptabs ไว้ หน้าตอกบัตรคือหน้าหลักของมือถือ
-             ตารางเวลาทั้งเดือนเข้าได้จากปุ่มใต้หน้าตอกบัตร */
-          <div className="app-sub px-4 pt-[18px] max-sm:hidden! sm:px-[30px]">
+          <div className="app-sub px-4 pt-[18px] sm:px-[30px] md:hidden">
             <SubNav items={current.sub} pathname={pathname} />
           </div>
         )}

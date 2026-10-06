@@ -3,14 +3,13 @@
 /*
  * ตั้งค่าระบบ — หน้าเดียวรวมทุกหัวข้อ (ต้นแบบ "ตั้งค่าระบบ — ERP MAZ.html" ที่เจ้าของส่งมา 28 ก.ย. 2569)
  *
- * ซ้ายเป็นรายการหัวข้อแบ่งสามกลุ่ม ขวาเป็นหน้าของหัวข้อที่เลือก
+ * หัวข้อแบ่งเป็นกลุ่ม เลือกจากเมนูย่อยในแถบข้าง (?s=) หน้านี้แสดงเฉพาะหัวข้อที่เลือก (ยกการวางแบบมาจากระบบต้นฉบับ)
  * เนื้อในแต่ละหัวข้อยังเป็นคอมโพเนนต์เดิมที่ใช้งานและทดสอบแล้ว ไม่ได้เขียนใหม่
- * หน้าเดิม (/admin/leave, /admin/rates, …) ยังเปิดตรงได้ เพราะกระดิ่งและลิงก์เก่าชี้ไปที่นั่น
  */
 
-import { useEffect, useState } from "react";
-import { ICONS } from "./app-shell";
-import type { IconName } from "@/lib/nav";
+import { useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { SETTINGS_SECTIONS, settingsKeyOf, type SettingsKey } from "@/lib/nav";
 import { AdminOptionsPage } from "./admin-options-page";
 import { AdminPositionsPage } from "./admin-positions-page";
 import { AdminLeavePage } from "./admin-leave-page";
@@ -19,78 +18,8 @@ import { AdminAttendancePage } from "./admin-attendance-page";
 import { AdminRatesPage } from "./admin-rates-page";
 import { AdminBotnavPage } from "./admin-botnav-page";
 import { AdminCompanyPage } from "./admin-company-page";
-import { AdminDocNumbersPage } from "./admin-doc-numbers-page";
-import { AdminLogPage } from "./admin-log-page";
-import { AdminDataPage } from "./admin-data-page";
 
-/* ไอคอนของแต่ละหัวข้อตามต้นแบบ hr-settings.html */
-const SEC_ICON: Record<string, IconName> = {
-  master: "planboard",
-  positions: "team",
-  services: "project",
-  leave: "leave",
-  holidays: "leave",
-  attendance: "clock",
-  payroll: "commission",
-  wht: "tax",
-  issuer: "receipt",
-  botnav: "pin",
-  docs: "billing",
-  log: "shield",
-  data: "accboard",
-};
-
-type SecKey =
-  | "master"
-  | "positions"
-  | "services"
-  | "leave"
-  | "holidays"
-  | "attendance"
-  | "payroll"
-  | "wht"
-  | "issuer"
-  | "botnav"
-  | "docs"
-  | "log"
-  | "data";
-
-const GROUPS: { title: string; items: { key: SecKey; label: string }[] }[] = [
-  {
-    title: "ข้อมูลองค์กร",
-    items: [
-      { key: "master", label: "ข้อมูลหลัก" },
-      { key: "positions", label: "ตำแหน่งและสายอนุมัติ" },
-      { key: "services", label: "บริการ" },
-      { key: "botnav", label: "แถบเมนูล่างบนมือถือ" },
-    ],
-  },
-  {
-    title: "การลาและเวลา",
-    items: [
-      { key: "leave", label: "ประเภทการลา" },
-      { key: "holidays", label: "วันหยุดบริษัท" },
-      { key: "attendance", label: "เวลาทำงานและจุดลงเวลา" },
-    ],
-  },
-  {
-    title: "เงินและเอกสาร",
-    items: [
-      { key: "payroll", label: "การคำนวณเงินเดือน" },
-      { key: "wht", label: "หัก ณ ที่จ่าย" },
-      { key: "issuer", label: "ข้อมูลผู้ออกเอกสาร" },
-      { key: "docs", label: "เลขที่เอกสาร" },
-    ],
-  },
-  /* กลุ่มระบบ — ยกมาจากระบบต้นฉบับ ERP_Test (6 ต.ค. 2569) */
-  {
-    title: "ระบบ",
-    items: [
-      { key: "log", label: "ประวัติการตั้งค่า" },
-      { key: "data", label: "ข้อมูลตัวอย่าง" },
-    ],
-  },
-];
+type SecKey = SettingsKey;
 
 function Section({ sec }: { sec: SecKey }) {
   switch (sec) {
@@ -100,6 +29,8 @@ function Section({ sec }: { sec: SecKey }) {
       return <AdminPositionsPage />;
     case "services":
       return <AdminOptionsPage only="services" />;
+    case "botnav":
+      return <AdminBotnavPage />;
     case "leave":
       return <AdminLeavePage />;
     case "holidays":
@@ -112,87 +43,29 @@ function Section({ sec }: { sec: SecKey }) {
       return <AdminOptionsPage only="whtTypes" />;
     case "issuer":
       return <AdminCompanyPage />;
-    case "botnav":
-      return <AdminBotnavPage />;
-    case "docs":
-      return <AdminDocNumbersPage />;
-    case "log":
-      return <AdminLogPage />;
-    case "data":
-      return <AdminDataPage />;
   }
 }
 
-function SecIcon({ name }: { name: IconName }) {
-  const Icon = ICONS[name];
-  return <Icon className="size-[17px] flex-none" strokeWidth={1.9} />;
-}
-
-const KEYS: SecKey[] = GROUPS.flatMap((g) => g.items.map((i) => i.key));
-
+/**
+ * หัวข้อที่เปิดอยู่มาจาก ?s= — เลือกจากเมนูย่อยในแถบข้าง (จอคอม) หรือแถบชิปเมนูย่อย (มือถือ)
+ * หน้าที่เรียกต้องมี Suspense คร่อมที่ page.tsx เพราะ useSearchParams
+ */
 export function AdminSettingsPage() {
-  const [sec, setSec] = useState<SecKey>("master");
+  const q = useSearchParams();
+  const here = usePathname();
+  const router = useRouter();
+  const sec = settingsKeyOf(q);
 
-  /* เปิดหัวข้อตรงจากลิงก์ได้ เช่น /admin/settings#holidays (ต้นแบบใช้ #id เหมือนกัน)
-     อ่านหลังเมานต์ ไม่ใช่ตอนสร้างสเตท ไม่งั้น HTML ฝั่งเซิร์ฟเวอร์กับเบราว์เซอร์ไม่ตรงกัน */
+  /* ลิงก์เก่าแบบ #hash (เช่น /admin/settings#holidays) ยังใช้ได้ — อ่านครั้งเดียวแล้วเปลี่ยนเป็น ?s= */
   useEffect(() => {
-    const read = () => {
-      const id = window.location.hash.replace("#", "") as SecKey;
-      if (KEYS.includes(id)) setSec(id);
-    };
-    read();
-    window.addEventListener("hashchange", read);
-    return () => window.removeEventListener("hashchange", read);
-  }, []);
-
-  function go(k: SecKey) {
-    setSec(k);
-    window.history.replaceState(null, "", `#${k}`);
-  }
+    const id = window.location.hash.replace("#", "");
+    if (!q.get("s") && SETTINGS_SECTIONS.some((x) => x.key === id)) router.replace(`${here}?s=${id}`);
+  }, [q, here, router]);
 
   return (
     <div className="space-y-4">
-      <div className="bar">
-        <div>
-          <p>ข้อมูลหลักและค่าที่ใช้คำนวณทั้งระบบ</p>
-        </div>
-      </div>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[236px_minmax(0,1fr)]">
-        {/* จอคอม: รายการหัวข้อค้างอยู่ด้านซ้าย · จอแคบ: เลื่อนเป็นแถบแนวนอน */}
-        <nav
-          className="glass rounded-[16px] p-2 max-lg:flex max-lg:gap-1.5 max-lg:overflow-x-auto lg:sticky lg:top-4"
-          aria-label="หัวข้อตั้งค่า"
-        >
-          {GROUPS.map((g) => (
-            <div key={g.title} className="max-lg:flex max-lg:shrink-0 max-lg:items-center max-lg:gap-1.5">
-              {/* ต้นแบบ: ชื่อกลุ่มเป็นตัวหนังสือเล็กสีจาง ไม่ใช่แถบสีเทา */}
-              <p className="px-2.5 pt-3 pb-1 text-[11px] font-bold text-muted-foreground max-lg:pt-0">{g.title}</p>
-              {g.items.map((it) => {
-                const on = sec === it.key;
-                return (
-                  <button
-                    key={it.key}
-                    type="button"
-                    aria-current={on}
-                    onClick={() => go(it.key)}
-                    /* ต้นแบบใช้พื้นชมพูอ่อนตัวอักษรแดงตอนเลือกอยู่ ไม่ใช่แถบแดงทึบ */
-                    className={`flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-left text-[13.5px] transition-colors max-lg:w-auto max-lg:shrink-0 max-lg:whitespace-nowrap ${
-                      on ? "bg-[var(--accent)] font-semibold text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    <SecIcon name={SEC_ICON[it.key]} />
-                    {it.label}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-
-        <div className="min-w-0">
-          <Section sec={sec} />
-        </div>
+      <div className="min-w-0">
+        <Section sec={sec} />
       </div>
     </div>
   );

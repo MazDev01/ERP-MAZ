@@ -42,7 +42,53 @@ export type NavGroup =
   | "ผู้ใช้และสิทธิ์" | "การทำงาน" | "เอกสารและการเงิน" | "ดูแลระบบ";
 
 /** title = ชื่อบนแถบบนถ้าต่างจากชื่อแท็บ */
-export type SubItem = { label: string; href: string; title?: string };
+export type SubItem = {
+  label: string;
+  href: string;
+  title?: string;
+  /** หัวข้อกลุ่มที่คั่นเหนือรายการนี้ในเมนูย่อย */
+  caption?: string;
+  /** หน้าย่อยที่แยกด้วย query (เช่น ?s=) บอกเองว่ากำลังเปิดอยู่ไหม */
+  on?: (pathname: string, q: URLSearchParams) => boolean;
+};
+
+/*
+ * หัวข้อของหน้าตั้งค่าระบบ (/admin/settings?s=<key>) — ยกการวางแบบมาจากระบบต้นฉบับ
+ * หัวข้ออยู่ในเมนูย่อยของแถบข้าง (จอคอม) และแถบชิปเหนือเนื้อหา (มือถือ) ไม่มีรายการซ้อนในเนื้อหาอีก
+ * ลำดับและกลุ่มตามต้นแบบ "ตั้งค่าระบบ — ERP MAZ.html" · หน้าตั้งค่าอ่านรายการนี้ชุดเดียวกัน
+ */
+export const SETTINGS_SECTIONS = [
+  { key: "master", label: "ข้อมูลหลัก", group: "ข้อมูลองค์กร" },
+  { key: "positions", label: "ตำแหน่งและสายอนุมัติ", group: "ข้อมูลองค์กร" },
+  { key: "services", label: "บริการ", group: "ข้อมูลองค์กร" },
+  { key: "botnav", label: "แถบเมนูล่างบนมือถือ", group: "ข้อมูลองค์กร" },
+  { key: "leave", label: "ประเภทการลา", group: "การลาและเวลา" },
+  { key: "holidays", label: "วันหยุดบริษัท", group: "การลาและเวลา" },
+  { key: "attendance", label: "เวลาทำงานและจุดลงเวลา", group: "การลาและเวลา" },
+  { key: "payroll", label: "การคำนวณเงินเดือน", group: "เงินและเอกสาร" },
+  { key: "wht", label: "หัก ณ ที่จ่าย", group: "เงินและเอกสาร" },
+  { key: "issuer", label: "ข้อมูลผู้ออกเอกสาร", group: "เงินและเอกสาร" },
+] as const;
+export type SettingsKey = (typeof SETTINGS_SECTIONS)[number]["key"];
+
+/** หัวข้อที่เปิดอยู่จาก ?s= — ไม่มีหรือไม่รู้จัก = ข้อมูลหลัก */
+export function settingsKeyOf(q: URLSearchParams): SettingsKey {
+  const s = q.get("s");
+  return SETTINGS_SECTIONS.find((x) => x.key === s)?.key ?? "master";
+}
+
+const SETTINGS_SUB: SubItem[] = [
+  ...SETTINGS_SECTIONS.map((x, i, all) => ({
+    label: x.label,
+    href: `/admin/settings?s=${x.key}`,
+    caption: i === 0 || all[i - 1].group !== x.group ? x.group : undefined,
+    on: (p: string, q: URLSearchParams) => p === "/admin/settings" && settingsKeyOf(q) === x.key,
+  })),
+  /* หน้าระบบที่แยกเป็นหน้าของตัวเอง — อยู่ท้ายเมนูย่อย */
+  { label: "เลขที่เอกสาร", href: "/admin/doc-numbers", caption: "ระบบ" },
+  { label: "ประวัติการตั้งค่า", href: "/admin/log" },
+  { label: "ข้อมูลตัวอย่าง", href: "/admin/data" },
+];
 
 export type NavItem = {
   group: NavGroup;
@@ -180,6 +226,7 @@ const HR: NavItem[] = [
     label: "ตั้งค่าระบบ",
     icon: "shield",
     href: "/admin/settings",
+    sub: SETTINGS_SUB,
   },
 ];
 

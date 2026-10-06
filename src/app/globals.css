@@ -220,6 +220,47 @@ body {
   color: var(--muted-foreground);
 }
 
+
+/* เมนูย่อยใต้เมนูแม่ที่เปิดอยู่ (ผู้ใช้สั่ง 5 ต.ค. 2569 — แทนแถบชิปเหนือเนื้อหา)
+   เยื้องให้ตรงกับชื่อเมนูแม่ (ไอคอน 17px + ช่องไฟ 10px) ตัวเล็กกว่า ไม่มีไอคอน ใช้จุดเล็กแทน */
+.side-sub {
+  margin: 2px 0 4px;
+  padding-left: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.side-sub a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  transition: background-color 0.15s, color 0.15s;
+}
+.side-sub a i {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+}
+.side-sub a:hover { background: var(--accent); color: var(--foreground); }
+.side-sub a.on { color: var(--primary); font-weight: 600; background: var(--accent); }
+.side-sub a.on i { opacity: 1; }
+/* หัวข้อกลุ่มในเมนูย่อย — ตัวเล็กสีจาง ไม่ใช่ลิงก์ */
+.side-sub-cap {
+  padding: 8px 10px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}
+.side-sub li:first-child .side-sub-cap { padding-top: 2px; }
+
 .side-link {
   display: flex;
   align-items: center;
