@@ -11,7 +11,8 @@ import {
   useDashCards,
 } from "@/lib/dashboard-cards";
 import { downloadCsv, reportCsv } from "@/lib/report-export";
-import { bkkNow, thaiDate, toIsoDate, todayIso } from "@/lib/format";
+import { bkkNow, greetNow, toIsoDate, todayIso } from "@/lib/format";
+import { CURRENT_USER } from "@/lib/mock-data";
 import {
   AGENDA_COLOR,
   AGENDA_LABEL,
@@ -38,7 +39,7 @@ import {
   UserIcon,
 } from "./icons";
 
-import { DashWrap, DashChips, DashHero, DashSection, DashWeek } from "./mobile-dash";
+import { SalesDashboardMobile } from "./sales-dashboard-mobile";
 
 const RANGES: RangeKey[] = ["m", "q", "y"];
 
@@ -97,69 +98,8 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
         ? d.sourceSlices
         : d.lostSlices;
 
-  /* วันที่เลือกในปฏิทินรายสัปดาห์ของมือถือ — ว่าง = วันนี้ */
-  const [pickDay, setPickDay] = useState(() => todayIso());
-  const dayEvents = agenda.filter((e) => e.date === pickDay);
-  const hasEvent = (iso: string) => agenda.some((e) => e.date === iso);
-
   return (
     <div className="space-y-3.5">
-      {/* ─────────── มือถือ: แดชบอร์ดแบบแอปตามต้นแบบ (ตัวเลขชุดเดียวกับจอคอม) ─────────── */}
-      <DashWrap>
-        <DashHero
-          chips={
-            <DashChips
-              value={range}
-              items={RANGES.map((r) => ({ key: r, label: RANGE_LABEL[r] }))}
-              onPick={setRange}
-            />
-          }
-          label="มูลค่าที่ปิดได้"
-          value={`${baht(d.won)} ฿`}
-          foot={
-            <>
-              <b className={d.dWon >= 0 ? "font-bold text-[var(--success)]" : "font-bold text-destructive"}>
-                {d.dWon >= 0 ? "+" : "−"}
-                {Math.abs(d.dWon)}%
-              </b>{" "}
-              {d.wonDeals} ดีล · เทียบช่วงก่อน
-            </>
-          }
-          ringPct={d.quotes ? d.rate : 0}
-          ringLabel="อัตราปิดการขาย"
-        />
-
-        <DashWeek value={pickDay} onPick={setPickDay} has={hasEvent} />
-
-        <DashSection
-          title={pickDay === todayIso() ? "นัดหมายวันนี้" : `นัดหมาย ${thaiDate(pickDay)}`}
-          href="/leads"
-          rows={dayEvents.map((e) => ({
-            key: e.id,
-            title: e.title,
-            meta: AGENDA_LABEL[e.type],
-            metaTint: e.type === "follow" ? "rose" : e.type === "presale" ? "sky" : "peach",
-            href: e.href,
-          }))}
-          empty="ไม่มีนัดหมายในวันนี้"
-        />
-
-        <DashSection
-          title="ลูกค้าที่ปิดได้สูงสุด"
-          href={dealsHref}
-          linkLabel="ดูดีล"
-          rows={d.rank.map((r, i) => ({
-            key: r.code,
-            title: r.name,
-            meta: `${baht(r.value)} ฿`,
-            metaTint: "rose",
-            end: String(i + 1),
-            endTint: (["rose", "peach", "sky", "lilac", "mint"] as const)[i % 5],
-            href: `/leads/${r.code}`,
-          }))}
-          empty="ยังไม่มีดีลที่ปิดได้ในช่วงนี้"
-        />
-      </DashWrap>
 
       {/* ── หัวเรื่องแบบตัวอย่าง: คำทักทายซ้าย เครื่องมืออยู่ขวา ── */}
       <div className="bar gap-3 max-md:hidden!">
@@ -420,6 +360,20 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
             </p>
           </section>
       </div>
+
+      {/* มือถือ: แดชบอร์ดแบบแอปตามระบบต้นฉบับ — ตัวเลขและช่วงเวลาชุดเดียวกับจอคอม */}
+      <SalesDashboardMobile
+        d={d}
+        range={range}
+        onRange={setRange}
+        events={agenda}
+        today={todayIso()}
+        hello={`${greetNow()}, ${CURRENT_USER.name.split(" ")[0]}`}
+        dealsHref={dealsHref}
+        onExport={() =>
+          downloadCsv(`รายงานการขาย-${RANGE_LABEL[range]}-${todayIso()}.csv`, reportCsv(d, RANGE_LABEL[range]))
+        }
+      />
     </div>
   );
 }
