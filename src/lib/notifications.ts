@@ -42,8 +42,8 @@ import type { LogArea, LogEntry } from "./admin-log";
 import { findLink } from "./deep-link";
 import { PS_UNTAKEN_DAYS, psMine, psOwner, psUntakenDays } from "./presales-work";
 
-/** ทดลองงานเหลืออีกกี่วันถึงจะขึ้นเตือนฝ่ายบุคคล — ตรงกับแดชบอร์ด */
-const PROBATION_WARN_DAYS = 30;
+/** ทดลองงานเหลืออีกกี่วันถึงจะขึ้นเตือนฝ่ายบุคคล (เจ้าของตัดสิน 6 ต.ค. 2569 — ล่วงหน้า 14 วัน) */
+const PROBATION_WARN_DAYS = 14;
 
 /** เรื่องที่เกิดขึ้นที่ฝ่ายอื่นแจ้งกี่วันย้อนหลัง (ชำระเงิน ส่งมอบงาน) */
 const RECENT_DAYS = 7;

@@ -771,7 +771,10 @@ function DayDetail({
                 {HR_ISSUE_LABEL[x.kind]}
               </span>
               {x.note ? (
-                <p className="mt-2 text-[12.5px] text-muted-foreground">เหตุผลที่บันทึกไว้ · {x.note}</p>
+                <p className="mt-2 text-[12.5px] text-muted-foreground">
+                  {x.absent ? "สรุปว่าขาดงาน · หักเต็มวัน · " : "ตรวจแล้ว มาทำงานจริง · "}
+                  {x.note}
+                </p>
               ) : locked ? (
                 <p className="mt-2 text-[12.5px] text-muted-foreground">รอบนี้ปิดแล้ว</p>
               ) : (
@@ -784,13 +787,24 @@ function DayDetail({
                     style={{ height: 36 }}
                     className="field-control min-w-0 flex-1 rounded-[10px] px-3 text-[13px] max-sm:h-[46px]! max-sm:w-full max-sm:rounded-[12px] max-sm:text-[14.5px]"
                   />
+                  {/* สองทางเท่านั้น — มาทำงานจริง (ไม่หัก) หรือขาดงานจริง (หักเต็มวัน)
+                      ต้องให้ฝ่ายบุคคลสรุป ไม่ใช่ให้ระบบเดาจากการไม่มีบันทึกเวลา (เจ้าของตัดสิน 6 ต.ค. 2569) */}
+                  <button
+                    type="button"
+                    className="btn glass-thin flex-none disabled:opacity-45 max-sm:h-[46px]! max-sm:w-full max-sm:justify-center max-sm:rounded-[12px]!"
+                    disabled={!(notes[x.d] ?? "").trim()}
+                    onClick={() => noteIssue(emp.id, x.d, (notes[x.d] ?? "").trim())}
+                  >
+                    มาทำงานจริง
+                  </button>
                   <button
                     type="button"
                     className="btn solid btn-solid flex-none disabled:opacity-45 max-sm:h-[46px]! max-sm:w-full max-sm:justify-center max-sm:rounded-[12px]!"
                     disabled={!(notes[x.d] ?? "").trim()}
-                    onClick={() => noteIssue(emp.id, x.d, (notes[x.d] ?? "").trim())}
+                    title="หักเงินเต็มวันตามค่าจ้างรายวันในรอบนี้"
+                    onClick={() => noteIssue(emp.id, x.d, (notes[x.d] ?? "").trim(), true)}
                   >
-                    บันทึก
+                    ขาดงาน
                   </button>
                 </div>
               )}

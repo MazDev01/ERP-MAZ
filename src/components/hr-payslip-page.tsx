@@ -29,6 +29,7 @@ import {
   ceilingOf,
   cutOf,
   earnOf,
+  paydayOf,
   hrCycle,
   hrDept,
   hrPos,
@@ -434,6 +435,8 @@ export function HrPayslipPage() {
                     </td>
                     <Cut label="ประกันสังคม" v={pay.ss} />
                     <Cut label="หักมาสาย" v={pay.late} />
+                    <Cut label="หักขาดงาน" v={pay.absent} />
+                    <Cut label="หักลาไม่รับค่าจ้าง" v={pay.unpaid} />
                     {/* ปรับปรุงติดลบคือหักเพิ่ม บวกคือคืนกลับ — เครื่องหมายต้องอ่านออกจากช่องเลย */}
                     <Cut label="ปรับปรุงอื่น" v={-pay.adj} />
                     {/* ใบเบิกที่อนุมัติแล้วบวกเข้ายอดสุทธิ ไม่ใช่รายได้ และไม่คิดประกันสังคม */}
@@ -522,6 +525,8 @@ export function HrPayslipPage() {
                    บวกลบตามได้ครบ: รายได้ − ประกันสังคม − หักมาสาย ± ปรับปรุง + ค่าใช้จ่ายคืน = สุทธิ */
                 cutStat("ประกันสังคม", pay.ss),
                 cutStat("หักมาสาย", pay.late),
+                cutStat("หักขาดงาน", pay.absent),
+                cutStat("หักลาไม่รับค่าจ้าง", pay.unpaid),
                 cutStat("ปรับปรุงอื่น", -pay.adj),
                 pay.reimb
                   ? { label: "ค่าใช้จ่ายคืน", value: `+${baht(pay.reimb)}` }
@@ -689,6 +694,11 @@ function SlipView({
       snapped || pay.late === 0 ? "หักมาสาย" : `หักมาสาย ${pay.lateChargedMin} นาที`,
       pay.late,
     ],
+    /* ขาดงานและลาไม่รับค่าจ้าง — ขึ้นเฉพาะรอบที่มีจริง ไม่ต้องรกใบของคนที่มาเต็ม */
+    ...(pay.absent ? ([[`หักขาดงาน ${pay.absentDays} วัน`, pay.absent]] as [string, number][]) : []),
+    ...(pay.unpaid
+      ? ([[`หักลาไม่รับค่าจ้าง ${pay.unpaidDays} วัน`, pay.unpaid]] as [string, number][])
+      : []),
     ...(adjust.length > 0
       ? adjust.map((a): [string, number] => [`รายการปรับปรุงอื่น · ${a.why}`, -a.amt || 0])
       /* -0 ไม่ใช่ตัวเลขที่คนอ่านออก บังคับให้เป็น 0 ก่อนพิมพ์ */
@@ -699,6 +709,7 @@ function SlipView({
     const csv = toCsv([
       ["สลิปเงินเดือน MAZ"],
       ["รอบ", thaiMonth(month), `${thaiDate(c.from)} – ${thaiDate(c.to)}`],
+      ["วันจ่ายเงินเดือน", thaiDate(paydayOf(month))],
       ["ชื่อพนักงาน", emp.name],
       ["รหัสพนักงาน", emp.id],
       ["ตำแหน่ง", p.label],
@@ -922,6 +933,8 @@ function PublishDialog({
       <dl className="grid gap-x-4 gap-y-2 text-[13.5px] sm:grid-cols-[150px_minmax(0,1fr)]">
         <Pair k="รอบการจ่าย" v={thaiMonth(month)} />
         <Pair k="ช่วงวันที่" v={`${thaiDate(c.from)} – ${thaiDate(c.to)}`} />
+        {/* วันจ่ายคือสิ้นเดือนของรอบนั้น (เจ้าของตัดสิน 6 ต.ค. 2569) */}
+        <Pair k="วันจ่ายเงินเดือน" v={thaiDate(paydayOf(month))} />
         <Pair k="กลุ่มพนักงาน" v={GROUP_LABEL[group]} />
         {undo ? (
           <Pair k="เผยแพร่เมื่อ" v={pubAt ? thaiDate(pubAt) : "—"} />

@@ -619,10 +619,16 @@ export const HR_EMP: Employee[] = [
  *
  * อ่านผ่านฟังก์ชันทุกครั้ง ห้ามเก็บเป็นค่าคงที่ระดับไฟล์ — ผู้ดูแลแก้แล้วต้องมีผลทันทีทั้งระบบ
  *
- * TODO: ⚠️ วันจ่ายเงินเดือนคือสิ้นเดือนหรือวันที่ 1 ของเดือนถัดไป ยังไม่ยืนยัน
+ * วันจ่ายเงินเดือนคือ "สิ้นเดือน" ของเดือนนั้น (เจ้าของตัดสิน 6 ต.ค. 2569)
  */
 export function hrCutDay() {
   return settings().schedule.payCutDay;
+}
+
+/** วันจ่ายเงินเดือนของรอบหนึ่ง — สิ้นเดือนของเดือนรอบนั้น เช่น รอบ "2026-08" จ่าย 31 ส.ค. 2569 */
+export function paydayOf(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  return isoOf(new Date(y, m, 0));
 }
 
 function pad2(n: number) {
@@ -675,6 +681,11 @@ export type CycleLine = {
   adj: number;
   ss: number;
   late: number;
+  /** หักขาดงานและลาไม่รับค่าจ้าง — รอบที่ปิดก่อนมีช่องนี้ไม่มีเก็บไว้ ถือเป็น 0 */
+  absentDays?: number;
+  absent?: number;
+  unpaidDays?: number;
+  unpaid?: number;
   /** ค่าใช้จ่ายคืน (ใบเบิกที่อนุมัติแล้ว) — ไม่ใช่รายได้ ไม่คิดประกันสังคม บวกเข้ายอดสุทธิ · รอบเก่าไม่มี */
   reimb?: number;
   net: number;
@@ -806,9 +817,13 @@ export type LateRow = { d: string; min: number; was?: number };
  * hours = ชั่วโมงที่ลาจริงของวันนั้น (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1 — ลาไม่เต็มวันนับตามชั่วโมง)
  * ไม่มีค่า = ใช้ span เหมือนเดิม (เต็มวัน หรือครึ่งวัน)
  */
-export type LeaveRow = { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no?: string };
+/* unpaid = วันลาที่ไม่ได้ค่าจ้าง — ลาเกินสิทธิ์ และลาคลอดส่วนที่เกินวันที่บริษัทจ่าย
+   (เจ้าของตัดสิน 6 ต.ค. 2569 — ลาคลอดบริษัทจ่าย 45 วันแรก ที่เหลือประกันสังคมจ่าย) */
+export type LeaveRow = { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no?: string; unpaid?: boolean };
 export type OtRow = { d: string; h: number; kind: OtKind; was?: number; no?: string };
-export type IssueRow = { d: string; kind: IssueKind; note: string };
+/* absent = ฝ่ายบุคคลตรวจแล้วสรุปว่า "ขาดงานจริง" → หักเต็มวัน (เจ้าของตัดสิน 6 ต.ค. 2569)
+   ไม่ติดธง = ตรวจแล้วมาทำงานจริง (ลืมตอกบัตร) ไม่หักเงิน */
+export type IssueRow = { d: string; kind: IssueKind; note: string; absent?: boolean };
 
 export type TimeRec = {
   late: LateRow[];
@@ -1302,6 +1317,12 @@ export type PaySlipCalc = {
   lateChargedMin: number;
   /** เงินที่หักเพราะมาสาย — 0 ถ้าผู้ดูแลระบบปิดการหัก */
   late: number;
+  /** วันที่ขาดงานโดยไม่มีใบลา และเงินที่หัก (เจ้าของตัดสิน 6 ต.ค. 2569 — หักเต็มวันตามค่าจ้างรายวัน) */
+  absentDays: number;
+  absent: number;
+  /** วันลาที่ไม่ได้ค่าจ้าง (เกินสิทธิ์ · ลาคลอดเกินที่บริษัทจ่าย) และเงินที่หัก */
+  unpaidDays: number;
+  unpaid: number;
   gross: number;
   /** ค่าใช้จ่ายคืน — อยู่นอกรายได้ (ไม่รวมใน gross ไม่คิดประกันสังคม) แต่รวมในยอดสุทธิ */
   reimb: number;
@@ -1331,6 +1352,10 @@ export function calcOfLine(x: CycleLine): PaySlipCalc {
     lateMin: 0,
     lateChargedMin: 0,
     late: x.late,
+    absentDays: x.absentDays ?? 0,
+    absent: x.absent ?? 0,
+    unpaidDays: x.unpaidDays ?? 0,
+    unpaid: x.unpaid ?? 0,
     gross: x.gross ?? round2(x.base + x.ot + com + inc + allow + x.adj),
     reimb: x.reimb ?? 0,
     net: x.net,
@@ -1375,6 +1400,35 @@ export function lateDeduction(e: Employee, c: Cycle, minutes: number) {
   return { charged, perMin, amount: round2(charged * perMin) };
 }
 
+/** ค่าจ้างต่อวันที่ใช้หักเงิน — รายวันใช้อัตราของตัวเอง รายเดือนใช้เงินเดือน ÷ 30 */
+function perDayOf(e: Employee, c: Cycle) {
+  return isDaily(e) ? dailyRateIn(e, c) : baseSalaryIn(e, c) / HR_OT_DIVISOR.days;
+}
+
+/*
+ * ขาดงานโดยไม่มีใบลา — หักเต็มวันตามค่าจ้างรายวัน (เจ้าของตัดสิน 6 ต.ค. 2569)
+ *
+ * หักเฉพาะวันที่ฝ่ายบุคคลตรวจแล้วสรุปว่าขาดงานจริง ไม่ใช่ทุกวันที่ไม่มีบันทึกเวลา
+ * วันที่ไม่มีบันทึกเวลาเกิดจากลืมตอกบัตรก็ได้ ซึ่งมาทำงานจริงและต้องไม่ถูกหักเงิน
+ * คนจ่ายรายวันไม่ต้องหักซ้ำ เพราะจ่ายตามวันที่มาทำงานอยู่แล้ว
+ */
+export function absentDeduction(e: Employee, c: Cycle, r: TimeRec) {
+  if (isDaily(e)) return { days: 0, amount: 0 };
+  const days = r.issues.filter((x) => x.absent).length;
+  return { days, amount: round2(days * perDayOf(e, c)) };
+}
+
+/*
+ * วันลาที่ไม่ได้ค่าจ้าง — ลาเกินสิทธิ์ และลาคลอดส่วนที่เกินวันที่บริษัทจ่าย
+ * วันที่ถูกทำเครื่องหมายไว้ตั้งแต่ตอนรวมใบลาเข้าเวลาทำงาน (hr-link) ที่นี่แค่คิดเป็นเงิน
+ * คนจ่ายรายวันไม่ต้องหัก เพราะจ่ายตามวันที่มาทำงานอยู่แล้ว
+ */
+export function unpaidLeaveDeduction(e: Employee, c: Cycle, r: TimeRec) {
+  if (isDaily(e)) return { days: 0, amount: 0 };
+  const days = r.leave.filter((x) => x.unpaid).reduce((a, x) => a + (x.span === "half" ? 0.5 : 1), 0);
+  return { days, amount: round2(days * perDayOf(e, c)) };
+}
+
 /**
  * ยอดเงินของคนหนึ่งในรอบหนึ่ง
  *
@@ -1408,6 +1462,8 @@ export function payIn(
   const gross = round2(base + ot + com + x.incentive + x.allowance + adj);
   const lateTotal = lateMin(r);
   const lateCut = lateDeduction(e, c, lateTotal);
+  const absent = absentDeduction(e, c, r);
+  const unpaid = unpaidLeaveDeduction(e, c, r);
   return {
     base,
     ot,
@@ -1419,9 +1475,13 @@ export function payIn(
     lateMin: lateTotal,
     lateChargedMin: lateCut.charged,
     late: lateCut.amount,
+    absentDays: absent.days,
+    absent: absent.amount,
+    unpaidDays: unpaid.days,
+    unpaid: unpaid.amount,
     gross,
     reimb: round2(reimbIn(e, c, src)),
-    net: round2(gross - ss - lateCut.amount + reimbIn(e, c, src)),
+    net: round2(gross - ss - lateCut.amount - absent.amount - unpaid.amount + reimbIn(e, c, src)),
   };
 }
 
@@ -1545,6 +1605,10 @@ export function sumOfGroup(
       adj: c.adj,
       ss: c.ss,
       late: c.late,
+      absentDays: c.absentDays,
+      absent: c.absent,
+      unpaidDays: c.unpaidDays,
+      unpaid: c.unpaid,
       reimb: c.reimb,
       net: c.net,
       days,

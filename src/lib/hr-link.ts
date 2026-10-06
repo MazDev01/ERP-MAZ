@@ -42,14 +42,14 @@ import { useAllClaims } from "./expense-store";
 import { useAcc } from "./acc-store";
 import { useHr, voidPayApproval } from "./hr-store";
 import { usePm } from "./pm-store";
-import { useAllLeave } from "./leave-store";
+import { entitlementDays, useAllLeave } from "./leave-store";
 import { useEmpRequests, type EmpRequest } from "./emp-requests";
 import { otKindOf, paidHours } from "./ot-data";
 import { useAllOt } from "./ot-store";
 import { addDays, baht, bkkOf, pad2, thaiMonth, todayIso } from "./format";
 import { isWorkday } from "./holidays";
 import { useRole, type Role } from "./role";
-import type { LeaveRecord } from "./leave-data";
+import { leavePeriodOf, leaveYearOf, type LeaveRecord } from "./leave-data";
 
 /* บทบาทที่ล็อกอินได้ → รหัสในทะเบียนพนักงาน (ย้ายไปอยู่ hr-data เพื่อให้สโตร์ใช้ได้โดยไม่วนกัน) */
 export { ROLE_EMPLOYEE };
@@ -60,11 +60,14 @@ export const EMPLOYEE_ROLE: Record<string, Role> = Object.fromEntries(
 ) as Record<string, Role>;
 
 /*
- * ประเภทการลาในใบลามี 5 แบบ แต่ฝ่ายบุคคลสรุปเหลือ 3 กลุ่ม
- * ลาคลอดกับลาไม่รับค่าจ้างจัดเป็น "ลากิจ" ไปก่อน เพราะยังไม่มีช่องของตัวเอง
+ * ประเภทการลาในใบลามี 5 แบบ แต่ฝ่ายบุคคลสรุปเหลือ 3 กลุ่มในตารางเวลาทำงาน
+ * ลาคลอดกับลาไม่รับค่าจ้างจึงอยู่กลุ่ม "ลากิจ" — ต่างกันที่เรื่องเงิน ไม่ใช่ชื่อกลุ่ม
  *
- * TODO: ⚠️ ลาคลอดกับลาไม่รับค่าจ้างมีผลต่อการจ่ายเงินต่างจากลากิจ
- * ต้องแยกกลุ่มออกมาเมื่อได้ข้อสรุปเรื่องเงื่อนไขการหักเงิน
+ * เรื่องเงินแยกด้วยธง unpaid รายวัน (เจ้าของตัดสิน 6 ต.ค. 2569)
+ *   ลาในสิทธิ์        ได้ค่าจ้างเต็ม
+ *   ลาเกินสิทธิ์       ไม่ได้ค่าจ้าง หักตามจำนวนวันที่เกิน
+ *   ลาคลอด           บริษัทจ่าย 45 วันแรก (ตั้งที่สิทธิ์วันลา) ส่วนที่เหลือประกันสังคมจ่าย
+ *   ลาไม่รับค่าจ้าง    ไม่ได้ค่าจ้างทุกวัน
  */
 const LEAVE_GROUP: Record<string, LeaveKind> = {
   ลาพักร้อน: "vacation",
@@ -111,9 +114,42 @@ function counted(r: LeaveRecord) {
   return r.status === "อนุมัติแล้ว";
 }
 
+/*
+ * วันลาที่ไม่ได้ค่าจ้างของคนหนึ่ง — คืนชุดวันที่ที่ต้องหักเงิน
+ * ไล่ใบที่อนุมัติแล้วของแต่ละประเภทตามลำดับวัน นับสะสมเทียบกับสิทธิ์ของรอบปีนั้น
+ * วันที่เกินสิทธิ์ขึ้นไปถือว่าไม่ได้ค่าจ้าง — ลาคลอดใช้กติกาเดียวกัน เพราะวันที่บริษัทจ่ายตั้งไว้ที่สิทธิ์วันลา
+ */
+function unpaidDaysOf(records: LeaveRecord[]) {
+  const out = new Set<string>();
+  const byType = new Map<string, LeaveRecord[]>();
+  for (const r of records.filter(counted)) byType.set(r.type, [...(byType.get(r.type) ?? []), r]);
+  for (const [type, list] of byType) {
+    /* ลาไม่รับค่าจ้างไม่ได้เงินทุกวันอยู่แล้ว ไม่ต้องเทียบสิทธิ์ */
+    const always = type === "ลาไม่รับค่าจ้าง";
+    const byPeriod = new Map<string, LeaveRecord[]>();
+    for (const r of list) {
+      const k = leavePeriodOf(leaveYearOf(r.date));
+      byPeriod.set(k, [...(byPeriod.get(k) ?? []), r]);
+    }
+    for (const [period, rows] of byPeriod) {
+      const quota = always ? 0 : entitlementDays(type, period, list);
+      let used = 0;
+      for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
+        for (let d = r.date; d <= r.toDate; d = addDays(d, 1)) {
+          const step = r.half ? 0.5 : 1;
+          used += step;
+          if (used > quota + 1e-9) out.add(d);
+          if (out.size > 400) break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 /** ใบลาหนึ่งใบกินหลายวันได้ กางออกเป็นรายวันเพื่อให้ตรงกับที่ฝ่ายบุคคลนับ */
-function spread(r: LeaveRecord) {
-  const out: { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no: string }[] = [];
+function spread(r: LeaveRecord, unpaid?: Set<string>) {
+  const out: { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no: string; unpaid?: boolean }[] = [];
   const type = LEAVE_GROUP[r.type] ?? "personal";
   const span = r.half ? ("half" as const) : ("full" as const);
   /* ลาไม่เต็มวันส่งชั่วโมงจริงไปให้ฝ่ายบุคคลด้วย (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1)
@@ -124,7 +160,7 @@ function spread(r: LeaveRecord) {
       : undefined;
   for (let d = r.date; d <= r.toDate; d = addDays(d, 1)) {
     /* ติดเลขที่ใบไปกับทุกวัน — ใบเดียวกันที่มาถึงอีกทางจะได้ไม่ถูกนับซ้ำ */
-    out.push({ d, type, span, hours, no: r.id });
+    out.push({ d, type, span, hours, no: r.id, unpaid: unpaid?.has(d) || undefined });
     /* กันวนไม่รู้จบถ้าเจอใบที่วันสิ้นสุดมาก่อนวันเริ่ม */
     if (out.length > 90) break;
   }
@@ -213,8 +249,11 @@ export function useHrTime(): Record<string, TimeRec> {
       const base = out[id] ?? { late: [], leave: [], ot: [], issues: [] };
       /* วันลาซ้ำวันเดียวกันจากสองบทบาทนับครั้งเดียว — วันหนึ่งลาได้ใบเดียว */
       const days = new Set<string>();
+      /* วันที่ไม่ได้ค่าจ้างคิดจากใบของทุกบทบาทรวมกัน สิทธิ์เป็นของ "คน" ไม่ใช่ของบทบาท */
+      const mineLeave = roles.flatMap((r) => leave[r]);
+      const unpaid = unpaidDaysOf(mineLeave);
       const lv = roles
-        .flatMap((r) => leave[r].filter(counted).flatMap(spread))
+        .flatMap((r) => leave[r].filter(counted).flatMap((x) => spread(x, unpaid)))
         .filter((x) => !days.has(x.d) && days.add(x.d));
       out[id] = {
         ...base,

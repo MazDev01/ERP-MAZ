@@ -151,10 +151,12 @@ export function HrPayrollPage() {
       adj: a.adj + c.adj,
       ss: a.ss + c.ss,
       late: a.late + c.late,
+      absent: a.absent + c.absent,
+      unpaid: a.unpaid + c.unpaid,
       reimb: a.reimb + c.reimb,
       net: a.net + c.net,
     }),
-    { base: 0, ot: 0, com: 0, inc: 0, allow: 0, adj: 0, ss: 0, late: 0, reimb: 0, net: 0 },
+    { base: 0, ot: 0, com: 0, inc: 0, allow: 0, adj: 0, ss: 0, late: 0, absent: 0, unpaid: 0, reimb: 0, net: 0 },
   );
   const dayTotal = daily.reduce(
     (a, { days, c }) => ({ days: a.days + days, net: a.net + c.net }),
@@ -433,6 +435,8 @@ export function HrPayrollPage() {
                   {/* บวกลบตามได้ครบด้วยตาเปล่า — รายได้ − ประกันสังคม − หักมาสาย + ค่าใช้จ่ายคืน = สุทธิ
                       (ผู้ใช้กำหนด 23 ก.ย. 2569) สองช่องนี้เคยมีในการคำนวณแต่ไม่เคยขึ้นในตาราง */}
                   <Th w={104}>หักมาสาย</Th>
+                  <Th w={104}>หักขาดงาน</Th>
+                  <Th w={124}>หักลาไม่รับค่าจ้าง</Th>
                   <Th w={112}>ค่าใช้จ่ายคืน</Th>
                   <Th w={120}>สุทธิ</Th>
                   <Th w={96}>จัดการ</Th>
@@ -443,7 +447,7 @@ export function HrPayrollPage() {
                   <BlockedRow cols={12} month={month} />
                 ) : monthly.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={14} className="py-12 text-center text-muted-foreground">
                       ไม่มีพนักงานรายเดือนในช่วงที่เลือก
                     </td>
                   </tr>
@@ -465,6 +469,9 @@ export function HrPayrollPage() {
                         <Money label="ปรับปรุง" v={c.adj} />
                         <td data-label="ประกันสังคม" className="c num text-destructive">-{baht(c.ss)}</td>
                         <Minus label="หักมาสาย" v={c.late} />
+                        {/* ขาดงานโดยไม่มีใบลา และลาไม่รับค่าจ้าง — หักเต็มวันตามค่าจ้างรายวัน (เจ้าของตัดสิน 6 ต.ค. 2569) */}
+                        <Minus label="หักขาดงาน" v={c.absent} />
+                        <Minus label="หักลาไม่รับค่าจ้าง" v={c.unpaid} />
                         <Plus label="ค่าใช้จ่ายคืน" v={c.reimb} />
                         <td data-label="สุทธิ" className="c num font-bold">{baht(c.net)}</td>
                       </PayRow>
@@ -486,6 +493,12 @@ export function HrPayrollPage() {
                       <td className="c tsum num text-destructive">-{baht(total.ss)}</td>
                       <td className="c tsum num text-destructive">
                         {total.late ? `-${baht(total.late)}` : "—"}
+                      </td>
+                      <td className="c tsum num text-destructive">
+                        {total.absent ? `-${baht(total.absent)}` : "—"}
+                      </td>
+                      <td className="c tsum num text-destructive">
+                        {total.unpaid ? `-${baht(total.unpaid)}` : "—"}
                       </td>
                       <td className="c tsum num">{total.reimb ? `+${baht(total.reimb)}` : "—"}</td>
                       <td className="c tsum num">{baht(total.net)}</td>
@@ -580,6 +593,8 @@ export function HrPayrollPage() {
                 { label: "ปรับปรุง", value: baht(total.adj) },
                 { label: "ประกันสังคม", value: `-${baht(total.ss)}`, tone: "text-destructive" },
                 { label: "หักมาสาย", value: total.late ? `-${baht(total.late)}` : "—", tone: total.late ? "text-destructive" : undefined, muted: !total.late },
+                { label: "หักขาดงาน", value: total.absent ? `-${baht(total.absent)}` : "—", tone: total.absent ? "text-destructive" : undefined, muted: !total.absent },
+                { label: "หักลาไม่รับค่าจ้าง", value: total.unpaid ? `-${baht(total.unpaid)}` : "—", tone: total.unpaid ? "text-destructive" : undefined, muted: !total.unpaid },
                 { label: "ค่าใช้จ่ายคืน", value: total.reimb ? `+${baht(total.reimb)}` : "—", muted: !total.reimb },
               ]}
             />
@@ -1077,6 +1092,11 @@ function PayDetail({
           <Row k="เพดานปีนี้" v={`${baht(cap.ceiling)} บาท · หักสูงสุด ${baht(cap.max)} บาท`} num />
           <Row k={`ประกันสังคม ${settings().rates.socialSecurity}%`} v={`${baht(c.ss)} บาท`} num />
           {c.lateMin > 0 && <Row k={`หักมาสาย ${c.lateMin} นาที`} v={`${baht(c.late)} บาท`} num />}
+          {/* ขาดงานและลาไม่รับค่าจ้าง หักเต็มวันตามค่าจ้างรายวัน (เจ้าของตัดสิน 6 ต.ค. 2569) */}
+          {c.absentDays > 0 && <Row k={`หักขาดงาน ${c.absentDays} วัน`} v={`${baht(c.absent)} บาท`} num />}
+          {c.unpaidDays > 0 && (
+            <Row k={`หักลาไม่รับค่าจ้าง ${c.unpaidDays} วัน`} v={`${baht(c.unpaid)} บาท`} num />
+          )}
         </Kv>
       </Sect>
 

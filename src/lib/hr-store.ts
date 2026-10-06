@@ -457,10 +457,10 @@ export function setOtHours(id: string, day: string, hours: number) {
  * ระบุด้วยวันที่ ไม่ใช่ลำดับในอาเรย์ เพราะรายการที่แสดงถูกกรองตามรอบมาแล้ว
  * ลำดับที่เห็นบนจอกับลำดับจริงในข้อมูลจึงไม่ตรงกัน
  */
-export function noteIssue(id: string, day: string, note: string) {
+export function noteIssue(id: string, day: string, note: string, absent = false) {
   editTime(id, (r) => ({
     ...r,
-    issues: r.issues.map((x) => (x.d === day ? { ...x, note } : x)),
+    issues: r.issues.map((x) => (x.d === day ? { ...x, note, absent } : x)),
   }));
 }
 

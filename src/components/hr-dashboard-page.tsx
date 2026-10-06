@@ -31,7 +31,8 @@ import { decideInternLeave, useHr } from "@/lib/hr-store";
 import { UsersIcon, UserIcon, ClockIcon, ChartIcon } from "./icons";
 
 /** ใกล้ครบกำหนดทดลองงานภายในกี่วันถึงจะเตือน */
-const PROBATION_WARN_DAYS = 30;
+/* เตือนล่วงหน้า 14 วันก่อนครบทดลองงาน (เจ้าของตัดสิน 6 ต.ค. 2569) — ต้องตรงกับ notifications.ts */
+const PROBATION_WARN_DAYS = 14;
 
 /** ช่วงเวลาของงานที่ต้องดำเนินการ */
 type Range = "m" | "q" | "y";
