@@ -411,6 +411,8 @@ export type TaskFile = {
   sz: string;
   at: string;
   by: string;
+  /** รหัสไฟล์จริงที่เก็บไว้ในเครื่อง (file-store.ts) — เปิดไฟล์กลับมาดูได้ */
+  fileId?: string;
 };
 
 /** ผลงานที่ทีมส่งให้ PM ตรวจหนึ่งรอบ */
@@ -526,6 +528,8 @@ export type ProjectDoc = {
   /** "YYYY-MM-DD HH:mm" */
   at: string;
   url?: string;
+  /** รหัสไฟล์จริงที่เก็บไว้ในเครื่อง (file-store.ts) — เปิดไฟล์กลับมาดูได้ */
+  fileId?: string;
 };
 
 export type ProjectTransfer = {

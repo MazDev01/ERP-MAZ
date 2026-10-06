@@ -59,6 +59,7 @@ import {
   UserIcon,
 } from "./icons";
 import { fileSize } from "./file-drop";
+import { openStoredFile, putFile, removeStoredFile } from "@/lib/file-store";
 import { Field, Sheet } from "./lead-dialogs";
 import { ProposalPreview, QuotationPreview } from "./pm-docs";
 import { ThaiDatePicker } from "./thai-date-picker";
@@ -1705,14 +1706,24 @@ function TaskDialog({
                       {fileKindLabel(f.n, f.k)} · {f.sz}
                     </em>
                   </span>
+                  {f.fileId && (
+                    <button
+                      type="button"
+                      className="btn glass-thin h-7 flex-none px-2.5 text-[11.5px] max-sm:h-9"
+                      onClick={() => void openStoredFile(f.fileId!)}
+                    >
+                      เปิด
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label={`เอาไฟล์ ${f.n} ออก`}
-                    onClick={() =>
+                    onClick={() => {
+                      if (f.fileId) void removeStoredFile(f.fileId);
                       onEdit((t) => {
                         t.files = (t.files ?? []).filter((x) => x.n !== f.n);
-                      })
-                    }
+                      });
+                    }}
                     className="grid size-7 flex-none place-items-center rounded-lg text-muted-foreground hover:bg-[var(--destructive-soft)] hover:text-destructive max-sm:size-9"
                   >
                     <CloseIcon className="size-3.5" strokeWidth={2.4} />
@@ -1725,24 +1736,32 @@ function TaskDialog({
               ยังไม่มีไฟล์แนบ — แนบแบบ ภาพตัวอย่าง หรือข้อมูลที่คนทำต้องใช้ได้
             </p>
           )}
-          {/* TODO: ยังไม่มีที่เก็บไฟล์จริง เก็บได้แค่ชื่อกับขนาด · ต่อ backend แล้วให้อัปโหลดขึ้น storage */}
+          {/* ไฟล์เก็บอยู่ในเครื่องผู้ใช้ (IndexedDB) · ต่อ backend แล้วย้ายไปอัปโหลดขึ้น storage จริง */}
         </section>
       </div>
     </Sheet>
   );
 }
 
-/** ไฟล์ที่เพิ่งเลือกจากเครื่อง → รายการไฟล์ของงาน (ยังไม่มีที่เก็บไฟล์จริง เก็บแค่ชื่อกับขนาด) */
+/*
+ * ไฟล์ที่เพิ่งเลือกจากเครื่อง → รายการไฟล์ของงาน
+ * เก็บไบต์ไว้ในเครื่อง (file-store · IndexedDB) ด้วย คนทำงานจะได้กดเปิดไฟล์โจทย์ได้จริง ไม่ใช่เห็นแค่ชื่อ
+ */
 function pickedFiles(list: FileList | null): TaskFile[] {
   if (!list) return [];
   const at = todayIso();
-  return Array.from(list).map((f) => ({
-    n: f.name,
-    k: fileKind(f.name),
-    sz: fileSize(f.size),
-    at,
-    by: "PM",
-  }));
+  return Array.from(list).map((f) => {
+    const fileId = `tf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    void putFile(fileId, f);
+    return {
+      n: f.name,
+      k: fileKind(f.name),
+      sz: fileSize(f.size),
+      at,
+      by: "PM",
+      fileId,
+    };
+  });
 }
 
 /** แถวคนหนึ่งคน — ชื่อ ตำแหน่ง และงานที่ถืออยู่ ใช้ทั้งในรายการที่เลือกแล้วและรายชื่อทีม */

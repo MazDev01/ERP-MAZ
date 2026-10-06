@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { openStoredFile } from "@/lib/file-store";
 import { bkkStamp, daysBetween, thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import { fileKindLabel, lastSub, projName, type Project, type ProjectTask } from "@/lib/pm-data";
 import { memberName, openNudge, postTaskTalk, submitWork, taskTalks, usePm, type TaskTalk } from "@/lib/pm-store";
@@ -518,7 +519,7 @@ function DetailDialog({
       )}
 
       <p className="mt-5 mb-2 text-[11.5px] text-muted-foreground">ไฟล์จาก PM</p>
-      <FileList names={t.files.map((f) => ({ n: f.n, sz: f.sz }))} empty="ไม่มีไฟล์แนบ" />
+      <FileList names={t.files.map((f) => ({ n: f.n, sz: f.sz, fileId: f.fileId }))} empty="ไม่มีไฟล์แนบ" />
 
       <dl className="mt-5 grid gap-4 sm:grid-cols-2">
         <Kv k="ผู้มอบหมาย" v={t.lastChange?.by || p.pm} />
@@ -695,7 +696,7 @@ function SubmitDialog({
             </div>
           )}
           <p className="mt-5 mb-2 text-[11.5px] text-muted-foreground">ไฟล์จาก PM</p>
-          <FileList names={t.files.map((f) => ({ n: f.n, sz: f.sz }))} empty="ไม่มีไฟล์แนบ" />
+          <FileList names={t.files.map((f) => ({ n: f.n, sz: f.sz, fileId: f.fileId }))} empty="ไม่มีไฟล์แนบ" />
           <dl className="mt-5 grid gap-4 sm:grid-cols-2">
             <Kv k="ผู้มอบหมาย" v={t.lastChange?.by || p.pm} />
             <Kv k="กำหนดส่ง" v={thaiDate(t.due)} />
@@ -888,13 +889,13 @@ function Kv({ k, v, warn }: { k: string; v: string; warn?: boolean }) {
 }
 
 /** ไฟล์พร้อมขนาด (ถ้ารู้) — ไฟล์จาก PM มีขนาด ไฟล์ที่ส่งงานเก็บแต่ชื่อ ตามต้นแบบ fileRow */
-function FileList({ names, empty }: { names: { n: string; sz?: string }[]; empty: string }) {
+function FileList({ names, empty }: { names: { n: string; sz?: string; fileId?: string }[]; empty: string }) {
   if (names.length === 0) {
     return <p className="text-[13px] text-muted-foreground">{empty}</p>;
   }
   return (
     <ul className="flex flex-col gap-2">
-      {names.map(({ n, sz }) => (
+      {names.map(({ n, sz, fileId }) => (
         <li key={n} className="flex items-center gap-3">
           <FileIcon className="size-[15px] flex-none text-muted-foreground" strokeWidth={2} />
           <span className="min-w-0 flex-1">
@@ -904,23 +905,29 @@ function FileList({ names, empty }: { names: { n: string; sz?: string }[]; empty
               {sz ? ` · ${sz}` : ""}
             </em>
           </span>
-          <DownloadLink />
+          <DownloadLink fileId={fileId} />
         </li>
       ))}
     </ul>
   );
 }
 
-/* ยังไม่มีที่เก็บไฟล์จริง ปุ่มจึงบอกตรง ๆ แทนที่จะทำเป็นว่าโหลดได้ */
-function DownloadLink({ className = "" }: { className?: string }) {
+/*
+ * ไฟล์ที่แนบหลังมีที่เก็บในเครื่องแล้ว (file-store) กดเปิดได้จริง
+ * ไฟล์เก่าที่แนบไว้ก่อนหน้านี้ยังไม่มีไบต์ ปุ่มจึงบอกตรง ๆ แทนที่จะทำเป็นว่าโหลดได้
+ */
+function DownloadLink({ className = "", fileId }: { className?: string; fileId?: string }) {
   return (
     <button
       type="button"
       className={`lnk flex flex-none items-center gap-1 ${className}`}
-      onClick={() => window.alert("ยังไม่มีระบบเก็บไฟล์จริง จึงยังดาวน์โหลดไม่ได้")}
+      onClick={() => {
+        if (fileId) void openStoredFile(fileId);
+        else window.alert("ไฟล์นี้แนบไว้ก่อนระบบเก็บไฟล์ จึงยังเปิดไม่ได้");
+      }}
     >
       <DownloadIcon className="size-[14px]" strokeWidth={2} />
-      ดาวน์โหลด
+      {fileId ? "เปิดไฟล์" : "ดาวน์โหลด"}
     </button>
   );
 }

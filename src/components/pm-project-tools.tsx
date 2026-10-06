@@ -14,6 +14,7 @@ import { addProjectDocs, removeProjectDoc, renameProject } from "@/lib/pm-store"
 import { useProfile } from "@/lib/profile-data";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FileDrop, fileSize, type PickedFile } from "./file-drop";
+import { openStoredFile, removeStoredFile } from "@/lib/file-store";
 import { CloseIcon, FileIcon, LinkIcon, PencilIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
@@ -123,7 +124,7 @@ export function AddDocsDialog({ deal, onClose }: { deal: string; onClose: () => 
     const at = bkkStamp();
     const docs: ProjectDoc[] = files.map((f) => {
       const url = f.url && /^https?:\/\//i.test(f.url) ? f.url : undefined;
-      return { n: f.name, sz: url ? "ลิงก์" : fileSize(f.size), by: me.name, at, url };
+      return { n: f.name, sz: url ? "ลิงก์" : fileSize(f.size), by: me.name, at, url, fileId: f.fileId };
     });
     addProjectDocs(deal, docs);
     onClose();
@@ -165,10 +166,13 @@ export function AddDocsDialog({ deal, onClose }: { deal: string; onClose: () => 
 export function RemoveDocDialog({
   deal,
   name,
+  fileId,
   onClose,
 }: {
   deal: string;
   name: string | null;
+  /** รหัสไฟล์จริงของเอกสารที่กำลังจะเอาออก — ลบออกจากที่เก็บด้วย จะได้ไม่มีไฟล์ค้างในเครื่อง */
+  fileId?: string;
   onClose: () => void;
 }) {
   return (
@@ -181,6 +185,7 @@ export function RemoveDocDialog({
       tone="destructive"
       onConfirm={() => {
         if (name) removeProjectDoc(deal, name);
+        if (fileId) void removeStoredFile(fileId);
         onClose();
       }}
       onCancel={onClose}
@@ -195,7 +200,7 @@ export function docSub(d: ProjectDoc) {
 
 /*
  * ชิปเอกสารแนบ วางต่อจากปุ่มใบเสนอราคา/Proposal ในหน้าจัดคิวงาน
- * ลิงก์เปิดได้จริง · ไฟล์ยังไม่มีที่เก็บ จึงโชว์แค่ชื่อกับรายละเอียดใน title
+ * ลิงก์เปิดได้จริง · ไฟล์ที่แนบเก็บไว้ในเครื่อง (file-store) จึงกดเปิดดูได้เหมือนกัน
  */
 export function DocChips({
   deal,
@@ -227,6 +232,16 @@ export function DocChips({
               <a href={d.url} target="_blank" rel="noreferrer" title={docSub(d)} className="btn glass-thin pl-docbtn">
                 {inner}
               </a>
+            ) : d.fileId ? (
+              /* ไฟล์ที่แนบไว้เปิดดูได้จริง — เก็บไบต์ไว้ในเครื่องตั้งแต่ตอนแนบ (file-store) */
+              <button
+                type="button"
+                title={`เปิด ${d.n} · ${docSub(d)}`}
+                onClick={() => void openStoredFile(d.fileId!)}
+                className="btn glass-thin pl-docbtn"
+              >
+                {inner}
+              </button>
             ) : (
               <span title={docSub(d)} className="btn glass-thin pl-docbtn cursor-default">
                 {inner}
@@ -247,7 +262,12 @@ export function DocChips({
           </span>
         );
       })}
-      <RemoveDocDialog deal={deal} name={removing} onClose={() => setRemoving(null)} />
+      <RemoveDocDialog
+        deal={deal}
+        name={removing}
+        fileId={docs.find((d) => d.n === removing)?.fileId}
+        onClose={() => setRemoving(null)}
+      />
     </>
   );
 }

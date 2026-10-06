@@ -325,7 +325,19 @@ export function createRound(input: {
     status: "open",
     comments: [],
   };
-  store.update((st) => ({ ...st, rounds: [...st.rounds, r] }));
+  /* ส่งรอบใหม่แล้วลิงก์รอบเก่าของงานเดียวกันต้องตาย — ไม่งั้นลูกค้าที่ยังเปิดลิงก์เดิมค้างไว้
+     จะคอมเมนต์ใส่งานรอบที่เลิกใช้แล้ว แล้วทีมไม่เห็นว่าเขาพูดถึงไฟล์ชุดไหน */
+  store.update((st) => ({
+    ...st,
+    rounds: [
+      ...st.rounds.map((x) =>
+        x.deal === input.deal && x.taskName === input.taskName && x.status === "open"
+          ? { ...x, status: "expired" as const }
+          : x,
+      ),
+      r,
+    ],
+  }));
   sendToClientWork(input.deal, input.taskName, round, at);
   return token;
 }

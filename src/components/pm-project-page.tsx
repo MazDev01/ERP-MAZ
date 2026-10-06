@@ -20,6 +20,7 @@ import { latestRound, roundStatus, useClientReviews } from "@/lib/client-review-
 import { ClientFeedbackSheet, ClientRoundChip, ClientSendSheet } from "./client-review-pm";
 import { ProjectChat } from "./project-chat";
 import { AddDocButton, AddDocsDialog, docSub, RemoveDocDialog } from "./pm-project-tools";
+import { openStoredFile } from "@/lib/file-store";
 import { useHydrated } from "@/lib/pwa";
 import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
@@ -529,6 +530,15 @@ function SalesDocs({ project }: { project: Project }) {
               <a href={d.url} target="_blank" rel="noreferrer" className="btn glass-thin h-7 px-2.5 text-[11.5px] max-sm:h-9 max-sm:px-3">
                 เปิด
               </a>
+            ) : d.fileId ? (
+              /* ไฟล์ที่แนบเก็บไบต์ไว้ในเครื่องตั้งแต่ตอนแนบ (file-store) จึงเปิดดูได้จริง */
+              <button
+                type="button"
+                className="btn glass-thin h-7 px-2.5 text-[11.5px] max-sm:h-9 max-sm:px-3"
+                onClick={() => void openStoredFile(d.fileId!)}
+              >
+                เปิด
+              </button>
             ) : (
               <span className="text-[11.5px] text-muted-foreground">แนบไว้ให้ทีม</span>
             )}
@@ -572,7 +582,12 @@ function SalesDocs({ project }: { project: Project }) {
       </ul>
 
       {adding && <AddDocsDialog deal={project.deal} onClose={() => setAdding(false)} />}
-      <RemoveDocDialog deal={project.deal} name={removing} onClose={() => setRemoving(null)} />
+      <RemoveDocDialog
+        deal={project.deal}
+        name={removing}
+        fileId={extra.find((d) => d.n === removing)?.fileId}
+        onClose={() => setRemoving(null)}
+      />
 
       {open?.open.t === "quo" && (
         <Sheet
