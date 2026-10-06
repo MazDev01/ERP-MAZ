@@ -273,6 +273,26 @@ export function ScheduleBoard<T>({
   const phone = () => window.matchMedia("(max-width: 1099.98px)").matches;
   /* นัดที่ยกเลิกแล้วไม่ลงปฏิทิน แต่ยังอยู่ในรายการของวันที่เลือก */
   const liveRows = rows.filter((e) => !e.cancelled);
+  /*
+   * วันที่เลือกว่าง — บอกว่ารายการถัดไปคือวันไหนเรื่องอะไร กดแล้วกระโดดไปวันนั้นเลย
+   * ไม่งั้นคนใช้ต้องกดไล่ทีละวันหาเองว่ามีอะไรรออยู่ (ตามต้นแบบ presales-schedule.html)
+   */
+  const nextUp = (() => {
+    const later = liveRows.filter((e) => e.start > sel).sort((a, b) => a.start.localeCompare(b.start))[0];
+    return later ? { day: later.start, title: later.title } : null;
+  })();
+  const nextHint = nextUp && (
+    <>
+      {" · ถัดไป "}
+      <button
+        type="button"
+        onClick={() => nav.jumpTo(nextUp.day)}
+        className="font-semibold text-primary hover:underline"
+      >
+        {thaiDate(nextUp.day)} · {nextUp.title}
+      </button>
+    </>
+  );
   const dotOf = Object.fromEntries(kinds.map((k) => [k.key, k])) as Record<string, BoardKind>;
 
   /* วันหยุดของเดือนที่กำลังดู — แสดงเหนือปฏิทินเสมอ นัดลูกค้าต้องรู้ก่อนว่าวันไหนเขาไม่อยู่ */
@@ -323,7 +343,7 @@ export function ScheduleBoard<T>({
   const dayList = (
     <>
     {dayRows.length === 0 ? (
-      <p className="py-1.5 text-[12.5px] text-muted-foreground">ไม่มีนัดหมายในวันนี้</p>
+      <p className="py-1.5 text-[12.5px] text-muted-foreground">ไม่มีนัดหมายในวันนี้{nextHint}</p>
     ) : (
       <ul className="flex flex-col">
         {dayRows.map((e) => {
@@ -656,7 +676,7 @@ export function ScheduleBoard<T>({
               </div>
               <ul className="mt-1 border-t border-border">
                 {dayRows.length === 0 ? (
-                  <li className="py-7 text-center text-[13.5px] text-muted-foreground">ไม่มีนัดหมาย</li>
+        <li className="py-7 text-center text-[13.5px] text-muted-foreground">ไม่มีนัดหมาย{nextHint}</li>
                 ) : (
                   dayRows.map((e) => (
                     <li key={e.id} className="border-b border-border">

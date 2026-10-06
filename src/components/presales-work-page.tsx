@@ -353,7 +353,10 @@ function WorkDialog({
 }) {
   const ME = usePsMe();
   const crm = useCrm();
-  const templates = useTemplates();
+  /* เทมเพลตที่เลิกใช้แล้วไม่ขึ้นให้เลือก แต่ยังอยู่ในคลัง (เจ้าของสั่ง 6 ต.ค. 2569) */
+  const templates = useTemplates().filter((t) => !t.off);
+  /* เลขนับของรายการที่หยิบจากคลัง — ใช้ทำรหัสไม่ซ้ำ แทนการอ่านเวลาปัจจุบันตอนวาดหน้า */
+  const pickSeqRef = useRef(0);
   const rounds = crm.presalesRounds.filter((x) => x.requestNo === r.no).sort((a, b) => b.round - a.round);
   const [form, setForm] = useState<"send" | "ask" | null>(initialForm ?? null);
   const ro = usePmReadOnly();
@@ -610,7 +613,12 @@ function WorkDialog({
                 if (!t) return;
                 setFiles([
                   ...files,
-                  { id: `tpl:${t.id}:${Date.now()}`, name: t.url ?? t.file, size: t.url ? 0 : (t.size ?? 0), url: t.url },
+                  {
+                    id: `tpl:${t.id}:${(pickSeqRef.current += 1)}`,
+                    name: t.url ?? t.file,
+                    size: t.url ? 0 : (t.size ?? 0),
+                    url: t.url,
+                  },
                 ]);
                 setSendErr(false);
               }}

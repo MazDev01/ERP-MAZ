@@ -17,8 +17,9 @@ import { serviceLabel, services } from "@/lib/pm-data";
 import { usePsMe } from "@/lib/presales-work";
 import {
   addTemplate,
+  fileKindOf,
   linkKind,
-  removeTemplate,
+  toggleTemplateOff,
   updateTemplate,
   useTemplates,
   type PresalesTemplate,
@@ -36,19 +37,29 @@ type Tab = "all" | TemplateKind;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "all", label: "ทั้งหมด" },
+  { key: "ppt", label: "PowerPoint" },
   { key: "pdf", label: "ไฟล์ PDF" },
   { key: "canva", label: "Canva" },
   { key: "link", label: "ลิงก์" },
 ];
 
-const KIND_LABEL: Record<TemplateKind, string> = { pdf: "ไฟล์ PDF", canva: "ลิงก์ Canva", link: "ลิงก์" };
+const KIND_LABEL: Record<TemplateKind, string> = {
+  ppt: "PowerPoint",
+  pdf: "ไฟล์ PDF",
+  canva: "ลิงก์ Canva",
+  link: "ลิงก์",
+};
 
 /** ป้ายชนิด — สีเดียวกับป้ายเอกสารในหน้าข้อเสนอ (proposal-doc: ลิงก์สีเขียวน้ำทะเล · ไฟล์สีแดง) */
 export function TemplateKindTag({ kind }: { kind: TemplateKind }) {
   return (
     <span
       className={`inline-block shrink-0 rounded-full px-2 py-px text-[10.5px] font-bold whitespace-nowrap ${
-        kind === "pdf" ? "bg-[var(--destructive-soft)] text-destructive" : "bg-[#e7fbfc] text-[#0b8f95]"
+        kind === "pdf"
+          ? "bg-[var(--destructive-soft)] text-destructive"
+          : kind === "ppt"
+            ? "bg-[#fdedd6] text-[#94500a]"
+            : "bg-[#e7fbfc] text-[#0b8f95]"
       }`}
     >
       {KIND_LABEL[kind]}
@@ -63,7 +74,8 @@ export function PresalesTemplatesPage() {
   const [tab, setTab] = useState<Tab>("all");
   /* หน้าต่างเพิ่ม/แก้ไข — "new" = เพิ่มใหม่ · อื่น ๆ = รหัสเทมเพลตที่แก้ */
   const [editing, setEditing] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<PresalesTemplate | null>(null);
+  /* เลิกใช้แทนการลบ — ข้อเสนอเก่าที่อ้างเทมเพลตนี้ต้องตามย้อนได้ (เจ้าของสั่ง 6 ต.ค. 2569) */
+  const [retiring, setRetiring] = useState<PresalesTemplate | null>(null);
   /** เปิดไฟล์ไม่ได้เพราะอะไร — เช่น อัปโหลดจากเครื่องอื่นหรือล้างข้อมูลไปแล้ว */
   const [openError, setOpenError] = useState("");
 
@@ -75,6 +87,20 @@ export function PresalesTemplatesPage() {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const countOf = (k: Tab) => (k === "all" ? filtered.length : filtered.filter((t) => t.kind === k).length);
   const rows = tab === "all" ? filtered : filtered.filter((t) => t.kind === tab);
+  /* จัดกลุ่มตามบริการตามต้นแบบ — ที่ยังใช้อยู่ขึ้นก่อน ที่เลิกใช้แล้วไปท้ายกลุ่ม */
+  const groups = services()
+    .map((sv) => ({
+      key: sv.key,
+      label: sv.label,
+      items: rows
+        .filter((t) => t.service === sv.key)
+        .sort((a, b) => Number(Boolean(a.off)) - Number(Boolean(b.off))),
+    }))
+    .filter((g) => g.items.length > 0);
+  /* บริการที่ถูกลบออกจากข้อมูลหลักไปแล้ว แต่ยังมีเทมเพลตค้างอยู่ — ไม่ปล่อยให้หายไปเฉย ๆ */
+  const known = new Set(services().map((sv) => sv.key));
+  const orphan = rows.filter((t) => !known.has(t.service));
+  if (orphan.length) groups.push({ key: "_other", label: "บริการอื่น", items: orphan });
   const current = editing && editing !== "new" ? list.find((t) => t.id === editing) : undefined;
 
   return (
@@ -152,8 +178,18 @@ export function PresalesTemplatesPage() {
                   </td>
                 </tr>
               ) : (
-                rows.map((t) => (
-                  <tr key={t.id}>
+                groups.flatMap((g) => [
+                  /* หัวข้อกลุ่มบริการ (ตามต้นแบบ presales-templates.html) — บอกจำนวนที่ยังใช้อยู่ */
+                  <tr key={`h-${g.key}`} className="group-row max-sm:!block">
+                    <td colSpan={6} className="!bg-muted/60 !py-2 text-[12.5px] font-bold max-sm:!block">
+                      {g.label}{" "}
+                      <b className="num ml-1 font-semibold text-muted-foreground">
+                        ใช้อยู่ {g.items.filter((x) => !x.off).length} รายการ
+                      </b>
+                    </td>
+                  </tr>,
+                  ...g.items.map((t) => (
+                  <tr key={t.id} className={t.off ? "opacity-60" : ""}>
                     <td className="min-w-[240px] max-sm:!block max-sm:!text-left max-sm:[&>*]:!text-left">
                       {/* กดชื่อเทมเพลตแล้วเปิดได้เลย ไม่ต้องเล็งปุ่มเล็ก ๆ ด้านล่าง (ตรวจการกด 2 ต.ค. 2569) */}
                       {t.url ? (
@@ -167,6 +203,11 @@ export function PresalesTemplatesPage() {
                         </a>
                       ) : (
                         <b className="font-semibold break-words">{t.name}</b>
+                      )}
+                      {t.off && (
+                        <span className="ml-2 rounded-full bg-muted px-2 py-px text-[10.5px] font-bold text-muted-foreground">
+                          เลิกใช้แล้ว
+                        </span>
                       )}
                       <span className="why">{t.note || (t.url ? t.url : t.file)}</span>
                     </td>
@@ -225,17 +266,24 @@ export function PresalesTemplatesPage() {
                         <button type="button" className="btn glass-thin btn-mini" onClick={() => setEditing(t.id)}>
                           แก้ไข
                         </button>
-                        <button
-                          type="button"
-                          className="btn glass-thin btn-mini hover:!border-destructive hover:!text-destructive"
-                          onClick={() => setRemoving(t)}
-                        >
-                          ลบ
-                        </button>
+                        {t.off ? (
+                          <button type="button" className="btn glass-thin btn-mini" onClick={() => toggleTemplateOff(t.id)}>
+                            ใช้อีกครั้ง
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn glass-thin btn-mini hover:!border-destructive hover:!text-destructive"
+                            onClick={() => setRetiring(t)}
+                          >
+                            เลิกใช้
+                          </button>
+                        )}
                       </span>
                     </td>
                   </tr>
-                ))
+                  )),
+                ])
               )}
             </tbody>
           </table>
@@ -247,17 +295,17 @@ export function PresalesTemplatesPage() {
       )}
 
       <ConfirmDialog
-        open={Boolean(removing)}
-        title="ลบเทมเพลตนี้?"
-        description="ลบแล้วเลือกไปแนบในข้อเสนอไม่ได้อีก ข้อเสนอที่ส่งไปแล้วไม่เปลี่ยน"
-        detail={removing?.name}
-        confirmLabel="ลบ"
+        open={Boolean(retiring)}
+        title="เลิกใช้เทมเพลตนี้?"
+        description="เลิกใช้แล้วจะไม่ขึ้นให้เลือกตอนส่งข้อเสนอ แต่ยังอยู่ในคลัง ข้อเสนอเก่าที่ใช้ฉบับนี้จึงยังตามย้อนได้ · กลับมาใช้ใหม่ได้ทุกเมื่อ"
+        detail={retiring?.name}
+        confirmLabel="เลิกใช้"
         tone="destructive"
         onConfirm={() => {
-          if (removing) removeTemplate(removing.id);
-          setRemoving(null);
+          if (retiring) toggleTemplateOff(retiring.id);
+          setRetiring(null);
         }}
-        onCancel={() => setRemoving(null)}
+        onCancel={() => setRetiring(null)}
       />
     </div>
   );
@@ -290,7 +338,7 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
     const input = {
       name: name.trim(),
       service,
-      kind: f.url ? linkKind(f.url) : ("pdf" as const),
+      kind: f.url ? linkKind(f.url) : fileKindOf(f.name),
       file: f.name,
       url: f.url,
       size: f.url ? undefined : f.size,

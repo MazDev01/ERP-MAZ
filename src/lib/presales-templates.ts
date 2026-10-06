@@ -4,7 +4,7 @@
  * คลังเทมเพลตของทีมก่อนการขาย (บทบาท ps) — หน้า /presales-templates
  *
  * เก็บเทมเพลตข้อเสนอที่ใช้ซ้ำบ่อย แยกตามประเภทบริการชุดเดียวกับใบเสนอราคา (services() ใน pm-data)
- * ชนิดของเทมเพลตมีสามแบบ — ไฟล์ PDF · ลิงก์ Canva · ลิงก์อื่น ๆ
+ * ชนิดของเทมเพลตมีสี่แบบ — ไฟล์ PowerPoint · ไฟล์ PDF · ลิงก์ Canva · ลิงก์อื่น ๆ (เจ้าของสั่ง 6 ต.ค. 2569)
  * ไฟล์ที่อัปโหลดเองเก็บตัวไฟล์ไว้ในเครื่อง (file-store.ts) จึงเปิดกลับมาดูได้
  * ส่วนเทมเพลตชุดตั้งต้นมีแค่ชื่อไฟล์ เพราะยังไม่มีที่เก็บไฟล์ของระบบ
  * เลือกเทมเพลตไปแนบในหน้าส่งงาน (presales-work) แล้วนับจำนวนครั้งที่ใช้ให้
@@ -14,7 +14,7 @@ import { useSyncExternalStore } from "react";
 import { todayIso } from "./format";
 import { createPersistedStore } from "./persisted-store";
 
-export type TemplateKind = "pdf" | "canva" | "link";
+export type TemplateKind = "ppt" | "pdf" | "canva" | "link";
 
 export type PresalesTemplate = {
   id: string;
@@ -22,7 +22,7 @@ export type PresalesTemplate = {
   /** รหัสประเภทบริการ — ServiceKey ของ pm-data */
   service: string;
   kind: TemplateKind;
-  /** ชื่อไฟล์ (ชนิด pdf) หรือที่อยู่ลิงก์ (canva/link) */
+  /** ชื่อไฟล์ (ชนิด ppt/pdf) หรือที่อยู่ลิงก์ (canva/link) */
   file: string;
   url?: string;
   /** ขนาดไฟล์เป็นไบต์ — ลิงก์ไม่มี */
@@ -35,6 +35,11 @@ export type PresalesTemplate = {
   updatedAt: string;
   /** แนบไปกับข้อเสนอแล้วกี่ครั้ง */
   uses: number;
+  /*
+   * เลิกใช้แล้ว — ไม่ขึ้นให้เลือกตอนส่งข้อเสนอ แต่ยังอยู่ในคลัง (เจ้าของสั่ง 6 ต.ค. 2569)
+   * เลิกใช้แทนการลบ เพราะข้อเสนอเก่าที่อ้างเทมเพลตนี้ต้องตามย้อนได้ว่าใช้ฉบับไหน
+   */
+  off?: boolean;
 };
 
 const SEED: PresalesTemplate[] = [
@@ -126,6 +131,11 @@ export function resetTemplates() {
   store.reset();
 }
 
+/** ชนิดจากนามสกุลไฟล์ — PowerPoint หรือ PDF */
+export function fileKindOf(name: string): TemplateKind {
+  return /\.pptx?$/i.test(name) ? "ppt" : "pdf";
+}
+
 /** ลิงก์ Canva ขึ้นป้าย Canva · ลิงก์อื่นขึ้นป้ายลิงก์ */
 export function linkKind(url: string): TemplateKind {
   return /canva\.(com|link)/i.test(url) ? "canva" : "link";
@@ -150,6 +160,11 @@ export function updateTemplate(id: string, input: TemplateInput) {
 
 export function removeTemplate(id: string) {
   store.update((list) => list.filter((t) => t.id !== id));
+}
+
+/** เลิกใช้หรือกลับมาใช้อีกครั้ง — ไม่ลบทิ้ง ข้อเสนอเก่าจึงยังอ้างฉบับที่ใช้จริงได้ */
+export function toggleTemplateOff(id: string) {
+  store.update((list) => list.map((t) => (t.id === id ? { ...t, off: !t.off, updatedAt: todayIso() } : t)));
 }
 
 /** นับว่าเทมเพลตถูกแนบไปกับข้อเสนอ — เรียกตอนส่งงานจริง */
