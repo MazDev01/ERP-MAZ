@@ -247,5 +247,8 @@ export const OT_RECORDS: Record<Role, OtRecord[]> = {
   ],
   gm: [],
   ceo: [],
+  /* ฝึกงานและแม่บ้านเพิ่งเปิดใช้ ยังไม่มีใบของตัวเอง */
+  intern: [],
+  maid: [],
 };
 

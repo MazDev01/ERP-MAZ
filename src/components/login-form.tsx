@@ -102,13 +102,14 @@ export function LoginForm() {
   const [role, setPick] = useState<Role>(savedRole);
   /* พนักงานมีหลายตำแหน่ง จึงต้องเลือกด้วยว่าจะเข้าเป็นใคร (เจ้าของสั่ง 29 ก.ย. 2569) */
   const [who, setWho] = useState(() => staffEmployeeId());
-  /* ทางเข้าแบบทดลองงาน/ฝึกงาน — หยิบคนแรกของแต่ละประเภทที่ยังทำงานอยู่จากทะเบียนจริง
-     ไม่ตั้งรหัสพนักงานตายตัว เพราะฝ่ายบุคคลเพิ่มหรือเปลี่ยนคนได้ */
-  const demoTypes = (["probat", "intern"] as const)
+  /* ทางเข้าแบบทดลองงาน — หยิบคนแรกที่ยังทำงานอยู่จากทะเบียนจริง
+     ไม่ตั้งรหัสพนักงานตายตัว เพราะฝ่ายบุคคลเพิ่มหรือเปลี่ยนคนได้
+     ฝึกงานไม่อยู่ในนี้แล้ว เพราะมีบทบาท "นักศึกษาฝึกงาน" ของตัวเองตั้งแต่ 6 ต.ค. 2569 */
+  const demoTypes = (["probat"] as const)
     .map((type) => {
       const e = hr.emp.find((x) => x.type === type && x.status === "active" && staffTeam().some((t) => t.id === x.id));
       return e
-        ? { id: e.id, name: e.name, label: HR_EMPTYPE[type].label, en: type === "probat" ? "Probation" : "Intern" }
+        ? { id: e.id, name: e.name, label: HR_EMPTYPE[type].label, en: "Probation" }
         : null;
     })
     .filter((x) => x !== null);

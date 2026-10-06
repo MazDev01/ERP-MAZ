@@ -248,6 +248,9 @@ export const LEAVE_RECORDS: Record<Role, LeaveRecord[]> = {
   staff: STAFF_LEAVE,
   gm: GM_LEAVE,
   ceo: [],
+  /* ฝึกงานและแม่บ้านเพิ่งเปิดใช้ ยังไม่มีใบของตัวเอง */
+  intern: [],
+  maid: [],
 };
 
 

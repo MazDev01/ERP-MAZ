@@ -200,6 +200,9 @@ export const ROLE_EMPLOYEE: Partial<Record<Role, string>> = {
   staff: "E05",
   /* GM อยู่ในทะเบียนอยู่แล้ว (ประเสริฐ) */
   gm: "E11",
+  /* ฝึกงานและแม่บ้านอยู่ในทะเบียนอยู่แล้ว (ณัฐริกา · บุญเรือน) */
+  intern: "E14",
+  maid: "E15",
 };
 
 /**

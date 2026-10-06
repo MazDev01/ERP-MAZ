@@ -205,11 +205,32 @@ const ACC: NavItem[] = [
   { group: "บัญชี", label: "หัก ณ ที่จ่าย", icon: "tax", href: "/acc/wht" },
 ];
 
+/*
+ * รอบเงินเดือนแยกเป็นสองเมนูย่อยตามกลุ่มการจ่าย (ยกมาจากระบบต้นฉบับ 6 ต.ค. 2569)
+ *   "พนักงาน" = จ่ายรายเดือน · "ทดลองงาน" = จ่ายรายวัน
+ * ทั้งสี่ขั้น (ตรวจเวลา · คำนวณ · ออกสลิป · ประวัติรอบ) ใช้ชุดเดียวกัน กลุ่มส่งต่อกันทาง ?g=
+ * ไม่มี ?g= ถือเป็นรายเดือน (ลิงก์เก่าและแถบล่างบนมือถือ)
+ */
+const PAY_STEPS = ["/hr/timesheet", "/hr/payroll", "/hr/payslip", "/hr/cycles"];
+const PAY_SUB: SubItem[] = [
+  {
+    label: "พนักงาน",
+    href: "/hr/timesheet?g=month",
+    on: (p, q) => PAY_STEPS.includes(p) && q.get("g") !== "day",
+  },
+  {
+    label: "ทดลองงาน",
+    href: "/hr/timesheet?g=day",
+    on: (p, q) => PAY_STEPS.includes(p) && q.get("g") === "day",
+  },
+];
+
 const HR: NavItem[] = [
   { group: "ฝ่ายบุคคล", label: "แดชบอร์ด", icon: "accboard", href: "/hr/dashboard" },
   { group: "ฝ่ายบุคคล", label: "พนักงาน", icon: "team", href: "/hr/employees" },
-  /* ต้นแบบมีรายการเดียวคือ "รอบเงินเดือน" แล้วข้ามขั้นด้วยแถบขั้นตอนในหน้า (dose-erp-maz/hr-*.html) */
-  { group: "ฝ่ายบุคคล", label: "รอบเงินเดือน", icon: "clock", href: "/hr/timesheet" },
+  /* ต้นแบบมีรายการเดียวคือ "รอบเงินเดือน" แล้วข้ามขั้นด้วยแถบขั้นตอนในหน้า (dose-erp-maz/hr-*.html)
+     เมนูย่อยแยกตามกลุ่มการจ่าย ยกมาจากระบบต้นฉบับ 6 ต.ค. 2569 */
+  { group: "ฝ่ายบุคคล", label: "รอบเงินเดือน", icon: "clock", href: "/hr/timesheet", sub: PAY_SUB },
   { group: "ฝ่ายบุคคล", label: "รายงาน", icon: "chart", href: "/hr/report" },
   { group: "ฝ่ายบุคคล", label: "จัดการบัญชีผู้ใช้", icon: "user", href: "/hr/accounts" },
 
@@ -263,6 +284,23 @@ const CEO: NavItem[] = [
 ];
 
 
+/*
+ * นักศึกษาฝึกงาน — ลงเวลางานกับใบลาเท่านั้น (ยกมาจากระบบต้นฉบับ 6 ต.ค. 2569)
+ * ไม่มีค่าจ้าง จึงไม่มีโอที ไม่มีเบิกค่าใช้จ่าย และไม่มีสลิป
+ */
+const INTERN: NavItem[] = [
+  { group: "ของฉัน", label: "ลงเวลางาน", icon: "clock", href: "/" },
+  { group: "ของฉัน", label: "การลา", icon: "leave", href: "/leave" },
+];
+
+/* แม่บ้าน — ลงเวลางาน · เบิกค่าใช้จ่าย · การลา · สลิปเงินเดือน ไม่มีโอทีและบันทึกเวลาทั้งเดือน */
+const MAID: NavItem[] = [
+  { group: "ของฉัน", label: "ลงเวลางาน", icon: "clock", href: "/" },
+  { group: "ของฉัน", label: "เบิกค่าใช้จ่าย", icon: "commission", href: "/expense" },
+  { group: "ของฉัน", label: "การลา", icon: "leave", href: "/leave" },
+  { group: "ของฉัน", label: "สลิปเงินเดือน", icon: "receipt", href: "/payslip" },
+];
+
 /** approvalsAfter = href ของเมนูที่ "รายการรออนุมัติ" ต่อท้าย — ไม่ระบุคือท้ายกลุ่มงาน */
 const BY_ROLE: Record<Role, { work: NavItem[]; group: NavGroup; approvalsAfter?: string }> = {
   sales: { work: SALES, group: "งานขาย" },
@@ -274,9 +312,12 @@ const BY_ROLE: Record<Role, { work: NavItem[]; group: NavGroup; approvalsAfter?:
   /* รายการรออนุมัติอยู่ท้ายกลุ่มตามต้นแบบ */
   gm: { work: GM, group: "ผู้จัดการทั่วไป" },
   ceo: { work: CEO, group: "ผู้บริหาร" },
+  /* สองบทบาทนี้มีแต่เมนูของตัวเอง จึงไม่ต้องต่อกลุ่ม "ของฉัน" ซ้ำอีก */
+  intern: { work: INTERN, group: "ของฉัน" },
+  maid: { work: MAID, group: "ของฉัน" },
 };
 
-const NO_MINE: Role[] = ["ceo"];
+const NO_MINE: Role[] = ["ceo", "intern", "maid"];
 
 /*
  * เมนู "รายการรออนุมัติ" ไม่ได้ผูกกับบทบาทตายตัว — โผล่ให้บทบาทที่เป็นผู้อนุมัติของใครสักคน
@@ -403,6 +444,8 @@ export function navGroups(role: Role): NavGroup[] {
 export function mobileHomeOf(role: Role) {
   if (role === "ceo") return "/ceo/home";
   if (role === "staff") return "/my-home";
+  /* ฝึกงานมีแค่หน้าลงเวลา ไม่มีหน้าหลักการ์ดเมนู */
+  if (role === "intern") return "/";
   return "/home";
 }
 
@@ -432,6 +475,8 @@ const BOTTOM_HREFS: Record<Role, string[]> = {
   staff: ["/", "/my-tasks", "/my-schedule", "/leave"],
   gm: ["/", "/gm/dashboard", "/pm/inbox", "/approvals"],
   ceo: ["/ceo/home", "/ceo/dashboard", "/ceo/approvals"],
+  intern: ["/", "/leave"],
+  maid: ["/", "/expense", "/leave", "/payslip"],
 };
 
 export function bottomNav(

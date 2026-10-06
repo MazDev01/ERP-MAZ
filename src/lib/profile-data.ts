@@ -49,6 +49,8 @@ export const DEFAULT_PROFILE: ProfileByRole = {
   staff: seed("staff"),
   gm: seed("gm"),
   ceo: seed("ceo"),
+  intern: seed("intern"),
+  maid: seed("maid"),
 };
 
 function isProfileByRole(value: unknown): value is ProfileByRole {

@@ -239,6 +239,9 @@ export const EXPENSE_CLAIMS: Record<Role, ExpenseClaim[]> = {
   staff: STAFF_CLAIMS,
   gm: [],
   ceo: [],
+  /* ฝึกงานและแม่บ้านเพิ่งเปิดใช้ ยังไม่มีใบของตัวเอง */
+  intern: [],
+  maid: [],
 };
 
 

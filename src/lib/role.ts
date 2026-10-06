@@ -20,7 +20,9 @@ import { HR_EMP, ROLE_EMPLOYEE } from "./hr-data";
  * บริษัทไม่มีผู้ดูแลระบบแยก ฝ่ายบุคคลดูแลการตั้งค่าทั้งหมด (Full Proposal · M5)
  * บทบาท admin จึงถูกถอดออกเมื่อ 28 ก.ย. 2569 — หน้าตั้งค่าย้ายไปอยู่ในเมนูของฝ่ายบุคคล
  */
-export type Role = "sales" | "ps" | "pm" | "acc" | "hr" | "staff" | "gm" | "ceo";
+/* intern = นักศึกษาฝึกงาน · maid = แม่บ้าน (ยกมาจากระบบต้นฉบับ 6 ต.ค. 2569)
+   สองบทบาทนี้มีบัญชีเข้าระบบ แต่ใช้ได้เฉพาะเมนูของตัวเอง และคำขอขึ้นฝ่ายบุคคล/GM */
+export type Role = "sales" | "ps" | "pm" | "acc" | "hr" | "staff" | "gm" | "ceo" | "intern" | "maid";
 
 /*
  * en ใช้เฉพาะการ์ดเลือกบทบาทในหน้าเข้าสู่ระบบ — ที่อื่นในระบบยังใช้ชื่อภาษาไทย (label)
@@ -44,6 +46,11 @@ export const ROLES: { key: Role; label: string; short: string; note: string; en:
     en: "General Manager" },
   { key: "ceo", label: "ผู้บริหาร", short: "ผู้บริหาร", note: "อนุมัติคำขอที่ขึ้นถึงผู้บริหาร และอนุมัติยอดเงินเดือน",
     en: "CEO" },
+  { key: "intern", label: "นักศึกษาฝึกงาน", short: "ฝึกงาน", note: "ลงเวลาเข้า-ออกงาน และยื่นใบลา",
+    en: "Intern" },
+  /* แม่บ้าน — ลงเวลา เบิกค่าใช้จ่าย ลา และดูสลิปเงินเดือน (ระบบต้นฉบับ 2 ต.ค. 2569) */
+  { key: "maid", label: "แม่บ้าน", short: "แม่บ้าน", note: "ลงเวลา ยื่นใบลา เบิกค่าใช้จ่าย และดูสลิปเงินเดือน",
+    en: "Housekeeper" },
 ];
 
 /*
@@ -166,16 +173,16 @@ export type ApprovalRoute = Record<RequestKind, Record<Role, ApproverKey>>;
  * ผู้ดูแลระบบและผู้บริหารไม่ยื่นคำขอ (NO_REQUESTS) ค่าของสองบทบาทนี้มีไว้ให้ครบเฉย ๆ
  */
 export const DEFAULT_ROUTE: ApprovalRoute = {
-  leave: { sales: "gm", ps: "gm", pm: "gm", staff: "gm", acc: "exec", hr: "exec", gm: "exec", ceo: "hr" },
+  leave: { sales: "gm", ps: "gm", pm: "gm", staff: "gm", acc: "exec", hr: "exec", gm: "exec", ceo: "hr", intern: "hr", maid: "gm" },
   /* 22 ก.ย. 2569 ผู้ใช้เอาเมนูรายการรออนุมัติออกจาก PM — คำขอที่เคยขึ้น PM ย้ายไป GM */
   /* ต้นแบบ gm-approvals.html ชุด 22 ก.ย. 2569 (files (2)):
        โอที — GM อนุมัติทุกตำแหน่ง ยกเว้น SA/Dev/Website/GM และบัญชีและบุคคล → CEO
        ใบเบิก — GM อนุมัติทุกคน ยกเว้นใบของ GM เอง (ผู้ใช้ยืนยัน 24 ก.ย. 2569 ว่าขึ้น CEO) */
-  ot: { sales: "gm", ps: "exec", acc: "exec", hr: "exec", staff: "exec", pm: "gm", gm: "exec", ceo: "hr" },
+  ot: { sales: "gm", ps: "exec", acc: "exec", hr: "exec", staff: "exec", pm: "gm", gm: "exec", ceo: "hr", intern: "hr", maid: "gm" },
   /* 24 ก.ย. 2569 ผู้ใช้ตัดสิน: ใบเบิกของฝ่ายบุคคลไปที่ GM เหมือนพนักงานทั่วไป
      (เดิมส่งไป "บัญชีและบุคคล" ซึ่งเป็นคนเดียวกับผู้ยื่น) · ใบเบิกของ GM เองขึ้น CEO ตามสายบังคับบัญชา
      ผู้ดูแลระบบอยู่บัญชีเดียวกับฝ่ายบุคคล จึงย้ายไป GM ด้วย (บทบาทนี้ยังไม่ยื่นคำขอ — NO_REQUESTS) */
-  expense: { sales: "gm", ps: "gm", pm: "gm", staff: "gm", hr: "gm", gm: "exec", acc: "gm", ceo: "acc" },
+  expense: { sales: "gm", ps: "gm", pm: "gm", staff: "gm", hr: "gm", gm: "exec", acc: "gm", ceo: "acc", intern: "hr", maid: "gm" },
 };
 
 const KINDS = ["leave", "ot", "expense"] as const;
