@@ -552,6 +552,12 @@ function matchIn(items: NavItem[], pathname: string) {
   );
 }
 
+/*
+ * ที่อยู่เก่าที่ไม่อยู่ในเมนูแล้วแต่ยังต้องเปิดได้ — ถือสิทธิ์และชื่อหน้าเหมือนหน้าที่มันพาไป
+ * /admin/roles รวมเข้า /admin/settings?s=positions แล้ว (ยกมาจากระบบต้นฉบับ)
+ */
+const MOVED: Record<string, string> = { "/admin/roles": "/admin/settings" };
+
 /** หน้าที่ทุกบทบาทเปิดได้ นอกจากเมนูของตัวเอง */
 /* /notify-test = หน้าทดสอบแจ้งเตือนบนมือถือ เปิดได้ทุกบทบาทโดยไม่ต้องอยู่ในเมนู (ชุดทดสอบ 2 ต.ค. 2569) */
 const SHARED_PAGES = ["/profile", "/notifications", "/notify-test"];
@@ -582,6 +588,7 @@ export function canVisit(
   route?: ApprovalRoute,
   empType?: MineEmpType,
 ): boolean {
+  pathname = MOVED[pathname] ?? pathname;
   if (SHARED_PAGES.includes(pathname)) return true;
   const owner = EXTRA_OWNER[pathname];
   if (owner) return Array.isArray(owner) ? owner.includes(role) : owner === role;
@@ -602,6 +609,7 @@ export function isKnownPage(pathname: string) {
 }
 
 export function findItem(pathname: string, role: Role): NavItem | undefined {
+  pathname = MOVED[pathname] ?? pathname;
   const own = [...configurableItems(role), { ...APPROVALS_ITEM, group: BY_ROLE[role].group }];
   const everyRole = Object.values(BY_ROLE).flatMap((r) => r.work);
   return (

@@ -12,7 +12,9 @@
  * บันทึกทีเดียวทั้งสองหมวด เพราะผู้ใช้มองว่าเป็นหน้าเดียว
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { DualRolePane, MenuAccessPane, RoutePane } from "./admin-roles-page";
 import type { Catalog, PosRoute } from "@/lib/system-settings";
 import {
   BUILTIN_HR_DEPT,
@@ -161,7 +163,65 @@ function ApprChip({ who, dim }: { who: string; dim?: boolean }) {
 }
 
 
+/*
+ * แท็บของหัวข้อนี้ — รวมหน้าบทบาทและสิทธิ์เข้ามาไว้ที่เดียว (ยกมาจากระบบต้นฉบับ)
+ *   ตำแหน่ง       — สายอนุมัติรายตำแหน่ง (ตั้งในกล่องแก้ตำแหน่ง) มาก่อนเสมอ
+ *   สายอนุมัติ     — ค่าตั้งต้นรายบทบาท ใช้เมื่อตำแหน่งไม่ได้ตั้งของตัวเอง + ชื่อผู้อนุมัติ
+ *   เมนูที่ใช้ได้ · บทบาทของบัญชีผู้ใช้ — ยกมาจากหน้าบทบาทและสิทธิ์ของระบบต้นฉบับทั้งก้อน
+ * แท็บที่เปิดอยู่อยู่ใน ?t= (ไม่มี = ตำแหน่ง) ลิงก์ตรงเข้าแท็บได้ · หน้าที่เรียกมี Suspense คร่อมแล้ว
+ */
+const POS_TABS = [
+  { key: "positions", label: "ตำแหน่ง" },
+  { key: "approval", label: "สายอนุมัติ" },
+  { key: "menu", label: "เมนูที่ใช้ได้" },
+  { key: "accounts", label: "บทบาทของบัญชีผู้ใช้" },
+] as const;
+type PosTab = (typeof POS_TABS)[number]["key"];
+
 export function AdminPositionsPage() {
+  const q = useSearchParams();
+  const here = usePathname();
+  const router = useRouter();
+  const tab: PosTab = POS_TABS.find((x) => x.key === q.get("t"))?.key ?? "positions";
+
+  function go(t: PosTab) {
+    const next = new URLSearchParams(q.toString());
+    next.set("s", "positions");
+    if (t === "positions") next.delete("t");
+    else next.set("t", t);
+    router.replace(`${here}?${next.toString()}`, { scroll: false });
+  }
+
+  const tabs = (
+    <div className="tabs wrap" role="tablist" aria-label="ตำแหน่งและสายอนุมัติ">
+      {POS_TABS.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          role="tab"
+          aria-selected={tab === t.key}
+          className={tab === t.key ? "on" : ""}
+          onClick={() => go(t.key)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (tab === "positions") return <PositionsPane tabs={tabs} />;
+  return (
+    <div className="space-y-4">
+      <h1 className="sr-only">ตำแหน่งและสายอนุมัติ</h1>
+      <section className="panel glass flex flex-col">
+        <div className="strip">{tabs}</div>
+        {tab === "approval" ? <RoutePane /> : tab === "menu" ? <MenuAccessPane /> : <DualRolePane />}
+      </section>
+    </div>
+  );
+}
+
+function PositionsPane({ tabs }: { tabs: ReactNode }) {
   const cat = useSectionDraft("catalog", "ตำแหน่งและสายอนุมัติ", describePos);
   const route = useSectionDraft("posRoute", "ตำแหน่งและสายอนุมัติ", describeRoute);
   /* ชื่อและตำแหน่งของผู้อนุมัติ — ขึ้นบนใบอนุมัติและเอกสาร เดิมแก้ที่หน้าบทบาทที่ยุบทิ้งไปแล้ว */
@@ -239,6 +299,10 @@ export function AdminPositionsPage() {
           เพิ่มตำแหน่ง
         </button>
       </AdminHead>
+
+      <section className="panel glass">
+        <div className="strip">{tabs}</div>
+      </section>
 
       {(
         <div className="grid gap-3">
