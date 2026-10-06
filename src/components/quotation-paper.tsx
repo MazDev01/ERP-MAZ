@@ -41,7 +41,7 @@ export type PaperParty = {
 };
 
 export type PaperDoc = {
-  /** ว่าง = ตัวอย่างเอกสารก่อนบันทึก (ยังไม่ออกเลขที่) */
+  /** ว่าง = ตัวอย่างก่อนออกเลขที่เอกสาร (หน้าสร้างใบเสนอราคา) */
   no: string;
   issued: string;
   /** ฉบับที่เท่าไร — มากกว่า 1 แปลว่าเป็นฉบับแก้ไขของเลขที่เดิม */
@@ -139,7 +139,7 @@ function PaperHead({ doc }: { doc: PaperDoc }) {
         <div className="sm:text-right">
           <h2 className="text-[23px] font-bold text-[#25292f]">ใบเสนอราคา / QUOTATION</h2>
           <p className="num mt-1 text-[13px] font-bold text-primary">
-            {doc.no || "ยังไม่ออกเลขที่ (ตัวอย่าง)"}
+            {doc.no || "ยังไม่ออกเลขที่"}
             {(doc.revision ?? 1) > 1 && (
               <span className="ml-2 text-[11.5px] font-semibold text-[#4a5058]">
                 ฉบับแก้ไขที่ {doc.revision}

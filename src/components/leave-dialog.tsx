@@ -8,8 +8,7 @@ import { todayIso } from "@/lib/format";
 import { lockScroll } from "@/lib/scroll-lock";
 import { isWorkday } from "@/lib/holidays";
 import { leaveTypes, type LeaveRecord, type LeaveType } from "@/lib/leave-data";
-import { addLeaveRequest, editLeaveRequest, excessDays, leaveUsage } from "@/lib/leave-store";
-import { useMyLeavePolicy } from "@/lib/leave-policy";
+import { addLeaveRequest, excessDays, leaveUsage } from "@/lib/leave-store";
 import { useOtRecords } from "@/lib/ot-store";
 import { hasNoApprover, useApprovalRoute, useRole } from "@/lib/role";
 import { currentProfile } from "@/lib/profile-data";
@@ -18,6 +17,7 @@ import {
   CalendarIcon,
   CloseIcon,
 } from "./icons";
+import "@/styles/mobile/sheet.css";
 
 /* อ่านเวลาทำงานสดทุกครั้ง — ผู้ดูแลระบบแก้เวลาได้ (ดู work-schedule.ts) */
 const lunchA = () => minutesOfDay(WORK_SCHEDULE.lunchStart);
@@ -43,7 +43,6 @@ export function LeaveDialog({
   period,
   records,
   presetDate,
-  edit,
   onClose,
   onSubmitted,
 }: {
@@ -52,40 +51,30 @@ export function LeaveDialog({
   records: LeaveRecord[];
   /** วันที่ตั้งต้น — มาจากการกดขอลาจากแถววันนั้นในหน้าบันทึกเวลา */
   presetDate?: string;
-  /** ใบที่กำลังแก้ (ต้องยังรออนุมัติ) — ไม่ส่งมาคือยื่นใบใหม่ */
-  edit?: LeaveRecord;
   onClose: () => void;
   onSubmitted: (days: number) => void;
 }) {
   /* เปิดกล่องได้หลัง hydrate เท่านั้น — ถ้าใช้ typeof document เซิร์ฟเวอร์จะวาดว่าง แต่เบราว์เซอร์วาดกล่อง
      ตอนที่กล่องเปิดมาตั้งแต่แรก (เช่นลิงก์ ?new=1) React จะฟ้อง hydration ไม่ตรงกัน */
   const hydrated = useHydrated();
-  /* กติกาวันลาตามประเภทการจ้างของผู้ยื่น (เอกสารฝ่ายบุคคล 30 ก.ย. 2569) */
-  const policy = useMyLeavePolicy();
   const types = leaveTypes();
-  const [type, setType] = useState<LeaveType>(edit?.type ?? types[0]);
+  const [type, setType] = useState<LeaveType>(types[0]);
   /* กดส่งแล้วยังไม่ครบ — ค่อยขึ้นข้อความว่าขาดอะไร ไม่ทักตั้งแต่ยังไม่ได้กรอก */
   const [tried, setTried] = useState(false);
   /* เปิดมาให้เริ่มที่วันนี้ก่อน — ลาย้อนหลังหรือล่วงหน้าค่อยเลื่อนเอง
      ถ้าถูกส่งวันที่มาจากหน้าบันทึกเวลา ให้ใช้วันนั้นแทน */
-  const [from, setFrom] = useState(edit?.date || presetDate || TODAY);
-  const [to, setTo] = useState(edit?.toDate || presetDate || TODAY);
+  const [from, setFrom] = useState(presetDate || TODAY);
+  const [to, setTo] = useState(presetDate || TODAY);
   /* ลาด่วน = นับเป็นชั่วโมง แล้วแปลงเป็นวันไปหักสิทธิ์ (เจ้าของสั่ง 28 ก.ย. 2569) */
-  const [span, setSpan] = useState<"full" | "half" | "hours">(
-    edit?.hours ? "hours" : edit?.half ? "half" : "full",
-  );
+  const [span, setSpan] = useState<"full" | "half" | "hours">("full");
   /* เลือกเป็นช่วงเวลา "เริ่มลา – จนถึง" แล้วระบบคิดชั่วโมงให้ (เจ้าของสั่ง 28 ก.ย. 2569) */
-  const [startAt, setStartAt] = useState(() =>
-    formatMinutesOfDay(edit?.hours && edit.startMin !== undefined ? edit.startMin : minutesOfDay(WORK_SCHEDULE.start)),
-  );
-  const [endAt, setEndAt] = useState(() =>
-    formatMinutesOfDay(edit?.hours && edit.endMin !== undefined ? edit.endMin : minutesOfDay(WORK_SCHEDULE.start) + 60),
-  );
-  const [half, setHalf] = useState<"morning" | "afternoon">(edit?.half ?? "morning");
+  const [startAt, setStartAt] = useState(() => formatMinutesOfDay(minutesOfDay(WORK_SCHEDULE.start)));
+  const [endAt, setEndAt] = useState(() => formatMinutesOfDay(minutesOfDay(WORK_SCHEDULE.start) + 60));
+  const [half, setHalf] = useState<"morning" | "afternoon">("morning");
   /* ครึ่งวันคือเช้าหรือบ่ายเท่านั้น เวลาจึงตายตัวตามกะ ไม่ให้กรอกเองซ้ำ */
   const { start: startMin, end: endMin } = preset()[half];
-  const [reason, setReason] = useState(edit?.comment ?? "");
-  const [files, setFiles] = useState<string[]>(edit?.files ?? []);
+  const [reason, setReason] = useState("");
+  const [files, setFiles] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // ปิดด้วย Esc + ล็อกการเลื่อนพื้นหลังระหว่างเปิด
@@ -123,8 +112,6 @@ export function LeaveDialog({
     return (
       records.find(
         (r) =>
-          /* ใบที่กำลังแก้ไม่นับว่าทับกับตัวเอง */
-          r.id !== edit?.id &&
           /* ใบที่ถูกตีกลับหรือยกเลิกแล้วไม่กันวันซ้ำ — ยังยื่นช่วงเดิมใหม่ได้ */
           r.status !== "ไม่อนุมัติ" &&
           r.status !== "ยกเลิก" &&
@@ -132,7 +119,7 @@ export function LeaveDialog({
           to >= r.date,
       ) ?? null
     );
-  }, [records, from, to, edit?.id]);
+  }, [records, from, to]);
 
   const otRecords = useOtRecords();
   const noApprover = hasNoApprover(useRole(), "leave", useApprovalRoute());
@@ -185,15 +172,7 @@ export function LeaveDialog({
       blocked = true;
     }
   }
-  /*
-   * ทดลองงานกับฝึกงานไม่มีโควตาวันลา (เอกสารฝ่ายบุคคล 30 ก.ย. 2569)
-   * จึงไม่กั้นเรื่องสิทธิ์ แต่บอกกติกาของประเภทการจ้างแทน
-   *   ทดลองงาน — ลาได้ แต่ช่วงที่ลาไม่ได้ค่าจ้าง
-   *   ฝึกงาน   — ลาได้ไม่จำกัด ไม่มีการหักเงิน
-   */
-  if (!policy.quota) {
-    problems.push(policy.note);
-  } else if (entitled <= 0) {
+  if (entitled <= 0) {
     problems.push("ไม่มีสิทธิ์ลาประเภทนี้ในรอบปีนี้");
     blocked = true;
   }
@@ -207,13 +186,13 @@ export function LeaveDialog({
    * สิทธิ์ตัดตอนอนุมัติเท่านั้น ใบที่ยังรออนุมัติจึงไม่เอามาหักตรงนี้ (ไม่งั้นสองจอได้เลขไม่ตรงกัน)
    * แต่ยังบอกแยกอีกบรรทัดว่ามีใบค้างอยู่กี่วัน ผู้ยื่นจะได้ไม่เซอร์ไพรส์ทีหลัง
    */
-  const over = policy.quota ? excessDays(records, type, days, period) : 0;
+  const over = excessDays(records, type, days, period);
   if (over > 0) {
     problems.push(
       `เกินสิทธิ์คงเหลือ ${fmt(over)} วัน — ส่วนที่เกินถือเป็นลาไม่รับค่าจ้าง หักจากเงินเดือน`,
     );
   }
-  if (policy.quota && quota.pending > 0 && days > 0) {
+  if (quota.pending > 0 && days > 0) {
     const after = Math.max(0, quota.remaining - quota.pending - days);
     problems.push(
       `มีใบลาประเภทนี้รออนุมัติอยู่ ${fmt(quota.pending)} วัน — ถ้าอนุมัติครบทุกใบรวมใบนี้ จะเหลือ ${fmt(after)} วัน`,
@@ -236,7 +215,7 @@ export function LeaveDialog({
       setTried(true);
       return;
     }
-    const input = {
+    addLeaveRequest({
       type,
       from,
       to,
@@ -246,10 +225,9 @@ export function LeaveDialog({
       endMin: span === "half" ? endMin : span === "hours" ? urgentEnd : undefined,
       hours: span === "hours" ? hours : undefined,
       reason: reason.trim(),
+      employee: currentProfile().name,
       files,
-    };
-    if (edit) editLeaveRequest(edit.id, input);
-    else addLeaveRequest({ ...input, employee: currentProfile().name });
+    });
     onSubmitted(days);
     onClose();
   }
@@ -258,7 +236,7 @@ export function LeaveDialog({
 
   return createPortal(
     <div
-      className="veil-in fixed inset-0 z-80 flex items-end justify-center bg-[rgb(28_20_45/0.42)] sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
+      className="lv-dlg ui-sheet fixed inset-0 z-80 flex items-end justify-center bg-black/50 md:items-start md:p-6 md:pt-[max(24px,7vh)]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="leave-box-title"
@@ -266,10 +244,10 @@ export function LeaveDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="sheet-in glass-solid flex max-h-[92dvh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[22px] shadow-[0_-10px_40px_-18px_rgb(40_25_60/0.5)] sm:max-h-full sm:rounded-[18px]">
-        <div className="flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 sm:py-4">
+      <div className="lv-dlg-panel ui-sheet-panel glass-solid flex max-h-[92dvh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[18px] md:max-h-full md:rounded-[18px]">
+        <div className="lv-dlg-head ui-sheet-head flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 md:px-5 md:py-4">
           <h2 id="leave-box-title" className="text-[16.5px] font-bold">
-            {edit ? `แก้ไขใบลา ${edit.id}` : "ยื่นใบลา"}
+            ยื่นใบลา
           </h2>
           <button
             type="button"
@@ -281,7 +259,7 @@ export function LeaveDialog({
           </button>
         </div>
 
-        <div className="scroll-stable min-h-0 flex-1 overflow-auto px-4 py-4 sm:max-h-[min(70dvh,560px)] sm:min-h-[280px] sm:flex-none sm:px-5 sm:py-[18px]">
+        <div className="lv-dlg-body ui-sheet-body scroll-stable min-h-0 flex-1 overflow-auto px-4 py-4 md:max-h-[min(70dvh,560px)] md:min-h-[280px] md:flex-none md:px-5 md:py-[18px]">
           <Field label="ประเภทการลา" htmlFor="lv-type">
             <select
               id="lv-type"
@@ -481,17 +459,17 @@ export function LeaveDialog({
           )}
         </div>
 
-        <div className="flex flex-none items-center gap-2.5 border-t border-border px-4 py-3.5 pb-[max(14px,env(safe-area-inset-bottom))] sm:justify-end sm:px-5">
-          <button type="button" className="btn glass-thin flex-1 justify-center sm:flex-none" onClick={onClose}>
+        <div className="lv-dlg-foot ui-sheet-foot flex flex-none items-center gap-2.5 border-t border-border px-4 py-3.5 pb-[max(14px,env(safe-area-inset-bottom))] md:justify-end md:px-5">
+          <button type="button" className="btn glass-thin flex-1 justify-center md:flex-none" onClick={onClose}>
             ยกเลิก
           </button>
           {/* ปุ่มไม่ปิดตาย — กดแล้วบอกว่าขาดอะไร ดีกว่าปุ่มเทาที่ไม่บอกเหตุผล */}
           <button
             type="button"
-            className="btn solid btn-solid flex-1 justify-center sm:flex-none"
+            className="btn solid btn-solid flex-1 justify-center md:flex-none"
             onClick={submit}
           >
-            {edit ? "บันทึกการแก้ไข" : "ส่งคำขอ"}
+            ส่งคำขอ
           </button>
         </div>
       </div>

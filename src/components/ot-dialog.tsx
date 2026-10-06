@@ -4,6 +4,7 @@ import { useHydrated } from "@/lib/pwa";import { bkkNow } from "@/lib/format";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import "@/styles/mobile/ot.css";
 import { CalendarPanel } from "./thai-date-picker";
 import { lockScroll } from "@/lib/scroll-lock";
 import {
@@ -15,7 +16,7 @@ import {
   isOffDayKind,
   type OtRecord,
 } from "@/lib/ot-data";
-import { addOtRequest, editOtRequest } from "@/lib/ot-store";
+import { addOtRequest } from "@/lib/ot-store";
 import { recordsOfDay } from "@/lib/attendance";
 import {
   getRecordsServerSnapshot,
@@ -54,15 +55,12 @@ function boundsOf(iso: string) {
 export function OtDialog({
   records,
   presetDate,
-  edit,
   onClose,
   onSubmitted,
 }: {
   records: OtRecord[];
   /** วันที่ตั้งต้น — มาจากการกดขอโอทีจากแถววันนั้นในหน้าบันทึกเวลา */
   presetDate?: string;
-  /** ใบที่กำลังแก้ (ต้องยังรออนุมัติ) — ไม่ส่งมาคือขอใบใหม่ · แก้ได้ทีละวันเท่านั้น */
-  edit?: OtRecord;
   onClose: () => void;
   onSubmitted: (hours: number, date: string) => void;
 }) {
@@ -77,7 +75,7 @@ export function OtDialog({
     getRecordsServerSnapshot,
   );
   const leaveRecords = useLeaveRecords();
-  const start = edit?.date || presetDate || today;
+  const start = presetDate || today;
   const [date, setDate] = useState(start);
   /*
    * ขอทีเดียวหลายวันได้ (เจ้าของถาม 25 ก.ย. 2569 — เสาร์+อาทิตย์)
@@ -92,9 +90,9 @@ export function OtDialog({
    * เก็บแยกตามวัน ไม่ใช่ตามลำดับ เปลี่ยนช่วงวันแล้วเวลาที่แก้ไว้จึงไม่เลื่อนตาม
    */
   const [dayTime, setDayTime] = useState<Record<string, { s: number; e: number }>>({});
-  const [startMin, setStartMin] = useState(() => edit?.startMin ?? boundsOf(start).lo);
-  const [endMin, setEndMin] = useState(() => edit?.endMin ?? boundsOf(start).lo + 60);
-  const [reason, setReason] = useState(edit?.reason ?? "");
+  const [startMin, setStartMin] = useState(() => boundsOf(start).lo);
+  const [endMin, setEndMin] = useState(() => boundsOf(start).lo + 60);
+  const [reason, setReason] = useState("");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -143,8 +141,6 @@ export function OtDialog({
           day: d,
           hit: records.find(
             (r) =>
-              /* ใบที่กำลังแก้ไม่นับว่าทับกับตัวเอง */
-              r.id !== edit?.id &&
               r.date === d &&
               r.status !== "ยกเลิก" &&
               r.status !== "ไม่อนุมัติ" &&
@@ -153,7 +149,7 @@ export function OtDialog({
           ),
         }))
         .filter((x) => x.hit),
-    [records, days, startMin, endMin, dayTime, edit?.id],
+    [records, days, startMin, endMin, dayTime],
   );
 
   const problems: string[] = [];
@@ -183,8 +179,7 @@ export function OtDialog({
      * จำนวนวันล่วงหน้าผู้ดูแลระบบตั้งเองที่ /admin/rates
      */
     for (const d of days) {
-      /* แก้ใบเดิมโดยไม่เปลี่ยนวัน ไม่ต้องเช็กกติกายื่นล่วงหน้าซ้ำ — ใบนี้ยื่นทันมาแล้ว */
-      const dl = edit && d === edit.date ? "" : otAheadDeadline(d);
+      const dl = otAheadDeadline(d);
       if (dl && today > dl)
         problems.push(
           `โอที${OT_KIND[otKindOf(d)].label}${multi ? ` วันที่ ${thaiDate(d)}` : ""}ต้องยื่นล่วงหน้า — วันสุดท้ายที่ยื่นได้คือ ${thaiDate(dl)}`,
@@ -215,13 +210,6 @@ export function OtDialog({
 
   function submit() {
     if (!canSubmit) return;
-    if (edit) {
-      const { s, e } = timeOf(date);
-      editOtRequest(edit.id, { date, startMin: s, endMin: e, hours: otHours(s, e), reason: reason.trim() });
-      onSubmitted(otHours(s, e), date);
-      onClose();
-      return;
-    }
     /* ออกใบแยกทีละวัน — เรตของแต่ละวันไม่เท่ากัน และผู้อนุมัติต้องตัดสินได้ทีละวัน */
     for (const d of days) {
       const { s, e } = timeOf(d);
@@ -235,7 +223,7 @@ export function OtDialog({
 
   return createPortal(
     <div
-      className="veil-in fixed inset-0 z-80 flex items-end justify-center bg-[rgb(28_20_45/0.42)] sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
+      className="m-ot-dlg fixed inset-0 z-80 flex items-end justify-center bg-black/50 sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="ot-box-title"
@@ -243,17 +231,17 @@ export function OtDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="sheet-in glass-solid flex max-h-[92dvh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[22px] shadow-[0_-10px_40px_-18px_rgb(40_25_60/0.5)] sm:max-h-full sm:rounded-[18px]">
-        <div className="flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 sm:py-4">
+      <div className="m-ot-dlg-panel glass-solid flex max-h-[92dvh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-[18px] sm:max-h-full sm:rounded-[18px]">
+        <div className="m-ot-dlg-head flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 sm:py-4">
           <h2 id="ot-box-title" className="text-[16.5px] font-bold">
-            {edit ? `แก้ไขคำขอ ${edit.id}` : "ขอโอที"}
+            ขอทำล่วงเวลา
           </h2>
           <button type="button" className="iconbtn glass-thin" onClick={onClose} aria-label="ปิด">
             <CloseIcon className="size-[15px]" strokeWidth={2.2} />
           </button>
         </div>
 
-        <div className="scroll-stable min-h-0 flex-1 overflow-auto px-4 py-4 sm:max-h-[min(70dvh,560px)] sm:min-h-[280px] sm:flex-none sm:px-5 sm:py-[18px]">
+        <div className="m-ot-dlg-body scroll-stable min-h-0 flex-1 overflow-auto px-4 py-4 sm:max-h-[min(70dvh,560px)] sm:min-h-[280px] sm:flex-none sm:px-5 sm:py-[18px]">
           <DateField
             label="วันที่ทำล่วงเวลา"
             value={date}
@@ -267,15 +255,14 @@ export function OtDialog({
             }}
           />
 
-          {/* ขอทีเดียวหลายวัน — ว่างไว้คือวันเดียว (เจ้าของถาม 25 ก.ย. 2569 เรื่องขอเสาร์+อาทิตย์)
-              ตอนแก้ใบเดิมไม่มีช่องนี้ เพราะหนึ่งใบคือหนึ่งวัน จะแตกเป็นหลายใบไม่ได้ */}
-          {!edit && <DateField
+          {/* ขอทีเดียวหลายวัน — ว่างไว้คือวันเดียว (เจ้าของถาม 25 ก.ย. 2569 เรื่องขอเสาร์+อาทิตย์) */}
+          <DateField
             label="ถึงวันที่ (ถ้าขอหลายวัน)"
             value={dateTo}
             today={today}
             quick={dateTo ? [{ label: "วันเดียว", iso: "" }] : []}
             onChange={setDateTo}
-          />}
+          />
 
           <div className="mb-[15px] grid gap-3 sm:grid-cols-2">
             <TimeField
@@ -300,8 +287,6 @@ export function OtDialog({
               }}
             />
           </div>
-          {/* บอกจังหวะที่ปุ่มขึ้น/ลงของตัวเลือกเวลาเดิน (ต้นแบบมือถือ 30 ก.ย. 2569) */}
-          <p className="mt-[-9px] mb-[15px] text-[11.5px] text-muted-foreground">ปรับนาทีทีละ 15 นาที</p>
 
           {/* ขอหลายวันแล้วแต่ละวันทำคนละเวลาได้ (เจ้าของถาม 25 ก.ย. 2569) */}
           {multi && (
@@ -407,7 +392,7 @@ export function OtDialog({
           )}
         </div>
 
-        <div className="flex flex-none items-center gap-2.5 border-t border-border px-4 py-3.5 pb-[max(14px,env(safe-area-inset-bottom))] sm:justify-end sm:px-5">
+        <div className="m-ot-dlg-foot flex flex-none items-center gap-2.5 border-t border-border px-4 py-3.5 pb-[max(14px,env(safe-area-inset-bottom))] sm:justify-end sm:px-5">
           <button
             type="button"
             className="btn glass-thin flex-1 justify-center sm:flex-none"
@@ -421,7 +406,7 @@ export function OtDialog({
             disabled={!canSubmit}
             onClick={submit}
           >
-            {edit ? "บันทึกการแก้ไข" : "ส่งคำขอ"}
+            ส่งคำขอ
           </button>
         </div>
       </div>

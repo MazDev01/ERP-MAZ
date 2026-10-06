@@ -9,7 +9,7 @@
  * แท็บเงินเดือนเปิดให้เฉพาะฝ่ายบุคคลกับผู้บริหาร — เป็นข้อมูลค่าจ้างของคนอื่น
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { baht, thaiDate } from "@/lib/format";
 import { useHydrated } from "@/lib/pwa";
@@ -36,8 +36,7 @@ import { CloseIcon } from "./icons";
 export function EmpPhoto({ className = "", note = true }: { className?: string; note?: boolean }) {
   return (
     <span
-      /* พื้นในกรอบเป็นสีทึบตามต้นแบบ (--field) ไม่ใช่สีโปร่ง ไม่งั้นทับแบนเนอร์แดงแล้วกลายเป็นชมพู */
-      className={`relative flex flex-none items-center justify-center overflow-hidden border border-border bg-[#FAFBFC] text-muted-foreground ${className}`}
+      className={`relative flex flex-none items-center justify-center overflow-hidden border border-border bg-muted/50 text-muted-foreground ${className}`}
       aria-hidden="true"
     >
       <svg
@@ -78,6 +77,16 @@ export function StatusPill({ emp, big }: { emp: Employee; big?: boolean }) {
   );
 }
 
+type TabKey = "over" | "person" | "work" | "docs" | "pay";
+
+const TABS: { k: TabKey; label: string }[] = [
+  { k: "over", label: "ภาพรวม" },
+  { k: "person", label: "ข้อมูลส่วนตัว" },
+  { k: "work", label: "ข้อมูลงาน" },
+  { k: "docs", label: "เอกสาร" },
+  { k: "pay", label: "เงินเดือน" },
+];
+
 export function EmployeeDetail({
   emp,
   today,
@@ -94,6 +103,7 @@ export function EmployeeDetail({
   const hydrated = useHydrated();
   const role = useRole();
   const hr = useHr();
+  const [tab, setTab] = useState<TabKey>("over");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -116,11 +126,13 @@ export function EmployeeDetail({
   const bossName = emp.boss ? hr.emp.find((e) => e.id === emp.boss)?.name : "";
   /* เงินเดือนเป็นข้อมูลค่าจ้างของคนอื่น — เปิดให้เฉพาะฝ่ายบุคคลกับผู้บริหาร */
   const seePay = role === "hr" || role === "ceo";
+  const tabs = TABS.filter((t) => t.k !== "pay" || seePay);
   const onProbation = emp.type === "probat" && emp.status === "active";
 
   return createPortal(
     <div
-      className="veil-in fixed inset-0 z-80 flex items-end justify-center bg-[rgb(28_20_45/0.42)] sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
+      /* he-detail — มือถือเป็นแผ่นเต็มความกว้างจากด้านล่าง (styles/mobile/hr-employees.css) */
+      className="he-detail fixed inset-0 z-80 flex items-end justify-center bg-black/50 sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
       role="dialog"
       aria-modal="true"
       aria-label={`ประวัติของ ${emp.name}`}
@@ -128,138 +140,225 @@ export function EmployeeDetail({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      {/* ต้นแบบชุด 1 ต.ค. 2569: กล่องเรียบ หัวกล่องเป็นชื่อพนักงานกับปุ่มปิด
-          เนื้อหาเป็นหัวข้อเรียงลงมาในกรอบเลื่อนเดียว ไม่มีแท็บและไม่มีแบนเนอร์แดงแล้ว
-          มือถือเป็นแผ่นเลื่อนขึ้นจากด้านล่าง แถวข้อมูลเป็นชื่อซ้าย-ค่าขวาบนพื้นอ่อน */}
-      <div className="sheet-in glass-solid flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[24px] shadow-[0_-10px_40px_-18px_rgb(40_25_60/0.5)] sm:max-h-[90dvh] sm:max-w-[680px] sm:rounded-[18px]">
-        <div className="flex flex-none items-center justify-between gap-3 border-b border-border px-[18px] py-4 sm:px-5">
-          <h2 className="min-w-0 truncate text-[18px] font-bold sm:text-[16.5px]">
-            {emp.name}
-            {emp.nick && <span className="ml-1.5 text-[13px] font-normal text-muted-foreground">({emp.nick})</span>}
-          </h2>
-          <span className="flex flex-none items-center gap-2.5">
-            <StatusPill emp={emp} />
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="ปิด"
-              className="flex size-9 items-center justify-center rounded-[10px] border border-border bg-card text-muted-foreground hover:text-foreground"
-            >
-              <CloseIcon className="size-[15px]" strokeWidth={2.2} />
-            </button>
-          </span>
+      <div className="glass-solid flex max-h-[92dvh] w-full max-w-[900px] flex-col overflow-hidden rounded-t-[18px] sm:max-h-full sm:rounded-[18px]">
+        {/* แบนเนอร์แดงของแอป มีวงกลมจาง ๆ ประดับ ปุ่มปิดอยู่มุมขวาบนบนแบนเนอร์ */}
+        <div
+          /* เจ้าของทัก 28 ก.ย. 2569 ว่าแถบบนใหญ่ไป — ลดเหลือ 56px ขอบล่างตรงเหมือนเดิม
+             รูปลอยทับแค่นิดเดียว เว้นระยะจากขอบบนให้เห็นชัด */
+          className="relative h-[56px] flex-none overflow-hidden"
+          style={{ background: "linear-gradient(105deg,var(--primary) 0%,var(--primary-hover) 100%)" }}
+        >
+          <span className="pointer-events-none absolute -top-8 -right-6 size-[100px] rounded-full bg-white/10" />
+          <span className="pointer-events-none absolute -bottom-10 left-16 size-[86px] rounded-full bg-white/[.07]" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="ปิด"
+            /* ปุ่มปิดเป็นสี่เหลี่ยมมนมีเส้นขอบ ไม่ใช่วงกลม (เจ้าของสั่ง 28 ก.ย. 2569) */
+            className="absolute top-2.5 right-3 flex size-8 items-center justify-center rounded-[10px] border border-white/45 bg-white/15 text-white hover:bg-white/30"
+          >
+            <CloseIcon className="size-[15px]" strokeWidth={2.2} />
+          </button>
         </div>
 
-        <div className="scroll-stable min-h-0 flex-1 overflow-auto px-[18px] pt-1.5 pb-4 sm:px-5 sm:pb-[18px]">
-          <Sect title="ข้อมูลการจ้างงาน">
-            <Kv>
-              <Row k="ตำแหน่ง" v={p.label} />
-              {more && <Row k="ตำแหน่งควบ" v={more} />}
-              <Row k="แผนก" v={hrDept(p.dept).label} />
-              <Row k="ผู้บังคับบัญชา" v={bossName || "ไม่มี"} muted={!bossName} />
-              <Row k="ประเภทพนักงาน" v={HR_EMPTYPE[emp.type].label} />
-              <Row k="วันเริ่มงาน" v={thaiDate(emp.startedAt)} num />
-              {emp.type === "probat" && (
-                <Row
-                  k="ครบกำหนดทดลองงาน"
-                  v={probLine(emp.startedAt, today)}
-                  num
-                  bad={probDaysLeft(emp.startedAt, today) < 0}
-                />
-              )}
-              <Row k={emp.leftAt ? "ทำงานรวม" : "ทำงานมาแล้ว"} v={empYears(emp.startedAt, today, emp.leftAt)} />
-              <Row
-                k="สถานะ"
-                v={
-                  emp.leftAt
-                    ? `${HR_STATUS[emp.status].label} · ${thaiDate(emp.leftAt)}${emp.leftWhy ? ` · ${emp.leftWhy}` : ""}`
-                    : HR_STATUS[emp.status].label
-                }
-              />
-              {/* BR-04 เงินเดือนเห็นได้เฉพาะฝ่ายบุคคลกับผู้บริหาร */}
-              {seePay && <Row k="เงินเดือนปัจจุบัน" v={`${baht(cur.salary)} บาท`} num />}
-            </Kv>
+        <div className="he-dbody scroll-stable min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-5 sm:pb-[18px]">
+          {/* รูปลอยขึ้นมาทับแบนเนอร์ */}
+          <div className="flex items-end gap-3.5">
+            <EmpPhoto
+              note={false}
+              className="mt-2 size-[68px] rounded-[16px] border-[3px]! border-white! shadow-[0_4px_14px_rgba(28,20,45,.18)]"
+            />
+            <div className="min-w-0 flex-1 pb-1">
+              <h2 className="truncate text-[17px] font-bold">
+                {emp.name}
+                {emp.nick && <span className="ml-1.5 text-[13px] font-normal text-muted-foreground">({emp.nick})</span>}
+              </h2>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <StatusPill emp={emp} big />
+                <span className="text-[12.5px] text-muted-foreground">{p.label}</span>
+              </div>
+            </div>
+          </div>
 
-            {onProbation && (
-              <div className="mt-3 rounded-[11px] border border-border bg-muted/50 px-3.5 py-3">
-                <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                  ตอนนี้จ่ายค่าจ้างรายวัน ผ่านทดลองงานแล้วจะเปลี่ยนเป็นพนักงานประจำจ่ายรายเดือน
-                  ฝ่ายบุคคลต้องระบุเงินเดือนที่จะใช้ตั้งแต่วันที่มีผล
-                </p>
-                <button type="button" className="btn solid btn-solid mt-2.5 max-sm:h-11! max-sm:w-full!" onClick={onPass}>
-                  บันทึกผ่านทดลองงาน
-                </button>
+          {/* แถบข้อมูลสี่ช่อง — มือถือเหลือสองคอลัมน์ */}
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <InfoBox k="แผนก" v={hrDept(p.dept).label} />
+            <InfoBox k="ประเภทพนักงาน" v={HR_EMPTYPE[emp.type].label} />
+            <InfoBox k="อีเมล" v={emp.email || "—"} />
+            <InfoBox k="โทรศัพท์" v={emp.phone || "—"} num />
+          </div>
+
+          <div
+            className="seg mt-4 w-full overflow-x-auto whitespace-nowrap"
+            role="tablist"
+            aria-label="ข้อมูลพนักงาน"
+          >
+            {tabs.map((t) => (
+              <button
+                key={t.k}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.k}
+                className={tab === t.k ? "on" : ""}
+                style={{ flex: "none" }}
+                onClick={() => setTab(t.k)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3.5">
+            {tab === "over" && (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Sect title="สรุปการจ้างงาน">
+                    <Kv>
+                      <Row k="ตำแหน่ง" v={p.label} />
+                      {more && <Row k="ตำแหน่งควบ" v={more} />}
+                      <Row k="แผนก" v={hrDept(p.dept).label} />
+                      <Row k="ประเภทพนักงาน" v={HR_EMPTYPE[emp.type].label} />
+                      <Row k="วันเริ่มงาน" v={thaiDate(emp.startedAt)} num />
+                      <Row
+                        k={emp.leftAt ? "ทำงานรวม" : "ทำงานมาแล้ว"}
+                        v={empYears(emp.startedAt, today, emp.leftAt)}
+                      />
+                      {/* ไม่แสดงผู้บังคับบัญชาในหน้าข้อมูลพนักงาน (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                    </Kv>
+                  </Sect>
+                  <Sect title="สรุปส่วนตัว">
+                    <Kv>
+                      <Row k="ชื่อเล่น" v={emp.nick || "—"} />
+                      <Row k="เพศ" v={emp.sex} />
+                      <Row k="วันเกิด" v={emp.birth ? thaiDate(emp.birth) : "—"} num />
+                      <Row k="วุฒิการศึกษา" v={emp.edu || "—"} />
+                      <Row k="โทรศัพท์" v={emp.phone || "—"} num />
+                      <Row k="อีเมล" v={emp.email || "ไม่มี"} muted={!emp.email} />
+                    </Kv>
+                  </Sect>
+                </div>
+
+                {onProbation && (
+                  <div className="mt-3 rounded-[12px] border border-border bg-muted/50 px-3.5 py-3">
+                    <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                      ตอนนี้จ่ายค่าจ้างรายวัน ผ่านทดลองงานแล้วจะเปลี่ยนเป็นพนักงานประจำจ่ายรายเดือน
+                      ฝ่ายบุคคลต้องระบุเงินเดือนที่จะใช้ตั้งแต่วันที่มีผล
+                    </p>
+                    <button type="button" className="btn solid btn-solid mt-2.5" onClick={onPass}>
+                      บันทึกผ่านทดลองงาน
+                    </button>
+                  </div>
+                )}
+
+                {emp.edited && (
+                  <p className="mt-3 text-[12px] text-muted-foreground">
+                    แก้ไขข้อมูลล่าสุดโดย {emp.edited.by} · {thaiDate(emp.edited.at.slice(0, 10))}{" "}
+                    {emp.edited.at.slice(11)} น.
+                  </p>
+                )}
+              </>
+            )}
+
+            {tab === "person" && (
+              <div className="space-y-3">
+                <Sect title="ประวัติส่วนตัว">
+                  <Kv>
+                    <Row k="ชื่อ-สกุล" v={emp.nick ? `${emp.name} (${emp.nick})` : emp.name} />
+                    <Row k="เพศ" v={emp.sex} />
+                    <Row k="วันเกิด" v={emp.birth ? thaiDate(emp.birth) : "—"} num />
+                    <Row k="วุฒิการศึกษา" v={emp.edu || "—"} />
+                    <dt className="text-[12.5px] font-semibold text-muted-foreground">ประสบการณ์ทำงาน</dt>
+                    <dd className="leading-relaxed">
+                      {emp.exp.length ? (
+                        <ul className="list-disc pl-5">
+                          {emp.exp.map((x) => (
+                            <li key={x}>{x}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-muted-foreground">ไม่มี</span>
+                      )}
+                    </dd>
+                  </Kv>
+                </Sect>
+                <Sect title="ข้อมูลติดต่อ">
+                  <Kv>
+                    <Row k="โทรศัพท์" v={emp.phone || "—"} num />
+                    <Row k="อีเมล" v={emp.email || "ไม่มี"} muted={!emp.email} />
+                    <Row k="ที่อยู่" v={emp.address || "—"} />
+                    <Row
+                      k="ผู้ติดต่อฉุกเฉิน"
+                      v={
+                        emp.sos.name
+                          ? `${emp.sos.name}${emp.sos.rel ? ` (${emp.sos.rel})` : ""}${
+                              emp.sos.phone ? ` · ${emp.sos.phone}` : ""
+                            }`
+                          : "ยังไม่ได้บันทึก"
+                      }
+                      muted={!emp.sos.name}
+                    />
+                  </Kv>
+                </Sect>
               </div>
             )}
-          </Sect>
 
-          <Sect title="ประวัติส่วนตัว">
-            <Kv>
-              <Row k="ชื่อ-สกุล" v={emp.nick ? `${emp.name} (${emp.nick})` : emp.name} />
-              <Row k="เพศ" v={emp.sex} />
-              <Row k="วันเกิด" v={emp.birth ? thaiDate(emp.birth) : "—"} num />
-              <Row k="วุฒิการศึกษา" v={emp.edu || "—"} />
-              <RowNode k="ประสบการณ์ทำงาน">
-                {emp.exp.length ? (
-                  <ul className="list-none">
-                    {emp.exp.map((x) => (
-                      <li key={x}>{x}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <span className="text-muted-foreground">ไม่มี</span>
-                )}
-              </RowNode>
-            </Kv>
-          </Sect>
+            {tab === "work" && (
+              <div className="space-y-3">
+                <Sect title="ข้อมูลการจ้างงาน">
+                  <Kv>
+                    <Row k="ตำแหน่ง" v={p.label} />
+                    <Row k="แผนก" v={hrDept(p.dept).label} />
+                    {/* ไม่แสดงผู้บังคับบัญชาในหน้าข้อมูลพนักงาน (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                    <Row k="ประเภทพนักงาน" v={HR_EMPTYPE[emp.type].label} />
+                    <Row k="วันเริ่มงาน" v={thaiDate(emp.startedAt)} num />
+                  </Kv>
+                </Sect>
+                <Sect title="สถานะการทำงาน">
+                  <Kv>
+                    <Row k="สถานะ" v={HR_STATUS[emp.status].label} />
+                    {emp.type === "probat" && (
+                      <Row
+                        k="ครบกำหนดทดลองงาน"
+                        v={probLine(emp.startedAt, today)}
+                        num
+                        bad={probDaysLeft(emp.startedAt, today) < 0}
+                      />
+                    )}
+                    <Row
+                      k={emp.leftAt ? "ทำงานรวม" : "ทำงานมาแล้ว"}
+                      v={empYears(emp.startedAt, today, emp.leftAt)}
+                    />
+                    {emp.leftAt && (
+                      <Row k="พ้นสภาพ" v={`${thaiDate(emp.leftAt)} · ${emp.leftWhy ?? ""}`} num />
+                    )}
+                  </Kv>
+                </Sect>
+              </div>
+            )}
 
-          <Sect title="ข้อมูลติดต่อ">
-            <Kv>
-              <Row k="โทรศัพท์" v={emp.phone || "—"} num />
-              <Row k="อีเมล" v={emp.email || "ไม่มี"} muted={!emp.email} />
-              <Row k="ที่อยู่" v={emp.address || "—"} />
-              <RowNode k="ติดต่อฉุกเฉิน">
-                {emp.sos.name ? (
-                  <>
-                    <span className="block">
-                      {emp.sos.name}
-                      {emp.sos.rel ? ` (${emp.sos.rel})` : ""}
-                    </span>
-                    {emp.sos.phone && <span className="num block">{emp.sos.phone}</span>}
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">ยังไม่ได้บันทึก</span>
-                )}
-              </RowNode>
-            </Kv>
-          </Sect>
+            {tab === "docs" && (
+              <Sect title="เอกสารประกอบ">
+                <Docs emp={emp} />
+              </Sect>
+            )}
 
-          <Sect title="เอกสารประกอบ">
-            <Docs emp={emp} />
-          </Sect>
-
-          {seePay && (
-            <Sect title="ประวัติตำแหน่งและเงินเดือน">
-              <p className="mb-2.5 text-[12.5px] text-muted-foreground">
-                เงินเดือนปัจจุบัน <b className="num text-foreground">{baht(cur.salary)}</b> บาท ·
-                เพิ่มเป็นแถวใหม่ทุกครั้งที่ปรับ ไม่ทับของเดิม
-              </p>
-              <History emp={emp} />
-            </Sect>
-          )}
-
-          {emp.edited && (
-            <p className="mt-3 text-[12px] text-muted-foreground">
-              แก้ไขข้อมูลล่าสุดโดย {emp.edited.by} · {thaiDate(emp.edited.at.slice(0, 10))} {emp.edited.at.slice(11)} น.
-            </p>
-          )}
+            {tab === "pay" && seePay && (
+              <Sect title="ประวัติตำแหน่งและเงินเดือน">
+                <p className="mb-2.5 text-[12.5px] text-muted-foreground">
+                  เงินเดือนปัจจุบัน <b className="num text-foreground">{baht(cur.salary)}</b> บาท ·
+                  เพิ่มเป็นแถวใหม่ทุกครั้งที่ปรับ ไม่ทับของเดิม
+                </p>
+                <History emp={emp} />
+              </Sect>
+            )}
+          </div>
         </div>
 
-        <div className="grid flex-none grid-cols-[1fr_1.4fr] items-center gap-2.5 border-t border-border px-[18px] py-3 pb-[max(16px,env(safe-area-inset-bottom))] sm:flex sm:justify-end sm:px-5 sm:py-3.5">
-          <button type="button" className="btn glass-thin max-sm:h-12! max-sm:justify-center max-sm:rounded-[14px]!" onClick={onClose}>
+        <div className="he-dfoot flex flex-none items-center gap-2.5 border-t border-border px-4 py-3.5 pb-[max(14px,env(safe-area-inset-bottom))] sm:justify-end sm:px-5">
+          <button type="button" className="btn glass-thin" onClick={onClose}>
             ปิด
           </button>
-          <button type="button" className="btn solid btn-solid max-sm:h-12! max-sm:justify-center max-sm:rounded-[14px]!" onClick={onEdit}>
+          <button type="button" className="btn solid btn-solid" onClick={onEdit}>
             แก้ไขข้อมูล
           </button>
         </div>
@@ -271,10 +370,21 @@ export function EmployeeDetail({
 
 // ─── ชิ้นส่วนย่อย ─────────────────────────────────────────────────
 
+function InfoBox({ k, v, num }: { k: string; v: string; num?: boolean }) {
+  return (
+    <div className="min-w-0 rounded-[10px] border border-border bg-muted/50 px-3 py-2">
+      <div className="text-[11px] text-muted-foreground">{k}</div>
+      <div className={`truncate text-[13px] font-semibold ${num ? "num" : ""}`} title={v}>
+        {v}
+      </div>
+    </div>
+  );
+}
+
 export function Sect({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-5 border-t border-border pt-4 first:mt-0 first:border-0 first:pt-3">
-      <h3 className="mb-2.5 text-[12.5px] font-bold text-primary max-sm:text-[14px]">{title}</h3>
+    <section className="he-sect rounded-[12px] border border-border bg-muted/40 px-3.5 py-3">
+      <h3 className="mb-2.5 text-[12.5px] font-bold text-primary">{title}</h3>
       {children}
     </section>
   );
@@ -282,26 +392,9 @@ export function Sect({ title, children }: { title: string; children: React.React
 
 function Kv({ children }: { children: React.ReactNode }) {
   return (
-    <dl className="grid grid-cols-[auto_minmax(0,1fr)] text-[13.5px] max-sm:rounded-[14px] max-sm:bg-[#FAF6F7] max-sm:px-3.5 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2 sm:gap-x-3">
-      {children}
-    </dl>
+    <dl className="he-kv grid gap-2 text-[13.5px] sm:grid-cols-[130px_minmax(0,1fr)] sm:gap-x-3">{children}</dl>
   );
 }
-
-/** แถวที่ค่าเป็นหลายบรรทัดหรือเป็นรายการ ใช้โครงเดียวกับ Row */
-function RowNode({ k, children }: { k: string; children: React.ReactNode }) {
-  return (
-    <>
-      <dt className={DT}>{k}</dt>
-      <dd className={`${DD} max-sm:[&_ul]:text-right`}>{children}</dd>
-    </>
-  );
-}
-
-const DT =
-  "text-[12.5px] font-semibold text-muted-foreground max-sm:border-b max-sm:border-[#F0E6E8] max-sm:py-2.5 max-sm:pr-3 max-sm:text-[13.5px] max-sm:font-normal max-sm:whitespace-nowrap max-sm:last-of-type:border-0";
-const DD =
-  "leading-relaxed max-sm:border-b max-sm:border-[#F0E6E8] max-sm:py-2.5 max-sm:text-right max-sm:font-semibold max-sm:last-of-type:border-0";
 
 function Row({
   k,
@@ -318,9 +411,9 @@ function Row({
 }) {
   return (
     <>
-      <dt className={DT}>{k}</dt>
+      <dt className="text-[12.5px] font-semibold text-muted-foreground">{k}</dt>
       <dd
-        className={`${DD} ${num ? "num font-semibold" : ""} ${
+        className={`leading-relaxed ${num ? "num font-semibold" : ""} ${
           bad ? "text-destructive" : muted ? "text-muted-foreground" : ""
         }`}
       >

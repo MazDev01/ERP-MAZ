@@ -1,10 +1,16 @@
 "use client";
 
+import { DevicePushCard } from "./device-push-card";
+import { isIOS, useHydrated } from "@/lib/pwa";
+
 import { optionsOf } from "@/lib/options";
 import { bkkNow, parseIsoDate, todayIso } from "@/lib/format";
 
-import { cloneElement, isValidElement, useEffect, useId, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { cloneElement, isValidElement, useId, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import "@/styles/mobile/profile.css";
+import { useRole } from "@/lib/role";
 import { saveProfile, useProfile } from "@/lib/profile-data";
 import {
   NOTIFY_CHANNELS,
@@ -13,35 +19,77 @@ import {
   useNotifySettings,
   type NotifySettings,
 } from "@/lib/notify-settings";
-import { checkPhotoFile, setProfilePhoto, useProfilePhoto } from "@/lib/profile-store";
-import { setMobileBack } from "@/lib/mobile-back";
-import Link from "next/link";
+import { setProfilePhoto, useProfilePhoto } from "@/lib/profile-store";
+import {
+  BOTNAV_SLOTS,
+  botnavChoices,
+  botnavDefault,
+  botnavOf,
+  resetBotnav,
+  setBotnav,
+  useBotnavPrefs,
+} from "@/lib/botnav-prefs";
+import { navItemsOf, useMenuAccess } from "@/lib/nav";
+import { useMyRoles } from "@/lib/hr-link";
+import { useApprovalRoute } from "@/lib/role";
+import { ICONS } from "./app-shell";
 import {
   BellIcon,
   CameraIcon,
   CheckIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
+  ClockIcon,
   DownloadIcon,
+  GridIcon,
+  HomeIcon,
   LockIcon,
   LogoutIcon,
   PencilIcon,
   UserIcon,
 } from "./icons";
-import { DevicePushCard } from "./device-push-card";
 import { FileDrop, type PickedFile } from "./file-drop";
 import { PhotoCropper } from "./photo-cropper";
 
 import { DateField } from "./thai-date-picker";
 import { ADD_VALUE, useAddOption } from "./add-option";
 /* ข้อมูลตัวอย่างย้ายไปหน้าผู้ดูแลระบบ (/admin/data) — เป็นเครื่องมือดูแลระบบ ไม่ใช่ของพนักงาน */
-type Pane = "profile" | "notify" | "security";
+type Pane = "profile" | "notify" | "security" | "botnav";
 
 const PANES: { key: Pane; label: string; icon: React.ReactNode }[] = [
   { key: "profile", label: "ข้อมูลส่วนตัว", icon: <UserIcon className="size-4" /> },
   { key: "notify", label: "การแจ้งเตือน", icon: <BellIcon className="size-4" /> },
-  { key: "security", label: "เปลี่ยนรหัสผ่าน", icon: <LockIcon className="size-4" /> },
-  /* แถบเมนูล่างย้ายไปให้ฝ่ายบุคคลตั้งที่หน้าตั้งค่าระบบ (เจ้าของสั่ง 1 ต.ค. 2569) */
+  { key: "security", label: "รหัสผ่าน", icon: <LockIcon className="size-4" /> },
+  /* แถบเมนูล่างเป็นของแต่ละคน ตั้งเองได้ที่นี่ (เจ้าของสั่ง 25 ก.ย. 2569) */
+  { key: "botnav", label: "แถบเมนูล่าง", icon: <GridIcon className="size-4" /> },
 ];
+
+/** ชื่อหัวจอของแต่ละแผงบนมือถือ — ตามต้นแบบ profile-glass.html */
+const MOBILE_TITLE: Record<Pane, string> = {
+  profile: "ข้อมูลส่วนตัว",
+  notify: "การแจ้งเตือน",
+  security: "เปลี่ยนรหัสผ่าน",
+  botnav: "แถบเมนูล่าง",
+};
+
+/** กระเป๋าทำงานหน้าตำแหน่งงาน — ไม่มีใน icons.tsx จึงวาดไว้ที่นี่ (ใช้เฉพาะหน้ารวมบนมือถือ) */
+function BriefcaseIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <rect x="3" y="7" width="18" height="13" rx="2.5" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18" />
+    </svg>
+  );
+}
 
 export function ProfilePage() {
   const params = useSearchParams();
@@ -51,201 +99,78 @@ export function ProfilePage() {
    */
   const panes = PANES;
   const fallback: Pane = "profile";
-  const tabParam = params.get("tab");
-  const initial = (tabParam as Pane) || fallback;
+  const tab = params.get("tab") as Pane | null;
+  const [saved, setSaved] = useState<string | null>(null);
+  const initial = tab || fallback;
   const [pane, setPane] = useState<Pane>(initial);
+  /*
+   * มือถือ (ต้นแบบ profile-glass.html): ไม่มี ?tab= = หน้ารวม (การ์ดโปรไฟล์ + แถวเมนู)
+   * มี ?tab= = เปิดแผงนั้นเต็มจอ ปุ่มย้อนกลับของเบราว์เซอร์จึงพากลับหน้ารวมได้
+   * จอคอมไม่ใช้ค่านี้ ยังเปิดแผงด้วย state เหมือนเดิม — แค่ตามค่า ?tab= ที่เปลี่ยนจากมือถือ
+   */
+  const router = useRouter();
+  const [lastTab, setLastTab] = useState(tab);
+  const pushed = useRef(false);
+  if (tab !== lastTab) {
+    setLastTab(tab);
+    if (tab) setPane(tab);
+    setSaved(null);
+  }
+  function openMobile(p: Pane) {
+    pushed.current = true;
+    router.push(`/profile?tab=${p}`, { scroll: true });
+  }
+  function closeMobile() {
+    if (pushed.current) {
+      pushed.current = false;
+      router.back();
+    } else router.replace("/profile", { scroll: true });
+  }
   /*
    * แผงที่เปิดอยู่จริง — บทบาทอ่านจาก localStorage จึงรู้หลัง hydrate
    * ถ้ายึดค่าที่ตั้งไว้ตอนเรนเดอร์แรก ผู้ดูแลระบบจะค้างอยู่ที่แผง "ข้อมูลส่วนตัว" ที่ไม่มีให้ดู แล้วจอว่างเปล่า
    */
   const current = panes.some((p) => p.key === pane) ? pane : fallback;
-  const [saved, setSaved] = useState<string | null>(null);
+  const mobileScreen = tab && panes.some((p) => p.key === tab) ? "pane" : "landing";
 
   function flash(message: string) {
     setSaved(message);
   }
 
-  /*
-   * มือถือ: หน้ารวมก่อน แล้วค่อยเข้าไปทีละเรื่อง (ต้นแบบ mobile/profile-glass.html 30 ก.ย. 2569)
-   * เดิมยัดทุกแผงไว้หน้าเดียวจนต้องเลื่อนยาวมาก · จอกว้างยังเป็นสองคอลัมน์เหมือนเดิม
-   */
-  const [open, setOpen] = useState<Pane | null>(tabParam ? initial : null);
-
-  /*
-   * มาจากลิงก์ ?tab=... เช่น "เปลี่ยนรหัสผ่าน" ในเมนูบัญชี
-   * ตอนอยู่หน้า /profile อยู่แล้ว Next เปลี่ยนแค่ค่าในที่อยู่เว็บ ไม่ได้สร้างคอมโพเนนต์ใหม่
-   * ถ้าอ่าน ?tab= แค่ตอนเรนเดอร์แรก กดแล้วจะค้างอยู่แผงเดิม (เจ้าของแจ้ง 1 ต.ค. 2569)
-   * จึงปรับสถานะตอนที่ค่าในที่อยู่เว็บเปลี่ยน ไม่ใช่ใน useEffect (กันวาดซ้ำซ้อน)
-   */
-  const [seenTab, setSeenTab] = useState(tabParam);
-  if (tabParam !== seenTab) {
-    setSeenTab(tabParam);
-    if (tabParam && panes.some((p) => p.key === tabParam)) {
-      setPane(tabParam as Pane);
-      setOpen(tabParam as Pane);
-    }
-  }
-
-  /* เปิดเรื่องย่อยอยู่ — ปุ่มย้อนกลับบนแถบหัวพากลับมาหน้ารวมโปรไฟล์ ไม่ใช่ออกไปหน้าหลักเลย */
-  useEffect(() => {
-    if (open === null) return;
-    setMobileBack(() => {
-      setOpen(null);
-      setSaved(null);
-    });
-    return () => setMobileBack(null);
-  }, [open]);
-
   return (
-    <>
-      {/* ── มือถือ ── */}
-      <div className="sm:hidden">
-        {open === null ? (
-          <ProfileHub panes={panes} onPane={setOpen} />
-        ) : (
-          <div>
-            {/* ปุ่มย้อนกลับมีอันเดียว คือปุ่มบนแถบหัว — กดแล้วกลับมาหน้ารวมโปรไฟล์ก่อน
-               (เจ้าของสั่ง 1 ต.ค. 2569 ว่าอย่าให้มีปุ่มย้อนกลับสองอัน) ตรงนี้เหลือแค่ชื่อเรื่อง */}
-            {saved && (
-              <p className="mb-[18px] flex items-center gap-[11px] rounded-[14px] bg-[var(--success-soft)] px-[17px] py-3 text-[13.5px] font-medium text-[var(--success)]">
-                <CheckIcon className="size-[18px] shrink-0" strokeWidth={2.4} />
-                {saved}
-              </p>
-            )}
-            {open === "profile" && <PersonalPane onSaved={flash} />}
-            {open === "notify" && <NotifyPane onSaved={flash} />}
-            {open === "security" && <SecurityPane onSaved={flash} />}
-          </div>
-        )}
-      </div>
+    <div
+      className="pf-m mx-auto grid max-w-[1060px] grid-cols-[minmax(0,1fr)] items-start gap-[22px] lg:grid-cols-[262px_minmax(0,1fr)]"
+      data-m={mobileScreen}
+    >
+      {/* พื้นไล่ชมพูด้านบน — มีเฉพาะมือถือ (ซ่อนด้วย hidden แล้ว profile.css เปิดเองบนจอแคบ) */}
+      <div className="pf-glow hidden" aria-hidden="true" />
+      <ProfileCard
+        pane={current}
+        panes={panes}
+        onPane={(p) => { setPane(p); setSaved(null); }}
+        onOpenMobile={openMobile}
+      />
 
-      {/* ── จอคอม ── */}
-      <div className="mx-auto hidden max-w-[1060px] grid-cols-[minmax(0,1fr)] items-start gap-[22px] sm:grid lg:grid-cols-[262px_minmax(0,1fr)]">
-        <ProfileCard pane={current} panes={panes} onPane={(p) => { setPane(p); setSaved(null); }} />
-
-        <div className="min-w-0">
-          {saved && (
-            <p className="mb-[18px] flex items-center gap-[11px] rounded-[14px] bg-[var(--success-soft)] px-[17px] py-3 text-[13.5px] font-medium text-[var(--success)]">
-              <CheckIcon className="size-[18px] shrink-0" strokeWidth={2.4} />
-              {saved}
-            </p>
-          )}
-          {current === "profile" && <PersonalPane onSaved={flash} />}
-          {current === "notify" && <NotifyPane onSaved={flash} />}
-          {current === "security" && <SecurityPane onSaved={flash} />}
-        </div>
-      </div>
-    </>
-  );
-}
-
-/*
- * หน้ารวมของโปรไฟล์บนมือถือ — รูป ชื่อ ตำแหน่ง ปุ่มแก้ไข แล้วตามด้วยรายการเรื่องอื่น
- * รูปยังเป็นสี่เหลี่ยมมุมมนมีขอบตามที่เจ้าของสั่งไว้ (29 ก.ย. 2569) ไม่ใช่วงกลมแบบในต้นแบบ
- */
-function ProfileHub({ panes, onPane }: { panes: typeof PANES; onPane: (p: Pane) => void }) {
-  const me = useProfile();
-  const photo = useProfilePhoto();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [cropping, setCropping] = useState<string | null>(null);
-  /** ข้อความบอกว่าทำไมรูปที่เลือกใช้ไม่ได้ */
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const short = me.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
-  const rows = panes.filter((p) => p.key !== "profile");
-
-  /* เลือกไฟล์ที่ไม่ใช่รูปหรือรูปใหญ่เกิน ต้องบอกเหตุผล ไม่ใช่เงียบ (ตรวจระบบ 5 ต.ค. 2569 · BUG-002) */
-  function pick(file: File | undefined) {
-    if (fileRef.current) fileRef.current.value = "";
-    if (!file) return;
-    const bad = checkPhotoFile(file);
-    setPhotoError(bad);
-    if (bad) return;
-    const reader = new FileReader();
-    reader.onload = () => setCropping(String(reader.result));
-    reader.onerror = () => setPhotoError("อ่านไฟล์รูปไม่สำเร็จ ลองเลือกไฟล์อื่น");
-    reader.readAsDataURL(file);
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <section className="glass flex flex-col items-center rounded-[28px] px-4 pt-6 pb-5 text-center">
-        <span className="relative inline-block">
-          {photo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={photo} alt="" className="size-[92px] rounded-full border-[3px] border-white object-cover shadow-[0_10px_24px_-12px_rgb(26_93_181/0.6)]" />
-          ) : (
-            <span className="grid size-[92px] place-items-center rounded-full border-[3px] border-white bg-[#E3EEFC] text-[30px] font-bold text-[#1A5DB5] shadow-[0_10px_24px_-12px_rgb(26_93_181/0.6)]">
-              {short}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            aria-label="เปลี่ยนรูปโปรไฟล์"
-            className="absolute -right-0.5 -bottom-0.5 grid size-9 place-items-center rounded-full border-[3px] border-white bg-foreground text-white"
-          >
-            <CameraIcon className="size-[15px]" strokeWidth={2.2} />
+      <div className="pf-pane min-w-0">
+        {/* หัวหน้าจอของแผงบนมือถือ — ปุ่มกลมย้อนกลับไปหน้ารวม ชื่อแผงอยู่กลาง */}
+        <header className="pf-head hidden">
+          <button type="button" className="pf-back" aria-label="ย้อนกลับ" onClick={closeMobile}>
+            <ChevronLeftIcon className="size-5" strokeWidth={2.4} />
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp"
-            aria-label="เลือกไฟล์รูปโปรไฟล์"
-            className="sr-only"
-            onChange={(e) => pick(e.target.files?.[0])}
-          />
-        </span>
-        {photoError && (
-          <p role="alert" className="mt-2.5 rounded-xl bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] font-medium text-destructive">
-            {photoError}
+          <h1>{MOBILE_TITLE[current]}</h1>
+          <span aria-hidden="true" />
+        </header>
+        {saved && (
+          <p className="mb-[18px] flex items-center gap-[11px] rounded-[14px] bg-[var(--success-soft)] px-[17px] py-3 text-[13.5px] font-medium text-[var(--success)]">
+            <CheckIcon className="size-[18px] shrink-0" strokeWidth={2.4} />
+            {saved}
           </p>
         )}
-        <h2 className="mt-4 text-[19px] font-bold">{me.name}</h2>
-        <p className="mt-1.5 text-[13px] text-muted-foreground">{me.position}</p>
-        <button
-          type="button"
-          onClick={() => onPane("profile")}
-          className="mt-[18px] flex h-[42px] items-center gap-2 rounded-full bg-primary px-5 text-[14px] font-semibold text-white shadow-[0_10px_20px_-12px_rgb(200_16_46/0.9)]"
-        >
-          <PencilIcon className="size-4" strokeWidth={2.2} />
-          แก้ไขข้อมูลส่วนตัว
-        </button>
-      </section>
-
-      {rows.map((p) => (
-        <button
-          key={p.key}
-          type="button"
-          onClick={() => onPane(p.key)}
-          className="glass flex h-[54px] items-center gap-3 rounded-[16px] px-4 text-left"
-        >
-          <span className="flex text-muted-foreground">{p.icon}</span>
-          <span className="flex-1 text-[14.5px] font-semibold">{p.label}</span>
-          <ChevronRightIcon className="size-[18px] text-muted-foreground" strokeWidth={2.3} />
-        </button>
-      ))}
-
-      <Link href="/install" className="glass flex h-[54px] items-center gap-3 rounded-[16px] px-4 text-foreground">
-        <DownloadIcon className="size-[18px] text-muted-foreground" strokeWidth={2} />
-        <span className="flex-1 text-[14.5px] font-semibold">ติดตั้งแอป</span>
-        <ChevronRightIcon className="size-[18px] text-muted-foreground" strokeWidth={2.3} />
-      </Link>
-
-      <a href="/login" className="glass mt-1 flex h-[54px] items-center gap-3 rounded-[16px] px-4 text-primary">
-        <LogoutIcon className="size-[18px]" strokeWidth={2} />
-        <span className="flex-1 text-[14.5px] font-semibold">ออกจากระบบ</span>
-      </a>
-
-      {cropping && (
-        <PhotoCropper
-          src={cropping}
-          onCancel={() => setCropping(null)}
-          onDone={(url) => {
-            setProfilePhoto(url);
-            setCropping(null);
-          }}
-        />
-      )}
+        {current === "profile" && <PersonalPane onSaved={flash} />}
+        {current === "notify" && <NotifyPane onSaved={flash} />}
+        {current === "security" && <SecurityPane onSaved={flash} />}
+        {current === "botnav" && <BotnavPane onSaved={flash} />}
+      </div>
     </div>
   );
 }
@@ -255,34 +180,96 @@ function ProfileCard({
   pane,
   panes,
   onPane,
+  onOpenMobile,
 }: {
   pane: Pane;
   panes: typeof PANES;
   onPane: (p: Pane) => void;
+  onOpenMobile: (p: Pane) => void;
 }) {
   const photo = useProfilePhoto();
   const fileRef = useRef<HTMLInputElement>(null);
   const [cropping, setCropping] = useState<string | null>(null);
-  /** ข้อความบอกว่าทำไมรูปที่เลือกใช้ไม่ได้ */
-  const [photoError, setPhotoError] = useState<string | null>(null);
 
-  function pick(file: File | undefined) {
-    if (fileRef.current) fileRef.current.value = "";
+  async function pick(file: File | undefined) {
     if (!file) return;
-    const bad = checkPhotoFile(file);
-    setPhotoError(bad);
-    if (bad) return;
     const reader = new FileReader();
     reader.onload = () => setCropping(String(reader.result));
-    reader.onerror = () => setPhotoError("อ่านไฟล์รูปไม่สำเร็จ ลองเลือกไฟล์อื่น");
     reader.readAsDataURL(file);
+    if (fileRef.current) fileRef.current.value = "";
   }
 
   const me = useProfile();
   const short = me.name.split(" ").map((s) => s[0]).join("").slice(0, 2);
 
+  /* แถวเมนูของหน้ารวมบนมือถือ — แผงข้อมูลส่วนตัวเปิดจากปุ่มแดงในการ์ดแทน */
+  const rows = panes.filter((p) => p.key !== "profile");
+
   return (
-    <aside className="glass rounded-[20px] px-4 py-4 sm:px-5 lg:sticky lg:top-[88px] lg:pt-[26px] lg:pb-[18px] lg:text-center">
+    <>
+    {/* ── มือถือ: หน้ารวมตามต้นแบบ profile-glass.html (จอคอมซ่อนด้วย hidden) ── */}
+    <div className="pf-land hidden">
+      <section className="pf-hero">
+        <span className="pf-ava">
+          {photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photo} alt="" />
+          ) : (
+            <span>{short}</span>
+          )}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="pf-cam"
+            aria-label="เปลี่ยนรูปโปรไฟล์"
+          >
+            <CameraIcon className="size-[15px]" strokeWidth={2.2} />
+          </button>
+        </span>
+        <h2>{me.name}</h2>
+        {me.position && (
+          <p>
+            <BriefcaseIcon className="size-[15px] flex-none" />
+            <span className="truncate">{me.position}</span>
+          </p>
+        )}
+        {panes.some((p) => p.key === "profile") && (
+          <button type="button" className="pf-edit" onClick={() => onOpenMobile("profile")}>
+            <PencilIcon className="size-4" />
+            แก้ไขข้อมูลส่วนตัว
+          </button>
+        )}
+      </section>
+
+      <div className="pf-rows">
+        {rows.map((p) => (
+          <button key={p.key} type="button" className="pf-row" onClick={() => onOpenMobile(p.key)}>
+            <span className="pf-row-ico">{p.icon}</span>
+            <span className="pf-row-lbl">{p.key === "security" ? "เปลี่ยนรหัสผ่าน" : p.label}</span>
+            <ChevronRightIcon className="pf-row-cv size-[18px]" />
+          </button>
+        ))}
+      </div>
+      <div className="pf-rows">
+        <Link href="/install" className="pf-row">
+          <span className="pf-row-ico">
+            <DownloadIcon className="size-4" />
+          </span>
+          <span className="pf-row-lbl">ติดตั้งแอป</span>
+          <ChevronRightIcon className="pf-row-cv size-[18px]" />
+        </Link>
+      </div>
+      <div className="pf-rows">
+        <a href="/login" className="pf-row pf-row-out">
+          <span className="pf-row-ico">
+            <LogoutIcon className="size-4" />
+          </span>
+          <span className="pf-row-lbl">ออกจากระบบ</span>
+        </a>
+      </div>
+    </div>
+
+    <aside className="pf-desk glass rounded-[20px] px-4 py-4 sm:px-5 lg:sticky lg:top-[88px] lg:pt-[26px] lg:pb-[18px] lg:text-center">
       <div className="flex items-center gap-4 lg:block">
       {/* เปลี่ยนรูปได้ทุกบทบาท รวมผู้ดูแลระบบ (เจ้าของสั่ง 25 ก.ย. 2569)
           รูปเป็นของบัญชี ไม่ใช่ข้อมูลส่วนตัวของคน บัญชีควบคุมระบบจึงตั้งรูปประจำบัญชีได้ */}
@@ -292,7 +279,7 @@ function ProfileCard({
           <img
             src={photo}
             alt=""
-            className="size-16 rounded-full border-[3px] border-white object-cover shadow-[0_4px_14px_rgba(28,20,45,.14)] lg:size-[104px]"
+            className="size-16 rounded-full object-cover lg:size-[104px]"
           />
         ) : (
           <span className="grid size-16 place-items-center rounded-full bg-accent text-xl font-bold text-primary lg:size-[104px] lg:text-[34px]">
@@ -307,21 +294,7 @@ function ProfileCard({
         >
           <CameraIcon className="size-[15px]" strokeWidth={2.2} />
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp"
-          aria-label="เลือกไฟล์รูปโปรไฟล์"
-          className="sr-only"
-          onChange={(e) => pick(e.target.files?.[0])}
-        />
       </span>
-
-        {photoError && (
-          <p role="alert" className="mt-2.5 w-full rounded-xl bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] font-medium text-destructive">
-            {photoError}
-          </p>
-        )}
 
         {/* ผู้ดูแลระบบไม่มีชื่อคนและไม่มีตำแหน่ง — บรรทัดเดียวว่า "ผู้ดูแลระบบ" พอ (เจ้าของสั่ง 25 ก.ย. 2569) */}
         <div className="min-w-0 lg:mt-3.5">
@@ -365,18 +338,29 @@ function ProfileCard({
           ออกจากระบบ
         </a>
       </div>
-
-      {cropping && (
-        <PhotoCropper
-          src={cropping}
-          onCancel={() => setCropping(null)}
-          onDone={(url) => {
-            setProfilePhoto(url);
-            setCropping(null);
-          }}
-        />
-      )}
     </aside>
+
+    {/* ช่องเลือกไฟล์กับกล่องครอปอยู่นอกการ์ด — การ์ดจอคอมถูกซ่อนบนมือถือ ปุ่มกล้องทั้งสองที่จึงใช้ช่องเดียวกัน
+        sr-only เป็น absolute และกล่องครอปยิงออกไปที่ body จึงไม่กินช่องของกริด */}
+    <input
+      ref={fileRef}
+      type="file"
+      accept="image/jpeg,image/png,image/gif"
+      aria-label="เลือกไฟล์รูปโปรไฟล์"
+      className="sr-only"
+      onChange={(e) => pick(e.target.files?.[0])}
+    />
+    {cropping && (
+      <PhotoCropper
+        src={cropping}
+        onCancel={() => setCropping(null)}
+        onDone={(url) => {
+          setProfilePhoto(url);
+          setCropping(null);
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -412,18 +396,21 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
   }
 
   return (
-    <section className="glass rounded-[20px] px-4 py-5 sm:px-7 sm:py-[26px]">
-      <h2 className="text-lg font-semibold">ข้อมูลส่วนตัว</h2>
-      <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+    <section className="pf-sheet glass rounded-[20px] px-4 py-5 sm:px-7 sm:py-[26px]">
+      <h2 className="pf-intro text-lg font-semibold">ข้อมูลส่วนตัว</h2>
+      <p className="pf-intro mt-1 text-[13px] leading-relaxed text-muted-foreground">
         ตามแบบฟอร์มข้อมูลประจำตัวพนักงาน MAZ · ช่องที่มี{" "}
         <em className="text-primary not-italic">*</em> ต้องกรอก
       </p>
 
+      {/* .pf-grp ไม่มีสไตล์บนจอคอม (หน้าตาเดิม) · บนมือถือแต่ละกลุ่มเป็นการ์ดของตัวเอง */}
+      <div className="pf-grp">
       <H3>ข้อมูลทั่วไป</H3>
-      <div className="grid gap-4 sm:grid-cols-2 sm:gap-x-5">
+      <div className="pf-grid grid gap-4 sm:grid-cols-2 sm:gap-x-5">
         <F
           label="ชื่อ–สกุล (ภาษาไทย)"
           required
+          wide
           error={bad.name ? "กรอกชื่อ–สกุลภาษาไทย" : undefined}
         >
           <Input
@@ -434,14 +421,15 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
             }}
           />
         </F>
-        <F label="ชื่อ–สกุล (ภาษาอังกฤษ)">
+        <F label="ชื่อ–สกุล (ภาษาอังกฤษ)" wide>
           <Input placeholder="Chitpon Panyanon" />
         </F>
         <F label="ชื่อเล่น">
           <Input />
         </F>
         <F label="เพศ">
-          <div className="flex h-12 items-center gap-[18px]">
+          {/* มือถือ: ปุ่มเรดิโอกลายเป็นแถบเลือกแบบแบ่งช่อง (pf-seg) ด้วย CSS ล้วน */}
+          <div className="pf-seg flex h-12 items-center gap-[18px]">
             {/* อ่านจากข้อมูลหลัก — เพิ่มเพศใหม่แล้วขึ้นให้เลือกที่นี่ด้วย */}
             {optionsOf("sex").map((g) => (
               <label
@@ -460,7 +448,7 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
           </div>
         </F>
 
-        <div className="sm:col-span-2">
+        <div className="pf-wide sm:col-span-2">
           <F label="ที่อยู่ที่ติดต่อได้">
             <textarea
               aria-label="ที่อยู่ที่ติดต่อได้"
@@ -492,13 +480,13 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
             onChange={(v) => setOfficePhone(formatPhone(v))}
           />
         </F>
-        <F label="E-mail (ส่วนตัว)">
+        <F label="E-mail (ส่วนตัว)" wide>
           <Input type="email" placeholder="name@example.com" />
         </F>
-        <F label="E-mail (บริษัท)">
+        <F label="E-mail (บริษัท)" wide>
           <Input defaultValue={me.email} readOnly />
         </F>
-        <F label="ID LINE">
+        <F label="ID LINE" wide>
           <Input placeholder="@lineid" />
         </F>
         <F label="วัน/เดือน/ปีเกิด">
@@ -514,7 +502,7 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
         <F label="อายุ" hint="คำนวณจากวันเกิดอัตโนมัติ">
           <Input value={age} readOnly />
         </F>
-        <F label="สถานภาพสมรส">
+        <F label="สถานภาพสมรส" wide>
           <Select options={["โสด", "สมรส", "หย่าร้าง", "หม้าย"]} />
         </F>
         <F label="น้ำหนัก (กก.)">
@@ -539,7 +527,7 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
         <F label="สัญชาติ">
           <Input placeholder="ไทย" />
         </F>
-        <F label="การรับราชการทหาร">
+        <F label="การรับราชการทหาร" wide>
           <Select
             options={[
               "ผ่านการเกณฑ์ทหารแล้ว",
@@ -550,9 +538,11 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
           />
         </F>
       </div>
+      </div>
 
+      <div className="pf-grp">
       <H3>ข้อมูลครอบครัว</H3>
-      <div className="grid gap-4 sm:grid-cols-2 sm:gap-x-5">
+      <div className="pf-grid grid gap-4 sm:grid-cols-2 sm:gap-x-5">
         <F label="ชื่อบิดา">
           <Input />
         </F>
@@ -582,8 +572,10 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
           />
         </F>
       </div>
+      </div>
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="pf-grp">
+      <div className="pf-grp-head flex items-center justify-between gap-3">
         <H3>ประวัติการศึกษา</H3>
         {addEdu.canAdd && (
           <button type="button" className="lnk text-[12.5px]" onClick={() => addEdu.pick(ADD_VALUE)}>
@@ -592,31 +584,32 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
         )}
       </div>
       {addEdu.dialog}
-      {/* จอเล็กกรอกทีละระดับ จอใหญ่เป็นตารางเหมือนแบบฟอร์มกระดาษ */}
-      <div className="space-y-3 md:hidden">
+      {/* จอเล็กกรอกทีละระดับ — มือถือพับเก็บได้ทีละระดับ (แตะเพื่อกรอก) ตามต้นแบบ · จอใหญ่เป็นตารางเหมือนแบบฟอร์มกระดาษ */}
+      <div className="pf-edu space-y-3 md:hidden">
         {optionsOf("eduLevel").map((lv) => (
-          <div key={lv} className="glass-thin rounded-[14px] p-3.5">
-            <p className="mb-2.5 text-[12.5px] font-semibold text-muted-foreground">
+          <details key={lv} className="pf-edu-item glass-thin rounded-[14px]">
+            <summary>
               {lv}
-            </p>
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="col-span-2">
-                <Input placeholder="ชื่อสถานศึกษา" aria-label={`สถานศึกษา ${lv}`} />
-              </div>
-              <Input placeholder="ประเทศ" aria-label={`ประเทศ ${lv}`} />
-              <Input placeholder="สาขาวิชา" aria-label={`สาขาวิชา ${lv}`} />
-              <Input
-                inputMode="decimal"
-                placeholder="เกรด 0.00"
-                aria-label={`เกรด ${lv}`}
-              />
-              <Input
-                inputMode="numeric"
-                placeholder="ปีที่สำเร็จ"
-                aria-label={`ปีที่สำเร็จ ${lv}`}
-              />
+              <span>แตะเพื่อกรอก</span>
+            </summary>
+            <div className="pf-edu-body">
+              <F label="ชื่อสถานศึกษา" wide>
+                <Input aria-label={`สถานศึกษา ${lv}`} />
+              </F>
+              <F label="ประเทศ">
+                <Input placeholder="ไทย" aria-label={`ประเทศ ${lv}`} />
+              </F>
+              <F label="สาขาวิชา">
+                <Input aria-label={`สาขาวิชา ${lv}`} />
+              </F>
+              <F label="เกรดเฉลี่ย">
+                <Input inputMode="decimal" placeholder="0.00" aria-label={`เกรด ${lv}`} />
+              </F>
+              <F label="ปีที่สำเร็จ">
+                <Input inputMode="numeric" placeholder="2562" aria-label={`ปีที่สำเร็จ ${lv}`} />
+              </F>
             </div>
-          </div>
+          </details>
         ))}
       </div>
       <div className="glass-thin hidden overflow-x-auto rounded-[14px] md:block">
@@ -657,10 +650,12 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
           </tbody>
         </table>
       </div>
+      </div>
 
+      <div className="pf-grp">
       <H3>บุคคลที่ติดต่อได้กรณีเร่งด่วน</H3>
-      <div className="grid gap-4 sm:grid-cols-2 sm:gap-x-5">
-        <F label="ชื่อ–สกุล">
+      <div className="pf-grid grid gap-4 sm:grid-cols-2 sm:gap-x-5">
+        <F label="ชื่อ–สกุล" wide>
           <Input />
         </F>
         <F label="ความสัมพันธ์">
@@ -677,7 +672,9 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
           />
         </F>
       </div>
+      </div>
 
+      <div className="pf-grp">
       <H3>เอกสารแนบ</H3>
       <FileDrop
         files={files}
@@ -687,15 +684,17 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
         accept="image/*"
         label="เลือกรูปถ่าย"
       />
+      </div>
 
-      {/* ฟอร์มยาวมาก — มือถือให้ปุ่มบันทึกลอยอยู่เหนือแถบล่างตลอด ไม่ต้องเลื่อนลงไปหา */}
-      <div className="mt-[26px] grid gap-3.5 max-sm:sticky max-sm:bottom-[calc(var(--botbar)+10px)] max-sm:z-10 max-sm:grid-cols-2 max-sm:gap-2.5 max-sm:rounded-2xl max-sm:border max-sm:border-border max-sm:bg-card max-sm:p-2.5 max-sm:shadow-[0_-6px_16px_-10px_rgb(0_0_0/0.25)] sm:grid-cols-2">
+      {/* ฟอร์มยาวมาก — มือถือให้ปุ่มบันทึกลอยอยู่เหนือแถบล่างตลอด ไม่ต้องเลื่อนลงไปหา
+          (.pf-bar บนจอแคบกว่า md เป็นแถบล่างแบบต้นแบบ: ยกเลิก / บันทึก 1fr 1.4fr) */}
+      <div className="pf-bar mt-[26px] grid gap-3.5 max-sm:sticky max-sm:bottom-[calc(var(--botbar)+10px)] max-sm:z-10 max-sm:grid-cols-2 max-sm:gap-2.5 max-sm:rounded-2xl max-sm:border max-sm:border-border max-sm:bg-card max-sm:p-2.5 max-sm:shadow-[0_-6px_16px_-10px_rgb(0_0_0/0.25)] sm:grid-cols-2">
         <button
           type="button"
           className="h-12 rounded-[14px] border-[1.5px] border-primary bg-white text-[14.5px] font-semibold text-primary transition-colors hover:bg-accent max-sm:h-11 max-sm:text-[13.5px]"
           onClick={() => setBad({})}
         >
-          ยกเลิกการแก้ไข
+          <CancelLabel />
         </button>
         <button
           type="button"
@@ -731,7 +730,7 @@ function Input({
 function Select({ options, id }: { options: string[]; id?: string }) {
   return (
     <select id={id} className="field-control h-12 cursor-pointer rounded-xl px-[15px] text-sm">
-      <option value="">ยังไม่ระบุ</option>
+      <option value="">— เลือก —</option>
       {options.map((o) => (
         <option key={o}>{o}</option>
       ))}
@@ -759,18 +758,21 @@ function NotifyPane({ onSaved }: { onSaved: (m: string) => void }) {
   const setLeadOut = (v: number) => patch({ leadOut: v });
   const setRepeat = (v: number) => patch({ repeat: v });
   const setQuiet = (v: boolean) => patch({ quietLunch: v });
-  /** เดสก์ท็อปสั่นไม่ได้ ปิดสวิตช์ไว้เลยจะได้ไม่หลอกกัน */
-  const canVibrate =
-    typeof navigator !== "undefined" && "vibrate" in navigator;
+  /* สวิตช์สั่นกดได้ทุกเครื่อง (ผู้ใช้สั่ง 29 ก.ย. 2569) — iPhone ไม่ให้เว็บสั่งสั่น เครื่องสั่นตามการตั้งค่าของ iPhone เอง
+     จึงบอกไว้ใต้ตาราง ไม่ล็อกสวิตช์ · อ่านชนิดเครื่องหลัง hydrate เท่านั้น */
+  const ios = useHydrated() && isIOS();
 
   return (
-    <section className="glass rounded-[20px] px-4 py-5 sm:px-7 sm:py-[26px]">
-      <h2 className="text-lg font-semibold">การแจ้งเตือน</h2>
-      <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+    <section className="pf-sheet glass rounded-[20px] px-4 py-5 sm:px-7 sm:py-[26px]">
+      <h2 className="pf-intro text-lg font-semibold">การแจ้งเตือน</h2>
+      <p className="pf-intro mt-1 text-[13px] leading-relaxed text-muted-foreground">
         เลือกได้ว่าเรื่องไหนจะเตือนด้วยวิธีใด ระบบยังคงส่งเรื่องสำคัญที่เกี่ยวกับบัญชีของคุณเสมอ
       </p>
 
-      <div className="glass-thin mt-5 flex items-center justify-between gap-3 rounded-[14px] px-4 py-3.5 text-sm font-semibold">
+      <DevicePushCard />
+
+      {/* มือถือ: สวิตช์ใหญ่เป็นการ์ดบนสุดของจอ (.pf-master) */}
+      <div className="pf-master glass-thin mt-5 flex items-center justify-between gap-3 rounded-[14px] px-4 py-3.5 text-sm font-semibold">
         <span>
           เปิดการแจ้งเตือน
           <small className="mt-0.5 block text-[11.5px] font-normal text-muted-foreground">
@@ -782,11 +784,11 @@ function NotifyPane({ onSaved }: { onSaved: (m: string) => void }) {
         <Switch on={on} onToggle={() => setOn(!on)} label="เปิดการแจ้งเตือน" />
       </div>
 
-      {/* เปิดรับแจ้งเตือนบนเครื่องนี้ (Web Push) — ต้องลงทะเบียนเครื่องก่อน ถึงจะเตือนตอนปิดแอปได้ */}
-      <DevicePushCard />
-
-      <div className={on ? "" : "pointer-events-none opacity-40"}>
-        <div className="mt-5 grid grid-cols-[minmax(0,1fr)_44px_44px_44px] sm:grid-cols-[minmax(0,1fr)_60px_60px_60px] gap-2.5 border-b border-border pb-2.5">
+      <div className={`pf-stack ${on ? "" : "pointer-events-none opacity-40"}`}>
+        {/* .pf-grp ไม่มีสไตล์บนจอคอม · มือถือเป็นการ์ด "เรื่องที่แจ้งเตือน" */}
+        <div className="pf-grp pf-events">
+        <h2 className="pf-grp-title hidden">เรื่องที่แจ้งเตือน</h2>
+        <div className="pf-chhead mt-5 grid grid-cols-[minmax(0,1fr)_44px_44px_44px] sm:grid-cols-[minmax(0,1fr)_60px_60px_60px] gap-2.5 border-b border-border pb-2.5">
           <span />
           {NOTIFY_CHANNELS.map((c) => (
             <span key={c.key} className="text-center text-[11.5px] font-semibold text-muted-foreground">
@@ -798,20 +800,22 @@ function NotifyPane({ onSaved }: { onSaved: (m: string) => void }) {
         {NOTIFY_EVENTS.map((e) => (
           <div
             key={e.key}
-            className="grid grid-cols-[minmax(0,1fr)_44px_44px_44px] sm:grid-cols-[minmax(0,1fr)_60px_60px_60px] items-center gap-2.5 border-b border-border py-4 last:border-b-0"
+            className="pf-ev grid grid-cols-[minmax(0,1fr)_44px_44px_44px] sm:grid-cols-[minmax(0,1fr)_60px_60px_60px] items-center gap-2.5 border-b border-border py-4"
           >
-            <span>
+            <span className="pf-ev-txt">
               <b className="block text-[13.5px] font-semibold">{e.title}</b>
               <span className="mt-[3px] block text-xs leading-relaxed text-muted-foreground">
                 {e.detail}
               </span>
             </span>
             {NOTIFY_CHANNELS.map((c) => (
-              <span key={c.key} className="flex justify-center">
+              <span key={c.key} className="pf-ch flex justify-center">
+                {/* มือถือ: ช่องทางเรียงลงเป็นแถว ชื่อช่องทางอยู่หน้าสวิตช์เล็ก (ต้นแบบ .pg-ch) */}
+                <span className="pf-ch-lbl hidden">{c.label}</span>
                 <Switch
+                  small
                   on={channels[e.key][c.key]}
                   label={`${e.title} — ${c.label}`}
-                  disabled={c.key === "vibrate" && !canVibrate}
                   onToggle={() =>
                     patch({
                       channels: {
@@ -826,15 +830,25 @@ function NotifyPane({ onSaved }: { onSaved: (m: string) => void }) {
           </div>
         ))}
 
+        {ios && (
+          <p className="mt-3 text-xs leading-[1.65] text-muted-foreground">
+            iPhone สั่นตามการตั้งค่าของเครื่อง (การตั้งค่า › เสียงและการสั่น › การสั่น) — สวิตช์สั่นในแอปใช้กับ Android
+          </p>
+        )}
+        </div>
+
+        <div className="pf-grp">
         <H3>เวลาแจ้งเตือน</H3>
         <div className="grid gap-[18px]">
           <Pills label="เตือนล่วงหน้าก่อนเข้างาน" options={LEAD_IN} value={leadIn} onChange={setLeadIn} zero="ตรงเวลา" />
           <Pills label="เตือนตอนเลิกงาน" options={LEAD_OUT} value={leadOut} onChange={setLeadOut} zero="ตรงเวลา" />
           <Pills label="เตือนซ้ำถ้ายังไม่กด" options={REPEAT} value={repeat} onChange={setRepeat} zero="ไม่เตือนซ้ำ" every />
         </div>
+        </div>
 
+        <div className="pf-grp">
         <H3>อื่น ๆ</H3>
-        <div className="flex items-center justify-between gap-3 py-3.5 text-[13.5px]">
+        <div className="pf-quiet flex items-center justify-between gap-3 py-3.5 text-[13.5px]">
           <span>
             ปิดเสียงช่วงพักกลางวัน
             <small className="mt-0.5 block text-[11.5px] text-muted-foreground">
@@ -843,15 +857,16 @@ function NotifyPane({ onSaved }: { onSaved: (m: string) => void }) {
           </span>
           <Switch on={quiet} onToggle={() => setQuiet(!quiet)} label="ปิดเสียงช่วงพักกลางวัน" />
         </div>
+        </div>
       </div>
 
-      <div className="mt-[26px] grid gap-3.5 sm:grid-cols-2">
+      <div className="pf-bar mt-[26px] grid gap-3.5 sm:grid-cols-2">
         <button
           type="button"
           className="h-12 rounded-[14px] border-[1.5px] border-primary bg-white text-[14.5px] font-semibold text-primary transition-colors hover:bg-accent"
           onClick={() => setDraft(stored)}
         >
-          ยกเลิกการแก้ไข
+          <CancelLabel />
         </button>
         <button
           type="button"
@@ -892,7 +907,8 @@ function Pills({
             key={o}
             type="button"
             onClick={() => onChange(o)}
-            className={`rounded-xl border-[1.5px] px-4 py-2.5 text-[13px] transition-colors ${
+            aria-pressed={o === value}
+            className={`pf-chip rounded-xl border-[1.5px] px-4 py-2.5 text-[13px] transition-colors ${
               o === value
                 ? "border-primary bg-accent font-semibold text-primary"
                 : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40"
@@ -911,11 +927,14 @@ function Switch({
   onToggle,
   label,
   disabled,
+  small,
 }: {
   on: boolean;
   onToggle: () => void;
   label: string;
   disabled?: boolean;
+  /** มือถือ: สวิตช์เล็ก 40×24 สำหรับช่องทางย่อยของแต่ละเรื่อง (จอคอมขนาดเท่าเดิม) */
+  small?: boolean;
 }) {
   return (
     <button
@@ -926,7 +945,7 @@ function Switch({
       disabled={disabled}
       title={disabled ? "สั่นใช้ได้เฉพาะบนมือถือ" : undefined}
       onClick={onToggle}
-      className={`relative h-[25px] w-11 shrink-0 rounded-[14px] transition-colors disabled:opacity-35 ${
+      className={`pf-sw${small ? " pf-sw-sm" : ""} relative h-[25px] w-11 shrink-0 rounded-[14px] transition-colors disabled:opacity-35 ${
         on ? "bg-primary" : "bg-[#dde2e9]"
       }`}
     >
@@ -960,13 +979,13 @@ function SecurityPane({ onSaved }: { onSaved: (m: string) => void }) {
   }
 
   return (
-    <section className="glass rounded-[20px] px-4 py-5 sm:px-7 sm:py-[26px]">
-      <h2 className="text-lg font-semibold">รหัสผ่าน</h2>
-      <p className="mt-1 text-[13px] text-muted-foreground">
+    <section className="pf-sheet glass rounded-[20px] px-4 py-5 sm:px-7 sm:py-[26px]">
+      <h2 className="pf-intro text-lg font-semibold">รหัสผ่าน</h2>
+      <p className="pf-intro mt-1 text-[13px] text-muted-foreground">
         เปลี่ยนรหัสผ่านที่ใช้เข้าสู่ระบบ
       </p>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <div className="pf-grp pf-pwgrid mt-5 grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <F
             label="รหัสผ่านปัจจุบัน"
@@ -985,16 +1004,30 @@ function SecurityPane({ onSaved }: { onSaved: (m: string) => void }) {
         <F
           label="รหัสผ่านใหม่"
           required
+          className="pf-pwnew"
           error={nextProblem || (touched && !next ? "กรอกรหัสผ่านใหม่" : undefined)}
           hint="อย่างน้อย 8 ตัวอักษร · พิมพ์ใหญ่ · พิมพ์เล็ก · ตัวเลข · อักขระพิเศษ"
         >
           <input
             type="password"
+            autoComplete="new-password"
             className="field-control h-12 rounded-xl px-[15px] text-sm"
             value={next}
             onChange={(e) => setNext(e.target.value)}
           />
         </F>
+        {/* มือถือ: เงื่อนไขรหัสผ่านใหม่ ข้อที่ผ่านเป็นเครื่องหมายถูกสีเขียวทันทีที่พิมพ์ (ต้นแบบ #pgRules)
+            ใช้เกณฑ์เดียวกับ passwordProblem · จอคอมซ่อน (hidden) จึงไม่กินช่องกริด */}
+        <ul className="pf-rules hidden" aria-live="polite">
+          {PW_RULES.map((r) => (
+            <li key={r.label} className={r.test(next) ? "ok" : undefined}>
+              <span className="pf-dot" aria-hidden="true">
+                <CheckIcon className="size-[11px]" strokeWidth={3} />
+              </span>
+              {r.label}
+            </li>
+          ))}
+        </ul>
         <F
           label="ยืนยันรหัสผ่านใหม่"
           required
@@ -1009,7 +1042,7 @@ function SecurityPane({ onSaved }: { onSaved: (m: string) => void }) {
         </F>
       </div>
 
-      <div className="mt-[26px] grid gap-3.5 sm:grid-cols-2">
+      <div className="pf-bar mt-[26px] grid gap-3.5 sm:grid-cols-2">
         <button
           type="button"
           className="h-12 rounded-[14px] border-[1.5px] border-primary bg-white text-[14.5px] font-semibold text-primary transition-colors hover:bg-accent"
@@ -1020,7 +1053,7 @@ function SecurityPane({ onSaved }: { onSaved: (m: string) => void }) {
             setTouched(false);
           }}
         >
-          ยกเลิกการแก้ไข
+          <CancelLabel />
         </button>
         <button
           type="button"
@@ -1048,12 +1081,17 @@ function F({
   required,
   hint,
   error,
+  wide,
+  className,
   children,
 }: {
   label: string;
   required?: boolean;
   hint?: string;
   error?: string;
+  /** มือถือ: กินเต็มแถวของกริดสองคอลัมน์ (จอคอมไม่มีผล) */
+  wide?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   /* ผูก label กับช่องกรอกให้เอง หลักการเดียวกับ Field ใน ui.tsx */
@@ -1064,7 +1102,7 @@ function F({
       : children;
 
   return (
-    <div>
+    <div className={`pf-f${wide ? " pf-wide" : ""}${className ? ` ${className}` : ""}`}>
       <label htmlFor={id} className="mb-[7px] block text-[12.5px] font-medium text-muted-foreground">
         {label}
         {required && <em className="ml-0.5 text-primary not-italic">*</em>}
@@ -1073,7 +1111,7 @@ function F({
       {error ? (
         <p className="mt-1.5 text-[12.5px] text-destructive">{error}</p>
       ) : hint ? (
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground">{hint}</p>
+        <p className="pf-hint mt-1.5 text-[11.5px] text-muted-foreground">{hint}</p>
       ) : null}
     </div>
   );
@@ -1097,6 +1135,25 @@ function ageFrom(iso: string) {
   return a >= 0 ? `${a} ปี` : "";
 }
 
+/** เงื่อนไขรหัสผ่านทีละข้อ — รายการติ๊กบนมือถือ (ตรงกับ passwordProblem ด้านล่าง) */
+const PW_RULES: { label: string; test: (v: string) => boolean }[] = [
+  { label: "อย่างน้อย 8 ตัวอักษร", test: (v) => v.length >= 8 },
+  { label: "ตัวพิมพ์ใหญ่", test: (v) => /[A-Z]/.test(v) },
+  { label: "ตัวพิมพ์เล็ก", test: (v) => /[a-z]/.test(v) },
+  { label: "ตัวเลข", test: (v) => /[0-9]/.test(v) },
+  { label: "อักขระพิเศษ เช่น # @ !", test: (v) => /[^A-Za-z0-9]/.test(v) },
+];
+
+/** ปุ่มยกเลิก — มือถือคำสั้น "ยกเลิก" ตามต้นแบบ จอคอมคงคำเดิม */
+function CancelLabel() {
+  return (
+    <>
+      <span className="max-md:hidden">ยกเลิกการแก้ไข</span>
+      <span className="md:hidden">ยกเลิก</span>
+    </>
+  );
+}
+
 /** คืนข้อความบอกว่าขาดอะไร หรือ "" ถ้าผ่าน */
 function passwordProblem(v: string) {
   if (v.length < 8) return `ต้องมีอย่างน้อย 8 ตัวอักษร ตอนนี้มี ${v.length} ตัว`;
@@ -1109,3 +1166,148 @@ function passwordProblem(v: string) {
 
 /* ─── แถบเมนูล่าง ───────────────────────────────────────────────── */
 
+/*
+ * เลือกเองว่าจะเอาหน้าไหนไว้ช่องไหนของแถบล่างบนมือถือ (เจ้าของสั่ง 25 ก.ย. 2569)
+ * เป็นค่าของแต่ละคน ไม่ใช่ค่าตั้งค่าระบบ — เปลี่ยนแล้วมีผลเฉพาะเครื่องนี้และบทบาทนี้
+ * เลือกได้เฉพาะหน้าที่บทบาทตัวเองเข้าได้ ไม่มีทางตั้งให้พาข้ามไปหน้าของฝ่ายอื่น
+ * ปุ่มกลาง (ลงเวลา) ตรึงไว้ ไม่ให้เปลี่ยน เพราะทุกคนตอกบัตรทุกวัน
+ */
+function BotnavPane({ onSaved }: { onSaved: (message: string) => void }) {
+  const role = useRole();
+  const roles = useMyRoles();
+  const access = useMenuAccess();
+  const route = useApprovalRoute();
+  const items = navItemsOf(roles, access, route);
+  const prefs = useBotnavPrefs();
+  const choices = botnavChoices(items, role);
+  const current = botnavOf(prefs, role) ?? botnavDefault(items, role);
+  const changed = botnavOf(prefs, role) !== null;
+  const used = current.filter(Boolean);
+  const full = used.length >= BOTNAV_SLOTS;
+
+  /*
+   * กดครั้งเดียวจบ (เจ้าของสั่ง 25 ก.ย. 2569 ให้ใช้ง่าย)
+   * กดหน้าที่ยังไม่ได้เลือก = ใส่เข้าช่องว่างช่องแรก · กดหน้าที่เลือกไว้แล้ว = เอาออก
+   * เลขบนไอคอนบอกว่าหน้านั้นไปอยู่ช่องที่เท่าไรของแถบ นับจากซ้ายไปขวา
+   */
+  function toggle(href: string) {
+    const next = [...current];
+    const at = next.indexOf(href);
+    if (at >= 0) {
+      next[at] = "";
+      setBotnav(role, next);
+      onSaved("เอาออกจากแถบเมนูล่างแล้ว");
+      return;
+    }
+    const empty = next.indexOf("");
+    if (empty < 0) return;
+    next[empty] = href;
+    setBotnav(role, next);
+    onSaved("เพิ่มเข้าแถบเมนูล่างแล้ว");
+  }
+
+  /** ช่องที่เท่าไรของแถบ (นับเฉพาะช่องที่มีของ) — ใช้เป็นเลขบนไอคอน */
+  const orderOf = (href: string) => {
+    const at = current.indexOf(href);
+    return at < 0 ? 0 : current.slice(0, at).filter(Boolean).length + 1;
+  };
+
+  return (
+    <section className="pf-card glass rounded-[20px] px-4 py-4 sm:px-6 sm:py-[22px]">
+      <h2 className="pf-intro text-lg font-semibold">แถบเมนูล่าง</h2>
+      <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+        กดเลือกหน้าที่อยากให้อยู่ในแถบล่างบนมือถือ ได้สูงสุด {BOTNAV_SLOTS} หน้า
+        <br />
+        กดซ้ำที่หน้าเดิมเพื่อเอาออก · ปุ่มกลางเป็นลงเวลาเสมอ
+      </p>
+
+      {/* แถบตัวอย่างของจริง — เลือกแล้วเห็นผลทันทีว่าหน้าตาจะเป็นแบบไหน */}
+      <div className="mt-4 flex items-end justify-between gap-1 rounded-[18px] bg-muted p-2">
+        {[0, 1, -1, 2, 3].map((s) => {
+          if (s === -1)
+            return (
+              <span key="mid" className="flex flex-1 flex-col items-center gap-1 py-1.5">
+                <i className="grid size-10 place-items-center rounded-full bg-primary text-white">
+                  <ClockIcon className="size-5" strokeWidth={2.3} />
+                </i>
+                <em className="text-[10.5px] font-semibold not-italic">ลงเวลา</em>
+              </span>
+            );
+          const found = choices.find((c) => c.href === current[s]);
+          const Icon = found ? (ICONS[found.icon] ?? HomeIcon) : null;
+          return (
+            <span key={s} className="flex flex-1 flex-col items-center gap-1 py-1.5 text-muted-foreground">
+              {Icon ? <Icon className="size-[19px]" /> : <i className="block size-[19px]" />}
+              <em className="w-full truncate px-0.5 text-center text-[10.5px] not-italic">
+                {found?.label ?? "ว่าง"}
+              </em>
+            </span>
+          );
+        })}
+      </div>
+
+      <p className="mt-3.5 text-[12.5px] font-semibold">
+        {full ? (
+          <span className="text-muted-foreground">
+            ครบ {BOTNAV_SLOTS} หน้าแล้ว — กดหน้าที่เลือกไว้เพื่อเอาออกก่อน
+          </span>
+        ) : (
+          <>
+            เลือกได้อีก <span className="text-primary">{BOTNAV_SLOTS - used.length}</span> หน้า
+          </>
+        )}
+      </p>
+
+      {/* หน้าที่เลือกได้ — เฉพาะหน้าในเมนูของบทบาทตัวเอง จึงไม่มีทางตั้งให้ข้ามไปหน้าของฝ่ายอื่น */}
+      <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {choices.map((c) => {
+          const Icon = ICONS[c.icon] ?? HomeIcon;
+          const on = current.includes(c.href);
+          return (
+            <button
+              key={c.href}
+              type="button"
+              onClick={() => toggle(c.href)}
+              aria-pressed={on}
+              disabled={!on && full}
+              className={`flex flex-col items-center justify-start gap-1.5 rounded-[14px] border px-2 py-3 text-[11.5px] leading-tight font-medium transition-colors disabled:opacity-40 ${
+                on ? "border-primary bg-[var(--accent)] text-primary" : "border-border bg-card"
+              }`}
+            >
+              <span className="relative">
+                <i
+                  className={`grid size-[34px] place-items-center rounded-[11px] ${
+                    on ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  <Icon className="size-[18px]" />
+                </i>
+                {on && (
+                  /* เลขบอกลำดับช่องบนแถบ — เห็นได้ทันทีว่าหน้านี้ไปอยู่ตรงไหน */
+                  <em className="num absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full bg-white text-[10.5px] font-bold text-primary shadow-[0_0_0_1.5px_var(--primary)] not-italic">
+                    {orderOf(c.href)}
+                  </em>
+                )}
+              </span>
+              <span className="w-full truncate text-center">{c.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn glass-thin"
+          disabled={!changed}
+          onClick={() => {
+            resetBotnav(role);
+            onSaved("คืนแถบเมนูล่างเป็นค่าตั้งต้นแล้ว");
+          }}
+        >
+          คืนค่าตั้งต้น
+        </button>
+      </div>
+    </section>
+  );
+}

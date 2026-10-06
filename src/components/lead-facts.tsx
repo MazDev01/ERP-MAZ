@@ -137,7 +137,7 @@ export function ProfileFacts({
                     aria-label={f.label}
                     className="field-control h-9 cursor-pointer text-[13.5px]"
                   >
-                    <option value="">ยังไม่ระบุ</option>
+                    <option value="">— เลือก —</option>
                     {sourceList.map((s) => (
                       <option key={s}>{s}</option>
                     ))}
@@ -253,7 +253,7 @@ export function BranchInput({ value, onChange }: { value: string; onChange: (v: 
         }}
         className="field-control h-9 min-w-0 flex-1 cursor-pointer text-[13.5px]"
       >
-        <option value="">ยังไม่ระบุ</option>
+        <option value="">— เลือก —</option>
         <option value={HEAD_OFFICE}>สำนักงานใหญ่</option>
         <option value="sub">สาขา</option>
       </select>

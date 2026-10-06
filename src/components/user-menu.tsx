@@ -5,13 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useProfile } from "@/lib/profile-data";
 import { useMyRoles } from "@/lib/hr-link";
-import { rolesLabel, useRole } from "@/lib/role";
-import { hrPos } from "@/lib/hr-data";
-import { setStaffEmployee, staffTeam, useStaffEmployeeId } from "@/lib/staff-identity";
-import { psTeam, setPsEmployee, usePsEmployeeId } from "@/lib/ps-identity";
+import { roleLabel, useRole } from "@/lib/role";
 import { useProfilePhoto } from "@/lib/profile-store";
 import { ConfirmDialog } from "./confirm-dialog";
-import { clearAllLocal, clearSession } from "@/lib/local-data";
 import { DownloadIcon, LockIcon, LogoutIcon, UserIcon } from "./icons";
 
 /** ตัวย่อชื่อสองตัวอักษรแรกของชื่อจริง */
@@ -27,20 +23,11 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
   const [open, setOpen] = useState(false);
   /* ออกจากระบบแล้วย้อนกลับเองไม่ได้ ต้องถามก่อนเสมอ */
   const [askLogout, setAskLogout] = useState(false);
-  /* เครื่องที่ใช้ร่วมกัน ควรล้างข้อมูลที่เก็บไว้ในเครื่องด้วย (ตรวจระบบ 5 ต.ค. 2569 · SEC-002) */
-  const [wipe, setWipe] = useState(false);
   const me = useProfile();
   /* คนหนึ่งควบได้หลายบทบาท (เช่น บัญชี + บุคคล + ผู้ดูแลระบบ)
      ต้องเห็นว่าตอนนี้ทำงานในบทบาทไหน และตัวเองถือบทบาทอะไรอีกบ้าง
      ไม่งั้นพอคิวอนุมัติหรือเมนูไม่เหมือนที่คิด ก็เดาไม่ออกว่าเพราะสวมหมวกผิดใบ */
   const role = useRole();
-  /* บทบาทที่ไม่ได้ผูกกับคนเดียวสลับคนได้ — รายชื่อจากทะเบียนฝ่ายบุคคล ไม่ใช่รายชื่อตายตัวในหน้านี้
-     พนักงาน = ทุกตำแหน่งที่ไม่มีหน้าจอของตัวเอง · ทีมก่อนการขาย = SA กับ BD (เจ้าของถาม 5 ต.ค. 2569) */
-  const staffId = useStaffEmployeeId();
-  const psId = usePsEmployeeId();
-  const team = role === "staff" ? staffTeam() : role === "ps" ? psTeam() : [];
-  const pickedId = role === "ps" ? psId : staffId;
-  const pickPerson = role === "ps" ? setPsEmployee : setStaffEmployee;
   const myRoles = useMyRoles();
   const dual = myRoles.length > 1;
   const photo = useProfilePhoto();
@@ -62,10 +49,9 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
     };
   }, [open]);
 
-  /* รูปผู้ใช้เป็นสี่เหลี่ยมมุมมน ตามต้นแบบที่เจ้าของส่งมา (clay) ไม่ใช่วงกลม — สั่ง 29 ก.ย. 2569 */
   const avatar = photo ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={photo} alt="" className="size-8 rounded-full border border-border object-cover" />
+    <img src={photo} alt="" className="size-8 rounded-full object-cover" />
   ) : (
     <span className="grid size-8 place-items-center rounded-full bg-accent text-xs font-bold text-primary">
       {initials(me.name)}
@@ -92,14 +78,17 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label="บัญชีของฉัน"
-          className="glass-thin flex items-center gap-2.5 rounded-[14px] py-1 pr-1 pl-1 transition-colors hover:border-primary sm:pr-3.5"
+          className="glass-thin flex items-center gap-2.5 rounded-full py-1 pr-1 pl-1 transition-colors hover:border-primary sm:pr-3.5"
         >
           {avatar}
           {/* ชื่อกับบทบาทโผล่เฉพาะจอกว้าง จอแคบเหลือแค่รูปกลม */}
           <span className="hidden min-w-0 text-left leading-tight sm:block">
             <b className="block max-w-[140px] truncate text-[13.5px] font-semibold">{me.name}</b>
-            <span className="block max-w-[140px] truncate text-[11.5px] text-muted-foreground">
-              {dual ? rolesLabel(myRoles) : me.position}
+            <span
+              className="block max-w-[140px] truncate text-[11.5px] text-muted-foreground"
+              title={dual ? `ควบ ${myRoles.length} บทบาท: ${myRoles.map(roleLabel).join(" · ")}` : undefined}
+            >
+              {dual ? `${roleLabel(role)} · ควบ ${myRoles.length}` : me.position}
             </span>
           </span>
         </button>
@@ -131,57 +120,26 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
               <b className="block truncate text-[13.5px] font-semibold">
                 {me.name}
               </b>
-              {/* คนเดียวทำสองฝ่าย — บอกสั้น ๆ ว่าฝ่ายไหนบ้าง เช่น "บัญชีและบุคคล" */}
               <span className="mt-0.5 block truncate text-[11.5px] text-muted-foreground">
-                {dual ? rolesLabel(myRoles) : me.position}
+                {me.position}
               </span>
+              {dual && (
+                <span className="mt-1 block text-[11.5px] leading-relaxed text-muted-foreground">
+                  ควบ {myRoles.length} บทบาท ·{" "}
+                  {myRoles.map((r, i) => (
+                    <span key={r}>
+                      {i > 0 && " · "}
+                      <span className={r === role ? "font-semibold text-primary" : undefined}>
+                        {roleLabel(r)}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              )}
             </span>
           </div>
 
           <hr className="mx-1 my-1.5 border-border" />
-
-          {/*
-            บทบาทพนักงานมีหลายคนหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
-            สลับได้ว่ากำลังใช้ระบบเป็นใคร — งานที่ได้รับ เวลาทำงาน ใบลา โอที ใบเบิก เป็นของคนนั้น
-            (เจ้าของสั่ง 29 ก.ย. 2569 · ยังไม่มีหลังบ้าน จึงเป็นตัวเลือกในเครื่อง)
-          */}
-          {team.length > 1 && (
-            <>
-              <p className="px-2.5 pt-1 pb-1.5 text-[11px] font-bold text-muted-foreground">
-                เข้าใช้งานเป็น
-              </p>
-              <div className="scroll-stable max-h-[184px] overflow-y-auto">
-                {team.map((e) => {
-                  const on = e.id === pickedId;
-                  return (
-                    <button
-                      key={e.id}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        pickPerson(e.id);
-                        setOpen(false);
-                      }}
-                      className={`flex w-full items-center gap-2.5 rounded-[9px] px-[11px] py-2 text-left text-[13px] transition-colors hover:bg-accent ${
-                        on ? "bg-[var(--accent)] font-semibold text-primary" : ""
-                      }`}
-                    >
-                      <span className="grid size-7 flex-none place-items-center rounded-[9px] bg-accent text-[10.5px] font-bold text-primary">
-                        {initials(e.name)}
-                      </span>
-                      <span className="min-w-0">
-                        <b className="block truncate font-semibold">{e.name}</b>
-                        <span className="block truncate text-[11px] text-muted-foreground">
-                          {hrPos(e.pos).label}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <hr className="mx-1 my-1.5 border-border" />
-            </>
-          )}
 
           <MenuLink href="/profile" onClick={() => setOpen(false)}>
             <UserIcon className="size-[15px]" />
@@ -219,37 +177,12 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
         open={askLogout}
         title="ออกจากระบบ"
         description="คุณต้องการออกจากระบบใช่หรือไม่"
-        detail={
-          <label className="mt-1 flex cursor-pointer items-start gap-2 rounded-xl bg-muted/60 px-3 py-2.5 text-left text-[12.5px] leading-relaxed">
-            <input
-              type="checkbox"
-              checked={wipe}
-              onChange={(e) => setWipe(e.target.checked)}
-              className="mt-0.5 size-4 flex-none accent-[var(--primary)]"
-            />
-            <span>
-              ล้างข้อมูลของระบบในเครื่องนี้ด้วย
-              <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                เลือกข้อนี้เมื่อใช้เครื่องร่วมกับคนอื่น — ข้อมูลที่บันทึกไว้ในเครื่องนี้ (รวมไฟล์โปรเจคและหน้าที่เก็บไว้ใช้ตอนออฟไลน์) จะถูกลบทั้งหมด
-              </span>
-            </span>
-          </label>
-        }
         confirmLabel="ยืนยัน"
         cancelLabel="ยกเลิก"
         onCancel={() => setAskLogout(false)}
         onConfirm={() => {
           setAskLogout(false);
-          /* ลืมว่าใครล็อกอินอยู่เสมอ ส่วนข้อมูลงานล้างเฉพาะที่ผู้ใช้สั่ง */
-          clearSession();
-          const done = wipe ? clearAllLocal() : Promise.resolve();
-          void done.then(() => {
-            /* ล้างแล้วต้องโหลดใหม่ทั้งหน้า ไม่งั้นสโตร์ในหน่วยความจำยังถือข้อมูลเดิมอยู่
-               (router.push ไม่พอ เพราะ JavaScript ตัวเดิมยังทำงานอยู่) */
-            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-            if (wipe) window.location.href = "/login";
-            else router.push("/login");
-          });
+          router.push("/login");
         }}
       />
     </div>

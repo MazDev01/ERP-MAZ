@@ -159,6 +159,56 @@ export const ACC_DEALS: AccDeal[] = [
     scope: "เว็บไซต์บริษัทและระบบฟอร์มติดต่อ",
     plan: [{ seq: 1, pct: 100, amount: 40560, due: "2026-07-25" }],
   },
+  /*
+   * วางบิลงวดแรกของโปรเจคตั้งต้นที่เหลือ (ผู้ใช้สั่ง 5 ต.ค. 2569) — โปรเจคผูกกับใบแจ้งหนี้งวดแรก
+   * ทุกโปรเจคและงานในกล่อง PM จึงต้องมีใบแจ้งหนี้งวดแรกที่ชำระแล้วอยู่จริงในฝั่งบัญชี
+   */
+  {
+    no: "DL-2569-0015", cus: "อัลฟ่าคอร์ป", quo: "MAZ-2569-0028", quoDate: "2026-05-15",
+    base: 145000, vat: false, wht: 0, whtPct: 0, net: 145000,
+    scope: "ระบบจัดการเอกสารภายในองค์กร",
+    plan: [{ seq: 1, pct: 100, amount: 145000, due: "2026-05-30" }],
+  },
+  {
+    no: "DL-2569-0029", cus: "เซลล่า ไทยแลนด์", quo: "MAZ-2569-0046", quoDate: "2026-08-26",
+    base: 96000, vat: false, wht: 0, whtPct: 0, net: 96000,
+    scope: "Digital Marketing 1 แคมเปญ ระยะ 3 เดือน",
+    plan: [
+      { seq: 1, pct: 50, amount: 48000, due: "2026-09-01" },
+      { seq: 2, pct: 50, amount: 48000, due: "" },
+    ],
+  },
+  {
+    no: "DL-2569-0031", cus: "ครัวคุณจิ", quo: "MAZ-2569-0048", quoDate: "2026-09-03",
+    base: 8500, vat: false, wht: 0, whtPct: 0, net: 8500,
+    scope: "แก้แบนเนอร์โปรโมชันหน้าเว็บ 3 ชิ้น",
+    plan: [{ seq: 1, pct: 100, amount: 8500, due: "2026-09-05" }],
+  },
+  {
+    no: "DL-2569-0026", cus: "บุญมีฟาร์ม", quo: "MAZ-2569-0045", quoDate: "2026-09-04",
+    base: 128000, vat: false, wht: 0, whtPct: 0, net: 128000,
+    scope: "เว็บไซต์ฟาร์มและระบบสั่งจองล่วงหน้า",
+    plan: [
+      { seq: 1, pct: 40, amount: 51200, due: "2026-09-06" },
+      { seq: 2, pct: 60, amount: 76800, due: "" },
+    ],
+  },
+  {
+    no: "DL-2569-0035", cus: "เอ็นอาร์ พร็อพเพอร์ตี้", quo: "MAZ-2569-0052", quoDate: "2026-09-01",
+    base: 270000, vat: false, wht: 0, whtPct: 0, net: 270000,
+    scope: "Digital Marketing 3 แคมเปญ ระยะ 6 เดือน",
+    plan: [
+      { seq: 1, pct: 34, amount: 91800, due: "2026-09-06" },
+      { seq: 2, pct: 33, amount: 89100, due: "" },
+      { seq: 3, pct: 33, amount: 89100, due: "" },
+    ],
+  },
+  {
+    no: "DL-2569-0033", cus: "อัลฟ่าคอร์ป", quo: "MAZ-2569-0050", quoDate: "2026-09-05",
+    base: 15000, vat: false, wht: 0, whtPct: 0, net: 15000,
+    scope: "ต่ออายุโฮสติ้งและย้ายขึ้นเซิร์ฟเวอร์ใหม่",
+    plan: [{ seq: 1, pct: 100, amount: 15000, due: "2026-09-07" }],
+  },
 ];
 
 // ═══ ใบแจ้งหนี้ ════════════════════════════════════════════════
@@ -243,6 +293,43 @@ export const ACC_INVOICES: Invoice[] = [
     base: 39000, vat: 2730, wht: 1170, total: 40560,
     outstanding: 0, status: "paid", col: [],
   },
+  /* ใบแจ้งหนี้งวดแรกของโปรเจคตั้งต้นที่เหลือ — ชำระแล้วทุกใบ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  {
+    no: "INV-2569-0032", deal: "DL-2569-0015", cus: "อัลฟ่าคอร์ป", seq: 1,
+    issue: "2026-05-20", due: "2026-05-30",
+    base: 145000, vat: 0, wht: 0, total: 145000,
+    outstanding: 0, status: "paid", col: [],
+  },
+  {
+    no: "INV-2569-0033", deal: "DL-2569-0029", cus: "เซลล่า ไทยแลนด์", seq: 1,
+    issue: "2026-08-27", due: "2026-09-01",
+    base: 48000, vat: 0, wht: 0, total: 48000,
+    outstanding: 0, status: "paid", col: [],
+  },
+  {
+    no: "INV-2569-0034", deal: "DL-2569-0031", cus: "ครัวคุณจิ", seq: 1,
+    issue: "2026-09-03", due: "2026-09-05",
+    base: 8500, vat: 0, wht: 0, total: 8500,
+    outstanding: 0, status: "paid", col: [],
+  },
+  {
+    no: "INV-2569-0035", deal: "DL-2569-0026", cus: "บุญมีฟาร์ม", seq: 1,
+    issue: "2026-09-04", due: "2026-09-06",
+    base: 51200, vat: 0, wht: 0, total: 51200,
+    outstanding: 0, status: "paid", col: [],
+  },
+  {
+    no: "INV-2569-0036", deal: "DL-2569-0035", cus: "เอ็นอาร์ พร็อพเพอร์ตี้", seq: 1,
+    issue: "2026-09-02", due: "2026-09-06",
+    base: 91800, vat: 0, wht: 0, total: 91800,
+    outstanding: 0, status: "paid", col: [],
+  },
+  {
+    no: "INV-2569-0037", deal: "DL-2569-0033", cus: "อัลฟ่าคอร์ป", seq: 1,
+    issue: "2026-09-05", due: "2026-09-07",
+    base: 15000, vat: 0, wht: 0, total: 15000,
+    outstanding: 0, status: "paid", col: [],
+  },
 ];
 
 // ═══ เงินที่รับเข้าจริง ═══════════════════════════════════════════
@@ -262,6 +349,12 @@ export const ACC_PAYMENTS: Payment[] = [
   { inv: "INV-2569-0014", date: "2026-09-05", received: 171200, wht: 0, certReceived: true },
   { inv: "INV-2569-0018", date: "2026-08-18", received: 10400, wht: 0, certReceived: true },
   { inv: "INV-2569-0022", date: "2026-07-31", received: 40560, wht: 1170, certReceived: true },
+  { inv: "INV-2569-0032", date: "2026-05-28", received: 145000, wht: 0, certReceived: true },
+  { inv: "INV-2569-0033", date: "2026-09-01", received: 48000, wht: 0, certReceived: true },
+  { inv: "INV-2569-0034", date: "2026-09-05", received: 8500, wht: 0, certReceived: true },
+  { inv: "INV-2569-0035", date: "2026-09-06", received: 51200, wht: 0, certReceived: true },
+  { inv: "INV-2569-0036", date: "2026-09-06", received: 91800, wht: 0, certReceived: true },
+  { inv: "INV-2569-0037", date: "2026-09-07", received: 15000, wht: 0, certReceived: true },
 ];
 
 // ═══ ใบเสร็จรับเงิน ════════════════════════════════════════════
@@ -304,6 +397,36 @@ export const ACC_RECEIPTS: Receipt[] = [
     no: "RCP-2569-0007", inv: "INV-2569-0014", deal: "DL-2569-0009", seq: 1,
     cus: "สยามพลาสติก", date: "2026-09-05",
     base: 160000, vatAmount: 11200, wht: 0, total: 171200, certReceived: true, vat: true,
+  },
+  {
+    no: "RCP-2569-0008", inv: "INV-2569-0032", deal: "DL-2569-0015", seq: 1,
+    cus: "อัลฟ่าคอร์ป", date: "2026-05-28",
+    base: 145000, vatAmount: 0, wht: 0, total: 145000, certReceived: true, vat: false,
+  },
+  {
+    no: "RCP-2569-0009", inv: "INV-2569-0033", deal: "DL-2569-0029", seq: 1,
+    cus: "เซลล่า ไทยแลนด์", date: "2026-09-01",
+    base: 48000, vatAmount: 0, wht: 0, total: 48000, certReceived: true, vat: false,
+  },
+  {
+    no: "RCP-2569-0010", inv: "INV-2569-0034", deal: "DL-2569-0031", seq: 1,
+    cus: "ครัวคุณจิ", date: "2026-09-05",
+    base: 8500, vatAmount: 0, wht: 0, total: 8500, certReceived: true, vat: false,
+  },
+  {
+    no: "RCP-2569-0011", inv: "INV-2569-0035", deal: "DL-2569-0026", seq: 1,
+    cus: "บุญมีฟาร์ม", date: "2026-09-06",
+    base: 51200, vatAmount: 0, wht: 0, total: 51200, certReceived: true, vat: false,
+  },
+  {
+    no: "RCP-2569-0012", inv: "INV-2569-0036", deal: "DL-2569-0035", seq: 1,
+    cus: "เอ็นอาร์ พร็อพเพอร์ตี้", date: "2026-09-06",
+    base: 91800, vatAmount: 0, wht: 0, total: 91800, certReceived: true, vat: false,
+  },
+  {
+    no: "RCP-2569-0013", inv: "INV-2569-0037", deal: "DL-2569-0033", seq: 1,
+    cus: "อัลฟ่าคอร์ป", date: "2026-09-07",
+    base: 15000, vatAmount: 0, wht: 0, total: 15000, certReceived: true, vat: false,
   },
 ];
 

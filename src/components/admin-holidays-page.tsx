@@ -121,8 +121,7 @@ export function AdminHolidaysPage() {
     <div className="space-y-4">
       <AdminHead
         title="วันหยุดบริษัท"
-        code="HR-13"
-        desc="วันหยุดประจำปีของบริษัท"
+        desc="วันหยุดประจำปีของบริษัท — ใบลาไม่หักวันนี้ โอทีวันนี้คิดอัตราวันหยุด และขึ้นเป็นวันหยุดในตารางงาน"
       >
         <div className="flex items-center gap-1.5">
           <button type="button" className="btn glass-thin btn-mini" aria-label="ปีก่อนหน้า" onClick={() => setYear(ly - 1)}>
@@ -153,10 +152,9 @@ export function AdminHolidaysPage() {
       </AdminHead>
 
       <section className="glass overflow-hidden rounded-[18px]">
-        {/* ต้นแบบ: ชื่อการ์ดซ้าย คำอธิบายขวา อยู่แถวเดียวกัน */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3.5 sm:px-5">
+        <div className="border-b border-border px-4 py-3.5 sm:px-5">
           <h2 className="text-[14.5px] font-bold">ปฏิทินปี พ.ศ. {ly + 543}</h2>
-          <p className="text-[12.5px] text-muted-foreground">กดวันที่เพื่อเพิ่มหรือแก้ไขวันหยุด</p>
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">กดวันที่เพื่อเพิ่มหรือแก้ไขวันหยุด</p>
         </div>
 
         <div className="grid gap-3.5 px-4 py-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-3 xl:grid-cols-4">

@@ -7,7 +7,8 @@ import "./globals.css";
 const notoThai = Noto_Sans_Thai({
   variable: "--font-noto-thai",
   subsets: ["thai", "latin"],
-  weight: ["400", "500", "600", "700"],
+  /* 800 ใช้กับตัวเลขใหญ่และหัวข้อเด่น (font-extrabold ~25 ที่) — ไม่โหลดไว้ เบราว์เซอร์จะทำตัวหนาปลอมจาก 700 */
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {

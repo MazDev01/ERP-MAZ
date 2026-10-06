@@ -209,55 +209,25 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
   const [drag, setDrag] = useState<string>("");
 
   /*
-   * ข้อมูลหลักมีหลายรายการเกินกว่าจะวางเรียงเป็นแท็บเดียว (เจ้าของทัก 29 ก.ย. 2569 ว่าหัวข้อล้นขอบ)
-   * จึงแยกสองชั้น: แถวบนเลือก "กลุ่มการใช้งาน" แถวล่างเป็นรายการในกลุ่มนั้น
-   * แต่ละแถวจึงสั้น อ่านออกทั้งแถว ไม่ต้องเลื่อนข้างและไม่มีอะไรถูกตัด
-   * หมวดที่มีหัวข้อของตัวเองในเมนู (บริการ · หัก ณ ที่จ่าย · ตำแหน่งงาน) ไม่เอามาซ้ำ
+   * แท็บตามต้นแบบ HR-10 เป๊ะ ๆ (เจ้าของสั่ง 29 ก.ย. 2569 "ข้อมูลมันซ้ำซ้อนเกินไป เอาตามที่ส่งไป")
+   * เหลือสามหมวด: แผนก · ประเภทนัดหมาย · ประเภทค่าใช้จ่าย
+   * รายการอื่น (แหล่งที่มา เพศ ระดับการศึกษา ฯลฯ) ยังมีอยู่ในระบบและเพิ่มจากหน้างานได้เหมือนเดิม
    */
-  const SETS: { key: string; label: string; items: { kind: "cat" | "opt"; key: string }[] }[] = [
-    {
-      key: "hr",
-      label: "องค์กรและพนักงาน",
-      items: [
-        { kind: "cat", key: "depts" },
-        { kind: "cat", key: "docs" },
-        { kind: "opt", key: "sex" },
-        { kind: "opt", key: "eduLevel" },
-        { kind: "opt", key: "expenseKind" },
-      ],
-    },
-    {
-      key: "sales",
-      label: "งานขาย",
-      items: [
-        { kind: "opt", key: "leadSource" },
-        { kind: "opt", key: "leadChannel" },
-        { kind: "opt", key: "leadClose" },
-        { kind: "opt", key: "leadTakeover" },
-        { kind: "opt", key: "quoteReject" },
-      ],
-    },
-    {
-      key: "pm",
-      label: "งานโครงการ",
-      items: [
-        { kind: "cat", key: "eventKinds" },
-        { kind: "cat", key: "teamRoles" },
-        { kind: "opt", key: "adPlatform" },
-      ],
-    },
-    { key: "acc", label: "บัญชี", items: [{ kind: "opt", key: "collectChannel" }] },
-  ];
-  const tabOf = (it: { kind: "cat" | "opt"; key: string }) => {
-    if (it.kind === "cat") {
-      const c = CAT_SPECS.find((x) => x.key === it.key);
-      return c ? { kind: "cat" as const, key: c.key as string, label: c.label, where: c.where } : null;
-    }
-    const g = OPTION_GROUPS.find((x) => x.key === it.key);
-    return g ? { kind: "opt" as const, key: g.key as string, label: g.label, where: g.where } : null;
-  };
-  const curSet = SETS.find((g) => g.items.some((i) => i.kind === sel.kind && i.key === sel.key)) ?? SETS[0];
-  const tabs = only ? [] : curSet.items.flatMap((i) => (tabOf(i) ? [tabOf(i)!] : []));
+  const tabs = only
+    ? []
+    : [
+        ...(["depts", "eventKinds"] as const).flatMap((k) => {
+          const c = CAT_SPECS.find((x) => x.key === k);
+          return c ? [{ kind: "cat" as const, key: c.key as string, label: c.label, where: c.where, count: toItems(cat.draft, c.key).length }] : [];
+        }),
+        ...OPTION_GROUPS.filter((g) => g.key === "expenseKind").map((g) => ({
+          kind: "opt" as const,
+          key: g.key as string,
+          label: g.label,
+          where: g.where,
+          count: d.draft[g.key].length,
+        })),
+      ];
   const curTab = tabs.find((t) => t.kind === sel.kind && t.key === sel.key) ?? tabs[0];
   const spec = onlySpec ?? (curTab && curTab.kind === "cat" ? CAT_SPECS.find((c) => c.key === curTab.key) : undefined);
   const optGroup = !onlySpec && curTab && curTab.kind === "opt" ? OPTION_GROUPS.find((g) => g.key === curTab.key) : undefined;
@@ -272,14 +242,7 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
         label: x.label,
         extra: spec.key === "whtTypes" && x.rate != null ? `${x.rate}%` : "",
         off: Boolean(x.off),
-        /* แผนกนับจำนวนตำแหน่งในร่างปัจจุบัน (ต้นแบบโชว์ "ตำแหน่ง 2") — นับที่นี่เพราะต้องใช้รายการตำแหน่งจากร่าง */
-        used:
-          spec.key === "depts"
-            ? (() => {
-                const n = toItems(cat.draft, "positions").filter((y) => y.dept === x.id).length;
-                return n ? `ตำแหน่ง ${n}` : "";
-              })()
-            : usageOfCat(spec.key, x.id, hr),
+        used: usageOfCat(spec.key, x.id, hr),
         block: BUILTIN[spec.key].some((b) => b.id === x.id) ? "รายการตั้งต้นของระบบลบไม่ได้ — ปิดใช้งานแทน" : usedBy(spec.key, x.id),
       }))
     : optGroup
@@ -365,7 +328,6 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
     <div className="space-y-4">
       <AdminHead
         title={onlySpec ? onlySpec.label : "ข้อมูลหลัก"}
-        code={only === "services" ? "HR-16" : only === "whtTypes" ? "HR-17" : "HR-10"}
         desc={
           onlySpec
             ? `เพิ่ม แก้ชื่อ และปิดใช้งานรายการ — ใช้ที่ ${onlySpec.where}`
@@ -379,32 +341,6 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
       </AdminHead>
 
       <section className="glass overflow-hidden rounded-[18px]">
-        {!only && (
-          /* แถวบน: กลุ่มการใช้งาน — กดแล้วเลือกรายการแรกของกลุ่มให้เลย ไม่ต้องกดสองที */
-          <div className="flex flex-wrap gap-1.5 border-b border-border px-4 pt-3.5 pb-3 sm:px-5" role="tablist" aria-label="กลุ่มข้อมูลหลัก">
-            {SETS.map((g) => {
-              const on = g.key === curSet.key;
-              return (
-                <button
-                  key={g.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => setSel({ kind: g.items[0].kind, key: g.items[0].key })}
-                  className={`h-9 rounded-full border px-3.5 text-[13px] font-semibold transition-colors ${
-                    on
-                      ? "border-primary bg-primary text-white"
-                      : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
-                  }`}
-                >
-                  {/* ไม่ใส่ตัวเลขที่ปุ่มกลุ่ม เพราะจะสับสนกับจำนวนรายการที่แท็บด้านล่าง */}
-                  {g.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
         {!only && (
           /* แท็บหมวดพร้อมจำนวนรายการ ตามต้นแบบ
              ขึ้นบรรทัดใหม่แทนการเลื่อนข้าง (กติกาเดียวกับมือถือ 25 ก.ย. 2569)
@@ -425,8 +361,8 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
                   className={on ? "on" : ""}
                   onClick={() => setSel({ kind: t.kind, key: t.key })}
                 >
-                  {/* ไม่ใส่จำนวนต่อท้ายชื่อแท็บ (เจ้าของสั่งเอาออก 29 ก.ย. 2569) */}
                   {t.label}
+                  <b>{t.count}</b>
                 </button>
               );
             })}

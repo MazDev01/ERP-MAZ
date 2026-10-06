@@ -3,8 +3,7 @@
 import Link from "next/link";
 
 import { useSearchParams } from "next/navigation";
-import { settings } from "@/lib/system-settings";
-import { Fragment, useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import {
   currentPeriod,
   leavePeriods,
@@ -24,17 +23,11 @@ import {
 import { formatMinutesOfDay } from "@/lib/work-schedule";
 import { ApproverNote } from "./approver-note";
 import { LeaveDialog } from "./leave-dialog";
-import { useMyLeavePolicy } from "@/lib/leave-policy";
-import { HR_EMPTYPE } from "@/lib/hr-data";
 import { Sheet } from "./lead-dialogs";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, LeaveIcon, PlusIcon } from "./icons";
+import { CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, LeaveIcon, PlusIcon } from "./icons";
+import "@/styles/mobile/leave.css";
 
 const PER_PAGE = 10;
-
-const TH_MONTHS_FULL = [
-  "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-  "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
-];
 
 const TH_MONTHS_SHORT = [
   "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
@@ -97,10 +90,6 @@ export function LeavePage() {
   const [flash, setFlash] = useState<number | null>(null);
   /* ใบที่กำลังกดยกเลิก — ต้องกรอกเหตุผลก่อน ใบไม่ถูกลบทิ้ง (ผู้ใช้ตัดสิน 23 ก.ย. 2569) */
   const [cancelling, setCancelling] = useState<LeaveRecord | null>(null);
-  /* กติกาวันลาของคนที่ล็อกอินอยู่ — ประจำ / ทดลองงาน / ฝึกงาน คนละกติกากัน */
-  const policy = useMyLeavePolicy();
-  /* ใบที่กำลังแก้ — เปิดกล่องเดียวกับตอนยื่น แต่เติมค่าเดิมไว้ให้ (เจ้าของสั่ง 29 ก.ย. 2569) */
-  const [editing, setEditing] = useState<LeaveRecord | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -135,8 +124,11 @@ export function LeavePage() {
 
   return (
     <div className="space-y-4">
+      {/* มือถือไม่มีหัวหน้า/ตัวเลือกปี (ต้นแบบ lv-mobile ซ่อน .bar) — แสดงใบลาทั้งรอบปีที่เลือกอยู่ */}
+      <div className="max-md:hidden">
       <div className="bar">
         <div>
+          <h1>การลาของฉัน</h1>
           <ApproverNote kind="leave" />
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
@@ -168,16 +160,16 @@ export function LeavePage() {
               <ChevronRightIcon className="size-[15px]" strokeWidth={2.4} />
             </button>
           </div>
-          {/* มือถือ: ปุ่มลอยเหนือแถบเมนูล่าง แบบเดียวกับหน้าโอที (เจ้าของสั่ง 1 ต.ค. 2569) */}
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0"
+            className="btn solid btn-solid btn-block-mobile shrink-0"
             onClick={() => setDialogOpen(true)}
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            <span className="lbl">ยื่นใบลา</span>
+            ยื่นใบลา
           </button>
         </div>
+      </div>
       </div>
 
       {flash !== null && (
@@ -187,49 +179,36 @@ export function LeavePage() {
         </p>
       )}
 
-      {/*
-        กติกาวันลาต่างกันตามประเภทการจ้าง (เอกสารฝ่ายบุคคล 30 ก.ย. 2569)
-        ทดลองงานกับฝึกงานไม่มีโควตา จึงไม่ต้องขึ้นการ์ดสิทธิ์ให้เข้าใจผิดว่ามีวันลาสะสม
-      */}
-      {!policy.quota && (
-        <p className="glass flex items-start gap-2.5 rounded-2xl px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
-          <LeaveIcon className="mt-0.5 size-4 flex-none text-primary" strokeWidth={2.2} />
-          <span>
-            <b className="font-semibold text-foreground">{HR_EMPTYPE[policy.type].label}</b> · {policy.note}
-          </span>
-        </p>
-      )}
-
-      {/* ── สิทธิ์คงเหลือแบบย่อสำหรับมือถือ ──
-         เจ้าของสั่ง 30 ก.ย. 2569 ให้เอาการ์ดตัวเลขใหญ่ (KPI) ออกจากจอมือถือ
-         เหลือแถวเดียวอ่านรวดเดียวจบ แบบเดียวกับ "วันนี้ของฉัน" ในหน้าหลัก */}
-      {policy.quota && (
-        <ul className="flex list-none rounded-[16px] border border-[#E3D3D7] bg-white p-0 py-3 md:hidden">
-          {leaveTypes().filter((t) => entitlementDays(t, period) > 0).map((t) => {
-            const q = leaveUsage(records, t, period);
-            return (
-              <li
-                key={t}
-                className="flex flex-1 flex-col items-center gap-0.5 border-r border-[#D9C8CC] px-1 text-center last:border-r-0"
-              >
-                <b className="num text-[17px] leading-tight font-bold whitespace-nowrap">
-                  {round1(q.remaining)}
-                  <span className="ml-0.5 text-[11px] font-semibold text-[#6B5F62]">วัน</span>
-                </b>
-                <span className="truncate text-[11px] text-[#8A7E81]">{t}คงเหลือ</span>
-                {q.pending > 0 && (
-                  <em className="num text-[10.5px] font-medium text-[var(--warning)] not-italic">
-                    รอ {round1(q.pending)}
-                  </em>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {/* ── มือถือ (ต้นแบบ leave.html lv-mobile) — หน้าตาอยู่ใน styles/mobile/leave.css ── */}
+      <MobileLeave
+        records={records}
+        period={period}
+        inPeriod={inPeriod}
+        scoped={scoped}
+        tab={tab}
+        onTab={(k) => {
+          setTab(k);
+          setPage(1);
+        }}
+        findId={findId}
+        onCancel={setCancelling}
+        onNew={() => setDialogOpen(true)}
+        yearLabel={pFrom.endsWith("-01-01") ? `ปี ${year + 543}` : `${shortThai(pFrom)} – ${shortThai(pTo)}`}
+        canPrev={periodIndex > 0}
+        canNext={periodIndex < LEAVE_PERIODS.indexOf(CURRENT_PERIOD)}
+        onPrev={() => {
+          setPeriodIndex((v) => v - 1);
+          setPage(1);
+        }}
+        onNext={() => {
+          setPeriodIndex((v) => v + 1);
+          setPage(1);
+        }}
+      />
 
       {/* ── สิทธิ์คงเหลือแต่ละประเภท (จอคอม) ── */}
-      <div className={`grid grid-cols-2 gap-2.5 max-md:hidden sm:gap-3.5 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] ${policy.quota ? "" : "hidden"}`}>
+      <div className="max-md:hidden">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
         {leaveTypes().filter((t) => entitlementDays(t, period) > 0).map((t, n) => {
           const base = entitlementDays(t, period);
           /* ลาพักร้อนที่ยกมาจากปีก่อน (ถ้าผู้ดูแลระบบเปิดให้ยกยอด) รวมเข้าไปในสิทธิ์ของปีนี้ */
@@ -286,9 +265,11 @@ export function LeavePage() {
           );
         })}
       </div>
+      </div>
 
-      {/* ── รายการใบลา ── */}
-      <section className="panel glass flex flex-col max-md:mb-[120px] max-md:border-0! max-md:bg-transparent! max-md:shadow-none!">
+      {/* ── รายการใบลา (จอคอม) ── */}
+      <div className="max-md:hidden">
+      <section className="panel glass flex flex-col">
         <div className="strip">
           <div className="tabs">
             {TABS.map((t) => {
@@ -311,7 +292,7 @@ export function LeavePage() {
               );
             })}
           </div>
-          <div className="legend hidden! sm:flex!">
+          <div className="legend hidden sm:flex">
             <span><i style={{ background: "var(--warning)" }} />รอการอนุมัติ</span>
             <span><i style={{ background: "var(--success)" }} />อนุมัติแล้ว</span>
             <span><i style={{ background: "var(--destructive)" }} />ไม่อนุมัติ</span>
@@ -341,33 +322,14 @@ export function LeavePage() {
                 </tr>
               ) : (
                 list.map((r) => (
-                  <LeaveRow key={r.id} row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} onEdit={() => setEditing(r)} />
+                  <LeaveRow key={r.id} row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} />
                 ))
               )}
             </tbody>
           </table>
         </div>
 
-        {/* มือถือ: แสดงทั้งรอบ ไม่แบ่งหน้า แทรกหัวข้อเดือนคั่น (ต้นแบบ leave.html 1 ต.ค. 2569) */}
-        <ul className="flex flex-col gap-2.5 pt-2.5 md:hidden">
-          {scoped.length === 0 ? (
-            <li className="rounded-[20px] bg-white px-5 py-10 text-center text-[#A3979A] shadow-[0_1px_2px_rgb(40_20_25/0.04)]">
-              ไม่มีรายการในหมวดนี้
-            </li>
-          ) : (
-            scoped.map((r, i) => (
-              <Fragment key={r.id}>
-                {monthKey(r.date) !== monthKey(scoped[i - 1]?.date) && (
-                  <li className="px-1 pt-1.5 text-[15px] font-bold">{thaiMonth(r.date)}</li>
-                )}
-                <MobileLeaveRow row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} onEdit={() => setEditing(r)} />
-              </Fragment>
-            ))
-          )}
-        </ul>
-
-        {/* มือถือไม่ต้องมีแถบสรุปท้ายรายการ — สิทธิ์คงเหลืออยู่ในแถวด้านบนแล้ว และปุ่มลอยจะทับพอดี */}
-        <div className="foot flex-col items-stretch gap-3 text-center max-md:hidden! sm:flex-row sm:items-center sm:text-left">
+        <div className="foot flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
           <span>
             {scoped.length === 0
               ? "แสดง 0 รายการ"
@@ -383,7 +345,6 @@ export function LeavePage() {
               disabled={safePage === 1}
               onClick={() => setPage(safePage - 1)}
               aria-label="ก่อนหน้า"
-              title="ไปหน้าก่อนหน้า"
             >
               ‹
             </button>
@@ -403,28 +364,24 @@ export function LeavePage() {
               disabled={safePage === maxPage}
               onClick={() => setPage(safePage + 1)}
               aria-label="ถัดไป"
-              title="ไปหน้าถัดไป"
             >
               ›
             </button>
           </div>
         </div>
       </section>
+      </div>
 
       {cancelling && (
         <CancelLeaveDialog row={cancelling} onClose={() => setCancelling(null)} />
       )}
 
-      {(dialogOpen || editing) && (
+      {dialogOpen && (
         <LeaveDialog
           period={period}
           records={records}
-          presetDate={editing ? undefined : presetDate}
-          edit={editing ?? undefined}
-          onClose={() => {
-            setDialogOpen(false);
-            setEditing(null);
-          }}
+          presetDate={presetDate}
+          onClose={() => setDialogOpen(false)}
           onSubmitted={(days) => {
             setFlash(days);
             if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -438,7 +395,7 @@ export function LeavePage() {
   );
 }
 
-function LeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?: boolean; onCancel: () => void; onEdit: () => void }) {
+function LeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onCancel: () => void }) {
   const canCancel = row.status === "รอการอนุมัติ";
   const partial =
     row.startMin != null && row.endMin != null
@@ -453,10 +410,7 @@ function LeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?: bool
       <td className="day">
         <b>{shortId(row.id)}</b>
         {/* วันที่ยื่นจริง — ใบเก่าที่ไม่ได้เก็บเวลายื่นไว้ ใช้วันแรกของช่วงลาแทน */}
-        <span>
-          ยื่น {thaiDate(row.submittedAt ? row.submittedAt.slice(0, 10) : row.date)}
-          {row.editedAt ? ` · แก้ไข ${thaiDate(row.editedAt.slice(0, 10))}` : ""}
-        </span>
+        <span>ยื่น {thaiDate(row.submittedAt ? row.submittedAt.slice(0, 10) : row.date)}</span>
       </td>
       <td>{row.type}</td>
       <td>
@@ -490,14 +444,13 @@ function LeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?: bool
       </td>
       <td className="c">
         {canCancel ? (
-          <span className="flex items-center justify-center gap-2.5">
-            <button type="button" className="lnk" onClick={onEdit}>
-              แก้ไข
-            </button>
-            <button type="button" className="lnk" onClick={onCancel}>
-              ยกเลิก
-            </button>
-          </span>
+          <button
+            type="button"
+            className="lnk"
+            onClick={onCancel}
+          >
+            ยกเลิก
+          </button>
         ) : (
           "—"
         )}
@@ -506,12 +459,132 @@ function LeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?: bool
   );
 }
 
+const TH_MONTHS_FULL = [
+  "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+  "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
+];
+
 /**
- * ใบลาหนึ่งใบในรูปการ์ด สำหรับจอแคบ — ต้นแบบ leave.html (#lv-mobile · 1 ต.ค. 2569)
- * บนสุด: วงไอคอนปฏิทิน + ประเภทการลา + จำนวนวันชิดขวา · ใต้ลงมาคือเหตุผล
- * เส้นประคั่น แล้วแถวล่างเป็นช่วงวันลา + สถานะ และบรรทัดสุดท้ายเลขที่คำขอ + ปุ่มจัดการ
+ * หน้าการลาบนมือถือ (ต้นแบบ leave.html lv-mobile) — แสดงเฉพาะจอแคบกว่า md
+ * ใบลาทั้งรอบปี เรียงจากล่าสุด มีหัวข้อเดือนคั่น ไม่มีแบ่งหน้าและยอดรวมท้ายรายการ
+ * ปฏิทินกรองรายวันในต้นแบบถูกปิดไว้แล้ว (ต้นแบบซ่อน .m-lv-head/.m-lv-sheet) จึงไม่ทำ
  */
-function MobileLeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?: boolean; onCancel: () => void; onEdit: () => void }) {
+function MobileLeave({
+  records,
+  period,
+  inPeriod,
+  scoped,
+  tab,
+  onTab,
+  findId,
+  onCancel,
+  onNew,
+  yearLabel,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+}: {
+  yearLabel: string;
+  canPrev: boolean;
+  canNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  records: LeaveRecord[];
+  period: string;
+  inPeriod: LeaveRecord[];
+  scoped: LeaveRecord[];
+  tab: "all" | LeaveStatus;
+  onTab: (k: "all" | LeaveStatus) => void;
+  findId: string;
+  onCancel: (r: LeaveRecord) => void;
+  onNew: () => void;
+}) {
+  /* จัดกลุ่มตามเดือนของวันเริ่มลา — scoped เรียงจากล่าสุดมาแล้ว */
+  const groups: { key: string; rows: LeaveRecord[] }[] = [];
+  for (const r of scoped) {
+    const key = r.date.slice(0, 7);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.rows.push(r);
+    else groups.push({ key, rows: [r] });
+  }
+
+  return (
+    <div className="m-lv md:hidden">
+      {/* ตัวเลือกรอบปีบนมือถือ — ใช้ state/ขอบเขตเดียวกับตัวเลือกปีของจอคอม ย้อนดูปีก่อน ๆ ได้ */}
+      <div className="m-lv-year">
+        <button type="button" disabled={!canPrev} onClick={onPrev} aria-label="ปีก่อนหน้า">
+          <ChevronLeftIcon strokeWidth={2.4} />
+        </button>
+        <span>{yearLabel}</span>
+        <button type="button" disabled={!canNext} onClick={onNext} aria-label="ปีถัดไป">
+          <ChevronRightIcon strokeWidth={2.4} />
+        </button>
+      </div>
+
+      {/* วันลาคงเหลือ — กล่องเดียวแบ่งคอลัมน์ ตัวเลขมาจาก leaveUsage() ตัวเดียวกับจอคอม */}
+      <div className="m-lv-bal">
+        {leaveTypes()
+          .filter((t) => entitlementDays(t, period) > 0)
+          .map((t) => (
+            <div key={t}>
+              <b className="num">
+                {round1(leaveUsage(records, t, period).remaining)}
+                <small>วัน</small>
+              </b>
+              <span>{t}คงเหลือ</span>
+            </div>
+          ))}
+      </div>
+
+      <div className="m-lv-chips">
+        {TABS.map((t) => {
+          const count =
+            t.key === "all" ? inPeriod.length : inPeriod.filter((r) => r.status === t.key).length;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              aria-pressed={tab === t.key}
+              className={tab === t.key ? "on" : ""}
+              onClick={() => onTab(t.key)}
+            >
+              {t.label} <b>{count}</b>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="m-lv-list">
+        {groups.length === 0 ? (
+          <p className="m-lv-empty">ไม่มีใบลาในปีนี้</p>
+        ) : (
+          groups.map((g) => {
+            const [y, m] = g.key.split("-").map(Number);
+            return (
+              <section key={g.key} className="m-lv-group">
+                <h3>
+                  {TH_MONTHS_FULL[m - 1]} {y + 543}
+                </h3>
+                {g.rows.map((r) => (
+                  <MobileLeaveCard key={r.id} row={r} hit={r.id === findId} onCancel={() => onCancel(r)} />
+                ))}
+              </section>
+            );
+          })
+        )}
+      </div>
+
+      {/* ปุ่มลอยยื่นใบลา — เหลือแต่ไอคอน ชื่อปุ่มอยู่ใน aria-label */}
+      <button type="button" className="m-lv-fab" aria-label="ยื่นใบลา" onClick={onNew}>
+        <PlusIcon strokeWidth={2.4} />
+      </button>
+    </div>
+  );
+}
+
+/** ใบลาหนึ่งใบในรูปการ์ด สำหรับจอแคบ */
+function MobileLeaveCard({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onCancel: () => void }) {
   const canCancel = row.status === "รอการอนุมัติ";
   const partial =
     row.startMin != null && row.endMin != null
@@ -522,67 +595,42 @@ function MobileLeaveRow({ row, hit, onCancel, onEdit }: { row: LeaveRecord; hit?
       : null;
 
   return (
-    <li
-      className={`rounded-[20px] bg-white p-3.5 shadow-[0_1px_2px_rgb(40_20_25/0.04),0_12px_28px_-20px_rgb(120_20_35/0.3)] ${
-        hit ? "ring-2 ring-primary ring-inset" : ""
-      }`}
-    >
-      <div className="flex gap-2.5">
-        <span className="grid size-10 flex-none place-items-center rounded-full bg-[#E8F0FC] text-[#1A5DB5]">
-          <LeaveIcon className="size-[19px]" strokeWidth={2} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2.5">
-            <b className="min-w-0 text-[15px] font-bold">{row.type}</b>
-            <span className="num flex-none text-[15px] font-bold whitespace-nowrap">
-              {round1(row.days)} <span className="font-semibold">วัน</span>
-            </span>
-          </div>
-          {row.comment && (
-            <p className="mt-0.5 text-[13px] leading-snug break-words text-[#6E6164]">{row.comment}</p>
-          )}
-          {row.status === "ยกเลิก" && (
-            <p className="mt-0.5 text-[12px] break-words text-[#9A8E91]">
-              ยกเลิก: {row.cancelReason || "—"}
-              {row.cancelledBy ? ` · โดย ${row.cancelledBy}` : ""}
-            </p>
-          )}
-        </div>
-      </div>
-
-      <hr className="mt-2 mb-1.5 border-0 border-t-[1.5px] border-dashed border-[#ECE3E5]" />
-
-      <div className="flex items-start justify-between gap-2.5">
-        <span className="min-w-0 text-[12.5px] font-semibold text-[#6E6164]">
-          <Link
-            href={`/records?month=${row.date.slice(0, 7)}`}
-            className="flex items-center gap-1.5 hover:text-primary max-sm:-my-2 max-sm:min-h-9"
-          >
-            <LeaveIcon className="size-3.5 flex-none text-[#8A7E81]" strokeWidth={2.2} />
-            <span className="num">{thaiRange(row.date, row.toDate)}</span>
-          </Link>
-          {partial && <span className="mt-0.5 block pl-[19px] text-[11.5px] font-medium text-[#9A8E91]">{partial}</span>}
-        </span>
-        <span className={`tag flex-none ${STATUS_CLASS[row.status]}`}>
-          <i />
-          {row.status}
-        </span>
-      </div>
-
-      <div className="mt-1.5 flex items-center justify-between gap-2.5">
-        <span className="num text-[12px] whitespace-nowrap text-[#9A8E91]">{shortId(row.id)}</span>
-        {canCancel && (
-          <span className="flex flex-none items-center gap-4">
-            <button type="button" className="lnk" onClick={onEdit}>
-              แก้ไข
-            </button>
-            <button type="button" className="lnk" onClick={onCancel}>
-              ยกเลิก
-            </button>
+    <article className={`m-lv-card${hit ? " hit" : ""}`}>
+      <i className="ico" aria-hidden="true">
+        <CalendarIcon strokeWidth={2} />
+      </i>
+      <b className="ty">{row.type}</b>
+      <span className="dy num">{round1(row.days)} วัน</span>
+      <div className="rs">
+        {row.comment || "—"}
+        {/* ใบที่ยกเลิกแล้ว — เหตุผลและผู้ยกเลิกต้องตามรอยย้อนหลังได้ */}
+        {row.status === "ยกเลิก" ? (
+          <span className="why">
+            ยกเลิก: {row.cancelReason || "—"}
+            {row.cancelledBy ? ` · โดย ${row.cancelledBy}` : ""}
           </span>
-        )}
+        ) : row.files && row.files.length > 0 ? (
+          <span className="why">แนบ {row.files.length} ไฟล์</span>
+        ) : null}
       </div>
-    </li>
+      <hr className="line" />
+      <div className="rg num">
+        <CalendarIcon strokeWidth={2.2} />
+        {/* กดช่วงวันลาเพื่อไปดูเวลาทำงานของเดือนนั้น (เหมือนจอคอม) */}
+        <Link href={`/records?month=${row.date.slice(0, 7)}`}>{thaiRange(row.date, row.toDate)}</Link>
+        {partial && <span className="why">{partial}</span>}
+      </div>
+      <span className={`st tag ${STATUS_CLASS[row.status]}`}>
+        <i />
+        {row.status}
+      </span>
+      <span className="no num">{shortId(row.id)}</span>
+      {canCancel && (
+        <button type="button" className="ac lnk" onClick={onCancel}>
+          ยกเลิก
+        </button>
+      )}
+    </article>
   );
 }
 
@@ -605,20 +653,22 @@ function CancelLeaveDialog({ row, onClose }: { row: LeaveRecord; onClose: () => 
       title={`ยกเลิกใบลา ${shortId(row.id)}`}
       onClose={onClose}
       footer={
-        <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:justify-end">
+        <>
           <button type="button" className="btn glass-thin h-11 justify-center rounded-[12px]" onClick={onClose}>
             ไม่ยกเลิกแล้ว
           </button>
+          {/* md:ml-0.5 คงระยะห่าง 12px เท่าเดิมบนจอใหญ่ (footer ของ Sheet ใช้ gap 10px) */}
           <button
             type="button"
-            className="btn solid h-11 justify-center rounded-[12px] !bg-primary !text-white hover:!bg-[#B00018]"
+            className="btn solid h-11 justify-center rounded-[12px] !bg-primary !text-white hover:!bg-[#B00018] md:ml-0.5"
             onClick={send}
           >
             ยืนยันยกเลิกใบลา
           </button>
-        </div>
+        </>
       }
     >
+      <div className="m-lv-cancel">
       <p className="text-[13.5px] leading-[1.7] text-muted-foreground">
         {row.type} {thaiRange(row.date, row.toDate)} รวม {round1(row.days)} วัน
         <span className="mt-1 block">
@@ -644,6 +694,7 @@ function CancelLeaveDialog({ row, onClose }: { row: LeaveRecord; onClose: () => 
           ยกเลิกใบลาต้องระบุเหตุผล เพราะใบลายังเก็บไว้เป็นประวัติ
         </p>
       )}
+      </div>
     </Sheet>
   );
 }
@@ -653,23 +704,9 @@ function round1(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-/*
- * เลขที่คำขอ — รหัสใบลามีตัวนำหน้าติดมาแล้ว (nextDocNo) แสดงตามนั้นเลย ห้ามเติมซ้ำ
- * ตัวนำหน้าตั้งได้ที่หน้าตั้งค่า จึงห้ามเขียน "LV-" ตายตัวที่นี่ (ใบเก่าที่ไม่มีตัวนำหน้าค่อยเติมให้)
- */
+/** เลขที่คำขอ — รหัสใบลามี "LV-" นำหน้าอยู่แล้ว ห้ามเติมซ้ำ (เคยขึ้นเป็น LV-LV-2569-0041) */
 function shortId(id: string) {
-  const up = id.toUpperCase();
-  return /^[A-Z0-9]+-/.test(up) ? up : `${settings().docs.leave}-${up.slice(-6)}`;
-}
-
-/** คีย์เดือนของใบลา ใช้เทียบว่าต้องขึ้นหัวข้อเดือนใหม่ไหม */
-function monthKey(iso?: string) {
-  return iso ? iso.slice(0, 7) : "";
-}
-
-function thaiMonth(iso: string) {
-  const d = new Date(`${iso}T00:00:00`);
-  return `${TH_MONTHS_FULL[d.getMonth()]} ${d.getFullYear() + 543}`;
+  return id.startsWith("LV-") ? id.toUpperCase() : `LV-${id.slice(-6).toUpperCase()}`;
 }
 
 function thaiDate(iso: string) {

@@ -51,17 +51,18 @@ export function AccWhtPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
-          <p className="max-md:hidden">รายจ่ายที่บริษัทหักภาษีจากผู้รับเงิน แล้วนำส่งกรมสรรพากร</p>
+          <h1>ยื่นภาษี</h1>
+          <p>รายจ่ายที่บริษัทหักภาษีจากผู้รับเงิน แล้วนำส่งกรมสรรพากร</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
           <MonthNav view={view} onChange={setView} />
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0"
+            className="btn solid btn-solid btn-block-mobile shrink-0"
             onClick={() => setEditing("new")}
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            <span className="lbl">เพิ่มรายการ</span>
+            เพิ่มรายการ
           </button>
         </div>
       </div>
@@ -75,7 +76,7 @@ export function AccWhtPage() {
           </b>
         </p>
         {/* มือถือ: สรุปสี่ช่องวางสองคอลัมน์ ไม่ต้องปัดผ่านกล่องใหญ่สี่กล่อง */}
-        <div className="mt-3.5 grid grid-cols-2 gap-3 max-sm:gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-3.5 grid grid-cols-2 gap-3 max-sm:gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
           <Sum
             title="ภ.ง.ด.53 · นิติบุคคล"
             value={baht(sum(k53))}
@@ -101,8 +102,7 @@ export function AccWhtPage() {
         </div>
       </section>
 
-      {/* มือถือ: การ์ดลอยบนพื้นหน้า ไม่มีแผงครอบ (ต้นแบบ billing.html) */}
-      <section className="panel plain-mobile glass flex flex-col">
+      <section className="panel glass flex flex-col">
         <div className="strip">
           <div className="tabs">
             <button type="button" className={tab === "all" ? "on" : ""} onClick={() => setTab("all")}>

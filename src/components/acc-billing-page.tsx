@@ -10,21 +10,24 @@
 
 import { ADD_VALUE, useAddOption } from "./add-option";
 import { optionsOf } from "@/lib/options";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import type { AccDeal, Installment, Invoice } from "@/lib/acc-data";
-import { INVOICE_STATUS, parseTermsPct, planFromPct } from "@/lib/acc-data";
-import { useCrm } from "@/lib/crm-store";
+import { INVOICE_STATUS, ISSUER_VAT, parseTermsPct, planFromPct } from "@/lib/acc-data";
+import { customerOfDeal, useCrm } from "@/lib/crm-store";
+import { taxInvoiceBuyer } from "@/lib/crm-data";
 import {
   canBill,
   dealPaid,
   invoiceDue,
   invoiceOf,
-  receiptsOf,
   invoiceStatus,
   issueInvoice,
   logCollection,
   markDealsSeen,
+  receiptOf,
+  receiptsOf,
   savePlan,
   seqLocked,
   seqStatus,
@@ -32,17 +35,36 @@ import {
   useAcc,
   type AccState,
 } from "@/lib/acc-store";
-import { baht, bkkNow, daysBetween, round2, thaiDate, todayIso, commaInput } from "@/lib/format";
+import { issueReceiptFlow } from "@/lib/flow";
+import { lockScroll } from "@/lib/scroll-lock";
+import {
+  TH_MONTHS_FULL,
+  baht,
+  bkkNow,
+  daysBetween,
+  round2,
+  thaiDate,
+  toIsoDate,
+  todayIso,
+  commaInput,
+} from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFindParam } from "@/lib/deep-link";
-import { DownloadIcon, PencilIcon, PlusIcon, ReceiptIcon, TrashIcon } from "./icons";
+import {
+  CalendarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  DownloadIcon,
+  PencilIcon,
+  PlusIcon,
+  SearchIcon,
+  TrashIcon,
+} from "./icons";
 import { Sheet } from "./lead-dialogs";
-import { AccDayFilter, AccFilters, MonthNav, NewDot, useAccFilter } from "./acc-ui";
+import { AccFilters, MonthNav, NewDot, useAccFilter } from "./acc-ui";
 import { Field, Textarea } from "./ui";
-import { PhoneCard, PhoneList } from "./acchr-phone";
-import { IssueDialog, receiptHref, seqsOf } from "./acc-receipts-page";
-import { taxInvoiceBuyer } from "@/lib/crm-data";
-import { customerOfDeal } from "@/lib/crm-store";
+import { receiptHref } from "./acc-receipts-page";
 
 import { DateField } from "./thai-date-picker";
 import { CancelDealDialog } from "./cancel-deal-dialog";
@@ -81,6 +103,9 @@ export function AccBillingPage() {
   const [view, setView] = useState(() => bkkNow());
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [planning, setPlanning] = useState<AccDeal | null>(null);
+  /* มือถือ: กดดินสอที่งวดไหน เปิดกล่องแบ่งงวดแล้วเลื่อนไปที่งวดนั้น */
+  const [planFocus, setPlanFocus] = useState<number | null>(null);
+  const phone = useIsPhone();
   const [billing, setBilling] = useState<{ deal: AccDeal; item: Installment } | null>(null);
   /* ดีลที่รับเงินแล้ว ฝ่ายบัญชีเป็นคนยกเลิก (ก่อนรับเงินฝ่ายขายยกเลิกที่หน้าดีล) */
   const [cancelling, setCancelling] = useState<AccDeal | null>(null);
@@ -118,44 +143,37 @@ export function AccBillingPage() {
       inRange(v.due),
   );
 
-  /* ดีลที่กางงวดอยู่บนมือถือ — ว่าง = ยังไม่กางใบไหน */
-  const [openPlan, setOpenPlan] = useState("");
-  /* ออกใบเสร็จจากการ์ดงวดบนมือถือได้เลย ไม่ต้องข้ามไปหน้าใบเสร็จ (ต้นแบบ billing.html 1 ต.ค. 2569) */
-  const [receipting, setReceipting] = useState<Invoice | null>(null);
   /* ดีลใหม่ที่ยังไม่ได้เปิดดู (AC-BR-01) — เปิดแท็บรอวางบิลอยู่ ให้จุดแดงค้างไว้ครู่หนึ่งพอให้เห็น แล้วถือว่าเปิดดูแล้ว */
   const newDeals = unseenDeals(acc).filter((d) => todo.some((t) => t.no === d.no)).length;
   const hasUnseen = unseenDeals(acc).length > 0;
+  /* มือถือมีแต่รายการรอวางบิล ไม่มีแท็บ — เปิดหน้าก็ถือว่าเห็นดีลใหม่แล้ว */
   useEffect(() => {
-    if (tab !== "todo" || !hasUnseen) return;
+    if ((tab !== "todo" && !phone) || !hasUnseen) return;
     const t = window.setTimeout(markDealsSeen, 1500);
     return () => window.clearTimeout(t);
-  }, [tab, hasUnseen]);
-
-  /* วันที่ที่มีรายการของแท็บที่เปิดอยู่ ใช้ขึ้นจุดในปฏิทินมือถือ — ไม่กรองด้วยวันที่ที่เลือก ไม่งั้นจุดจะเหลือวันเดียว */
-  const dayDots =
-    tab === "todo"
-      ? acc.deals.filter((d) => !d.cancelled).map((d) => d.quoDate)
-      : tab === "inv"
-        ? acc.invoices.map((v) => v.issue)
-        : acc.invoices.map((v) => v.due);
+  }, [tab, hasUnseen, phone]);
 
   /*
-   * รายการของมือถือ — ไม่แยกแท็บ จึงรวมทุกดีลที่ยังมีงานค้างไว้ที่เดียว
-   * ดีลที่ชำระครบแล้วยังอยู่ต่อจนจบเดือนที่ออกใบเสร็จงวดสุดท้าย เผื่อต้องเปิดเอกสารย้อนหลัง
+   * มือถือ "วางบิลจบในหน้าเดียว" — ไม่มีแท็บ ดีลอยู่ในรายการจนทุกงวดชำระครบ
+   * งวดที่ออกใบแจ้งหนี้แล้วอยู่ในการ์ดดีลเดิม (ดาวน์โหลดใบแจ้งหนี้ / ออกใบเสร็จได้จากตรงนั้น)
+   * ดีลที่ชำระครบแล้วยังอยู่ต่อจนสิ้นเดือนที่ออกใบเสร็จใบสุดท้าย จะได้ดาวน์โหลดใบเสร็จได้
+   * คำค้นตรงกับเลขที่ใบแจ้งหนี้ของดีลก็นับ (ลิงก์ ?find= จากหน้าอื่นมักส่งเลขที่ใบแจ้งหนี้มา)
    */
-  const phoneDeals = acc.deals.filter((d) => {
-    if (d.cancelled) return false;
-    if (!hit(d.cus, d.quo, d.no)) return false;
-    if (!inRange(d.quoDate)) return false;
-    if (d.plan.length === 0) return true;
-    if (d.plan.some((p) => seqStatus(acc, d.no, p.seq) !== "paid")) return true;
+  const month = today.slice(0, 7);
+  const phoneHit = (d: AccDeal) =>
+    hit(d.cus, d.quo, d.no, ...acc.invoices.filter((v) => v.deal === d.no).map((v) => v.no));
+  const phoneBase = acc.deals.filter((d) => {
+    if (d.cancelled || !phoneHit(d)) return false;
+    if (d.plan.length === 0 || d.plan.some((p) => seqStatus(acc, d.no, p.seq) !== "paid")) return true;
     const last = acc.receipts
       .filter((r) => r.deal === d.no)
-      .map((r) => r.date)
-      .sort()
-      .pop();
-    return Boolean(last && last.slice(0, 7) === today.slice(0, 7));
+      .reduce((a, r) => (r.date > a ? r.date : a), "");
+    return last.startsWith(month);
   });
+  /* ไม่มีวันปิดดีลในข้อมูลบัญชี ใช้วันส่งใบเสนอราคาเหมือนแท็บรอวางบิลบนจอคอม */
+  const phoneTodo = phoneBase.filter((d) => inRange(d.quoDate));
+  const phoneDays = new Set(phoneBase.map((d) => d.quoDate));
+  const [calOpen, setCalOpen] = useState(false);
 
   function pickTab(k: TabKey) {
     setTab(k);
@@ -168,24 +186,44 @@ export function AccBillingPage() {
     if (d && canCancel(dealNo)) setCancelling(d);
   }
 
+  /*
+   * มือถือ: ออกใบเสร็จจากการ์ดดีลเลย ด้วยค่าตั้งต้นชุดเดียวกับกล่องออกใบเสร็จที่หน้าใบเสร็จ
+   * (รับเต็มยอดค้าง หักภาษี ณ ที่จ่ายตามใบเสนอราคาเฉพาะใบเสร็จใบแรกของใบแจ้งหนี้)
+   * ข้อมูลผู้ซื้อไม่ครบออกใบกำกับภาษีไม่ได้ — บอกแล้วไม่ออก ให้ไปแก้ข้อมูลลูกค้าก่อน
+   * รับเงินไม่ครบหรือยอดหักต่างจากที่ตกลง ต้องไปออกที่หน้าใบเสร็จซึ่งกรอกยอดเองได้
+   */
+  function quickReceipt(v: Invoice, d: AccDeal) {
+    const buyer = taxInvoiceBuyer(customerOfDeal(crm, d.no, d.quo, v.cus));
+    if (ISSUER_VAT && buyer.missing.length > 0) {
+      window.alert(`ออกใบเสร็จไม่ได้ — ข้อมูลผู้ซื้อไม่ครบ: ${buyer.missing.join(", ")}`);
+      return;
+    }
+    const due = invoiceDue(v);
+    const wht = receiptsOf(acc, v.no).length === 0 ? v.wht : 0;
+    const got = round2(due - wht);
+    const msg =
+      `ออกใบเสร็จของใบแจ้งหนี้ ${v.no}\nรับชำระ ${baht(got)} บาท` +
+      (wht > 0 ? `\nภาษีหัก ณ ที่จ่าย ${baht(wht)} บาท` : "") +
+      `\n\nยืนยันออกใบเสร็จ?`;
+    if (!window.confirm(msg)) return;
+    issueReceiptFlow(v.no, today, got, wht);
+  }
+
   return (
     <div className="space-y-4">
-      <div className="bar">
+      {/* จอคอม (md ขึ้นไป) — แท็บสามแท็บ ตาราง และยอดรวมท้ายตาราง · มือถือใช้รายการเดียวด้านล่างแทน */}
+      <div className="bar max-md:hidden!">
+        <div>
+          <h1>วางบิล</h1>
+        </div>
         <div className="tools w-full sm:w-auto">
-          {/* มือถือ: ปุ่มปฏิทินเลือกวันแทนแถบเลือกเดือน (ต้นแบบ billing.html 1 ต.ค. 2569)
-             วันที่ที่มีจุดเปลี่ยนตามแท็บ — รอวางบิลใช้วันที่ส่งใบเสนอราคา ใบแจ้งหนี้ใช้วันที่วางบิล ค้างชำระใช้วันครบกำหนด */}
-          <AccDayFilter filter={filter} dates={dayDots} />
-          <span className="max-sm:hidden">
-            <MonthNav view={view} onChange={setView} />
-          </span>
+          <MonthNav view={view} onChange={setView} />
         </div>
       </div>
 
-      {/* มือถือ: การ์ดแต่ละใบลอยบนพื้นหน้า ไม่ต้องมีแผงครอบอีกชั้น (ต้นแบบ billing.html) */}
-      <section className="panel plain-mobile glass flex flex-col">
+      <section className="panel glass flex flex-col max-md:hidden!">
         <div className="strip">
-          {/* มือถือจบในหน้าเดียว ไม่ต้องสลับแท็บ (ต้นแบบ billing.html) */}
-          <div className="tabs max-sm:hidden!">
+          <div className="tabs">
             <Tab on={tab === "todo"} onClick={() => pickTab("todo")} count={todo.length} dot={newDeals > 0 ? "มีดีลใหม่รอวางบิล" : ""}>
               รอวางบิล
             </Tab>
@@ -435,133 +473,113 @@ export function AccBillingPage() {
           )}
         </div>
 
-        {/* ── มือถือ: วางบิลจบในหน้าเดียว (ต้นแบบ billing.html 1 ต.ค. 2569) ──
-           ไม่มีแท็บ — หนึ่งการ์ดคือหนึ่งดีล แตะแล้วกางงวดทั้งหมดของดีลนั้น
-           แต่ละงวดบอกสถานะของตัวเอง (ยังไม่ออกใบ · ออกใบแล้วรอชำระ · ชำระแล้ว)
-           พร้อมปุ่มของงวดนั้นเอง จึงไม่ต้องสลับไปแท็บใบแจ้งหนี้หรือค้างชำระอีก */}
-        <PhoneList empty={phoneDeals.length === 0 ? "ไม่มีดีลที่ต้องวางบิล" : undefined}>
-          {phoneDeals.map((d) => {
-            const has = d.plan.length > 0;
-            const isOpen = openPlan === d.no;
-            const waiting = d.plan.filter((p) => seqStatus(acc, d.no, p.seq) === "pending").length;
-            const allPaid = has && d.plan.every((p) => seqStatus(acc, d.no, p.seq) === "paid");
-            return (
-              <PhoneCard
-                key={d.no}
-                title={d.cus}
-                sub={
-                  <>
-                    ใบเสนอราคา <span className="num">{d.quo}</span> ·{" "}
-                    <span className="whitespace-nowrap">ส่ง {thaiDate(d.quoDate)}</span>
-                  </>
-                }
-                amount={baht(d.net)}
-                amountNote="ยอดสุทธิ (บาท)"
-                onOpen={has ? () => setOpenPlan(isOpen ? "" : d.no) : undefined}
-                openLabel={isOpen ? `ซ่อนงวดของ ${d.cus}` : `ดูงวดของ ${d.cus}`}
-                badge={
-                  <span className={`tag ${!has ? "t-miss" : waiting ? "t-early" : allPaid ? "t-ok" : "t-pend"}`}>
-                    <i />
-                    {!has
-                      ? "ยังไม่ได้แบ่งงวด"
-                      : waiting
-                        ? `รอออกใบแจ้งหนี้ ${waiting} งวด`
-                        : allPaid
-                          ? "ชำระครบทุกงวดแล้ว"
-                          : "ออกใบแจ้งหนี้ครบทุกงวดแล้ว"}
-                  </span>
-                }
-                /* กางงวดอยู่ไม่ต้องมีปุ่มด้านบน แตะการ์ดเพื่อย่อได้ (ต้นแบบ #bx-one) */
-                actions={
-                  isOpen ? undefined : (
-                    <>
-                      <button
-                        type="button"
-                        className={has ? "btn glass-thin" : "btn solid btn-solid"}
-                        data-ceo-hide
-                        onClick={() => setPlanning(d)}
-                      >
-                        {has ? "แก้งวด" : "แบ่งงวด"}
-                      </button>
-                      {has && (
-                        <button
-                          type="button"
-                          className="btn solid btn-solid"
-                          data-ceo-hide
-                          onClick={() => setOpenPlan(d.no)}
-                        >
-                          ดูงวด
-                        </button>
-                      )}
-                      {canCancel(d.no) && (
-                        <button
-                          type="button"
-                          className="btn basis-full! border-0! bg-transparent! text-destructive! shadow-none!"
-                          data-ceo-hide
-                          onClick={() => openCancel(d.no)}
-                        >
-                          ยกเลิกดีล
-                        </button>
-                      )}
-                    </>
-                  )
-                }
-              >
-                {has && isOpen && (
-                  <div className="mt-3 border-t-[1.5px] border-dashed border-[#ECE3E5] pt-3">
-                    <ul className="flex list-none flex-col gap-2 p-0">
-                      {d.plan.map((p, i) => (
-                        <PhoneSeq
-                          key={p.seq}
-                          acc={acc}
-                          deal={d}
-                          item={p}
-                          index={i}
-                          today={today}
-                          onPlan={() => setPlanning(d)}
-                          onBill={() => setBilling({ deal: d, item: p })}
-                          onReceipt={(v) => setReceipting(v)}
-                          onCollect={(v) => setCollecting(v)}
-                          onOpenDoc={(href) => router.push(href)}
-                        />
-                      ))}
-                    </ul>
-                    {canCancel(d.no) && (
-                      <div className="mt-3 flex justify-center">
-                        <button
-                          type="button"
-                          className="lnk text-destructive"
-                          data-ceo-hide
-                          onClick={() => openCancel(d.no)}
-                        >
-                          ยกเลิกดีล
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </PhoneCard>
-            );
-          })}
-        </PhoneList>
-
-
-        {/* มือถือจบในหน้าเดียวแล้ว ยอดรวมท้ายรายการจึงไม่ต้องมี (ต้นแบบ billing.html) */}
-        <div className="foot flex-col items-stretch gap-3 text-center max-sm:hidden! sm:flex-row sm:items-center sm:text-left">
+        <div className="foot flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
           <Foot tab={tab} acc={acc} invoices={invoices} todo={todo} overdue={overdue} />
         </div>
       </section>
+
+      {/* มือถือ — วางบิลจบในหน้าเดียว: ไม่มีแท็บและยอดรวมท้ายตาราง ทุกงวดของดีลอยู่ในการ์ดดีล */}
+      <div className="md:hidden">
+        <div className="flex items-center gap-2.5">
+          <label className="flex h-[46px] min-w-0 flex-1 items-center gap-2.5 rounded-[14px] bg-white px-3.5 text-[#8A7E81] shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-18px_rgba(120,20,35,.3)]">
+            <SearchIcon className="size-[17px] flex-none" strokeWidth={2} />
+            <input
+              type="search"
+              value={filter.f.q}
+              onChange={(e) => filter.setF((x) => ({ ...x, q: e.target.value }))}
+              placeholder="ค้นหาเลขที่เอกสารหรือลูกค้า"
+              aria-label="ค้นหาเลขที่เอกสารหรือลูกค้า"
+              className="h-full min-w-0 flex-1 bg-transparent text-[14.5px] text-[#2A1F22] outline-none placeholder:text-[#9A8E91]"
+            />
+          </label>
+          <button
+            type="button"
+            aria-label="เลือกวันที่"
+            onClick={() => setCalOpen(true)}
+            className="grid size-[42px] flex-none place-items-center rounded-full border border-[#EFE3E5] bg-white text-[#2A1F22] active:bg-[#F7EFF1]"
+          >
+            <CalendarIcon className="size-[19px]" strokeWidth={2} />
+          </button>
+        </div>
+
+        {(filter.f.from || filter.f.to) && (
+          <div className="mt-2.5 flex">
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#C8102E] pr-1 pl-3.5 text-[13px] font-semibold text-white">
+              <span className="num">
+                {filter.f.from === filter.f.to || !filter.f.to || !filter.f.from
+                  ? thaiDate(filter.f.from || filter.f.to)
+                  : `${thaiDate(filter.f.from)} – ${thaiDate(filter.f.to)}`}
+              </span>
+              <button
+                type="button"
+                aria-label="ล้างวันที่"
+                onClick={() => filter.setF((x) => ({ ...x, from: "", to: "" }))}
+                className="grid size-6 place-items-center rounded-full bg-white/20"
+              >
+                <CloseIcon className="size-3.5" strokeWidth={2.6} />
+              </button>
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 pt-3">
+          {phoneTodo.length === 0 ? (
+            <div className="rounded-[22px] bg-white px-4 py-10 text-center text-[13.5px] text-[#6E6164] shadow-[0_1px_2px_rgba(40,20,25,.04)]">
+              ไม่มีดีลที่รอวางบิล
+            </div>
+          ) : (
+            phoneTodo.map((d) => (
+              <PhoneDeal
+                key={d.no}
+                acc={acc}
+                deal={d}
+                today={today}
+                open={Boolean(open[d.no])}
+                onToggle={() => setOpen((o) => ({ ...o, [d.no]: !o[d.no] }))}
+                onPlan={(seq) => {
+                  setPlanFocus(seq ?? null);
+                  setPlanning(d);
+                }}
+                onBill={(item) => setBilling({ deal: d, item })}
+                onCancel={canCancel(d.no) ? () => openCancel(d.no) : undefined}
+                onReceipt={(v) => quickReceipt(v, d)}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      {calOpen && (
+        <DayPickSheet
+          days={phoneDays}
+          selected={filter.f.from && filter.f.from === filter.f.to ? filter.f.from : ""}
+          onPick={(iso) => {
+            filter.setF((x) => ({ ...x, from: iso, to: iso }));
+            setCalOpen(false);
+          }}
+          onAll={() => {
+            filter.setF((x) => ({ ...x, from: "", to: "" }));
+            setCalOpen(false);
+          }}
+          onClose={() => setCalOpen(false)}
+        />
+      )}
 
       {planning && (
         <PlanDialog
           deal={planning}
           acc={acc}
           terms={termsOf(planning.quo)}
-          onClose={() => setPlanning(null)}
+          focusSeq={planFocus}
+          onClose={() => {
+            setPlanning(null);
+            setPlanFocus(null);
+          }}
           onSaved={() => {
             /* กางงวดให้เลย ผู้ใช้จะได้เห็นปุ่มออกใบแจ้งหนี้ของงวดแรกทันที */
             setOpen((o) => ({ ...o, [planning.no]: true }));
             setPlanning(null);
+            setPlanFocus(null);
           }}
         />
       )}
@@ -569,30 +587,13 @@ export function AccBillingPage() {
         <BillDialog
           deal={billing.deal}
           item={billing.item}
+          phone={phone}
           onClose={() => setBilling(null)}
           onDone={() => {
             setOpen((o) => ({ ...o, [billing.deal.no]: true }));
             if (tab !== "inv") setInvDot(true);
             setBilling(null);
           }}
-        />
-      )}
-      {receipting && (
-        <IssueDialog
-          invoice={receipting}
-          seqs={seqsOf(acc, receipting.deal)}
-          first={receiptsOf(acc, receipting.no).length === 0}
-          buyer={taxInvoiceBuyer(
-            customerOfDeal(
-              crm,
-              receipting.deal,
-              acc.deals.find((d) => d.no === receipting.deal)?.quo ?? "",
-              receipting.cus,
-            ),
-          )}
-          today={today}
-          onClose={() => setReceipting(null)}
-          onDone={() => setReceipting(null)}
         />
       )}
       {collecting && (
@@ -610,132 +611,6 @@ export function AccBillingPage() {
         />
       )}
     </div>
-  );
-}
-
-/**
- * งวดหนึ่งงวดในการ์ดบนมือถือ — บอกสถานะของงวดนั้นและมีปุ่มของงวดนั้นในตัว
- * ยังไม่ออกใบ → ออกใบแจ้งหนี้ · ออกใบแล้ว → เปิดใบแจ้งหนี้ / ออกใบเสร็จ · ชำระแล้ว → เปิดใบเสร็จ
- * เกินกำหนดแล้วยังไม่ชำระ จะมีปุ่มบันทึกติดตามต่อท้าย (ต้นแบบ billing.html 1 ต.ค. 2569)
- */
-function PhoneSeq({
-  acc,
-  deal,
-  item,
-  index,
-  today,
-  onPlan,
-  onBill,
-  onReceipt,
-  onCollect,
-  onOpenDoc,
-}: {
-  acc: AccState;
-  deal: AccDeal;
-  item: Installment;
-  index: number;
-  today: string;
-  onPlan: () => void;
-  onBill: () => void;
-  onReceipt: (v: Invoice) => void;
-  onCollect: (v: Invoice) => void;
-  onOpenDoc: (href: string) => void;
-}) {
-  const st = seqStatus(acc, deal.no, item.seq);
-  const inv = invoiceOf(acc, deal.no, item.seq);
-  const receipt = inv ? receiptsOf(acc, inv.no)[0] : null;
-  const late = inv ? daysBetween(inv.due, today) : 0;
-
-  return (
-    <li className="rounded-[14px] bg-[#FAF6F7] p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <b className="text-[13px] font-bold">งวดที่ {item.seq}</b>
-          <p className="num mt-0.5 text-[12.5px] text-[#6E6164]">
-            {item.pct}% · <b className="font-bold text-foreground">{baht(item.amount)} ฿</b>
-          </p>
-        </div>
-        {/* แก้งวดนี้ — งวดที่ออกใบแล้วกล่องแบ่งงวดจะล็อกให้เอง */}
-        <button
-          type="button"
-          className="grid size-8 flex-none place-items-center rounded-full text-[#8A7E81]"
-          aria-label={`แก้ไขงวดที่ ${item.seq}`}
-          data-ceo-hide
-          onClick={onPlan}
-        >
-          <PencilIcon className="size-[17px]" strokeWidth={2.1} />
-        </button>
-      </div>
-
-      {st === "pending" ? (
-        canBill(acc, deal, index) ? (
-          <button
-            type="button"
-            className="btn solid btn-solid mt-2 h-9 w-full justify-center rounded-[11px] text-[13px]"
-            data-ceo-hide
-            onClick={onBill}
-          >
-            ออกใบแจ้งหนี้
-          </button>
-        ) : (
-          <p className="mt-2 text-center text-[12px] text-muted-foreground">รอชำระงวดก่อนหน้า</p>
-        )
-      ) : (
-        inv && (
-          <div className="mt-2 border-t border-dashed border-[#ECE3E5] pt-2">
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <b className="num text-[12.5px] font-bold">{inv.no}</b>
-              {invoiceDue(inv) <= 0 ? (
-                <span className="text-[11.5px] text-muted-foreground">ชำระแล้ว</span>
-              ) : late > 0 ? (
-                <span className="late">เกินกำหนด {late} วัน</span>
-              ) : (
-                <span className="text-[11.5px] text-muted-foreground">ครบกำหนด {thaiDate(inv.due)}</span>
-              )}
-            </p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                className="btn glass-thin h-9 justify-center rounded-[10px] text-[12.5px]"
-                onClick={() => onOpenDoc(invoiceHref(inv.no))}
-              >
-                <DownloadIcon className="size-[15px]" strokeWidth={2.2} />
-                ใบแจ้งหนี้
-              </button>
-              {receipt ? (
-                <button
-                  type="button"
-                  className="btn glass-thin h-9 justify-center rounded-[10px] text-[12.5px]"
-                  onClick={() => onOpenDoc(receiptHref(receipt.no))}
-                >
-                  <ReceiptIcon className="size-[15px]" strokeWidth={2.2} />
-                  ใบเสร็จ
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="btn solid btn-solid h-9 justify-center rounded-[10px] text-[12.5px]"
-                  data-ceo-hide
-                  onClick={() => onReceipt(inv)}
-                >
-                  ออกใบเสร็จ
-                </button>
-              )}
-              {invoiceDue(inv) > 0 && late > 0 && (
-                <button
-                  type="button"
-                  className="btn glass-thin col-span-2 h-9 justify-center rounded-[10px] text-[12.5px]"
-                  data-ceo-hide
-                  onClick={() => onCollect(inv)}
-                >
-                  บันทึกติดตาม
-                </button>
-              )}
-            </div>
-          </div>
-        )
-      )}
-    </li>
   );
 }
 
@@ -954,6 +829,462 @@ function SeqBilled({ acc, deal, seq, no }: { acc: AccState; deal: string; seq: n
   );
 }
 
+// ─── มือถือ (ต่ำกว่า md) — วางบิลจบในหน้าเดียว ────────────────────────
+const PHONE_MQ = "(max-width: 767.98px)";
+
+/** จอมือถือหรือไม่ — ใช้เลือกข้อความ/หน้าตาในกล่องที่ใช้ร่วมกับจอคอม (ฝั่งเซิร์ฟเวอร์ถือว่าไม่ใช่) */
+function useIsPhone() {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(PHONE_MQ);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(PHONE_MQ).matches,
+    () => false,
+  );
+}
+
+/* ปุ่มท้ายกล่องบนมือถือ — กว้างเต็มแถวแบ่งกัน สูง 48 (.btn ตั้งค่าไว้นอก layer จึงต้องใช้ !) */
+const PHONE_FOOT = "max-md:h-12! max-md:justify-center! max-md:rounded-[14px]! max-md:text-[14px]!";
+
+const CARD_SHADOW ="shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-18px_rgba(120,20,35,.3)]";
+
+/**
+ * การ์ดดีลบนมือถือ — กดการ์ด (หรือปุ่มออกใบแจ้งหนี้) เพื่อกางงวดทั้งหมดของดีล
+ * กางแล้วปุ่มของการ์ดซ่อน ยกเลิกดีลย้ายไปท้ายส่วนที่กาง การ์ดกับงวดดูเป็นการ์ดใบเดียวกัน
+ */
+function PhoneDeal({
+  acc,
+  deal: d,
+  today,
+  open,
+  onToggle,
+  onPlan,
+  onBill,
+  onCancel,
+  onReceipt,
+}: {
+  acc: AccState;
+  deal: AccDeal;
+  today: string;
+  open: boolean;
+  onToggle: () => void;
+  /** seq = งวดที่ต้องการเลื่อนไปหาในกล่องแบ่งงวด */
+  onPlan: (seq?: number) => void;
+  onBill: (item: Installment) => void;
+  onCancel?: () => void;
+  onReceipt: (v: Invoice) => void;
+}) {
+  const has = d.plan.length > 0;
+  const isOpen = open && has;
+  const status = d.plan.map((p) => seqStatus(acc, d.no, p.seq));
+  const waiting = status.filter((s) => s === "pending").length;
+  const unpaid = status.filter((s) => s === "invoiced").length;
+  const btn = "h-9 rounded-[11px] text-[13px] font-semibold";
+  const cancelBtn = onCancel && (
+    <button
+      type="button"
+      data-ceo-hide
+      className="col-span-2 h-8 text-[12.5px] font-semibold text-[#C0121F]"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCancel();
+      }}
+    >
+      ยกเลิกดีล
+    </button>
+  );
+
+  return (
+    <div className={`rounded-[22px] bg-white ${CARD_SHADOW}`}>
+      <div
+        role={has ? "button" : undefined}
+        tabIndex={has ? 0 : undefined}
+        aria-expanded={has ? isOpen : undefined}
+        className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2.5 p-3.5 text-[#2A1F22]"
+        style={{ gridTemplateAreas: '"cus amt" "quo quo" "plan plan" "act act"' }}
+        onClick={() => has && onToggle()}
+        onKeyDown={(e) => {
+          if (!has || e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+      >
+        <p className="text-[19px] leading-[1.3] font-bold [grid-area:cus]">{d.cus}</p>
+        <p className="num pt-0.5 text-right text-[15px] font-semibold whitespace-nowrap [grid-area:amt]">
+          {baht(d.net)} ฿
+        </p>
+        <p className="flex flex-wrap items-baseline gap-x-2 [grid-area:quo]">
+          <span className="num font-semibold">{d.quo}</span>
+          <span className="text-[12.5px] text-[#6E6164]">ส่ง {thaiDate(d.quoDate)}</span>
+        </p>
+        <div className="rounded-[14px] bg-[#FBF7F7] px-[11px] pt-[9px] pb-[13px] text-[13.5px] [grid-area:plan]">
+          {has ? (
+            <>
+              <p className="font-semibold">
+                แบ่ง {d.plan.length} งวด
+                {waiting > 0 && <span className="text-[#C8102E]"> · รอออกใบแจ้งหนี้ {waiting} งวด</span>}
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-[#6E6164]">
+                {unpaid > 0
+                  ? `รอชำระ ${unpaid} งวด`
+                  : waiting > 0
+                    ? `ชำระแล้ว ${d.plan.length - waiting} งวด`
+                    : "ชำระครบทุกงวดแล้ว"}
+              </p>
+            </>
+          ) : (
+            /* ข้อความเดียวในกล่อง จึงแสดงคำแนะนำ */
+            <p className="text-[#6E6164]">ยังไม่ได้แบ่งงวด · กดแบ่งงวดเพื่อเริ่มวางบิล</p>
+          )}
+        </div>
+        {!isOpen && (
+          <div className="grid grid-cols-2 gap-2 [grid-area:act]">
+            {has ? (
+              <>
+                <button
+                  type="button"
+                  data-ceo-hide
+                  className={`${btn} bg-[#F7EFF1] text-[#2A1F22]`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPlan();
+                  }}
+                >
+                  แก้งวด
+                </button>
+                <button
+                  type="button"
+                  className={`${btn} bg-[#C8102E] text-white`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggle();
+                  }}
+                >
+                  ออกใบแจ้งหนี้
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                data-ceo-hide
+                className={`${btn} col-span-2 bg-[#C8102E] text-white`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPlan();
+                }}
+              >
+                แบ่งงวด
+              </button>
+            )}
+            {cancelBtn}
+          </div>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="px-3.5 pt-1 pb-3.5">
+          <div className="flex flex-col gap-2 border-t-[1.5px] border-dashed border-[#ECE3E5] pt-3">
+            {d.plan.map((p, i) => (
+              <PhoneSeq
+                key={p.seq}
+                acc={acc}
+                deal={d}
+                item={p}
+                index={i}
+                today={today}
+                onEdit={() => onPlan(p.seq)}
+                onBill={() => onBill(p)}
+                onReceipt={onReceipt}
+              />
+            ))}
+            {cancelBtn && <div className="grid grid-cols-2 justify-items-center">{cancelBtn}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** งวดหนึ่งในการ์ดดีลมือถือ — ยังไม่ออกใบ: ปุ่มออกใบแจ้งหนี้ · ออกแล้ว: เลขที่ใบ สถานะ และปุ่มเอกสาร */
+function PhoneSeq({
+  acc,
+  deal,
+  item: p,
+  index,
+  today,
+  onEdit,
+  onBill,
+  onReceipt,
+}: {
+  acc: AccState;
+  deal: AccDeal;
+  item: Installment;
+  index: number;
+  today: string;
+  onEdit: () => void;
+  onBill: () => void;
+  onReceipt: (v: Invoice) => void;
+}) {
+  const router = useRouter();
+  const pending = seqStatus(acc, deal.no, p.seq) === "pending";
+  const inv = pending ? null : invoiceOf(acc, deal.no, p.seq);
+  const rc = inv ? receiptOf(acc, inv.no) : null;
+  const owed = inv ? invoiceDue(inv) > 0 && invoiceStatus(acc, inv) !== "cancelled" : false;
+  const docBtn =
+    "inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] text-[12.5px] font-semibold";
+
+  return (
+    <div className="grid grid-cols-[auto_auto_1fr_auto] items-center gap-x-2.5 gap-y-1 rounded-[14px] bg-[#FAF6F7] px-3 py-2.5 text-[#2A1F22]">
+      <b className="col-span-3 text-[14px] font-bold">งวดที่ {p.seq}</b>
+      <button
+        type="button"
+        data-ceo-hide
+        aria-label={`แก้งวดที่ ${p.seq}`}
+        className="row-span-2 grid size-[34px] place-items-center rounded-full text-[#8A7E81] hover:text-[#C8102E] active:text-[#C8102E]"
+        onClick={onEdit}
+      >
+        <PencilIcon className="size-[17px]" strokeWidth={2} />
+      </button>
+      <span className="num text-[13px] text-[#6E6164]">{p.pct}%</span>
+      <span className="num col-span-2 text-[14px] font-bold">{baht(p.amount)} ฿</span>
+
+      {pending ? (
+        canBill(acc, deal, index) ? (
+          <button
+            type="button"
+            data-ceo-hide
+            className="col-span-4 mt-1.5 h-9 rounded-[11px] bg-[#C8102E] text-[13px] font-semibold text-white"
+            onClick={onBill}
+          >
+            ออกใบแจ้งหนี้
+          </button>
+        ) : (
+          <p className="col-span-4 mt-1 text-center text-[12.5px] text-[#8A7E81]">รอชำระงวดก่อนหน้า</p>
+        )
+      ) : (
+        inv && (
+          <div className="col-span-4 mt-1.5 border-t-[1.5px] border-dashed border-[#ECE3E5] pt-2.5">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="num text-[12.5px] font-bold">{inv.no}</span>
+              <PhoneDueBadge invoice={inv} today={today} />
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className={`${docBtn} border border-[#E6DADD] bg-white text-[#2A1F22]`}
+                onClick={() => router.push(invoiceHref(inv.no))}
+              >
+                <DownloadIcon className="size-[15px]" strokeWidth={2.2} />
+                ใบแจ้งหนี้
+              </button>
+              {owed ? (
+                <button
+                  type="button"
+                  data-ceo-hide
+                  className={`${docBtn} bg-[#C8102E] text-white`}
+                  onClick={() => onReceipt(inv)}
+                >
+                  ออกใบเสร็จ
+                </button>
+              ) : rc ? (
+                <button
+                  type="button"
+                  className={`${docBtn} border border-[#E6DADD] bg-white text-[#2A1F22]`}
+                  onClick={() => router.push(receiptHref(rc.no))}
+                >
+                  <DownloadIcon className="size-[15px]" strokeWidth={2.2} />
+                  ใบเสร็จ
+                </button>
+              ) : null}
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+/** ป้ายวันครบกำหนดบนมือถือ — ข้อความชุดเดียวกับ DueBadge */
+function PhoneDueBadge({ invoice, today }: { invoice: Invoice; today: string }) {
+  const pill = "inline-flex h-[22px] items-center rounded-full px-2 text-[11.5px] font-semibold";
+  if (invoiceDue(invoice) <= 0) return <span className={`${pill} bg-[#E7F5EC] text-[#1C7A43]`}>ชำระแล้ว</span>;
+  const n = daysBetween(invoice.due, today);
+  if (n > 0) return <span className={`${pill} bg-[#FDE8EB] text-[#C0121F]`}>เกินกำหนด {n} วัน</span>;
+  if (n === 0) return <span className={`${pill} bg-[#FFF1DC] text-[#9A5B00]`}>ครบกำหนดวันนี้</span>;
+  if (n >= -7) return <span className={`${pill} bg-[#FFF1DC] text-[#9A5B00]`}>เหลืออีก {-n} วัน</span>;
+  return <span className={`${pill} bg-[#F2EAEC] text-[#6E6164]`}>เหลืออีก {-n} วัน</span>;
+}
+
+const DW = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+/**
+ * ปฏิทินเดือนเดียวของมือถือ — ใช้ทั้งในแผ่นเลือกวันกรองรายการ และในกล่องออกใบแจ้งหนี้
+ * days = วันที่มีข้อมูล (จุดแดงใต้เลข) · minIso = วันก่อนหน้านี้กดไม่ได้ · lockPast = ย้อนไปเดือนก่อนเดือนนี้ไม่ได้
+ */
+function MonthCal({
+  month,
+  onMonth,
+  selected,
+  onPick,
+  today,
+  days,
+  minIso = "",
+  lockPast = false,
+  cell = 46,
+}: {
+  month: Date;
+  onMonth: (d: Date) => void;
+  selected: string;
+  onPick: (iso: string) => void;
+  today: string;
+  days?: Set<string>;
+  minIso?: string;
+  lockPast?: boolean;
+  cell?: number;
+}) {
+  const y = month.getFullYear();
+  const m = month.getMonth();
+  const lead = new Date(y, m, 1).getDay();
+  const count = new Date(y, m + 1, 0).getDate();
+  const atNow = `${y}-${String(m + 1).padStart(2, "0")}` <= today.slice(0, 7);
+  const nav = "grid size-9 place-items-center rounded-full bg-[#F7EFF1] text-[#2A1F22] disabled:opacity-35";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          className={nav}
+          aria-label="เดือนก่อนหน้า"
+          disabled={lockPast && atNow}
+          onClick={() => onMonth(new Date(y, m - 1, 1))}
+        >
+          <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
+        </button>
+        <p className="text-[15px] font-bold text-[#2A1F22]">
+          {TH_MONTHS_FULL[m]} {y + 543}
+        </p>
+        <button
+          type="button"
+          className={nav}
+          aria-label="เดือนถัดไป"
+          onClick={() => onMonth(new Date(y, m + 1, 1))}
+        >
+          <ChevronRightIcon className="size-4" strokeWidth={2.4} />
+        </button>
+      </div>
+      <div className="mt-3 grid grid-cols-7 text-center text-[12px] font-semibold text-[#8A7E81]">
+        {DW.map((w) => (
+          <span key={w} className="py-1">
+            {w}
+          </span>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {Array.from({ length: lead }, (_, i) => (
+          <span key={`b${i}`} />
+        ))}
+        {Array.from({ length: count }, (_, i) => {
+          const iso = toIsoDate(new Date(y, m, i + 1));
+          const on = iso === selected;
+          const off = Boolean(minIso) && iso < minIso;
+          const isToday = iso === today;
+          return (
+            <button
+              key={iso}
+              type="button"
+              disabled={off}
+              aria-pressed={on}
+              aria-label={thaiDate(iso)}
+              onClick={() => onPick(iso)}
+              className="relative grid place-items-center disabled:cursor-default"
+              style={{ height: cell }}
+            >
+              <span
+                className={`num grid size-9 place-items-center rounded-full text-[14.5px] ${
+                  on
+                    ? "bg-[#C8102E] font-bold text-white"
+                    : off
+                      ? "text-[#CFC5C8]"
+                      : isToday
+                        ? "font-bold text-[#C8102E]"
+                        : "text-[#2A1F22]"
+                }`}
+              >
+                {i + 1}
+              </span>
+              {days?.has(iso) && !on && (
+                <span className="absolute bottom-[3px] left-1/2 size-[5px] -translate-x-1/2 rounded-full bg-[#C8102E]" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** แผ่นเลือกวันจากด้านล่างจอ (มือถือ) — เลือกวันแล้วกรองรายการเหลือวันนั้น · ดูทั้งหมด = ล้างวันที่ */
+function DayPickSheet({
+  days,
+  selected,
+  onPick,
+  onAll,
+  onClose,
+}: {
+  days: Set<string>;
+  selected: string;
+  onPick: (iso: string) => void;
+  onAll: () => void;
+  onClose: () => void;
+}) {
+  const today = todayIso();
+  const [month, setMonth] = useState(() => {
+    const base = selected ? new Date(`${selected}T00:00:00`) : bkkNow();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const unlock = lockScroll();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      unlock();
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-80 flex items-end bg-black/50 md:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="เลือกวันที่"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="max-h-[92vh] w-full overflow-auto rounded-t-[24px] bg-white px-[18px] pt-2.5 pb-[calc(16px+env(safe-area-inset-bottom))]">
+        <div className="mx-auto mb-3.5 h-[5px] w-10 rounded-full bg-[#E3D8DB]" aria-hidden="true" />
+        <MonthCal month={month} onMonth={setMonth} selected={selected} onPick={onPick} today={today} days={days} />
+        <button
+          type="button"
+          className="mt-3 h-12 w-full rounded-[14px] bg-[#F7EFF1] text-[14px] font-semibold text-[#2A1F22]"
+          onClick={onAll}
+        >
+          ดูทั้งหมด
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /**
  * แบ่งงวดชำระเงิน — ยอดรวมทุกงวดต้องเท่ากับยอดสุทธิพอดีจึงบันทึกได้ (AC-BR-03)
  * งวดที่ออกใบแจ้งหนี้แล้วแก้และลบไม่ได้ เพราะเอกสารออกเลขแล้ว
@@ -965,6 +1296,7 @@ function PlanDialog({
   deal,
   acc,
   terms,
+  focusSeq = null,
   onClose,
   onSaved,
 }: {
@@ -972,9 +1304,24 @@ function PlanDialog({
   acc: AccState;
   /** ข้อความเงื่อนไขชำระเงินตามใบเสนอราคา ดิบ ๆ อย่างที่ฝ่ายขายพิมพ์ */
   terms: string;
+  /** มือถือ: งวดที่กดดินสอมา — เลื่อนไปหา ไฮไลต์ครู่หนึ่ง แล้วโฟกัสช่องสัดส่วน */
+  focusSeq?: number | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const phoneRows = useRef<HTMLDivElement>(null);
+  /* กล่องสร้างใหม่ทุกครั้งที่เปิด ไฮไลต์จึงเริ่มจากงวดที่กดมาเลย แล้วดับเองใน 1.6 วินาที */
+  const [flash, setFlash] = useState<number | null>(focusSeq);
+  useEffect(() => {
+    if (focusSeq == null) return;
+    const row = phoneRows.current?.querySelector<HTMLElement>(`[data-seq="${focusSeq}"]`);
+    if (row && row.offsetParent) {
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+      row.querySelector<HTMLInputElement>("input[data-pct]")?.focus({ preventScroll: true });
+    }
+    const t = window.setTimeout(() => setFlash(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [focusSeq]);
   const pcts = parseTermsPct(terms);
   /* เติมตัวเลขให้เฉพาะดีลที่ยังไม่เคยแบ่งงวด และเงื่อนไขอ่านออกชัดเจนเท่านั้น */
   const prefilled = deal.plan.length === 0 && Boolean(pcts);
@@ -1007,21 +1354,13 @@ function PlanDialog({
       onClose={onClose}
       footer={
         <>
-          {/* บอกเหตุผลที่ปุ่มกดไม่ได้ ไม่ปล่อยให้เป็นปุ่มเทาเฉย ๆ (ตรวจระบบ 5 ต.ค. 2569 · BUG-005) */}
-          {diff !== 0 && (
-            <p className="mr-auto max-w-[250px] text-left text-[12px] leading-snug text-destructive max-sm:w-full">
-              ยอดทุกงวดต้องรวมกันเท่ากับยอดสุทธิ {baht(deal.net)} บาท (สัดส่วนรวม 100%) ตอนนี้ยัง
-              {diff > 0 ? "ขาด" : "เกิน"} {baht(Math.abs(diff))} บาท
-            </p>
-          )}
-          <button type="button" className="btn glass-thin" onClick={onClose}>
+          <button type="button" className={`btn glass-thin ${PHONE_FOOT} max-md:flex-1!`} onClick={onClose}>
             ยกเลิก
           </button>
           <button
             type="button"
-            className="btn solid btn-solid disabled:opacity-45"
+            className={`btn solid btn-solid disabled:opacity-45 ${PHONE_FOOT} max-md:flex-[1.4]!`}
             disabled={diff !== 0}
-            title={diff !== 0 ? "ยอดทุกงวดต้องรวมกันเท่ากับยอดสุทธิก่อนจึงจะบันทึกได้" : undefined}
             onClick={() => {
               savePlan(
                 deal.no,
@@ -1064,7 +1403,113 @@ function PlanDialog({
         )}
       </div>
 
-      <table className="sheet mt-3">
+      {/* มือถือ: งวดละการ์ด ช่องใหญ่พอให้นิ้วกด · งวดที่ออกใบแล้วล็อกไว้ */}
+      <div ref={phoneRows} className="mt-3 flex flex-col gap-2 md:hidden">
+        {rows.map((r, i) => {
+          const lock = locked(i);
+          const cap = "mb-1 block text-[11px] text-[#8A7E81]";
+          const box = `field-control h-[42px] w-full rounded-[10px] px-2.5 text-[15px] ${
+            lock ? "bg-muted text-muted-foreground" : ""
+          }`;
+          return (
+            <div
+              key={i}
+              data-seq={i + 1}
+              className={`grid grid-cols-[62px_minmax(0,1fr)_minmax(0,1.5fr)_36px] items-end gap-2 rounded-[14px] border border-[#EFE6E8] px-3 py-2.5 transition-shadow ${
+                lock ? "bg-[#FAF6F7]" : "bg-white"
+              } ${flash === i + 1 ? "shadow-[inset_0_0_0_2px_#C8102E]" : ""}`}
+            >
+              <div>
+                {lock && <span className={cap}>ออกใบแล้ว</span>}
+                <p className="flex h-[42px] items-center text-[14px] font-bold text-[#2A1F22]">
+                  <span className="mr-1 font-semibold text-[#6E6164]">งวดที่</span>
+                  {i + 1}
+                </p>
+              </div>
+              <label className="min-w-0">
+                <span className={cap}>สัดส่วน (%)</span>
+                {lock ? (
+                  <input data-pct className={`${box} text-center`} value={r.pct} readOnly tabIndex={-1} />
+                ) : (
+                  <input
+                    data-pct
+                    className={`${box} text-center`}
+                    inputMode="decimal"
+                    value={shown(i, "pct", r.pct ? String(r.pct) : "")}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^\d.]/g, "");
+                      setDraft({ i, f: "pct", v });
+                      const pct = parseFloat(v) || 0;
+                      edit(i, { pct, amount: round2((deal.net * pct) / 100) });
+                    }}
+                    onBlur={() => setDraft(null)}
+                  />
+                )}
+              </label>
+              <label className="min-w-0">
+                <span className={cap}>จำนวนเงิน (บาท)</span>
+                {lock ? (
+                  <input className={`${box} num text-right`} value={baht(r.amount)} readOnly tabIndex={-1} />
+                ) : (
+                  <input
+                    className={`${box} num text-right`}
+                    inputMode="decimal"
+                    value={shown(i, "amt", r.amount ? baht(r.amount) : "")}
+                    placeholder="0.00"
+                    onChange={(e) => {
+                      const v = commaInput(e.target.value);
+                      setDraft({ i, f: "amt", v });
+                      const amount = parseFloat(v.replace(/,/g, "")) || 0;
+                      edit(i, {
+                        amount: round2(amount),
+                        pct: deal.net ? Math.round((amount * 10000) / deal.net) / 100 : 0,
+                      });
+                    }}
+                    onBlur={() => setDraft(null)}
+                  />
+                )}
+              </label>
+              {lock ? (
+                <span />
+              ) : (
+                <button
+                  type="button"
+                  className="grid h-[42px] w-9 place-items-center rounded-[10px] text-[#8A7E81] active:bg-[#F7EFF1] active:text-[#C8102E]"
+                  aria-label={`ลบงวดที่ ${i + 1}`}
+                  onClick={() => {
+                    setDraft(null);
+                    setRows((l) => l.filter((_, x) => x !== i));
+                  }}
+                >
+                  <TrashIcon className="size-4" strokeWidth={2} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <div className="flex items-center justify-between rounded-[14px] bg-[#FAF4F5] px-3.5 py-3 text-[14px] text-[#2A1F22]">
+          <span className="font-semibold">รวมทุกงวด</span>
+          <b className="num font-bold">{baht(total)}</b>
+        </div>
+        <button
+          type="button"
+          className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[14px] border-[1.5px] border-dashed border-[#E3D3D7] text-[14px] font-semibold text-[#2A1F22]"
+          onClick={() => setRows((l) => [...l, { seq: l.length + 1, pct: 0, amount: 0, due: "" }])}
+        >
+          <PlusIcon className="size-[15px]" strokeWidth={2.2} />
+          เพิ่มงวด
+        </button>
+        <p className="text-center text-[12.5px] font-semibold">
+          {diff === 0 ? (
+            <span className="text-[var(--success)]">ตรงกับยอดสุทธิ</span>
+          ) : (
+            <span className="text-destructive">ต่างจากยอดสุทธิ {baht(Math.abs(diff))} บาท</span>
+          )}
+        </p>
+      </div>
+
+      <table className="sheet mt-3 max-md:hidden!">
         <thead>
           <tr>
             <th className="c" style={{ width: 70 }}>งวดที่</th>
@@ -1152,7 +1597,7 @@ function PlanDialog({
         </tfoot>
       </table>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3.5">
+      <div className="mt-3 flex flex-wrap items-center gap-3.5 max-md:hidden!">
         <button
           type="button"
           className="btn glass-thin"
@@ -1183,28 +1628,37 @@ function PlanDialog({
 function BillDialog({
   deal,
   item,
+  phone = false,
   onClose,
   onDone,
 }: {
   deal: AccDeal;
   item: Installment;
+  /** มือถือ: หัวกล่องเป็นชื่อลูกค้า */
+  phone?: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
   const [due, setDue] = useState("");
+  /* มือถือ: ปฏิทินในกล่องเริ่มที่เดือนนี้และยังไม่เลือกวันทุกครั้งที่เปิด (กล่องสร้างใหม่ทุกครั้ง) */
+  const today = todayIso();
+  const [calMonth, setCalMonth] = useState(() => {
+    const n = bkkNow();
+    return new Date(n.getFullYear(), n.getMonth(), 1);
+  });
 
   return (
     <Sheet
-      title="ออกใบแจ้งหนี้"
+      title={phone ? deal.cus : "ออกใบแจ้งหนี้"}
       onClose={onClose}
       footer={
         <>
-          <button type="button" className="btn glass-thin" onClick={onClose}>
+          <button type="button" className={`btn glass-thin ${PHONE_FOOT} max-md:flex-1!`} onClick={onClose}>
             ยกเลิก
           </button>
           <button
             type="button"
-            className="btn solid btn-solid disabled:opacity-45"
+            className={`btn solid btn-solid disabled:opacity-45 ${PHONE_FOOT} max-md:flex-[1.4]!`}
             disabled={!due}
             onClick={() => {
               issueInvoice(deal.no, item.seq, due);
@@ -1216,8 +1670,39 @@ function BillDialog({
         </>
       }
     >
+      {/* มือถือ: ชื่อลูกค้าอยู่หัวกล่องแล้ว · งวดกับยอดในกล่องเดียว แล้วเลือกวันจากปฏิทินในกล่องเลย */}
+      <div className="md:hidden">
+        <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[#FAF4F5] px-3.5 py-3 text-[#2A1F22]">
+          <span className="text-[13.5px] text-[#6E6164]">
+            งวดที่ {item.seq} จาก {deal.plan.length}
+          </span>
+          <b className="num text-[16px] font-bold">{baht(item.amount)} ฿</b>
+        </div>
+        <p className="mt-4 mb-1.5 text-[13px] font-semibold text-[#2A1F22]">วันครบกำหนดชำระ</p>
+        <input
+          readOnly
+          tabIndex={-1}
+          aria-label="วันครบกำหนดชำระ"
+          value={due ? thaiDate(due) : ""}
+          placeholder="เลือกวันที่จากปฏิทินด้านล่าง"
+          className="field-control h-[46px] w-full rounded-[12px] px-3.5 text-[15px] font-bold placeholder:font-normal"
+        />
+        <div className="mt-3 rounded-[14px] border border-[#EFE6E8] px-2.5 py-3">
+          <MonthCal
+            month={calMonth}
+            onMonth={setCalMonth}
+            selected={due}
+            onPick={setDue}
+            today={today}
+            minIso={today}
+            lockPast
+            cell={42}
+          />
+        </div>
+      </div>
+
       {/* ลูกค้า งวด และยอด อยู่คนละบรรทัดตามต้นแบบ (dueWho) */}
-      <p className="text-[13.5px] leading-relaxed">
+      <p className="text-[13.5px] leading-relaxed max-md:hidden">
         <b className="font-semibold">{deal.cus}</b>
         <br />
         <span className="text-[12.5px] text-muted-foreground">
@@ -1227,7 +1712,7 @@ function BillDialog({
         </span>
       </p>
 
-      <div className="mt-4">
+      <div className="mt-4 max-md:hidden">
         <Field label="วันครบกำหนดชำระ">
           <DateField
             value={due}

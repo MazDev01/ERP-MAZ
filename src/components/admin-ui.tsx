@@ -14,36 +14,26 @@ import { logChange, type LogArea } from "@/lib/admin-log";
 import { ConfirmDialog } from "./confirm-dialog";
 
 /*
- * หัวหัวข้อในหน้าตั้งค่า — วางตามต้นแบบ (.shead): ชื่อ 19px + รหัสยูสเคสในวงเล็บกลม
- * คำอธิบายอยู่ใต้ชื่อ ปุ่มอยู่ขวาแถวเดียวกัน (จอแคบตกบรรทัด)
+ * หัวหัวข้อในหน้าตั้งค่า — ยกมาจากระบบต้นฉบับ (6 ต.ค. 2569)
+ * หน้าย่อยของตั้งค่าระบบไม่มีหัวข้อหน้าแล้ว ชื่อหน้าอยู่ที่เมนูย่อยด้านซ้าย เหลือแค่ปุ่มเครื่องมือ
+ * title/desc ยังรับไว้เป็นชื่อให้โปรแกรมอ่านหน้าจอ (ไม่แสดงบนจอ)
  */
 export function AdminHead({
   title,
   desc,
-  code,
   children,
 }: {
   title: string;
   desc: string;
-  /** รหัสหน้าจอในเอกสารยูสเคส เช่น HR-13 */
+  /** รหัสหน้าจอในเอกสารยูสเคส — ไม่แสดงแล้ว รับไว้ให้หน้าเดิมเรียกได้เหมือนเดิม */
   code?: string;
   children?: React.ReactNode;
 }) {
+  if (!children) return <h1 className="sr-only">{title}</h1>;
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-      <div className="min-w-0">
-        {/* หัวข้อย่อยในหน้า ใช้ h2 เพราะ h1 คือชื่อหน้า "ตั้งค่าระบบ" */}
-        <h2 className="flex flex-wrap items-center gap-2.5 text-[19px] font-bold">
-          {title}
-          {code && (
-            <small className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
-              {code}
-            </small>
-          )}
-        </h2>
-        <p className="mt-1.5 max-w-[660px] text-[13px] leading-relaxed text-muted-foreground">{desc}</p>
-      </div>
-      {children && <div className="tools">{children}</div>}
+    <div className="flex items-center justify-end gap-2.5" title={desc}>
+      <h1 className="sr-only">{title}</h1>
+      {children}
     </div>
   );
 }

@@ -152,7 +152,7 @@ export function CustomerCombo({
                       i === cursor ? "bg-accent" : "hover:bg-accent/60"
                     }`}
                   >
-                    <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-accent text-[11.5px] font-semibold text-primary">
+                    <span className="grid size-[30px] shrink-0 place-items-center rounded-full bg-accent text-[11.5px] font-semibold text-primary">
                       {initials(c.name)}
                     </span>
                     <span className="min-w-0 flex-1">

@@ -20,8 +20,6 @@ import {
   toIsoDate,
 } from "@/lib/format";
 
-import { DashWrap, DashChips, DashHero, DashSection, DashWeek } from "./mobile-dash";
-
 type Range = "m" | "q" | "y";
 
 const MON = [
@@ -98,73 +96,11 @@ export function AccDashboardPage() {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
 
-  /* ── มือถือ: แดชบอร์ดแบบแอป (ตัวเลขชุดเดียวกับจอคอม) ── */
-  const [pickDay, setPickDay] = useState(() => toIsoDate(bkkNow()));
-  /* ปฏิทินของบัญชีดู "วันครบกำหนดชำระ" ของใบที่ยังไม่ได้รับเงิน */
-  const dueOn = (iso: string) => openInv.filter((v) => v.due === iso);
-  const recent = [...acc.receipts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-
   return (
     <div className="space-y-3.5">
-      <DashWrap>
-        <DashHero
-          chips={<DashChips value={range} items={RANGES} onPick={setRange} />}
-          label="รับชำระในช่วงนี้"
-          value={`${baht(got)} ฿`}
-          foot={`วางบิล ${baht(billed)} ฿ · ค้างรับ ${openInv.length} ใบ`}
-          ringPct={billed ? (got * 100) / billed : 0}
-          ringLabel="เก็บได้แล้ว"
-        />
-
-        <DashWeek value={pickDay} onPick={setPickDay} has={(iso) => dueOn(iso).length > 0} />
-
-        <DashSection
-          title={pickDay === today ? "ครบกำหนดชำระวันนี้" : `ครบกำหนดชำระ ${thaiDate(pickDay)}`}
-          href="/acc/billing"
-          rows={dueOn(pickDay).map((v) => ({
-            key: v.no,
-            title: `${v.cus} · ${v.no}`,
-            meta: `${baht(invoiceDue(v))} ฿`,
-            metaTint: "peach" as const,
-            href: `/acc/billing?find=${encodeURIComponent(v.no)}`,
-          }))}
-          empty="ไม่มีใบแจ้งหนี้ครบกำหนดวันนี้"
-        />
-
-        <DashSection
-          title="ลูกหนี้ค้างนานสุด"
-          href="/acc/billing"
-          rows={[...late]
-            .sort((a, b) => daysBetween(b.due, today) - daysBetween(a.due, today))
-            .slice(0, 5)
-            .map((v, i) => ({
-              key: v.no,
-              title: `${v.cus} · ${baht(invoiceDue(v))} ฿`,
-              meta: `เกิน ${daysBetween(v.due, today)} วัน`,
-              metaTint: "rose" as const,
-              end: String(i + 1),
-              endTint: (["rose", "peach", "sky", "lilac", "mint"] as const)[i % 5],
-              href: `/acc/billing?find=${encodeURIComponent(v.no)}`,
-            }))}
-          empty="ไม่มีใบแจ้งหนี้ที่เกินกำหนด"
-        />
-
-        <DashSection
-          title="รับชำระล่าสุด"
-          href="/acc/receipts"
-          rows={recent.map((r) => ({
-            key: r.no,
-            title: `${r.cus} · ${baht(r.total)} ฿`,
-            meta: `${thaiDate(r.date)} · ${r.no}`,
-            metaTint: "mint" as const,
-            href: `/acc/receipts?find=${encodeURIComponent(r.no)}`,
-          }))}
-          empty="ยังไม่มีการรับชำระ"
-        />
-      </DashWrap>
-
-      <div className="bar max-md:hidden!">
+      <div className="bar">
         <div>
+          <h1>แดชบอร์ดบัญชี</h1>
           <p>{rangeNote(range, now)}</p>
         </div>
         <div className="tools">
@@ -183,7 +119,7 @@ export function AccDashboardPage() {
         </div>
       </div>
 
-      <div className="max-md:hidden grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
         <Kpi
           icon={<FileIcon className="size-[17px]" />}
           skin="info"
@@ -215,7 +151,7 @@ export function AccDashboardPage() {
         />
       </div>
 
-      <div className="max-md:hidden grid items-start gap-3.5 xl:grid-cols-[minmax(0,1.34fr)_minmax(0,0.66fr)]">
+      <div className="grid items-start gap-3.5 xl:grid-cols-[minmax(0,1.34fr)_minmax(0,0.66fr)]">
         <section className="glass rounded-[15px] px-5 py-[18px]">
           <h2 className="text-[15px] font-bold">วางบิล เทียบ รับชำระ</h2>
           <p className="mt-1 text-[12.5px] text-muted-foreground">
@@ -267,7 +203,7 @@ export function AccDashboardPage() {
       {/* แถวล่างตามโครง mockup 24 ก.ย. 2569 — สองตารางซ้าย คอลัมน์ขวาเป็นรับชำระล่าสุดและสรุปช่วงนี้ */}
       {/* จอแคบตั้งคอลัมน์เป็น minmax(0,1fr) ไว้ชัด ๆ — ปล่อยเป็นคอลัมน์อัตโนมัติ ช่องจะกว้างตาม
           เนื้อหาที่ยาวที่สุด (ข้อความไทยตัดคำไม่ได้) แล้วดันทั้งแถวล้นออกนอกจอ */}
-      <div className="max-md:hidden grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
         {/* สองการ์ดนี้เป็นรายการแถวเดียวจบตามโครง mockup ไม่ใช่ตารางกว้าง
             เพราะอยู่คอลัมน์แคบ ตารางสี่คอลัมน์จะถูกตัดจนอ่านยอดไม่ครบ */}
         <section className="glass flex h-full flex-col md:col-span-3 rounded-[14px] px-5 py-[18px]">

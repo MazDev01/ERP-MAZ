@@ -136,6 +136,7 @@ export function AccCreditsPage() {
     <div className="space-y-4">
       <div className="bar">
         <div>
+          <h1>ใบลดหนี้ / คืนเงิน</h1>
           <p>
             ใบลดหนี้ลดยอดวางบิลและยอดค้างชำระ · การคืนเงินคือเงินที่ออกจากบริษัทจริง แยกกันคนละรายการ
           </p>
@@ -144,11 +145,11 @@ export function AccCreditsPage() {
           <div className="tools w-full sm:w-auto">
             <button
               type="button"
-              className="btn solid btn-solid btn-block-mobile fab-mobile"
+              className="btn solid btn-solid btn-block-mobile"
               data-ceo-hide
               onClick={() => setAsking("")}
             >
-              <span className="lbl">ขอออกใบลดหนี้</span>
+              ขอออกใบลดหนี้
             </button>
           </div>
         )}
@@ -160,8 +161,7 @@ export function AccCreditsPage() {
         </p>
       )}
 
-      {/* มือถือ: การ์ดลอยบนพื้นหน้า ไม่มีแผงครอบ (ต้นแบบ billing.html) */}
-      <section className="panel plain-mobile glass flex flex-col">
+      <section className="panel glass flex flex-col">
         <div className="strip">
           <div className="tabs">
             <button type="button" className={tab === "credit" ? "on" : ""} onClick={() => setTab("credit")}>

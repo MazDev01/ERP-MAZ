@@ -38,7 +38,7 @@ import {
   type RequestKind,
   type Role,
 } from "@/lib/role";
-import { AdminHead, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
+import { Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
 import { ChevronDownIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
@@ -289,19 +289,17 @@ function PositionsPane({ tabs }: { tabs: ReactNode }) {
 
   return (
     <div className="space-y-4">
-      <AdminHead title="ตำแหน่งและสายอนุมัติ" code="HR-11" desc="ผู้อนุมัติของแต่ละตำแหน่ง แยกตามประเภทคำขอ">
-        <button
-          type="button"
-          className="btn solid btn-solid"
-          onClick={() => setEditing("")}
-        >
-          <PlusIcon className="size-4" strokeWidth={2.4} />
-          เพิ่มตำแหน่ง
-        </button>
-      </AdminHead>
+      <h1 className="sr-only">ตำแหน่งและสายอนุมัติ</h1>
 
+      {/* แถบแท็บกับปุ่มเพิ่มตำแหน่งอยู่แถวเดียวกันตามระบบต้นฉบับ (เดิมปุ่มอยู่แถวหัวเรื่องแยกต่างหาก) */}
       <section className="panel glass">
-        <div className="strip">{tabs}</div>
+        <div className="strip">
+          {tabs}
+          <button type="button" className="btn solid btn-solid my-1.5" onClick={() => setEditing("")}>
+            <PlusIcon className="size-4" strokeWidth={2.4} />
+            เพิ่มตำแหน่ง
+          </button>
+        </div>
       </section>
 
       {(

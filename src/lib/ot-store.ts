@@ -1,7 +1,5 @@
 "use client";
 import { bkkStamp, nextDocNo } from "./format";
-import { currentProfile } from "./profile-data";
-import { settings } from "./system-settings";
 
 import { OT_RECORDS, type OtRecord } from "./ot-data";
 import type { Role } from "./role";
@@ -12,11 +10,6 @@ const store = createRoleStore<OtRecord[]>(
   "maz-erp.ot.v2",
   OT_RECORDS,
   (v): v is OtRecord[] => Array.isArray(v),
-  undefined,
-  /* หน้าอนุมัติมองพนักงานเป็นก้อนเดียว — รวมใบของทุกคนในบทบาทเข้าด้วยกัน */
-  (list) => list.flat(),
-  /* พนักงานคนอื่นเริ่มจากไม่มีใบเลย ไม่ใช่ได้ใบตัวอย่างของคนตั้งต้นติดมา */
-  [],
 );
 
 export function useOtRecords() {
@@ -32,7 +25,7 @@ export function addOtRequest(input: {
 }) {
   const record: OtRecord = {
     /* เลขที่ใบขอตาม ERD: OT-ปี พ.ศ.-ลำดับ เดินต่อกันทั้งบริษัท */
-    id: nextDocNo(settings().docs.ot, store.all().flat().map((r) => r.id)),
+    id: nextDocNo("OT", store.all().flat().map((r) => r.id)),
     date: input.date,
     startMin: input.startMin,
     endMin: input.endMin,
@@ -41,7 +34,6 @@ export function addOtRequest(input: {
     reason: input.reason,
     status: "รออนุมัติ",
     comment: "",
-    employee: currentProfile().name,
     submittedAt: bkkStamp(),
   };
   store.update((rs) => [record, ...rs]);
@@ -57,32 +49,6 @@ export function cancelOtRequest(id: string) {
   store.update((rs) =>
     rs.map((r) =>
       r.id === id && r.status === "รออนุมัติ" ? { ...r, status: "ยกเลิก" as const } : r,
-    ),
-  );
-}
-
-/**
- * แก้คำขอโอทีที่ยังรออนุมัติ (เจ้าของสั่ง 29 ก.ย. 2569)
- * เหมือนใบลา — ของเดิมต้องยกเลิกแล้วขอใหม่ ทิ้งเลขที่ใบไปเปล่า ๆ
- * แก้ได้เฉพาะใบที่ยังไม่ถูกตัดสิน · เลขที่ใบและเวลาที่ยื่นคงเดิม
- */
-export function editOtRequest(
-  id: string,
-  patch: { date: string; startMin: number; endMin: number; hours: number; reason: string },
-) {
-  store.update((rs) =>
-    rs.map((r) =>
-      r.id === id && r.status === "รออนุมัติ"
-        ? {
-            ...r,
-            date: patch.date,
-            startMin: patch.startMin,
-            endMin: patch.endMin,
-            hours: patch.hours,
-            reason: patch.reason.trim(),
-            editedAt: bkkStamp(),
-          }
-        : r,
     ),
   );
 }

@@ -6,12 +6,12 @@ import { cloneElement, isValidElement, useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom";
 import { todayIso } from "@/lib/format";
 import { lockScroll } from "@/lib/scroll-lock";
-import { pushMobileBack } from "@/lib/mobile-back";
 import { CloseIcon } from "./icons";
+import "@/styles/mobile/sheet.css";
 
 import { DateField } from "./thai-date-picker";
 import { useAddOption } from "./add-option";
-/** โครงกล่องมาตรฐาน — ทุกกล่องในระบบเปิดจากขอบล่างบนมือถือ กลางจอบนเดสก์ท็อป */
+/** โครงกล่องมาตรฐาน — จอแคบกว่า md เปิดเป็นแผ่นจากขอบล่าง (styles/mobile/sheet.css) ตั้งแต่ md ขึ้นไปอยู่กลางจอ */
 export function Sheet({
   title,
   onClose,
@@ -21,6 +21,7 @@ export function Sheet({
   mid = false,
   narrow = false,
   steady = false,
+  className = "",
 }: {
   title: string;
   onClose: () => void;
@@ -34,6 +35,8 @@ export function Sheet({
   narrow?: boolean;
   /** เนื้อหายืดหดตามที่กรอก — ตรึงความสูงไว้ กล่องจะได้ไม่ขยับตอนใช้งาน */
   steady?: boolean;
+  /** คลาสเพิ่มที่ตัวกล่อง (panel) — หน้าที่เรียกใช้จับแต่งเนื้อหาเฉพาะหน้าได้ ไม่ต้องพึ่ง :has() */
+  className?: string;
 }) {
   /* เปิดกล่องได้หลัง hydrate เท่านั้น — ถ้าใช้ typeof document เซิร์ฟเวอร์จะวาดว่าง แต่เบราว์เซอร์วาดกล่อง
      ตอนที่กล่องเปิดมาตั้งแต่แรก (เช่นลิงก์ ?new=1) React จะฟ้อง hydration ไม่ตรงกัน */
@@ -44,12 +47,9 @@ export function Sheet({
     };
     document.addEventListener("keydown", onKey);
     const unlock = lockScroll();
-    /* ปุ่มย้อนกลับบนแถบหัวมือถือต้องปิดกล่องก่อน ไม่ใช่พาออกจากหน้าไปเลย */
-    const popBack = pushMobileBack(onClose);
     return () => {
       document.removeEventListener("keydown", onKey);
       unlock();
-      popBack();
     };
   }, [onClose]);
 
@@ -57,7 +57,7 @@ export function Sheet({
 
   return createPortal(
     <div
-      className="veil-in fixed inset-0 z-80 flex items-end justify-center bg-[rgb(28_20_45/0.42)] sm:items-start sm:p-6 sm:pt-[max(24px,7vh)]"
+      className="ui-sheet fixed inset-0 z-80 flex items-end justify-center bg-black/50 md:items-start md:p-6 md:pt-[max(24px,7vh)]"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -66,19 +66,19 @@ export function Sheet({
       }}
     >
       <div
-        className={`sheet-in glass-solid flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[22px] shadow-[0_-10px_40px_-18px_rgb(40_25_60/0.5)] sm:max-h-full sm:rounded-[18px] ${
+        className={`ui-sheet-panel glass-solid flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[18px] md:max-h-full md:rounded-[18px] ${
           wide ? "max-w-[1080px]" : mid ? "max-w-[720px]" : narrow ? "max-w-[620px]" : "max-w-[560px]"
-        }`}
+        } ${className}`}
       >
-        <div className="flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 sm:py-4">
+        <div className="ui-sheet-head flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 md:px-5 md:py-4">
           <h2 className="text-[16.5px] font-bold">{title}</h2>
           <button type="button" className="iconbtn glass-thin" onClick={onClose} aria-label="ปิด">
             <CloseIcon className="size-[15px]" strokeWidth={2.2} />
           </button>
         </div>
         <div
-          className={`scroll-stable min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 sm:py-[18px] ${
-            steady ? "sm:max-h-[min(70dvh,560px)] sm:min-h-[280px] sm:flex-none" : ""
+          className={`ui-sheet-body scroll-stable min-h-0 flex-1 overflow-auto px-4 py-4 md:px-5 md:py-[18px] ${
+            steady ? "md:max-h-[min(70dvh,560px)] md:min-h-[280px] md:flex-none" : ""
           }`}
         >
           {children}
@@ -86,8 +86,7 @@ export function Sheet({
         {/* กล่องที่วางปุ่มไว้ในเนื้อหาเอง (เช่นการ์ดงานย่อย) ส่ง footer เป็น null
             จะได้ไม่มีแถบท้ายเปล่า ๆ ค้างอยู่ใต้กล่อง */}
         {footer != null && footer !== false && (
-          /* มือถือ: ปุ่มท้ายกล่องเต็มความกว้าง สูง 48px ปุ่มหลักกว้างกว่า ตามต้นแบบชุดมือถือทุกหน้า */
-          <div className="flex flex-none items-center gap-2.5 border-t border-border px-[18px] py-3 pb-[max(16px,env(safe-area-inset-bottom))] max-sm:[&>.btn]:h-12! max-sm:[&>.btn]:flex-1 max-sm:[&>.btn]:justify-center max-sm:[&>.btn]:rounded-[14px]! max-sm:[&>.btn:last-child]:grow-[1.4] sm:justify-end sm:px-5 sm:py-3.5">
+          <div className="ui-sheet-foot flex flex-none items-center gap-2.5 border-t border-border px-4 py-3.5 pb-[max(14px,env(safe-area-inset-bottom))] md:justify-end md:px-5">
             {footer}
           </div>
         )}

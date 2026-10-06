@@ -41,7 +41,6 @@ export function LeadForm({
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [source, setSource] = useState("");
-  const [taxId, setTaxId] = useState("");
   /* สามช่องนี้คือสิ่งที่ใบกำกับภาษีบังคับ ถามตั้งแต่ตอนเพิ่ม จะได้ไม่ต้องย้อนมากรอกตอนบัญชีจะออกใบเสร็จ */
   const [buyerType, setBuyerType] = useState<BuyerType>("juristic");
   const [legalName, setLegalName] = useState("");
@@ -105,7 +104,8 @@ export function LeadForm({
       email: email.trim(),
       address: address.trim(),
       source,
-      taxId,
+      /* เลขภาษีกรอกตอนสร้างใบเสนอราคา (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+      taxId: "",
       type: buyerType,
       legalName: legalName.trim(),
       branch,
@@ -194,7 +194,7 @@ export function LeadForm({
               onChange={(e) => addSource.pick(e.target.value) || setSource(e.target.value)}
               className="field-control cursor-pointer"
             >
-              <option value="">ยังไม่ระบุ</option>
+              <option value="">— เลือก —</option>
               {optionsOf("leadSource").map((s) => (
                 <option key={s}>{s}</option>
               ))}
@@ -224,19 +224,6 @@ export function LeadForm({
               <option value="juristic">นิติบุคคล</option>
               <option value="individual">บุคคลธรรมดา</option>
             </select>
-          </Field>
-
-          <Field
-            label="เลขประจำตัวผู้เสียภาษี"
-            hint="จำเป็นตอนออกเอกสารการเงิน กรอกได้ 13 หลัก"
-          >
-            <input
-              value={taxId}
-              inputMode="numeric"
-              onChange={(e) => setTaxId(e.target.value.replace(/\D/g, "").slice(0, 13))}
-              placeholder="13 หลัก"
-              className="field-control num"
-            />
           </Field>
 
           {juristic && (
@@ -290,7 +277,7 @@ export function LeadForm({
               onChange={(e) => addChannel.pick(e.target.value) || setChannel(e.target.value)}
               className="field-control cursor-pointer"
             >
-              <option value="">ยังไม่ระบุ</option>
+              <option value="">— เลือก —</option>
               {optionsOf("leadChannel").map((c) => (
                 <option key={c}>{c}</option>
               ))}

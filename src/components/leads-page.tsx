@@ -102,6 +102,7 @@ export function LeadsPage() {
 
       <div className="bar">
         <div>
+          <h1>ผู้สนใจ</h1>
           <p>พบ {tab === "log" ? logs.length : rows.length} รายการ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
@@ -116,10 +117,10 @@ export function LeadsPage() {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0"
+            className="btn solid btn-solid btn-block-mobile shrink-0"
           >
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            <span className="lbl">เพิ่มผู้สนใจ</span>
+            เพิ่มผู้สนใจ
           </button>
         </div>
       </div>

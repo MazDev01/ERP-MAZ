@@ -60,7 +60,7 @@ export function ConfirmDialog({
     <div
       /* z สูงกว่ากล่องฟอร์ม (z-80) เพราะกล่องยืนยันเปิดจากในกล่องฟอร์มได้
          ถ้าต่ำกว่า มันจะไปโผล่ข้างหลังจนกดไม่ได้ */
-      className="veil-in fixed inset-0 z-90 flex items-end justify-center bg-[rgb(28_20_45/0.42)] p-4 sm:items-center"
+      className="fixed inset-0 z-90 flex items-end justify-center bg-black/50 p-4 sm:items-center"
       onClick={onCancel}
     >
       <div
@@ -68,7 +68,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-title"
         onClick={(e) => e.stopPropagation()}
-        className="sheet-in glass-solid w-full max-w-sm rounded-[18px] shadow-[0_18px_44px_-20px_rgb(40_25_60/0.55)]"
+        className="glass-solid w-full max-w-sm rounded-[18px]"
       >
         <div className="px-5 pt-5 pb-4">
           <h2 id="confirm-title" className="text-lg font-semibold">

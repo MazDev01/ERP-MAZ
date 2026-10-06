@@ -1,5 +1,5 @@
 import { BANGKOK_TZ, bkkOf, toIsoDate } from "./format";
-
+import type { Role } from "./role";
 import type { PunchGeo } from "./work-area";
 import {
   expectedInMinutes,
@@ -22,42 +22,37 @@ export type PunchRecord = {
 };
 
 /*
- * เก็บแยก "ตามคน" ไม่ใช่ตามบทบาท (เจ้าของสั่ง 29 ก.ย. 2569 · หลักการเดียวกับ role-store.ts)
- * บทบาทที่มีคนเดียวใช้ชื่อบทบาทเป็นคีย์เหมือนเดิม ของเก่าจึงไม่หาย
- * พนักงานมีหลายคน คีย์จึงเป็น staff:<รหัสพนักงาน>
- * รูปแบบที่เก็บคือ { sales: [...], pm: [...], "staff:E05": [...] }
+ * เก็บแยกตามบทบาท เพราะหนึ่งบทบาทคือหนึ่งคน — สลับบทบาทแล้วต้องเห็นการตอกบัตร
+ * ของคนนั้น ไม่ใช่ของคนก่อนหน้า (หลักการเดียวกับ role-store.ts)
+ * รูปแบบที่เก็บคือ { sales: [...], pm: [...], acc: [...] }
  */
 const STORAGE_KEY = "maz-hrm.attendance.v2";
 
-type ByPerson = Partial<Record<string, PunchRecord[]>>;
+type ByRole = Partial<Record<Role, PunchRecord[]>>;
 
-function readAll(): ByPerson {
+function readAll(): ByRole {
   if (typeof window === "undefined") return {};
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
-    return parsed as ByPerson;
+    return parsed as ByRole;
   } catch {
     return {};
   }
 }
 
-/** key = คีย์ของคน (บทบาท หรือ staff:<รหัสพนักงาน>) */
-export function loadRecords(key: string): PunchRecord[] {
-  const all = readAll();
-  /* คนที่เพิ่งเลือกครั้งแรกเริ่มจากยังไม่เคยตอกบัตร ไม่ใช่ได้ประวัติของคนตั้งต้นติดมา
-     คีย์ที่เป็นชื่อบทบาทตรง ๆ ยังอ่านของเดิมเหมือนเดิม */
-  const list = all[key];
+export function loadRecords(role: Role): PunchRecord[] {
+  const list = readAll()[role];
   return Array.isArray(list) ? list.filter(isPunchRecord) : [];
 }
 
-export function saveRecords(key: string, records: PunchRecord[]) {
+export function saveRecords(role: Role, records: PunchRecord[]) {
   try {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ ...readAll(), [key]: records }),
+      JSON.stringify({ ...readAll(), [role]: records }),
     );
   } catch {
     // โหมดส่วนตัว/โควตาเต็ม — ไม่ให้ทั้งหน้าพัง

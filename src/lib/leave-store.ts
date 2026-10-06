@@ -29,10 +29,6 @@ const store = createRoleStore<LeaveRecord[]>(
   LEAVE_RECORDS,
   (v): v is LeaveRecord[] => Array.isArray(v),
   fixLeaveStatuses,
-  /* หน้าอนุมัติมองพนักงานเป็นก้อนเดียว — รวมใบของทุกคนในบทบาทเข้าด้วยกัน */
-  (list) => list.flat(),
-  /* พนักงานคนอื่นเริ่มจากไม่มีใบเลย ไม่ใช่ได้ใบตัวอย่างของคนตั้งต้นติดมา */
-  [],
 );
 
 export function useLeaveRecords() {
@@ -55,8 +51,8 @@ export function addLeaveRequest(input: {
 }) {
   const record: LeaveRecord = {
     /* เลขที่ใบลาตาม ERD: LV-ปี พ.ศ.-ลำดับ เดินต่อกันทั้งบริษัท รวมใบลาของนักศึกษาฝึกงาน */
-    /* รวมเลขที่ของใบลาที่ยื่นผ่านคำขอของพนักงาน (emp-requests) ด้วย ไม่งั้นเลขซ้ำกับคิวของ GM */
-    id: nextDocNo(settings().docs.leave, [
+    /* รวมเลขที่ของใบลาที่ยื่นผ่านคำขอของทีมงาน (emp-requests) ด้วย ไม่งั้นเลขซ้ำกับคิวของ GM */
+    id: nextDocNo("LV", [
       ...store.all().flat().map((r) => r.id),
       ...HR_INTERN_LEAVE.map((r) => r.id),
       ...empRequestIds("leave"),
@@ -97,48 +93,6 @@ export function cancelLeaveRequest(id: string, reason: string) {
             cancelReason: reason.trim(),
             cancelledBy: by,
             cancelledAt: bkkStamp(),
-          }
-        : r,
-    ),
-  );
-}
-
-/**
- * แก้ใบลาที่ยังรออนุมัติ (เจ้าของสั่ง 29 ก.ย. 2569)
- * ของเดิมต้องยกเลิกแล้วยื่นใหม่ ซึ่งทิ้งเลขที่ใบไปเปล่า ๆ และผู้อนุมัติเห็นใบยกเลิกรกคิว
- * ใบที่ตัดสินหรือยกเลิกแล้วแก้ไม่ได้ · เลขที่ใบและเวลาที่ยื่นคงเดิม บันทึกเวลาที่แก้ไว้แทน
- */
-export function editLeaveRequest(
-  id: string,
-  patch: {
-    type: LeaveType;
-    from: string;
-    to: string;
-    days: number;
-    half?: "morning" | "afternoon";
-    startMin?: number;
-    endMin?: number;
-    hours?: number;
-    reason: string;
-    files?: string[];
-  },
-) {
-  store.update((records) =>
-    records.map((r) =>
-      r.id === id && r.status === "รอการอนุมัติ"
-        ? {
-            ...r,
-            type: patch.type,
-            date: patch.from,
-            toDate: patch.to,
-            days: patch.days,
-            half: patch.half,
-            startMin: patch.startMin,
-            endMin: patch.endMin,
-            hours: patch.hours,
-            comment: patch.reason.trim(),
-            files: patch.files?.length ? patch.files : undefined,
-            editedAt: bkkStamp(),
           }
         : r,
     ),
@@ -321,7 +275,7 @@ export function quotaAfterUsed(type: LeaveType, used: number, days: number) {
 
 /**
  * ช่วงที่คนหนึ่งไม่อยู่ — รูปกลางของ "ใครไม่อยู่วันไหน"
- * ใบลาของบทบาทที่ล็อกอินได้ กับคำขอลาของพนักงาน (emp-requests) คนละรูปกัน แต่ความหมายเดียวกัน
+ * ใบลาของบทบาทที่ล็อกอินได้ กับคำขอลาของทีมงาน (emp-requests) คนละรูปกัน แต่ความหมายเดียวกัน
  */
 export type AwaySpan = {
   id: string;

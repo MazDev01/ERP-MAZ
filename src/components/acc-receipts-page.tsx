@@ -36,7 +36,7 @@ export function receiptHref(no: string) {
 }
 
 /** จำนวนงวดของดีล — ใช้บอก "งวดสุดท้าย" หรือ "ชำระครั้งเดียว" */
-export function seqsOf(acc: AccState, deal: string) {
+function seqsOf(acc: AccState, deal: string) {
   return acc.deals.find((d) => d.no === deal)?.plan.length ?? 0;
 }
 
@@ -72,8 +72,13 @@ export function AccReceiptsPage() {
 
   return (
     <div className="space-y-4">
-      {/* มือถือ: การ์ดลอยบนพื้นหน้า ไม่มีแผงครอบ (ต้นแบบ billing.html) */}
-      <section className="panel plain-mobile glass flex flex-col">
+      <div className="bar">
+        <div>
+          <h1>ใบเสร็จ / ใบกำกับภาษี</h1>
+        </div>
+      </div>
+
+      <section className="panel glass flex flex-col">
         <div className="strip">
           <div className="tabs">
             <button type="button" className={tab === "todo" ? "on" : ""} onClick={() => setTab("todo")}>
@@ -332,8 +337,7 @@ export function AccReceiptsPage() {
  * พร้อมบรรทัดภาษีที่ถูกหักและหมายเหตุว่ายังรอหนังสือรับรอง ไม่งั้นใบเสร็จระบุเงินเกินที่ได้รับจริง
  * ยอดไม่ตรงกับที่ตกลงไว้เมื่อไร ต้องให้คนกดยืนยันก่อน จะได้ไม่พลาดเพราะพิมพ์ผิด
  */
-/** ใช้ที่หน้าวางบิลด้วย — มือถือออกใบเสร็จได้จากการ์ดงวดเลย (ต้นแบบ billing.html 1 ต.ค. 2569) */
-export function IssueDialog({
+function IssueDialog({
   invoice,
   seqs,
   first,

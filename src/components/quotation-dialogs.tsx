@@ -69,6 +69,47 @@ function KvSheet({
 }
 
 /**
+ * ยืนยันออกเลขที่เอกสาร — ขั้นที่ย้อนไม่ได้ จึงต้องเตือนก่อนเสมอ
+ * ออกแล้วเลขนั้นเป็นของใบนี้ตลอด แก้ไขและลบไม่ได้อีก ต้องออกใบใหม่เลขใหม่แทน
+ * ใช้จากหน้าสร้างใบเสนอราคา — ไม่มีร่าง (ผู้ใช้สั่ง 5 ต.ค. 2569: ไม่มีร่าง ออกแล้วแก้ไม่ได้ ต้องออกใบใหม่)
+ */
+export function IssueNumberDialog({
+  customerName,
+  issuer,
+  total,
+  onGo,
+  onClose,
+}: {
+  customerName: string;
+  issuer: string;
+  /** ยอดรวมทั้งสิ้น (บาท) */
+  total: number;
+  onGo: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <KvSheet
+      title="ออกเลขที่เอกสาร"
+      rows={[
+        ["ผู้สนใจ", customerName],
+        ["ออกในนาม", issuer],
+        ["ยอดรวม", `${baht(total)} บาท`],
+      ]}
+      go="ออกเลขที่เอกสาร"
+      onGo={onGo}
+      onClose={onClose}
+    >
+      <p className="mt-4 rounded-[11px] bg-[var(--destructive-soft)] px-3.5 py-3 text-[12.5px] leading-relaxed font-semibold text-destructive">
+        ออกเลขที่แล้วย้อนกลับไม่ได้ ใบนี้จะแก้ไขหรือลบไม่ได้อีก ถ้าต้องแก้ต้องออกใบใหม่เป็นเลขใหม่
+        <span className="mt-1 block font-normal">
+          ยังไม่พร้อมก็กดปิดเพื่อกลับไปแก้ในฟอร์มต่อ ใบนี้ยังไม่ถูกบันทึก
+        </span>
+      </p>
+    </KvSheet>
+  );
+}
+
+/**
  * ลูกค้าปฏิเสธ — กดบันทึกได้อย่างเดียว ที่เหลือระบบอนุมานเอง
  * เหตุผลเป็นข้อความอิสระตามต้นแบบ ไปขึ้นในรายงาน "เหตุผลที่ไม่ตกลง"
  */

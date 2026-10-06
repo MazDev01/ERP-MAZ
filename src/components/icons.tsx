@@ -261,7 +261,7 @@ export const PlanBoardIcon = (p: IconProps) => (
 export const ProjectIcon = (p: IconProps) => (
   <Base {...p}><rect x="3" y="4" width="18" height="17" rx="2.4" /><path d="M8 2v4M16 2v4M3 10h18" /><path d="M8 14h3M8 17h6" /></Base>
 );
-/** พนักงาน */
+/** ทีมงาน */
 export const TeamIcon = (p: IconProps) => (
   <Base {...p}><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-5.4 6-5.4s6 2.1 6 5.4" /><path d="M16 11.2A3.2 3.2 0 1 0 16 4.8" /><path d="M18 20c0-2.6-1-4.4-2.6-5.4" /></Base>
 );

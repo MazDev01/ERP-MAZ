@@ -136,7 +136,6 @@ export function PhotoCropper({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          /* กรอบครอปเป็นวงกลม ให้ตรงกับรูปโปรไฟล์ที่แสดงจริงในระบบ (เจ้าของสั่ง 1 ต.ค. 2569) */
           className="relative max-w-full cursor-grab touch-none overflow-hidden rounded-full bg-neutral-900 ring-4 ring-white/80 active:cursor-grabbing"
         >
           {natural && (

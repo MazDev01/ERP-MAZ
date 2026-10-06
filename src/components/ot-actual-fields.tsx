@@ -6,7 +6,7 @@
  * แสดงเวลาเข้า-ออกจริงของวันนั้น + ข้อเสนอของระบบ แล้วให้ผู้อนุมัติแก้ชั่วโมงได้ (ทีละ 0.25 ไม่เกินที่ขอ)
  * ปรับชั่วโมงแล้วไม่พิมพ์เหตุผล ระบบเติมเหตุผลให้เอง · ถ้าพิมพ์ไว้ใช้ของผู้อนุมัติ
  *
- * บัตรตอกอ่านตามบทบาท (useAllPunches) · พนักงานที่ยังไม่มีบัญชีไม่มีบัตรตอกในระบบ
+ * บัตรตอกอ่านตามบทบาท (useAllPunches) · ทีมงานที่ยังไม่มีบัญชีไม่มีบัตรตอกในระบบ
  * ใช้ทะเบียนฝ่ายบุคคลบอกเหตุผลถ้ามีรายการของวันนั้น ไม่มีก็บอกว่าไม่มีบันทึก
  */
 
@@ -26,7 +26,7 @@ export type OtReq = {
   hours: number;
   /** ใบของบทบาทที่ล็อกอินได้ */
   role?: Role;
-  /** รหัสพนักงาน — พนักงานที่ยังไม่มีบัญชี */
+  /** รหัสพนักงาน — ทีมงานที่ยังไม่มีบัญชี */
   emp?: string;
 };
 
@@ -91,7 +91,16 @@ export function useOtDecision(req: OtReq | null) {
 }
 
 /** เวลาตอกบัตรจริง + ช่องชั่วโมงที่อนุมัติ + เหตุผล (ไม่บังคับ) */
-export function OtActualFields({ d, idPrefix }: { d: OtDecision; idPrefix: string }) {
+export function OtActualFields({
+  d,
+  idPrefix,
+  fixed = false,
+}: {
+  d: OtDecision;
+  idPrefix: string;
+  /** ผู้อนุมัติแก้ชั่วโมงไม่ได้ — อนุมัติได้เท่าที่ขอเท่านั้น (หน้า CEO · ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  fixed?: boolean;
+}) {
   const a = d.actual;
   if (!a) return null;
   const tone = a.state === "cut" ? "text-warning" : "text-muted-foreground";
@@ -102,6 +111,29 @@ export function OtActualFields({ d, idPrefix }: { d: OtDecision; idPrefix: strin
         <b className="num font-semibold text-foreground">{punchRange(a)}</b>
         <span className={`block ${tone}`}>{a.note}</span>
       </p>
+      {fixed ? (
+        /* CEO เห็นตัวเลขอย่างเดียว ไม่มีช่องแก้ — อนุมัติ = ตามชั่วโมงที่ขอ · ไม่ตรงก็กดไม่อนุมัติ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+        <>
+          <p>
+            <span className="font-semibold text-muted-foreground">ชั่วโมงที่อนุมัติ </span>
+            <b className="num font-semibold text-foreground">{d.asked.toFixed(2)} ชม.</b>
+            <span className="text-muted-foreground"> (ตามที่ขอ)</span>
+          </p>
+          {d.tooSmall && (
+            <p className="text-destructive">
+              ชั่วโมงที่ขอ {d.asked.toFixed(2)} ชม. ต่ำกว่าขั้นต่ำ {OT_MIN_HOURS.toFixed(2)} ชม. — อนุมัติไม่ได้ ให้กดไม่อนุมัติ
+            </p>
+          )}
+          <input
+            value={d.comment}
+            onChange={(e) => d.setComment(e.target.value)}
+            placeholder="เหตุผล/หมายเหตุ (ไม่บังคับ)"
+            aria-label="เหตุผลหรือหมายเหตุการอนุมัติ"
+            className="field-control h-9 w-full rounded-[10px] px-3 text-[13px]"
+          />
+        </>
+      ) : (
+      <>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <label htmlFor={`${idPrefix}-hours`} className="font-semibold text-muted-foreground">
           ชั่วโมงที่อนุมัติ
@@ -151,6 +183,8 @@ export function OtActualFields({ d, idPrefix }: { d: OtDecision; idPrefix: strin
         aria-label="เหตุผลหรือหมายเหตุการอนุมัติ"
         className="field-control h-9 w-full rounded-[10px] px-3 text-[13px]"
       />
+      </>
+      )}
     </div>
   );
 }

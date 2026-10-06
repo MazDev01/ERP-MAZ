@@ -10,8 +10,12 @@
 
 import { useRole } from "@/lib/role";
 
+/*
+ * GM สืบทอดงานทั้งหมดของ PM — รับงาน จัดคิว มอบหมาย ตรวจงานได้เหมือน PM ต่างแค่มีงานอนุมัติเพิ่ม
+ * (ผู้ใช้สั่ง 5 ต.ค. 2569) จึงไม่มีบทบาทไหนเป็นโหมดดูอย่างเดียวในหน้าของ PM แล้ว
+ */
 export function usePmReadOnly() {
-  return useRole() === "gm";
+  return false;
 }
 
 export function ReadOnlyNote({ owner = "PM" }: { owner?: string }) {

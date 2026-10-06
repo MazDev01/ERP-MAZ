@@ -88,7 +88,34 @@ function isAccState(value: unknown): value is AccState {
  *                     ชื่อคนยกเลิกกับเวลาเพิ่มขึ้นมา · ของเก่า v6–v8 ค้างคำขอที่ไม่มีหน้าจอรับแล้ว
  *                     และใบที่รอใบลดหนี้อนุมัติยังไม่เคยถูกยกเลิกจริง เดาแทนคนยกเลิกไม่ได้
  */
-const store = createPersistedStore<AccState>("maz-erp.acc.v9", INITIAL, isAccState);
+/*
+ * เติมวางบิลงวดแรกของโปรเจคตั้งต้นที่เพิ่มเข้าชุดตั้งต้นทีหลัง (ผู้ใช้สั่ง 5 ต.ค. 2569)
+ * โปรเจคผูกกับใบแจ้งหนี้งวดแรก เครื่องที่เก็บข้อมูลบัญชีไว้ก่อนจึงต้องมีใบพวกนี้ด้วย
+ * กติกา "เติมของที่หาย ไม่ทับของที่มี" — ดีลที่มีอยู่แล้ว หรือเลขที่เอกสารที่ถูกใช้ไปแล้วในเครื่อง ข้ามทั้งชุด
+ */
+function migrateAcc(v: AccState): AccState {
+  const haveDeal = new Set(v.deals.map((d) => d.no));
+  const usedInv = new Set(v.invoices.map((x) => x.no));
+  const usedRcp = new Set(v.receipts.map((x) => x.no));
+  const add = ACC_DEALS.filter((d) => {
+    if (haveDeal.has(d.no)) return false;
+    const inv = ACC_INVOICES.filter((x) => x.deal === d.no);
+    const rcp = ACC_RECEIPTS.filter((x) => x.deal === d.no);
+    return !inv.some((x) => usedInv.has(x.no)) && !rcp.some((x) => usedRcp.has(x.no));
+  });
+  if (!add.length) return v;
+  const nos = new Set(add.map((d) => d.no));
+  const invNos = new Set(ACC_INVOICES.filter((x) => nos.has(x.deal)).map((x) => x.no));
+  return {
+    ...v,
+    deals: [...v.deals, ...add.map((d) => ({ ...d, accSeen: true }))],
+    invoices: [...v.invoices, ...ACC_INVOICES.filter((x) => nos.has(x.deal))],
+    receipts: [...v.receipts, ...ACC_RECEIPTS.filter((x) => nos.has(x.deal))],
+    payments: [...v.payments, ...ACC_PAYMENTS.filter((x) => invNos.has(x.inv))],
+  };
+}
+
+const store = createPersistedStore<AccState>("maz-erp.acc.v9", INITIAL, isAccState, migrateAcc);
 
 export function useAcc() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);

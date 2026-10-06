@@ -107,7 +107,6 @@ export function AdminLeavePage() {
     <div className="space-y-4">
       <AdminHead
         title="ประเภทการลา"
-        code="HR-12"
         desc="สิทธิ์วันลาต่อปีของพนักงานทุกบทบาท — พนักงานเห็นวันคงเหลือจากตัวเลขนี้ และระบบเตือนเมื่อยื่นลาเกินสิทธิ์"
       />
 

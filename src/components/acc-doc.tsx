@@ -14,7 +14,6 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { pdfName, savePdf } from "@/lib/pdf";
 import {
   creditKind,
   debitKind,
@@ -316,7 +315,7 @@ export function AccCreditDocView({ no }: { no: string }) {
  * แล้วย่อทั้งแผ่นให้พอดีความกว้างจอ (zoom) ไม่เรียงเนื้อหาใหม่เป็นแถวเดียว
  * ตอนสั่งพิมพ์ปิดโหมดย่อ ให้กระดาษกลับไปใช้สไตล์พิมพ์ตามปกติ
  */
-function PaperFit({ children, paperRef }: { children: React.ReactNode; paperRef?: React.RefObject<HTMLDivElement | null> }) {
+function PaperFit({ children }: { children: React.ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(0);
 
@@ -351,7 +350,6 @@ function PaperFit({ children, paperRef }: { children: React.ReactNode; paperRef?
   return (
     <div ref={box} className="w-full">
       <div
-        ref={paperRef}
         data-a4={zoom ? "" : undefined}
         className="group/doc flex flex-col items-center gap-5"
         style={zoom ? { zoom, width: 794 } : undefined}
@@ -411,20 +409,6 @@ function DocShell({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  /* สร้างไฟล์ PDF จากกระดาษที่เห็นบนจอ (ข้อเสนอโครงการ · Export PDF) */
-  const paper = useRef<HTMLDivElement>(null);
-  const [saving, setSaving] = useState(false);
-  const [pdfError, setPdfError] = useState("");
-
-  async function download() {
-    if (!paper.current || saving) return;
-    setSaving(true);
-    setPdfError("");
-    const res = await savePdf(paper.current, pdfName([no, cus]));
-    setSaving(false);
-    if (!res.ok) setPdfError(`ดาวน์โหลดไม่สำเร็จ: ${res.error} — ใช้ปุ่มพิมพ์แล้วเลือกบันทึกเป็น PDF แทนได้`);
-  }
-
   return (
     <div className="space-y-4">
       <div className="bar no-print">
@@ -448,21 +432,15 @@ function DocShell({
           </button>
           <button
             type="button"
-            className="btn solid btn-solid btn-block-mobile shrink-0 disabled:opacity-60"
-            disabled={saving}
-            onClick={download}
+            className="btn solid btn-solid btn-block-mobile shrink-0"
+            onClick={() => window.print()}
           >
             <DownloadIcon className="size-[15px]" strokeWidth={2} />
-            {saving ? "กำลังสร้างไฟล์…" : "ดาวน์โหลด PDF"}
+            ดาวน์โหลด PDF
           </button>
         </div>
       </div>
-      {pdfError && (
-        <p role="alert" className="no-print rounded-xl bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] font-medium text-destructive">
-          {pdfError}
-        </p>
-      )}
-      <PaperFit paperRef={paper}>{children}</PaperFit>
+      <PaperFit>{children}</PaperFit>
     </div>
   );
 }

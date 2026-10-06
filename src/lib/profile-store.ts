@@ -11,7 +11,6 @@
 
 import { useSyncExternalStore } from "react";
 import { currentRole, useRole, type Role } from "./role";
-import { reportStorageError } from "./storage-health";
 
 const STORAGE_KEY = "maz-hrm.profile-photo.v2";
 /** คีย์เดิมที่เก็บรูปเดียวใช้ร่วมกันทุกบทบาท — ล้างทิ้งครั้งเดียวตอนอ่านครั้งแรก */
@@ -60,9 +59,8 @@ export function setProfilePhoto(dataUrl: string | null, role?: Role) {
   cache = next;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch (error) {
-    /* รูปเก็บเป็น data URL จึงกินพื้นที่มาก เต็มเมื่อไรต้องบอกผู้ใช้ ไม่ใช่เงียบ (BUG-003) */
-    reportStorageError(error);
+  } catch {
+    // โควตาเต็มหรือโหมดส่วนตัว — ยังให้หน้าจอเปลี่ยนตามได้
   }
   for (const listener of listeners) listener();
 }
@@ -88,19 +86,4 @@ export function readImageAsDataUrl(file: File) {
     reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
     reader.readAsDataURL(file);
   });
-}
-
-/** รูปโปรไฟล์ที่รับได้ — เก็บเป็น data URL ใน localStorage จึงต้องจำกัดขนาด */
-export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-export const PHOTO_MAX_MB = 2;
-
-/**
- * ตรวจไฟล์ก่อนเอาไปทำรูปโปรไฟล์ (ตรวจระบบ 5 ต.ค. 2569 · BUG-002)
- * เดิมรับทุกไฟล์แล้วเงียบ เลือกไฟล์ข้อความมาก็ไม่มีอะไรเกิดขึ้น ผู้ใช้ไม่รู้ว่าพลาดตรงไหน
- * กัน accept ของช่องเลือกไฟล์อย่างเดียวไม่พอ เพราะลากวางหรือมือถือบางรุ่นข้ามได้
- */
-export function checkPhotoFile(file: File): string | null {
-  if (!PHOTO_TYPES.includes(file.type)) return "ไฟล์นี้ไม่ใช่รูปภาพ ใช้ได้เฉพาะ JPG PNG GIF หรือ WEBP";
-  if (file.size > PHOTO_MAX_MB * 1024 * 1024) return `รูปใหญ่เกิน ${PHOTO_MAX_MB} MB ย่อรูปก่อนแล้วลองใหม่`;
-  return null;
 }

@@ -18,14 +18,15 @@ import { attachContract, useCrm } from "@/lib/crm-store";
 import { dealPaid, useAcc } from "@/lib/acc-store";
 import { billingOf, dealTrack } from "@/lib/flow";
 import { usePm } from "@/lib/pm-store";
-import { baht, thaiDate, todayIso } from "@/lib/format";
+import { baht, initials, thaiDate, todayIso } from "@/lib/format";
 import { USERS } from "@/lib/mock-data";
 import { useRole } from "@/lib/role";
-import { BanIcon, CalendarIcon, ChevronDownIcon, PaperclipIcon } from "./icons";
+import { BanIcon, CalendarIcon, PaperclipIcon } from "./icons";
 import { CancelDealDialog } from "./cancel-deal-dialog";
 import { Sheet } from "./lead-dialogs";
 import { Pager, SearchBox, TabStrip, Who, usePaged } from "./sales-ui";
 import { ThaiDatePicker } from "./thai-date-picker";
+import "@/styles/mobile/deals.css";
 
 const PER_PAGE = 7;
 
@@ -79,9 +80,10 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
   const attachRow = attaching ? crm.deals.find((d) => d.no === attaching) : undefined;
 
   return (
-    <div className="space-y-4">
+    <div className="deals-m space-y-4">
       <div className="bar">
         <div>
+          <h1>ดีล</h1>
           <p>พบ {rows.length} ดีล</p>
         </div>
         <div className="tools w-full sm:w-auto">
@@ -96,8 +98,7 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
         </div>
       </div>
 
-      {/* มือถือ: การ์ดวางบนพื้นหน้า ไม่มีกรอบขาวครอบอีกชั้น (ต้นแบบ deals.html 2 ต.ค. 2569) */}
-      <section className="panel glass flex flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
+      <section className="panel glass flex flex-col">
         <div className="strip">
           <TabStrip
             tabs={TABS}
@@ -123,7 +124,7 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
           onCancel={setCancelling}
         />
 
-        <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">
+        <div className="scroll-stable min-h-0 flex-1 overflow-auto max-md:hidden">
           <table className="data-table cards-sm min-w-[900px]">
             <thead>
               <tr>
@@ -236,10 +237,9 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
           </table>
         </div>
 
-        {/* มือถือเหลือแค่ปุ่มแบ่งหน้าตรงกลาง ช่วงที่แสดงกับยอดรวมอยู่บนจอใหญ่พอ (ต้นแบบ deals.html) */}
-        <div className="foot flex-col items-stretch gap-3 text-center max-sm:border-0! max-sm:justify-center sm:flex-row sm:items-center sm:text-left">
-          <span className="max-sm:hidden">{paged.range("ดีล")}</span>
-          <span className="sum max-sm:hidden">
+        <div className="foot flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
+          <span>{paged.range("ดีล")}</span>
+          <span className="sum">
             มูลค่ารวมที่กรอง<b>{baht(filteredTotal)}</b> บาท
           </span>
           {/* ไม่มีผลลัพธ์ก็ไม่ต้องแสดงปุ่มแบ่งหน้า ตาม mockup */}
@@ -300,7 +300,12 @@ function WorkProgress({ deal, className = "" }: { deal: Deal; className?: string
   );
 }
 
-/** รายการดีลบนมือถือ — ชื่อลูกค้าและสถานะก่อน มูลค่าเด่น ปุ่มท้ายการ์ดกว้างเต็มแถว */
+/**
+ * รายการดีลบนมือถือ (ต้นแบบ deals.html จอ ≤760px) — การ์ดมนแยกใบ: วงกลมตัวย่อ · ชื่อลูกค้ากับมูลค่า
+ * · เลขที่ดีลกับสถานะ · ปุ่มใบเสนอราคา · เส้นประ · วันส่งมอบกับปุ่มไอคอน
+ * กดการ์ดที่ยกเลิกหรือมีสัญญา = กางรายละเอียดใต้การ์ด (เหมือนกดแถวในตาราง)
+ * หน้าตาอยู่ใน styles/mobile/deals.css
+ */
 function DealCards({
   list,
   nameOf,
@@ -323,94 +328,81 @@ function DealCards({
   onCancel: (no: string) => void;
 }) {
   if (!list.length) {
-    return <p className="px-5 py-12 text-center text-muted-foreground sm:hidden">ไม่พบดีลที่ตรงกับเงื่อนไข</p>;
+    return <p className="px-5 py-12 text-center text-muted-foreground md:hidden">ไม่พบดีลที่ตรงกับเงื่อนไข</p>;
   }
   return (
-    <ul className="flex flex-col gap-2.5 px-4 pt-3 pb-1 sm:hidden">
+    <ul className="dl-rows md:hidden">
       {list.map((d) => {
         const cons = d.contracts ?? [];
-        const isOpen = Boolean(open[d.no]) && canOpen(d);
+        const can = canOpen(d);
+        const isOpen = Boolean(open[d.no]) && can;
         const name = nameOf.get(d.customerCode) ?? d.customerCode;
         return (
-          <li key={d.id} className="rounded-[20px] bg-card p-3.5 shadow-[0_1px_2px_rgb(40_20_25/0.04)]">
-            <div className="flex gap-3">
-              {/* วงกลมย่อชื่อลูกค้า — โทนน้ำเงินตามต้นแบบ แยกจากการ์ดฝั่ง PM ที่เป็นโทนส้ม */}
-              <span className="grid size-10 flex-none place-items-center rounded-full bg-[#E8F0FC] text-[16px] font-bold text-[#1A5DB5]">
-                {name.replace(/^(บริษัท|ห้าง|ร้าน)\s*/, "").replace(/\s/g, "").slice(0, 2)}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start gap-2">
-                  <b className="min-w-0 flex-1 text-[15.5px] leading-snug font-bold">{name}</b>
-                  <b className="num flex-none text-[15.5px] font-bold whitespace-nowrap">{baht(d.total)} ฿</b>
-                </div>
-                <div className="mt-0.5 flex items-center gap-2">
-                  <span className="num flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-                    {d.no}
-                    {cons.length > 0 && (
-                      <em className="rounded-full bg-[#E8F0FC] px-2 py-0.5 text-[11px] font-semibold text-[#1A5DB5] not-italic">
-                        มีสัญญา {cons.length} ฉบับ
-                      </em>
-                    )}
-                  </span>
-                  <span className={`tag shrink-0 ${DEAL_STATUS[d.status]}`}>
-                    <i />
-                    {d.status}
-                  </span>
-                </div>
-                {d.quotationNo && (
-                  <Link
-                    href={quoHref(d.quotationNo)}
-                    className="num mt-1.5 inline-flex items-center rounded-full border border-border bg-card px-2.5 py-1 text-[12px] font-semibold text-muted-foreground max-sm:min-h-9 max-sm:px-3.5"
-                  >
-                    {d.quotationNo}
-                  </Link>
-                )}
-                <WorkProgress deal={d} className="mt-1.5" />
-              </div>
-            </div>
-
-            <div className="mt-2 border-t border-dashed border-[#ECE3E5]" />
-
-            <div className="mt-2.5 flex items-center gap-2">
-              <span className="num flex min-w-0 flex-1 items-center gap-1.5 text-[12.5px] font-semibold text-[#6E6164]">
-                <CalendarIcon className="size-3.5 flex-none text-muted-foreground" strokeWidth={2.2} />
-                ส่งมอบ {d.delivery ? thaiDate(d.delivery) : "—"}
-              </span>
-              <span className="flex flex-none gap-2">
-                {canOpen(d) && (
-                  <button
-                    type="button"
-                    onClick={() => onToggle(d.no)}
-                    aria-expanded={isOpen}
-                    aria-label={`รายละเอียดดีล ${d.no}`}
-                    className="grid size-9 place-items-center rounded-[10px] border border-border bg-card text-muted-foreground"
-                  >
-                    <ChevronDownIcon className={`size-4 transition-transform ${isOpen ? "rotate-180" : ""}`} strokeWidth={2.2} />
-                  </button>
-                )}
-                {/* แนบสัญญาได้ทุกดีล รวมดีลที่ยกเลิกแล้ว (เก็บเป็นหลักฐาน) */}
+          <li
+            key={d.id}
+            className="dl-card"
+            style={{ cursor: can ? "pointer" : undefined }}
+            aria-expanded={can ? isOpen : undefined}
+            onClick={() => can && onToggle(d.no)}
+          >
+            <span className="dl-av" aria-hidden>
+              {initials(name)}
+            </span>
+            <b className="dl-cus">{name}</b>
+            <span className="dl-amt num">{baht(d.total)} ฿</span>
+            <span className="dl-no num">
+              {d.no}
+              {cons.length > 0 && <span className="dl-has">มีสัญญา {cons.length} ฉบับ</span>}
+            </span>
+            <span className={`dl-st tag ${DEAL_STATUS[d.status]}`}>
+              <i />
+              {d.status}
+            </span>
+            <span className="dl-pg">
+              <WorkProgress deal={d} />
+            </span>
+            <span className="dl-quo">
+              {d.quotationNo ? (
+                <Link href={quoHref(d.quotationNo)} className="num" onClick={(e) => e.stopPropagation()}>
+                  {d.quotationNo}
+                </Link>
+              ) : (
+                <span>ไม่มีใบเสนอราคา</span>
+              )}
+            </span>
+            <span className="dl-deli num">
+              <CalendarIcon strokeWidth={2} />
+              ส่งมอบ {d.delivery ? thaiDate(d.delivery) : "—"}
+            </span>
+            <span className="dl-act" onClick={(e) => e.stopPropagation()}>
+              {/* แนบสัญญาได้ทุกดีล รวมดีลที่ยกเลิกแล้ว (เก็บเป็นหลักฐาน) */}
+              <button
+                type="button"
+                className="iconbtn glass-thin"
+                onClick={() => onAttach(d.no)}
+                aria-label={`แนบสัญญา ${d.no}`}
+                title="แนบสัญญา"
+              >
+                <PaperclipIcon className="size-4" strokeWidth={2} />
+              </button>
+              {canCancel(d) && (
                 <button
                   type="button"
-                  className="grid size-9 place-items-center rounded-[10px] border border-border bg-card text-muted-foreground"
-                  aria-label={`แนบสัญญา ${d.no}`}
-                  onClick={() => onAttach(d.no)}
+                  className="iconbtn glass-thin hover:!border-destructive hover:!text-destructive"
+                  data-ceo-hide
+                  onClick={() => onCancel(d.no)}
+                  aria-label={`ยกเลิกดีล ${d.no}`}
+                  title="ยกเลิกดีล"
                 >
-                  <PaperclipIcon className="size-4" strokeWidth={2} />
+                  <BanIcon className="size-4" strokeWidth={2.2} />
                 </button>
-                {canCancel(d) && (
-                  <button
-                    type="button"
-                    className="grid size-9 place-items-center rounded-[10px] border border-border bg-card text-destructive"
-                    data-ceo-hide
-                    aria-label={`ยกเลิกดีล ${d.no}`}
-                    onClick={() => onCancel(d.no)}
-                  >
-                    <BanIcon className="size-4" strokeWidth={2.2} />
-                  </button>
-                )}
-              </span>
-            </div>
-            {isOpen && <SubCard deal={d} />}
+              )}
+            </span>
+            {isOpen && (
+              <div className="dl-sub" onClick={(e) => e.stopPropagation()}>
+                <SubCard deal={d} />
+              </div>
+            )}
           </li>
         );
       })}

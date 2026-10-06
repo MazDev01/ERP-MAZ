@@ -55,9 +55,10 @@ export function resetBotnav(role: Role) {
   });
 }
 
-/** หน้าหลักกับโปรไฟล์ไม่ได้อยู่ในเมนูข้าง แต่เลือกมาไว้ในแถบล่างได้ */
+/** หน้าหลักกับโปรไฟล์ไม่ได้อยู่ในเมนูข้าง แต่เลือกมาไว้ในแถบล่างได้
+ *  บทบาทที่หน้าหลักคือหน้าลงเวลาเอง (นักศึกษาฝึกงาน) ไม่มีช่องหน้าหลัก เพราะซ้ำกับปุ่มกลาง */
 export const BOTNAV_EXTRA = (role: Role) => [
-  { href: mobileHomeOf(role), label: "หน้าหลัก", icon: "home" as const },
+  ...(mobileHomeOf(role) === "/" ? [] : [{ href: mobileHomeOf(role), label: "หน้าหลัก", icon: "home" as const }]),
   { href: "/profile", label: "โปรไฟล์", icon: "user" as const },
 ];
 
@@ -75,17 +76,15 @@ export function botnavChoices(items: NavItem[], role: Role) {
 /*
  * ค่าตั้งต้น: หน้าหลัก · แดชบอร์ด · การลา · โปรไฟล์
  *
- * บทบาทที่ไม่มีแดชบอร์ด (เช่นพนักงาน) ใช้หน้างานหน้าแรกของบทบาทแทน
- * เจ้าของสั่ง 25 ก.ย. 2569 ให้แถบของพนักงานเป็น หน้าหลัก · งานที่ได้รับ · ลงเวลา · การลา · โปรไฟล์
+ * บทบาทที่ไม่มีแดชบอร์ด (เช่นทีมงาน) ใช้หน้างานหน้าแรกของบทบาทแทน
+ * เจ้าของสั่ง 25 ก.ย. 2569 ให้แถบของทีมงานเป็น หน้าหลัก · งานที่ได้รับ · ลงเวลา · การลา · โปรไฟล์
  * เดิมช่องที่สองว่างเปล่าเพราะไปหาแต่หน้าแดชบอร์ดที่บทบาทนั้นไม่มี
  */
 export function botnavDefault(items: NavItem[], role: Role) {
   const work = items.filter((i) => i.href !== "/" && i.href !== "/leave");
-  /* ผู้บริหารเข้าหน้าคำขออนุมัติทุกวัน แถบล่างจึงเป็นช่องนั้น ไม่ใช่แดชบอร์ด (ต้นแบบ home-ceo.html) */
   const second =
-    (role === "ceo" ? items.find((i) => i.href.endsWith("/approvals")) : undefined) ??
-    items.find((i) => i.href.endsWith("/dashboard") || i.href === "/presales-dash") ??
-    work[0];
+    items.find((i) => i.href.endsWith("/dashboard") || i.href === "/presales-dash") ?? work[0];
   const leave = items.find((i) => i.href === "/leave");
-  return [mobileHomeOf(role), second?.href ?? BOTNAV_EMPTY, leave?.href ?? BOTNAV_EMPTY, "/profile"];
+  const home = mobileHomeOf(role) === "/" ? BOTNAV_EMPTY : mobileHomeOf(role);
+  return [home, second?.href ?? BOTNAV_EMPTY, leave?.href ?? BOTNAV_EMPTY, "/profile"];
 }

@@ -37,6 +37,7 @@ import { ProfileFacts } from "./lead-facts";
 import { ChangeFromTo } from "./sales-ui";
 import { findLink } from "@/lib/deep-link";
 import { LeadStatusMenu } from "./lead-status-menu";
+import "@/styles/mobile/lead-detail.css";
 
 const PANES = [
   { key: "timeline", label: "ไทม์ไลน์การติดต่อ" },
@@ -142,21 +143,80 @@ export function LeadDetailPage({ code }: { code: string }) {
   const createdAt = acts.at(-1)?.date ?? "";
   const hasDeal = (no: string) => crm.deals.some((d) => d.quotationNo === no);
 
+  /* ปุ่มรอง (ปฏิเสธ · ลบ · รับช่วง · บันทึกการติดต่อ) — จอคอมอยู่บนแถบหัวเรื่อง มือถืออยู่ท้ายหน้าตามต้นแบบ */
+  const secondaryActions = (
+    <>
+      {/* ปฏิเสธได้เฉพาะรายการที่ยังเป็นผู้สนใจ (ต้นแบบ: status = lead) · เปลี่ยนกลับได้ที่ป้ายสถานะ */}
+      {customer.status === "รอนัดหมาย" && (
+        <button
+          type="button"
+          className="btn glass-thin text-destructive"
+          onClick={() => setCloseOpen(true)}
+        >
+          <BanIcon className="size-[15px]" strokeWidth={2.2} />
+          ปฏิเสธ
+        </button>
+      )}
+      {/* ลบได้เฉพาะรายที่ยังไม่มีเอกสารผูกอยู่ — กรอกผิดคนแล้วลบทิ้งได้ ไม่ต้องทิ้งขยะไว้ในรายชื่อ
+         รายที่มีคำขอ ใบเสนอราคา หรือดีลแล้ว ปุ่มยังอยู่แต่กดไม่ได้ พร้อมบอกเหตุผล */}
+      <button
+        type="button"
+        className="btn glass-thin text-destructive disabled:cursor-not-allowed disabled:opacity-45"
+        disabled={Boolean(blockWhy)}
+        title={blockWhy || undefined}
+        onClick={() => setDelOpen(true)}
+      >
+        <TrashIcon className="size-[15px]" strokeWidth={2.2} />
+        ลบผู้สนใจ
+      </button>
+      {!mine && (
+        <button
+          type="button"
+          className="btn glass-thin"
+          onClick={() => setTakeOverOpen(true)}
+        >
+          <HandoverIcon className="size-[15px]" strokeWidth={2.2} />
+          รับช่วงดูแล
+        </button>
+      )}
+      <button type="button" className="btn glass-thin" onClick={() => setLogOpen(true)}>
+        <PlusIcon className="size-[15px]" strokeWidth={2.2} />
+        บันทึกการติดต่อ
+      </button>
+    </>
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="ld-m space-y-4 max-md:space-y-3">
+      {/* มือถือ: ชื่อ + ป้ายสถานะซ้าย ปุ่มสร้างใบเสนอราคาขวา (ต้นแบบ .title ≤760px) */}
+      <div className="md:hidden">
+        <div className="ld-title">
+          <h1>{customer.name}</h1>
+          <span className="ld-tg">
+            <LeadStatusMenu code={code} name={customer.name} status={customer.status} />
+          </span>
+          <Link
+            href={`/quotations/new?customer=${encodeURIComponent(code)}`}
+            className="btn solid btn-solid ld-q shrink-0"
+          >
+            <QuotationIcon className="size-[15px]" strokeWidth={2.2} />
+            สร้างใบเสนอราคา
+          </Link>
+        </div>
+      </div>
+
+      <div className="max-md:hidden">
       <div className="bar">
-        <div className="min-w-0 max-sm:flex max-sm:w-full max-sm:items-start max-sm:gap-2.5">
-          <div className="min-w-0 max-sm:flex-1">
-          {/* เส้นทาง "ผู้สนใจ › ชื่อ" ตาม mockup แทนปุ่มย้อนกลับ — มือถือมีปุ่มย้อนกลับบนหัวจออยู่แล้ว */}
-          <p className="mb-1 flex min-w-0 items-center gap-[7px] text-[13px] text-muted-foreground max-sm:hidden">
+        <div className="min-w-0">
+          {/* เส้นทาง "ผู้สนใจ › ชื่อ" ตาม mockup แทนปุ่มย้อนกลับ */}
+          <p className="mb-1 flex min-w-0 items-center gap-[7px] text-[13px] text-muted-foreground">
             <Link href="/leads" className="shrink-0 hover:text-primary">
               ผู้สนใจ
             </Link>
             <ChevronRightIcon className="size-[13px] shrink-0" strokeWidth={2.4} />
             <span className="truncate">{customer.name}</span>
           </p>
-          {/* ชื่อผู้สนใจคือตัวบอกว่าเปิดรายไหนอยู่ จึงยังขึ้นบนมือถือ ต่างจากหัวข้อหน้าทั่วไปที่ซ่อนไว้ */}
-          <h1 className="flex flex-wrap items-center gap-2.5 max-sm:flex! max-sm:text-[20px] max-sm:leading-snug">
+          <h1 className="flex flex-wrap items-center gap-2.5">
             {customer.name}
             <LeadStatusMenu code={code} name={customer.name} status={customer.status} />
           </h1>
@@ -166,55 +226,9 @@ export function LeadDetailPage({ code }: { code: string }) {
               <span className="text-muted-foreground"> · เดิม {customer.leadCode}</span>
             )}
           </p>
-          </div>
-          {/* มือถือ: ปุ่มหลักอยู่แถวเดียวกับชื่อ ชิดขวา (ต้นแบบ lead-detail.html 2 ต.ค. 2569) */}
-          <Link
-            href={`/quotations/new?customer=${encodeURIComponent(code)}`}
-            className="btn solid btn-solid h-[34px] flex-none px-3 text-[12.5px] sm:hidden"
-          >
-            <QuotationIcon className="size-3.5" strokeWidth={2.2} />
-            ใบเสนอราคา
-          </Link>
         </div>
-        {/* ปุ่มรองบนมือถือย้ายไปท้ายหน้า เหลือแต่ของจอใหญ่ตรงนี้ */}
-        <div className="tools w-full flex-wrap max-sm:hidden! sm:w-auto">
-          {/* ปฏิเสธได้เฉพาะรายการที่ยังเป็นผู้สนใจ (ต้นแบบ: status = lead) · เปลี่ยนกลับได้ที่ป้ายสถานะ */}
-          {customer.status === "รอนัดหมาย" && (
-            <button
-              type="button"
-              className="btn glass-thin text-destructive"
-              onClick={() => setCloseOpen(true)}
-            >
-              <BanIcon className="size-[15px]" strokeWidth={2.2} />
-              ปฏิเสธ
-            </button>
-          )}
-          {/* ลบได้เฉพาะรายที่ยังไม่มีเอกสารผูกอยู่ — กรอกผิดคนแล้วลบทิ้งได้ ไม่ต้องทิ้งขยะไว้ในรายชื่อ
-             รายที่มีคำขอ ใบเสนอราคา หรือดีลแล้ว ปุ่มยังอยู่แต่กดไม่ได้ พร้อมบอกเหตุผล */}
-          <button
-            type="button"
-            className="btn glass-thin text-destructive disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={Boolean(blockWhy)}
-            title={blockWhy || undefined}
-            onClick={() => setDelOpen(true)}
-          >
-            <TrashIcon className="size-[15px]" strokeWidth={2.2} />
-            ลบผู้สนใจ
-          </button>
-          {!mine && (
-            <button
-              type="button"
-              className="btn glass-thin"
-              onClick={() => setTakeOverOpen(true)}
-            >
-              <HandoverIcon className="size-[15px]" strokeWidth={2.2} />
-              รับช่วงดูแล
-            </button>
-          )}
-          <button type="button" className="btn glass-thin" onClick={() => setLogOpen(true)}>
-            <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            บันทึกการติดต่อ
-          </button>
+        <div className="tools w-full flex-wrap sm:w-auto">
+          {secondaryActions}
           <Link
             href={`/quotations/new?customer=${encodeURIComponent(code)}`}
             className="btn solid btn-solid btn-block-mobile shrink-0"
@@ -224,6 +238,7 @@ export function LeadDetailPage({ code }: { code: string }) {
           </Link>
         </div>
       </div>
+      </div>
 
       {customer.status === "ปฏิเสธ" && customer.closedReason && (
         <p className="rounded-xl border border-[var(--neutral)]/20 bg-[var(--neutral-soft)] px-4 py-3 text-sm text-muted-foreground">
@@ -231,13 +246,13 @@ export function LeadDetailPage({ code }: { code: string }) {
         </p>
       )}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2.05fr)_minmax(0,1fr)]">
-        <div className="min-w-0 space-y-4">
+      <div className="grid items-start gap-4 max-md:gap-3 xl:grid-cols-[minmax(0,2.05fr)_minmax(0,1fr)]">
+        <div className="space-y-4 max-md:space-y-3">
           {/* ── การ์ดโปรไฟล์: ตัวตนลูกค้าซ้าย ข้อมูลติดต่อที่แก้ได้ขวา ── */}
-          <section className="glass rounded-2xl px-4 py-5 sm:px-[22px]">
+          <section className="ld-card glass rounded-2xl px-4 py-5 sm:px-[22px]">
             <div className="grid gap-[22px] lg:grid-cols-[210px_minmax(0,1fr)]">
               <div className="border-border pb-[18px] text-center lg:border-r lg:border-b-0 lg:pr-[22px] lg:pb-0">
-                <span className="mx-auto grid size-[84px] place-items-center rounded-[26px] bg-accent text-[28px] font-semibold text-primary">
+                <span className="mx-auto grid size-[84px] place-items-center rounded-full bg-accent text-[28px] font-semibold text-primary">
                   {initials(customer.name)}
                 </span>
                 <h2 className="mt-3 text-[17px] leading-snug font-semibold">{customer.name}</h2>
@@ -281,7 +296,7 @@ export function LeadDetailPage({ code }: { code: string }) {
             </div>
           </section>
 
-          <section id="lead-timeline" className="glass rounded-2xl px-4 pb-5 sm:px-[22px]">
+          <section id="lead-timeline" className="ld-card glass rounded-2xl px-4 pb-5 sm:px-[22px]">
             <div className="tabs -mx-4 mb-4 border-b border-border px-4 sm:-mx-[22px] sm:px-[22px]">
               {PANES.map((p) => (
                 <button
@@ -296,9 +311,42 @@ export function LeadDetailPage({ code }: { code: string }) {
             </div>
 
             {pane === "timeline" ? (
-              /* มือถือ: ไทม์ไลน์เป็นแนวนอน เลื่อนซ้ายขวา เก่าอยู่ซ้าย ใหม่/นัดถัดไปอยู่ขวา (ต้นแบบ lead-detail.html) */
-              <div className="relative pl-[26px] max-sm:flex max-sm:flex-row-reverse max-sm:justify-end max-sm:overflow-x-auto max-sm:pl-0 max-sm:[-ms-overflow-style:none] max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
-                <span className="absolute top-1.5 bottom-1.5 left-1.5 w-0.5 bg-border max-sm:hidden" />
+              <>
+              {/* มือถือ: ไทม์ไลน์แนวนอน เก่าซ้าย ใหม่/นัดถัดไปขวา (ต้นแบบ #tl ≤760px) */}
+              <div className="md:hidden">
+                {acts.length === 0 && !nextFollow ? (
+                  <p className="py-6 text-[13px] text-muted-foreground">ยังไม่มีบันทึกการติดต่อ</p>
+                ) : (
+                  <div className="ld-tl">
+                    {nextFollow && (
+                      <div className="ev next">
+                        <p className="when">
+                          {thaiDate(nextFollow)}
+                          <span className="chan">นัดติดตามครั้งถัดไป</span>
+                        </p>
+                        <p className="sum">{nextFollow >= today ? "ยังไม่ถึงกำหนด" : "เลยกำหนดแล้ว"}</p>
+                      </div>
+                    )}
+                    {acts.map((a) => (
+                      <div key={a.id} className="ev">
+                        <p className="when">
+                          {thaiDate(a.date)}
+                          {a.channel && <span className="chan">{a.channel}</span>}
+                        </p>
+                        <p className="sum">{a.summary}</p>
+                        {a.nextAction && (
+                          <p className="na">
+                            <span>สิ่งที่ต้องทำต่อ</span>
+                            {a.nextAction}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative pl-[26px] max-md:hidden">
+                <span className="absolute top-1.5 bottom-1.5 left-1.5 w-0.5 bg-border" />
                 {nextFollow && (
                   <Event
                     tone="next"
@@ -321,6 +369,7 @@ export function LeadDetailPage({ code }: { code: string }) {
                   ))
                 )}
               </div>
+              </>
             ) : (
               <div className="divide-y divide-border">
                 {logs.map((l) => (
@@ -358,8 +407,8 @@ export function LeadDetailPage({ code }: { code: string }) {
           </section>
         </div>
 
-        <div className="min-w-0 space-y-4">
-          <section className="glass rounded-2xl px-4 py-5 sm:px-[22px]">
+        <div className="space-y-4 max-md:space-y-3">
+          <section className="ld-card glass rounded-2xl px-4 py-5 sm:px-[22px]">
             <h2 className="flex items-center gap-2 text-[15px] font-semibold">
               บันทึกล่าสุด
               {/* ตามต้นแบบ — พาไปดูไทม์ไลน์การติดต่อทั้งหมด */}
@@ -397,6 +446,7 @@ export function LeadDetailPage({ code }: { code: string }) {
               const st = quotationStateOf(q, hasDeal(q.no), today);
               return {
                 key: q.id,
+                /* ไม่มีร่างแล้ว ทุกใบมีเลขที่ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
                 href: `/quotations/${encodeURIComponent(q.no)}`,
                 main: q.no,
                 sub: `${baht(quotationTotals(q).grand)} บาท`,
@@ -433,48 +483,12 @@ export function LeadDetailPage({ code }: { code: string }) {
             }))}
           />
         </div>
-      </div>
 
-      {/* มือถือ: ปุ่มรองอยู่ท้ายหน้า หลังการ์ดทั้งหมด (ต้นแบบ lead-detail.html) */}
-      <div className="grid grid-cols-2 gap-2 sm:hidden">
-        {customer.status === "รอนัดหมาย" && (
-          <button
-            type="button"
-            className="btn glass-thin h-[46px] justify-center text-destructive"
-            onClick={() => setCloseOpen(true)}
-          >
-            <BanIcon className="size-[15px]" strokeWidth={2.2} />
-            ปฏิเสธ
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn glass-thin h-[46px] justify-center text-destructive disabled:cursor-not-allowed disabled:opacity-45"
-          disabled={Boolean(blockWhy)}
-          title={blockWhy || undefined}
-          onClick={() => setDelOpen(true)}
-        >
-          <TrashIcon className="size-[15px]" strokeWidth={2.2} />
-          ลบผู้สนใจ
-        </button>
-        {!mine && (
-          <button
-            type="button"
-            className="btn glass-thin h-[46px] justify-center"
-            onClick={() => setTakeOverOpen(true)}
-          >
-            <HandoverIcon className="size-[15px]" strokeWidth={2.2} />
-            รับช่วงดูแล
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn glass-thin h-[46px] justify-center"
-          onClick={() => setLogOpen(true)}
-        >
-          <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-          บันทึกการติดต่อ
-        </button>
+        {/* มือถือ: ปุ่มรองย้ายมาท้ายหน้า ต่อจากการ์ดทั้งหมด (ต้นแบบ .m-ld-bottom)
+           อยู่ในกริดเพื่อให้จอคอมไม่มีระยะท้ายหน้าเพิ่ม (display:none ไม่กินช่องกริด) */}
+        <div className="md:hidden">
+          <div className="ld-bottom">{secondaryActions}</div>
+        </div>
       </div>
 
       {logOpen && (
@@ -549,19 +563,17 @@ function Event({
         ? "border-[var(--success)]"
         : "border-[var(--info)]";
   return (
-    <div className="relative pb-[18px] max-sm:w-[min(220px,62vw)] max-sm:flex-none max-sm:pt-[26px] max-sm:pr-3 max-sm:pb-0">
-      {/* เส้นเวลาแนวนอนของมือถือ — ต่อกันทุกใบจนเป็นเส้นเดียว */}
-      <span aria-hidden="true" className="absolute top-[7px] right-0 left-0 hidden h-0.5 bg-[#E9DEE1] max-sm:block" />
+    <div className="relative pb-[18px]">
       <span
-        className={`absolute top-1 -left-[26px] size-3.5 rounded-full border-[3px] bg-white ${dot} max-sm:top-[1px] max-sm:left-0 max-sm:border-0 max-sm:bg-primary max-sm:ring-4 max-sm:ring-[#FDECEE]`}
+        className={`absolute top-1 -left-[26px] size-3.5 rounded-full border-[3px] bg-white ${dot}`}
       />
-      <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground max-sm:text-[13px] max-sm:font-bold max-sm:text-foreground">
+      <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         {when}
         {channel && (
-          <span className="glass-thin rounded-full px-2 py-px text-[11px] max-sm:font-semibold max-sm:text-muted-foreground">{channel}</span>
+          <span className="glass-thin rounded-full px-2 py-px text-[11px]">{channel}</span>
         )}
       </p>
-      <p className="mt-1.5 text-sm leading-relaxed break-words max-sm:rounded-xl max-sm:bg-[#FAF6F7] max-sm:px-3 max-sm:py-2.5 max-sm:text-[13px]">{body}</p>
+      <p className="mt-1.5 text-sm leading-relaxed break-words">{body}</p>
       {next && (
         <p className="mt-1.5 inline-block rounded-lg bg-[var(--warning-soft)] px-2.5 py-1 text-[12.5px] text-[var(--warning)]">
           สิ่งที่ต้องทำต่อ · {next}
@@ -583,7 +595,7 @@ function DocCard({
   rows: { key: string; href: string; main: string; sub: string; tag: string; cls: string }[];
 }) {
   return (
-    <section className="glass rounded-2xl px-4 py-5 sm:px-[22px]">
+    <section className="ld-card glass rounded-2xl px-4 py-5 sm:px-[22px]">
       <h2 className="flex items-center gap-2 text-[15px] font-semibold">
         {title}
         {action && (

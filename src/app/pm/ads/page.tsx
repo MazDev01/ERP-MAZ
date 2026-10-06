@@ -3,7 +3,7 @@ import { PmAdsPage } from "@/components/pm-ads-page";
 
 export const metadata = { title: "โฆษณาและรายงาน — ERP MAZ" };
 
-/* useSearchParams (?deal=) ต้องมี Suspense คร่อม ไม่งั้นทั้งหน้าถูกบังคับเป็น dynamic */
+/* useSearchParams (?pj=) ต้องมี Suspense คร่อม ไม่งั้นทั้งหน้าถูกบังคับเป็น dynamic */
 export default function Page() {
   return (
     <Suspense>
