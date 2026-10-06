@@ -273,25 +273,6 @@ body {
   transition: background-color 0.15s, color 0.15s;
 }
 .side-link:hover { background: var(--accent); }
-/* เมนูแม่ที่มีเมนูย่อย — ปุ่มลูกศรกดพับ/กางอยู่ริมขวาของแถว ไม่ซ้อนอยู่ในลิงก์ (กดลิงก์ยังไปหน้านั้นเหมือนเดิม) */
-.side-row { position: relative; }
-.side-row .side-link { padding-right: 38px; }
-.side-row .side-fold {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  translate: 0 -50%;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  color: inherit;
-  opacity: 0.8;
-}
-.side-row .side-fold:hover { background: color-mix(in srgb, currentColor 16%, transparent); opacity: 1; }
-.side-row .side-fold svg { transition: rotate 0.18s; }
-.side-row .side-fold[aria-expanded="true"] svg { rotate: 180deg; }
 .side-link.on {
   background: var(--primary);
   color: var(--primary-foreground);

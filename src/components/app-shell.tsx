@@ -41,7 +41,6 @@ import {
   TasksIcon,
   TeamIcon,
   UserIcon,
-  ChevronDownIcon,
 } from "./icons";
 import { NotificationMenu } from "./notification-menu";
 import { SideSub, SubNav } from "./sub-nav";
@@ -320,33 +319,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {list.map((item) => {
                 const ItemIcon = ICONS[item.icon];
                 const active = (current?.parent ?? current?.href) === item.href;
-                /* เมนูย่อยกางอยู่เป็นค่าตั้งต้น กดลูกศรพับเก็บได้ (เจ้าของสั่ง 6 ต.ค. 2569) */
+                /* เมนูย่อยกางอยู่เป็นค่าตั้งต้น · กดชื่อเมนูที่เปิดอยู่ซ้ำ = หุบ กดอีกทีกางกลับ
+                   (เจ้าของสั่ง 6 ต.ค. 2569 เอาปุ่มลูกศรออก) */
                 const open = active && item.sub && !folded[item.href];
                 return (
                   <Fragment key={item.href}>
-                    <div className={item.sub && active ? "side-row" : undefined}>
-                      <Link
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
-                        className={`side-link${active ? " on" : ""}`}
-                      >
-                        <ItemIcon className="size-[18px] shrink-0" />
-                        <span className="truncate">{item.label}</span>
-                        {/* ดีลใหม่ที่ฝ่ายบัญชียังไม่ได้เปิดดู (AC-BR-01) */}
-                        {item.href === "/acc/billing" && <BillingNavDot />}
-                      </Link>
-                      {active && item.sub && (
-                        <button
-                          type="button"
-                          className="side-fold"
-                          aria-expanded={Boolean(open)}
-                          aria-label={`${open ? "พับ" : "กาง"}หน้าย่อยของ${item.label}`}
-                          onClick={() => setFolded((v) => ({ ...v, [item.href]: !v[item.href] }))}
-                        >
-                          <ChevronDownIcon className="size-[17px]" strokeWidth={2.2} />
-                        </button>
-                      )}
-                    </div>
+                    <Link
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      aria-expanded={item.sub ? Boolean(open) : undefined}
+                      className={`side-link${active ? " on" : ""}`}
+                      onClick={() =>
+                        setFolded((v) =>
+                          /* อยู่หน้านั้นอยู่แล้ว = สลับกาง/หุบ · มาจากหน้าอื่น = เข้าหน้านั้นแล้วกางให้ */
+                          item.sub ? { ...v, [item.href]: active ? !v[item.href] : false } : v,
+                        )
+                      }
+                    >
+                      <ItemIcon className="size-[18px] shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                      {/* ดีลใหม่ที่ฝ่ายบัญชียังไม่ได้เปิดดู (AC-BR-01) */}
+                      {item.href === "/acc/billing" && <BillingNavDot />}
+                    </Link>
                     {/* เมนูย่อยกางใต้เมนูแม่ที่เปิดอยู่ แทนแถบชิปเหนือเนื้อหา (ตามระบบต้นฉบับ) */}
                     {open && <SideSub items={item.sub!} pathname={pathname} />}
                   </Fragment>
