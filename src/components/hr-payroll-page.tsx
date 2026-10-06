@@ -99,7 +99,8 @@ export function HrPayrollPage() {
   const urlMonth = useUrlMonth(months);
   const [range, setRange] = useState<Cycle>(() => hrCycle(urlMonth || months[months.length - 1]));
   const urlGroup = useUrlGroup();
-  const [tab, setTab] = useState<Tab>(urlGroup === "day" ? "daily" : "month");
+  /* กลุ่มมาจากเมนูย่อย "พนักงาน / ทดลองงาน" ทาง ?g= อย่างเดียว ไม่มีแท็บในหน้าแล้ว */
+  const tab: Tab = urlGroup === "day" ? "daily" : "month";
   const [viewing, setViewing] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   /* เปิดรอบกลับ — ต้องพิมพ์เหตุผล และกล่องบอกผลที่ตามมาให้ครบก่อนกดยืนยัน */
@@ -337,14 +338,7 @@ export function HrPayrollPage() {
 
       <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>
         <div className="strip">
-          <div className="tabs max-md:hidden!">
-            <button type="button" className={tab === "month" ? "on" : ""} onClick={() => setTab("month")}>
-              คำนวณเงินเดือน <b>{monthly.length}</b>
-            </button>
-            <button type="button" className={tab === "daily" ? "on" : ""} onClick={() => setTab("daily")}>
-              คำนวณค่าจ้างรายวัน <b>{daily.length}</b>
-            </button>
-          </div>
+          {/* แท็บสลับกลุ่มเอาออก — เลือกกลุ่มจากเมนูย่อย "พนักงาน / ทดลองงาน" แทน (ระบบต้นฉบับ 5 ต.ค. 2569) */}
           {payClosed ? (
             /* ปิดแล้วปิดเลย ป้ายแทนที่ปุ่ม ไม่มีทางเปิดกลับ
                ป้าย CEO ยังอยู่คู่กัน (ต้นแบบ hr-payroll.html · ceoTag ไม่ถูกซ่อนตอนปิดรอบ)

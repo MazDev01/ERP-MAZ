@@ -76,7 +76,9 @@ export function HrTimesheetPage() {
   const urlMonth = useUrlMonth(hr.periods.map((p) => p.month));
   const [month, setMonth] = useState(urlMonth || hr.periods[hr.periods.length - 1].month);
   const urlGroup = useUrlGroup();
-  const [tab, setTab] = useState<Tab>(urlGroup === "day" ? "daily" : "month");
+  /* กลุ่มมาจากเมนูย่อย "พนักงาน / ทดลองงาน" ทาง ?g= อย่างเดียว (ระบบต้นฉบับ 5 ต.ค. 2569)
+     เก็บเป็นค่าที่คำนวณจาก URL ไม่ใช่ state ไม่งั้นกดเมนูย่อยแล้วตารางไม่เปลี่ยนตาม */
+  const tab: Tab = urlGroup === "day" ? "daily" : "month";
   /* เวลาทำงานอ่านผ่านสะพาน — ใบลาใบโอทีของคนที่ผูกบทบาทไว้มาจากใบจริงในระบบ */
   const time = useHrTime();
   /* ใบที่ยังไม่ตัดสินและตกอยู่ในรอบนี้ ปิดรอบไปทั้งที่มีใบค้าง = ตัวเลขจะเปลี่ยนทีหลัง */
@@ -186,7 +188,7 @@ export function HrTimesheetPage() {
 
       {mgroup === null && (
         <GroupTiles
-          onPick={(g) => { setTab(g); setMgroup(g); syncGroupUrl(g === "daily" ? "day" : "month"); }}
+          onPick={(g) => { setMgroup(g); syncGroupUrl(g === "daily" ? "day" : "month"); }}
           month={{
             n: monthly.length,
             note: period.closed ? "ปิดรอบแล้ว" : issuesOf(monthly) ? `ต้องตรวจ ${issuesOf(monthly)} รายการ` : "ตรวจครบแล้ว",
@@ -241,14 +243,7 @@ export function HrTimesheetPage() {
 
       <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>
         <div className="strip">
-          <div className="tabs max-md:hidden!">
-            <button type="button" className={tab === "month" ? "on" : ""} onClick={() => setTab("month")}>
-              พนักงานรายเดือน <b>{monthly.length}</b>
-            </button>
-            <button type="button" className={tab === "daily" ? "on" : ""} onClick={() => setTab("daily")}>
-              ทดลองงาน จ่ายรายวัน <b>{daily.length}</b>
-            </button>
-          </div>
+          {/* แท็บสลับกลุ่มเอาออก — เลือกกลุ่มจากเมนูย่อย "พนักงาน / ทดลองงาน" แทน (ระบบต้นฉบับ 5 ต.ค. 2569) */}
           {locked ? (
             /* ปิดแล้วปิดเลย ป้ายแทนที่ปุ่ม ไม่มีทางเปิดกลับ */
             <span className="tag t-ok my-2 ml-auto">

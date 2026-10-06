@@ -34,7 +34,8 @@ type Row = { period: Period; sum: CycleSum | null; at: string; by: string };
 export function HrCyclesPage() {
   const hr = useHr();
   const urlGroup = useUrlGroup();
-  const [tab, setTab] = useState<PayGroup>(urlGroup || "month");
+  /* กลุ่มมาจากเมนูย่อย "พนักงาน / ทดลองงาน" ทาง ?g= อย่างเดียว ไม่มีแท็บในหน้าแล้ว */
+  const tab: PayGroup = urlGroup || "month";
   const [open, setOpen] = useState<{ month: string; group: PayGroup } | null>(null);
   /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ — ชุดเดียวกับหน้าอื่นในสายรอบเงินเดือน
      (ต้นแบบ hr-cycles.html บล็อก pay-tiles 1 ต.ค. 2569) */
@@ -146,14 +147,7 @@ export function HrCyclesPage() {
 
       <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>
         <div className="strip">
-          <div className="tabs max-md:hidden!">
-            <button type="button" className={tab === "month" ? "on" : ""} onClick={() => setTab("month")}>
-              รอบรายเดือน
-            </button>
-            <button type="button" className={tab === "day" ? "on" : ""} onClick={() => setTab("day")}>
-              รอบรายวัน
-            </button>
-          </div>
+          {/* แท็บสลับกลุ่มเอาออก — เลือกกลุ่มจากเมนูย่อย "พนักงาน / ทดลองงาน" แทน (ระบบต้นฉบับ 5 ต.ค. 2569) */}
         </div>
 
         <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">

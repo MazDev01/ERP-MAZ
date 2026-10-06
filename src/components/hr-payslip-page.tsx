@@ -107,7 +107,8 @@ export function HrPayslipPage() {
       months[months.length - 1]);
   const monthIdx = months.indexOf(month);
   const urlGroup = useUrlGroup();
-  const [tab, setTab] = useState<PayGroup>(urlGroup || "month");
+  /* กลุ่มมาจากเมนูย่อย "พนักงาน / ทดลองงาน" ทาง ?g= อย่างเดียว ไม่มีแท็บในหน้าแล้ว */
+  const tab: PayGroup = urlGroup || "month";
   const [viewing, setViewing] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   /* มือถือ: เลือกกลุ่มก่อน แล้วค่อยเห็นขั้นตอนกับรายการ · เลือกรอบจากปฏิทินแทนแถบเลื่อนเดือน */
@@ -248,22 +249,7 @@ export function HrPayslipPage() {
 
       <section className={`panel glass flex flex-col ${mgroup === null ? "max-md:hidden!" : ""}`}>
         <div className="strip">
-          <div className="tabs max-md:hidden!">
-            <button
-              type="button"
-              className={tab === "month" ? "on" : ""}
-              onClick={() => setTab("month")}
-            >
-              สลิปรายเดือน <b>{monthlyCount}</b>
-            </button>
-            <button
-              type="button"
-              className={tab === "day" ? "on" : ""}
-              onClick={() => setTab("day")}
-            >
-              สลิปรายวัน <b>{dailyCount}</b>
-            </button>
-          </div>
+          {/* แท็บสลับกลุ่มเอาออก — เลือกกลุ่มจากเมนูย่อย "พนักงาน / ทดลองงาน" แทน (ระบบต้นฉบับ 5 ต.ค. 2569) */}
           {/* มือถือ: สองปุ่มแบ่งครึ่งแถว สูงพอให้นิ้วกด */}
           <span className="my-2 ml-auto flex gap-2 max-sm:ml-0 max-sm:w-full max-sm:[&>.btn]:h-10! max-sm:[&>.btn]:flex-1 max-sm:[&>.btn]:justify-center">
             {/* ปุ่มที่กดไม่ลงต้องบอกเหตุผลที่ตัวปุ่มเอง ไม่ใช่ให้ไปหาอ่านในตาราง (ทดสอบฝ่ายบุคคล 30 ก.ย. 2569) */}
