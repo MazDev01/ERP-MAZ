@@ -231,7 +231,22 @@ function AccountRow({
   const a = emp.account;
   const st = a ? HR_ACC_STATUS[a.status] : null;
   return (
-    <tr>
+    /* กดตรงไหนของแถวก็ได้เพื่อเปิด "เมนูที่ใช้ได้" ตามต้นแบบ (เจ้าของสั่ง 6 ต.ค. 2569)
+       กดปุ่มในแถวให้ทำงานของปุ่มเอง จึงเช็กก่อนว่าคลิกโดนปุ่มหรือเปล่า */
+    <tr
+      tabIndex={0}
+      className="cursor-pointer"
+      onClick={(ev) => {
+        if ((ev.target as HTMLElement).closest("button,a,input,select,textarea,label")) return;
+        onRoles();
+      }}
+      onKeyDown={(ev) => {
+        if (ev.target !== ev.currentTarget) return;
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        ev.preventDefault();
+        onRoles();
+      }}
+    >
       <td data-label="พนักงาน">
         <b className="block text-[13.5px] font-semibold">{emp.name}</b>
         {/* ใต้ชื่อบอกตำแหน่งอย่างเดียวตามต้นแบบ — ประเภทการจ้างดูที่หน้าข้อมูลพนักงาน */}
