@@ -81,7 +81,8 @@ export function NotifyTestPage() {
   const current = PUSH_SCENARIOS.find((x) => x.key === scenario);
 
   return (
-    <main className="flex min-h-dvh justify-center px-4 pt-8 pb-16">
+    /* เปลือกแอปมี <main> ของตัวเองอยู่แล้ว ตรงนี้จึงเป็น section — ไม่งั้นโปรแกรมอ่านหน้าจอเจอจุดหลักสองจุด */
+    <section aria-label="ทดสอบแจ้งเตือนบนมือถือ" className="flex justify-center px-4 pt-8 pb-16">
       <div className="w-full max-w-[560px]">
         <h1 className="text-center text-[21px] font-bold">ทดสอบแจ้งเตือนบนมือถือ</h1>
         <p className="mt-2 text-center text-sm leading-[1.75] text-muted-foreground">
@@ -217,7 +218,7 @@ export function NotifyTestPage() {
           หน้าติดตั้งแอป
         </Link>
       </div>
-    </main>
+    </section>
   );
 }
 
