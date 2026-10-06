@@ -68,7 +68,7 @@ export type EventDraft = {
   note: string;
   col: EventColor;
   /** ผู้สร้าง — PM · GM · ทีมก่อนการขาย (เจ้าของสั่ง 24 และ 25 ก.ย. 2569) ไม่ส่งมา = PM */
-  by?: "pm" | "gm" | "ps";
+  by?: "pm" | "gm" | "ps" | "sales";
   /** เลขที่คำขอก่อนการขายที่นัดนี้ผูกอยู่ — บังคับเมื่อ by เป็น ps */
   ps?: string;
 };

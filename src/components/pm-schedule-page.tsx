@@ -29,6 +29,8 @@ import { projName } from "@/lib/pm-data";
 import { thaiDate } from "@/lib/format";
 import { usePm, useTeam } from "@/lib/pm-store";
 import { USERS } from "@/lib/mock-data";
+import { useCrm } from "@/lib/crm-store";
+import { CustomerCombo } from "./customer-combo";
 import {
   KIND_COLOR,
   PM_COLORS,
@@ -40,6 +42,7 @@ import {
   endOf,
   eventPaint,
   isPsEvent,
+  isSalesEvent,
   type EventKind,
   type PmEvent,
 } from "@/lib/pm-schedule-data";
@@ -90,11 +93,11 @@ function pmBoardEvent(e: PmEvent): BoardEvent<PmEvent> {
   };
 }
 
-export function PmSchedulePage() {
+export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
   const sc = useSchedule();
   const nav = useBoardNav();
   /* GM เปิดหน้าของ PM ได้แบบดูอย่างเดียว — สร้างหรือแก้นัดของ PM ไม่ได้ */
-  const ro = usePmReadOnly();
+  const ro = usePmReadOnly() && !sales;
   const canEdit = !ro;
 
   /* ว่างอยู่ = ปิด · มี date = เพิ่มใบใหม่ของวันนั้น · มี event = แก้ใบเดิม */
@@ -112,7 +115,9 @@ export function PmSchedulePage() {
    * นัดที่ทีมก่อนการขายตั้งเองไม่ขึ้นที่นี่ (เจ้าของตัดสิน 25 ก.ย. 2569)
    * งานช่วงก่อนการขายยังไม่มีดีลและยังไม่ใช่ความรับผิดชอบของ PM
    */
-  const events = sc.events.filter((e) => !isPsEvent(e)).map(pmBoardEvent);
+  const events = sc.events
+    .filter((e) => (sales ? isSalesEvent(e) : !isPsEvent(e) && !isSalesEvent(e)))
+    .map(pmBoardEvent);
 
   return (
     <div className="space-y-4">
@@ -120,7 +125,9 @@ export function PmSchedulePage() {
         <div>
           <p>
             {canEdit
-              ? "นัดหมายและกิจกรรมของผู้จัดการโครงการ กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น"
+              ? sales
+                ? "นัดหมายกับผู้สนใจของฝ่ายขาย กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น"
+                : "นัดหมายและกิจกรรมของผู้จัดการโครงการ กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น"
               : "นัดหมายของผู้จัดการโครงการ กดวันเพื่อดูนัดของวันนั้น"}
           </p>
         </div>
@@ -170,6 +177,7 @@ export function PmSchedulePage() {
 
       {editing && (
         <EventForm
+          sales={sales}
           day={editing.date}
           event={editing.event}
           note={editing.event ? (sc.notes[editing.event.id] ?? editing.event.todo.join(NEWLINE)) : ""}
@@ -211,12 +219,14 @@ function saveWarn(f: EventDraft, multi: boolean) {
 // ─── ฟอร์มเพิ่ม / แก้ / ยกเลิกนัดหมาย ─────────────────────────────
 
 function EventForm({
+  sales = false,
   day,
   event,
   note,
   onClose,
   onSaved,
 }: {
+  sales?: boolean;
   day: string;
   event?: PmEvent;
   note: string;
@@ -226,6 +236,10 @@ function EventForm({
   const projects = usePm().projects;
   /* ผู้เข้าร่วมเลือกจากทีมที่ซิงก์จากทะเบียนฝ่ายบุคคล — คนที่พ้นสภาพแล้วไม่ขึ้นให้เลือก */
   const team = useTeam().filter((m) => !m.left);
+  /* ฝ่ายขาย — ผู้เข้าร่วมเลือกจากผู้สนใจ (ไม่รวมรายที่ปฏิเสธแล้ว) ไม่ใช่ทีมงาน */
+  const leads = useCrm().customers.filter((c) => c.status !== "ปฏิเสธ");
+  const people = sales ? leads.map((c) => ({ id: c.code, name: c.name })) : team;
+  const actor = sales ? USERS.sales.name : USERS.pm.name;
   const [form, setForm] = useState<EventDraft>(() => ({
     title: event?.title ?? "",
     kind: event?.kind ?? "client",
@@ -278,8 +292,8 @@ function EventForm({
     if (warn) return setErr(warn);
 
     /* หน้านี้เป็นของ PM — ใบที่สร้างจากที่นี่จึงบันทึกผู้สร้างเป็น PM เสมอ */
-    const draft: EventDraft = { ...form, title: form.title.trim(), place: form.place.trim(), by: "pm" };
-    if (event) editEvent(event.id, draft, USERS.pm.name);
+    const draft: EventDraft = { ...form, title: form.title.trim(), place: form.place.trim(), by: sales ? "sales" : "pm" };
+    if (event) editEvent(event.id, draft, actor);
     else addEvent(draft);
     onSaved(draft.date);
   }
@@ -305,7 +319,7 @@ function EventForm({
                 }
                 /* เหตุผลเป็นของบังคับ — ข้อความแจ้งเตือนที่ผู้เข้าร่วมได้รับคือเหตุผลบรรทัดนี้ */
                 if (!why.trim()) return setErr(CANCEL_WARN);
-                cancelEvent(event.id, USERS.pm.name, why);
+                cancelEvent(event.id, actor, why);
                 onClose();
               }}
             >
@@ -464,6 +478,8 @@ function EventForm({
           />
         </Field>
 
+        {/* นัดของฝ่ายขายยังไม่มีโปรเจค — ช่องนี้จึงมีเฉพาะของ PM */}
+        {!sales && (
         <Field label="โปรเจคที่เกี่ยวข้อง">
           <Select value={form.deal} onChange={(e) => set("deal", e.target.value)}>
             <option value="">ไม่ผูกกับโปรเจค</option>
@@ -474,10 +490,23 @@ function EventForm({
             ))}
           </Select>
         </Field>
+        )}
 
-        <Field label="ผู้เข้าร่วม">
+        <Field label={sales ? "ผู้สนใจที่เข้าร่วม" : "ผู้เข้าร่วม"}>
+          {/* ผู้สนใจมีหลายราย — ค้นหาแล้วกดเพิ่ม ไม่ไล่ปุ่มทุกรายแบบทีม */}
+          {sales && (
+            <span className="mb-2 block">
+              <CustomerCombo
+                key={form.who.join(",")}
+                customers={leads.filter((c) => !form.who.includes(c.code))}
+                nameOnly
+                value={null}
+                onChange={(c) => c && toggleWho(c.code)}
+              />
+            </span>
+          )}
           <span className="flex flex-wrap gap-[7px]">
-            {team.map((m) => {
+            {(sales ? people.filter((m) => form.who.includes(m.id)) : people).map((m) => {
               const on = form.who.includes(m.id);
               return (
                 <button

@@ -107,7 +107,7 @@ export type PmEvent = {
    * และไม่มีใครรับผิดชอบว่านัดนั้นมีจริงหรือเปล่า · PM กับ GM เป็นคนจัดคิวงานและจัดคนอยู่แล้ว
    * ใบเก่าที่ไม่มีคีย์นี้ถือว่า PM สร้าง
    */
-  by?: "pm" | "gm" | "ps";
+  by?: "pm" | "gm" | "ps" | "sales";
   /*
    * นัดของทีมก่อนการขาย (เจ้าของตัดสิน 25 ก.ย. 2569) — ต้องผูกกับคำขอก่อนการขายที่ตัวเองรับผิดชอบ
    * เก็บเลขที่คำขอไว้ เพื่อกันไม่ให้กลายเป็นปฏิทินส่วนตัวที่เคยตัดทิ้งไปแล้ว
@@ -251,6 +251,9 @@ export function invitedEvents(all: PmEvent[], empId: string) {
  * ปฏิทินของ PM ตัดกลุ่มนี้ทิ้ง ส่วนหน้าคำขอของฝ่ายขายหยิบเฉพาะของใบตัวเอง
  */
 export const isPsEvent = (e: PmEvent) => e.by === "ps";
+
+/** นัดที่ฝ่ายขายตั้งเอง (/sales-schedule) — ขึ้นเฉพาะในตารางงานของฝ่ายขาย */
+export const isSalesEvent = (e: PmEvent) => e.by === "sales";
 
 export function psEventsOf(all: PmEvent[], requestNo: string) {
   return all

@@ -103,6 +103,8 @@ const SALES: NavItem[] = [
   { group: "งานขาย", label: "คำขอก่อนการขาย", icon: "presales", href: "/presales" },
   { group: "งานขาย", label: "ใบเสนอราคา", icon: "quotation", href: "/quotations" },
   { group: "งานขาย", label: "ดีล", icon: "deals", href: "/deals" },
+  /* ตารางงานของฝ่ายขาย — ผู้เข้าร่วมเป็นผู้สนใจ (ยกมาจากระบบต้นฉบับ) */
+  { group: "งานขาย", label: "ตารางงาน", icon: "leave", href: "/sales-schedule" },
 ];
 
 /*
