@@ -886,7 +886,8 @@ function PhoneDeal({
     <button
       type="button"
       data-ceo-hide
-      className="col-span-2 h-8 text-[12.5px] font-semibold text-[#C0121F]"
+      /* 36px — 32px กดพลาดง่ายบนมือถือ (ตรวจ 7 ต.ค. 2569) */
+      className="col-span-2 h-9 text-[12.5px] font-semibold text-[#C0121F]"
       onClick={(e) => {
         e.stopPropagation();
         onCancel();
