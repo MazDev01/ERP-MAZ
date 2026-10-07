@@ -12,6 +12,7 @@
 
 import { thaiDate } from "@/lib/format";
 import { useHr } from "@/lib/hr-store";
+import { isRef } from "@/lib/pm-data";
 import { usePm } from "@/lib/pm-store";
 import { endOf, eventKind, lastEdit, type PmEvent } from "@/lib/pm-schedule-data";
 import { Sheet } from "./lead-dialogs";
@@ -42,7 +43,7 @@ export function AppointmentSheet({
   const kind = eventKind(event.kind);
   /* ชื่อผู้เข้าร่วมอ่านจากทะเบียนฝ่ายบุคคล — ครอบคลุมคนที่ไม่ได้อยู่ในทีมผลิตงาน เช่น PM และ GM */
   const emp = useHr().emp;
-  const project = usePm().projects.find((p) => p.deal === event.deal);
+  const project = usePm().projects.find((p) => isRef(p, event.pj));
   const end = endOf(event);
   const nameOf = (id: string) => emp.find((e) => e.id === id)?.name ?? id;
   /* บอกการแก้ครั้งล่าสุดครั้งเดียว — คนอ่านอยากรู้ว่า "ตกลงตอนนี้เป็นยังไง" ไม่ได้อยากอ่านประวัติทั้งเส้น */

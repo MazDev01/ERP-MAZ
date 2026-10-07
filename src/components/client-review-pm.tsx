@@ -130,7 +130,7 @@ export function ClientSendSheet({
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const reviews = useClientReviews();
-  const nextRound = (latestRound(reviews, project.deal, task.name)?.round ?? 0) + 1;
+  const nextRound = (latestRound(reviews, project.pj, task.name)?.round ?? 0) + 1;
 
   function toggle(key: string) {
     setErr(false);
@@ -168,7 +168,7 @@ export function ClientSendSheet({
     ];
     if (!files.length) return setErr(true);
     const tk = createRound({
-      deal: project.deal,
+      pj: project.pj,
       taskName: task.name,
       project: projName(project),
       createdBy: project.pm,

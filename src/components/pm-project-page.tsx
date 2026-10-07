@@ -26,6 +26,8 @@ import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
 import { addDays, bkkStamp, daysBetween, initials, thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import {
+  isRef,
+  planHref,
   lastSub,
   projName,
   projectMembers,
@@ -65,9 +67,10 @@ const STATUS_COLOR: Record<TaskStatus, string> = {
   done: "var(--success)",
 };
 
-export function PmProjectPage({ deal }: { deal: string }) {
+export function PmProjectPage({ pj }: { pj: string }) {
   const pm = usePm();
-  const project = pm.projects.find((p) => p.deal === deal);
+  /* ลิงก์เก่าส่งเลขที่ดีลมา — isRef หาเจอทั้งเลขโปรเจคและเลขดีล */
+  const project = pm.projects.find((p) => isRef(p, pj));
 
   if (!project) {
     return (
@@ -75,7 +78,7 @@ export function PmProjectPage({ deal }: { deal: string }) {
         <div className="bar">
           <div>
             <h1>ไม่พบโปรเจค</h1>
-            <p>เลขที่ดีล {deal} ไม่มีในระบบ หรือยังไม่ได้ยืนยันแผนงาน</p>
+            <p>เลขที่โปรเจค {pj} ไม่มีในระบบ หรือยังไม่ได้ยืนยันแผนงาน</p>
           </div>
         </div>
         <section className="glass rounded-[15px] px-5 py-14 text-center">
@@ -100,7 +103,7 @@ export function PmProjectPage({ deal }: { deal: string }) {
 function Detail({ project }: { project: Project }) {
   const today = todayIso();
   /* ร่างแผนของโปรเจคนี้ที่ PM ยังไม่ได้ยืนยัน — คนอื่นที่เปิดโปรเจคต้องเห็นว่ามีร่างค้างอยู่ */
-  const draft = usePm().drafts[project.deal];
+  const draft = usePm().drafts[project.pj];
   const pr = projectProgress(project);
   /* โปรเจคที่ยืนยันแผนตอนยังไม่มีเฟส ไม่มีวันส่งมอบ — นับวันไม่ได้ ไม่ใช่ว่าเลยกำหนด */
   const hasDue = Boolean(project.due);
@@ -145,7 +148,7 @@ function Detail({ project }: { project: Project }) {
             กลับไปหน้าโปรเจค
           </Link>
           <Link
-            href={`/pm/plan?deal=${encodeURIComponent(project.deal)}`}
+            href={planHref(project.pj)}
             className="btn solid btn-solid max-sm:h-10 max-sm:flex-1 max-sm:justify-center"
           >
             <PlanBoardIcon className="size-3.5" strokeWidth={2} />
@@ -299,7 +302,7 @@ function TransferDialog({ project, onClose }: { project: Project; onClose: () =>
   function save() {
     setTouched(true);
     if (missTo || missWhy) return;
-    transferProject(project.deal, to, why, project.pm);
+    transferProject(project.pj, to, why, project.pm);
     onClose();
   }
 
@@ -373,7 +376,7 @@ function RenameDialog({ project, onClose }: { project: Project; onClose: () => v
       setErr(true);
       return;
     }
-    renameProject(project.deal, v);
+    renameProject(project.pj, v);
     onClose();
   }
   return (
@@ -581,9 +584,9 @@ function SalesDocs({ project }: { project: Project }) {
         )}
       </ul>
 
-      {adding && <AddDocsDialog deal={project.deal} onClose={() => setAdding(false)} />}
+      {adding && <AddDocsDialog pj={project.pj} onClose={() => setAdding(false)} />}
       <RemoveDocDialog
-        deal={project.deal}
+        pj={project.pj}
         name={removing}
         fileId={extra.find((d) => d.n === removing)?.fileId}
         onClose={() => setRemoving(null)}
@@ -626,6 +629,8 @@ function jobOf(p: Project, crm: ReturnType<typeof useCrm>): InboxJob {
   const q = crm.quotations.find((x) => x.no === p.quo);
   const c = crm.customers.find((x) => x.code === q?.customerCode);
   return {
+    pj: p.pj,
+    bill: p.bill,
     deal: p.deal,
     service: p.service,
     cus: p.cus,
@@ -859,11 +864,11 @@ function Tasks({ project, today, count }: { project: Project; today: string; cou
               lastSub(t)?.at.split(" ")[0] ??
               (t.status === "done" ? (t.doneAt?.slice(0, 10) ?? addDays(t.due, -1)) : "");
             const first = t.whos[0] ? (memberOf(t.whos[0])?.name ?? t.whos[0]) : "";
-            const taskTalkList = talks[`${project.deal}|${t.name}`] ?? [];
+            const taskTalkList = talks[`${project.pj}|${t.name}`] ?? [];
             const talkCount = taskTalkList.length;
             /* ข้อความใหม่จากผู้รับงานที่ PM ยังไม่ได้อ่าน */
-            const unread = hydrated ? unreadCount(marks, "PM", project.deal, t.name, taskTalkList) : 0;
-            const latest = latestRound(reviews, project.deal, t.name);
+            const unread = hydrated ? unreadCount(marks, "PM", project.pj, t.name, taskTalkList) : 0;
+            const latest = latestRound(reviews, project.pj, t.name);
             /* ส่งให้ลูกค้าได้เมื่อ PM ตรวจผ่านแล้ว และไม่มีรอบที่ลูกค้ายังตรวจค้างอยู่ / ปิดไปแล้ว */
             const canSendClient =
               project.status !== "cancelled" &&
@@ -979,7 +984,7 @@ function TaskTalkDialog({
   taskName: string;
   onClose: () => void;
 }) {
-  const talks = taskTalks(usePm(), project.deal, taskName);
+  const talks = taskTalks(usePm(), project.pj, taskName);
   const task = project.tasks.find((t) => t.name === taskName);
   const ro = usePmReadOnly();
   const [tx, setTx] = useState("");
@@ -988,15 +993,15 @@ function TaskTalkDialog({
   /* เปิดอ่านแล้วถือว่าอ่านถึงข้อความล่าสุด */
   const talkCount = talks.length;
   useEffect(() => {
-    markTalkRead("PM", project.deal, taskName, talks);
+    markTalkRead("PM", project.pj, taskName, talks);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.deal, taskName, talkCount]);
+  }, [project.pj, taskName, talkCount]);
 
   /* ส่งแล้วกล่องยังเปิด คุยต่อได้ทันที (เจ้าของสั่ง 5 ต.ค. 2569 — ให้เหมือนแชททั่วไป) */
   function send() {
     const v = tx.trim();
     if (!v) return setErr(true);
-    nudgeTask(project.deal, taskName, v, bkkStamp());
+    nudgeTask(project.pj, taskName, v, bkkStamp());
     setTx("");
   }
 

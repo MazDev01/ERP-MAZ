@@ -121,7 +121,7 @@ export function PresalesSchedulePage() {
         const done = t.status === "done";
         add(
           "task",
-          `task-${p.deal}-${ti}`,
+          `task-${p.pj}-${ti}`,
           t.due,
           t.due,
           `${done ? "ส่งแล้ว · " : "กำหนดส่งงาน · "}${t.name}`,
@@ -269,7 +269,7 @@ function PsEventForm({
       from,
       to,
       place: place.trim(),
-      deal: "",
+      pj: "",
       /* ตัวเองอยู่ในนัดเสมอ — เป็นคนตั้งและเป็นคนไป */
       who: [ME.employeeId, ...who],
       note: detail,

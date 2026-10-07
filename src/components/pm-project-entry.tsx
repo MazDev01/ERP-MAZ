@@ -3,9 +3,9 @@
 /*
  * ทางเข้าหน้าโปรเจคจากเมนูซ้าย
  *
- * ไม่ระบุ ?deal= = หน้ารายการโปรเจคแบบโฟลเดอร์ · ระบุ = รายละเอียดโปรเจคใบนั้น
- * ใช้พาธเดียวกันทั้งสองแบบ เพราะลิงก์จากแดชบอร์ด ฝ่ายบุคคล และบัญชี
- * ส่งมาเป็น /pm/projects?deal= อยู่แล้ว ทุกลิงก์จึงยังเปิดถูกใบโดยไม่ต้องไล่แก้
+ * ไม่ระบุ ?pj= = หน้ารายการโปรเจคแบบโฟลเดอร์ · ระบุ = รายละเอียดโปรเจคใบนั้น
+ * โปรเจคมีเลขของตัวเอง (PJ-) ผูกกับวางบิลงวดแรก (ผู้ใช้สั่ง 5 ต.ค. 2569)
+ * ลิงก์เก่า ?deal= ยังเปิดได้ — หน้ารายละเอียดหาโปรเจคได้ทั้งจากเลข PJ และเลขดีล (isRef)
  */
 
 import { useSearchParams } from "next/navigation";
@@ -13,6 +13,7 @@ import { PmProjectPage } from "./pm-project-page";
 import { PmProjectsPage } from "./pm-projects-page";
 
 export function PmProjectEntry() {
-  const deal = useSearchParams().get("deal");
-  return deal ? <PmProjectPage deal={deal} /> : <PmProjectsPage />;
+  const params = useSearchParams();
+  const ref = params.get("pj") ?? params.get("deal");
+  return ref ? <PmProjectPage pj={ref} /> : <PmProjectsPage />;
 }

@@ -62,8 +62,8 @@ export type EventDraft = {
   from: string;
   to: string;
   place: string;
-  /** เลขที่ดีลของโปรเจคที่เกี่ยวข้อง — ว่างคือไม่ผูกกับโปรเจคไหน */
-  deal: string;
+  /** เลขที่โปรเจค (PJ-) ที่เกี่ยวข้อง — ว่างคือไม่ผูกกับโปรเจคไหน */
+  pj: string;
   who: string[];
   note: string;
   col: EventColor;
@@ -95,7 +95,7 @@ export function addEvent(d: EventDraft) {
         col: d.col,
         title: d.title,
         place: d.place || "ยังไม่ระบุสถานที่",
-        deal: d.deal,
+        pj: d.pj,
         who: d.who,
         todo: [],
         by: d.by ?? "pm",
@@ -158,7 +158,7 @@ export function editEvent(id: string, d: EventDraft, by: string) {
         to: d.to,
         col: d.col,
         place: d.place || "ยังไม่ระบุสถานที่",
-        deal: d.deal,
+        pj: d.pj,
         who: d.who,
         edits: change ? [...(e.edits ?? []), change] : e.edits,
       };

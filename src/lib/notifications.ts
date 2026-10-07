@@ -33,7 +33,7 @@ import type { EmpRequest } from "./emp-requests";
 import type { NotifyEventKey } from "./notify-settings";
 import type { OtRecord } from "./ot-data";
 import { canBill, invoiceDue, invoiceStatus, type AccState } from "./acc-store";
-import { lastSub, type ProjectTask } from "./pm-data";
+import { isRef, lastSub, projectHref, type ProjectTask } from "./pm-data";
 import { memberName, openNudge } from "./pm-store";
 import { eventChangeNotices, eventNotices, type PmEvent } from "./pm-schedule-data";
 import type { PmState } from "./pm-store";
@@ -374,7 +374,7 @@ export function buildNotices(input: {
     /* ลูกค้าชำระงวดถัดไปของโปรเจคที่กำลังทำ — PM ต้องรู้ว่างานงวดไหนได้เงินแล้ว (งวดแรกขึ้นเป็นงานเข้าใหม่อยู่แล้ว) */
     for (const r of acc.receipts) {
       if (r.seq <= 1 || daysBetween(r.date, today) > RECENT_DAYS) continue;
-      const proj = pm.projects.find((p) => p.deal === r.deal);
+      const proj = pm.projects.find((p) => isRef(p, r.deal));
       if (!proj) continue;
       out.push({
         id: `pmpaid-${r.no}`,
@@ -382,7 +382,7 @@ export function buildNotices(input: {
         group: "ลูกค้าชำระงวดถัดไปแล้ว",
         title: `${proj.cus} · งวดที่ ${r.seq}`,
         detail: `${r.no} · ${baht(r.total)} บาท`,
-        href: `/pm/projects?deal=${encodeURIComponent(r.deal)}`,
+        href: projectHref(proj.pj),
         date: r.date,
       });
     }
@@ -420,7 +420,7 @@ export function buildNotices(input: {
         group: "ดีลถูกยกเลิก งานหยุด",
         title: `${p.cus} · ${p.name || p.scope}`,
         detail: `${p.cancelled.by}ยกเลิกเมื่อ ${thaiDate(day)} · ${p.cancelled.why} — แผนที่วางไว้ยังเปิดดูได้`,
-        href: `/pm/projects?deal=${encodeURIComponent(p.deal)}`,
+        href: projectHref(p.pj),
         date: day,
       });
     }
@@ -468,7 +468,7 @@ export function buildNotices(input: {
           detail:
             `${t.whos.map(memberName).join(", ") || "ยังไม่มีผู้รับผิดชอบ"} · เลยกำหนด ${over} วัน` +
             (p.status === "done" ? " · โปรเจคปิดว่าส่งมอบแล้ว" : ""),
-          href: `/pm/projects?deal=${encodeURIComponent(p.deal)}`,
+          href: projectHref(p.pj),
           date: t.due,
         });
       }
@@ -542,10 +542,10 @@ export function buildNotices(input: {
         /* ── PM ทวงงานใบนี้ (กติกากลาง: สิ่งที่คนหนึ่งต้องลงมือ ต้องถึงตัวเขา) ──
            ก่อนหน้านี้ PM พิมพ์ทวงในแชทโปรเจค ซึ่งพนักงานเปิดไม่ได้ ข้อความจึงไม่เคยถึงใคร
            ขึ้นเฉพาะตอนที่ข้อความล่าสุดของงานนั้นยังเป็นการทวงที่ยังไม่ตอบ ตอบแล้วหายเอง */
-        const nudge = openNudge(pm, p.deal, t.name);
+        const nudge = openNudge(pm, p.pj, t.name);
         if (nudge) {
           out.push({
-            id: `mytask-nudge-${p.deal}-${i}`,
+            id: `mytask-nudge-${p.pj}-${i}`,
             level: "late",
             group: "PM ทวงงาน",
             title: `${p.cus} · ${t.name}`,

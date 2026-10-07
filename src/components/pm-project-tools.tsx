@@ -19,7 +19,7 @@ import { CloseIcon, FileIcon, LinkIcon, PencilIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
 /** ของที่ต้องใช้ตอนแก้ชื่อ — ได้ทั้งใบงานที่ยังวางแผนอยู่และโปรเจคที่เดินแล้ว */
-export type RenameTarget = { deal: string; name?: string; cus: string; scope: string };
+export type RenameTarget = { pj: string; name?: string; cus: string; scope: string };
 
 // ─── แก้ชื่อโปรเจค ─────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ export function RenameDialog({ project, onClose }: { project: RenameTarget; onCl
       setErr(true);
       return;
     }
-    renameProject(project.deal, v);
+    renameProject(project.pj, v);
     onClose();
   }
   return (
@@ -116,7 +116,7 @@ export function AddDocButton({ onClick, className = "" }: { onClick: () => void;
  * ยังไม่มีที่เก็บไฟล์จริง — เก็บแค่ชื่อกับขนาดเหมือนไฟล์แนบอื่นในระบบ (ดู file-drop.tsx)
  * ลิงก์ http(s) เก็บ url ไว้เปิดได้จริง
  */
-export function AddDocsDialog({ deal, onClose }: { deal: string; onClose: () => void }) {
+export function AddDocsDialog({ pj, onClose }: { pj: string; onClose: () => void }) {
   const me = useProfile();
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [busy, setBusy] = useState(false);
@@ -126,7 +126,7 @@ export function AddDocsDialog({ deal, onClose }: { deal: string; onClose: () => 
       const url = f.url && /^https?:\/\//i.test(f.url) ? f.url : undefined;
       return { n: f.name, sz: url ? "ลิงก์" : fileSize(f.size), by: me.name, at, url, fileId: f.fileId };
     });
-    addProjectDocs(deal, docs);
+    addProjectDocs(pj, docs);
     onClose();
   }
   return (
@@ -164,12 +164,12 @@ export function AddDocsDialog({ deal, onClose }: { deal: string; onClose: () => 
 
 /** กล่องยืนยันก่อนเอาเอกสารออก */
 export function RemoveDocDialog({
-  deal,
+  pj,
   name,
   fileId,
   onClose,
 }: {
-  deal: string;
+  pj: string;
   name: string | null;
   /** รหัสไฟล์จริงของเอกสารที่กำลังจะเอาออก — ลบออกจากที่เก็บด้วย จะได้ไม่มีไฟล์ค้างในเครื่อง */
   fileId?: string;
@@ -184,7 +184,7 @@ export function RemoveDocDialog({
       confirmLabel="เอาออก"
       tone="destructive"
       onConfirm={() => {
-        if (name) removeProjectDoc(deal, name);
+        if (name) removeProjectDoc(pj, name);
         if (fileId) void removeStoredFile(fileId);
         onClose();
       }}
@@ -203,11 +203,11 @@ export function docSub(d: ProjectDoc) {
  * ลิงก์เปิดได้จริง · ไฟล์ที่แนบเก็บไว้ในเครื่อง (file-store) จึงกดเปิดดูได้เหมือนกัน
  */
 export function DocChips({
-  deal,
+  pj,
   docs,
   canEdit,
 }: {
-  deal: string;
+  pj: string;
   docs: ProjectDoc[];
   canEdit: boolean;
 }) {
@@ -263,7 +263,7 @@ export function DocChips({
         );
       })}
       <RemoveDocDialog
-        deal={deal}
+        pj={pj}
         name={removing}
         fileId={docs.find((d) => d.n === removing)?.fileId}
         onClose={() => setRemoving(null)}

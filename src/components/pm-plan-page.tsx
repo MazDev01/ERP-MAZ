@@ -27,6 +27,8 @@ import {
   fileKindLabel,
   teamRoles,
   roleLabel,
+  isRef,
+  projectHref,
   type InboxJob,
   type Member,
   type Project,
@@ -82,7 +84,8 @@ type Board = { phases: PlanPhase[]; plan: Draft[][] };
  * docs = ข้อมูลสำหรับเปิดใบเสนอราคา/ข้อเสนอ (โปรเจคตั้งต้นไม่มี)
  */
 type Target = {
-  deal: string;
+  /** เลขที่โปรเจค (PJ-) — ลิงก์เก่าส่งเลขที่ดีลมาก็ยังหาเจอด้วย isRef */
+  pj: string;
   cus: string;
   /** ชื่อโปรเจค — ว่าง = ยังไม่ได้ตั้ง ขึ้นชื่อลูกค้าแทน (ยกมาจากระบบต้นฉบับ) */
   name?: string;
@@ -100,7 +103,7 @@ type Target = {
 
 function targetOfJob(j: InboxJob): Target {
   return {
-    deal: j.deal,
+    pj: j.pj,
     cus: j.cus,
     name: j.name,
     scope: j.scope,
@@ -115,7 +118,7 @@ function targetOfJob(j: InboxJob): Target {
 
 function targetOfProject(p: Project): Target {
   return {
-    deal: p.deal,
+    pj: p.pj,
     cus: p.cus,
     name: p.name,
     scope: p.scope,
@@ -163,25 +166,28 @@ export function PmPlanPage() {
   const params = useSearchParams();
 
   /* ทุกงานที่รับแล้วรอวางแผน — รวมงานที่ไม่มีข้อเสนอ ซึ่งต้องสร้างเฟสเอง
-     ปุ่ม "วางแผนงาน" ในหน้าโปรเจคส่ง ?deal= ของโปรเจคที่ยืนยันแล้วมา — เปิดมาแก้แผนได้ด้วย */
-  const fromParam = params.get("deal") ?? "";
+     ปุ่ม "วางแผนงาน" ในหน้าโปรเจคส่ง ?pj= ของโปรเจคที่ยืนยันแล้วมา — เปิดมาแก้แผนได้ด้วย
+     ลิงก์เก่าที่ส่ง ?deal= มายังเปิดได้ (isRef หาเจอทั้งเลขโปรเจคและเลขดีล) */
+  const fromRef = params.get("pj") ?? params.get("deal") ?? "";
+  /* ลิงก์เก่าส่งเลขที่ดีลมา — แปลงเป็นเลขที่โปรเจคก่อน แล้วที่เหลือในหน้านี้ใช้เลข PJ อย่างเดียว */
+  const fromParam = [...pm.projects, ...pm.inbox].find((x) => isRef(x, fromRef))?.pj ?? fromRef;
   /* โปรเจคที่ถูกยกเลิกแล้ววางแผนต่อไม่ได้ — ไม่เอาเข้ารายการให้เลือก */
-  const linked = pm.projects.find((p) => p.deal === fromParam && p.status !== "cancelled");
+  const linked = pm.projects.find((p) => isRef(p, fromParam) && p.status !== "cancelled");
   const targets: Target[] = [
     ...(linked ? [targetOfProject(linked)] : []),
     ...pm.inbox.filter((j) => j.stage === "plan").map(targetOfJob),
   ];
-  const [dealNo, setDealNo] = useState(fromParam);
-  const job = targets.find((t) => t.deal === dealNo) ?? targets[0];
+  const [pjNo, setPjNo] = useState(() => linked?.pj ?? fromParam);
+  const job = targets.find((t) => t.pj === pjNo) ?? targets[0];
   /*
    * ลิงก์ชี้มาที่ดีลที่ไม่มีให้วางแผนแล้ว (ถูกยกเลิก หรือยืนยันแผนไปแล้ว)
    * ต้องบอกให้รู้ ไม่ใช่สลับไปงานอื่นเงียบ ๆ แล้วปล่อยให้แก้ผิดใบ (ผู้ใช้ทักท้วง 24 ก.ย. 2569)
    */
-  const gone = Boolean(fromParam) && !targets.some((t) => t.deal === fromParam);
-  const cancelled = pm.projects.find((p) => p.deal === fromParam && p.status === "cancelled");
+  const gone = Boolean(fromParam) && !targets.some((t) => t.pj === fromParam);
+  const cancelled = pm.projects.find((p) => isRef(p, fromParam) && p.status === "cancelled");
 
   /* ร่างเก็บในสโตร์ คีย์ด้วยเลขที่ดีล — สลับงานไปมาหรือรีโหลดแล้วสิ่งที่กรอกไว้ไม่หาย */
-  const draft = job ? pm.drafts[job.deal] : undefined;
+  const draft = job ? pm.drafts[job.pj] : undefined;
   const board: Board = job ? (draft ?? job.initial()) : { phases: [], plan: [] };
   const { phases, plan } = board;
 
@@ -207,7 +213,7 @@ export function PmPlanPage() {
     if (!job) return;
     const next = cloneBoard(board);
     fn(next);
-    savePlanDraft(job.deal, next, `${me.name} (PM)`);
+    savePlanDraft(job.pj, next, `${me.name} (PM)`);
   }
 
   function dropOn(phase: number, index: number) {
@@ -251,7 +257,7 @@ export function PmPlanPage() {
         <section className="glass rounded-[15px] px-5 py-12 text-center">
           {gone ? (
             <>
-              <b className="block text-[15px] font-bold">ไม่พบงานของดีลนี้ในหน้าวางแผน</b>
+              <b className="block text-[15px] font-bold">ไม่พบงานของโปรเจคนี้ในหน้าวางแผน</b>
               <p className="mx-auto mt-2 max-w-[520px] text-[13px] leading-relaxed text-muted-foreground">
                 <span className="num">{fromParam}</span>{" "}
                 {cancelled
@@ -260,7 +266,7 @@ export function PmPlanPage() {
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2.5">
                 <Link
-                  href={`/pm/projects${fromParam ? `?deal=${encodeURIComponent(fromParam)}` : ""}`}
+                  href={fromParam ? projectHref(fromParam) : "/pm/projects"}
                   className="btn glass-thin"
                 >
                   เปิดหน้าโปรเจค
@@ -316,11 +322,11 @@ export function PmPlanPage() {
     }));
     if (job.project) {
       /* โปรเจคที่เดินงานอยู่ — บันทึกแผนใหม่แล้วกลับไปหน้าโปรเจคนั้น (ร่างถูกล้างในสโตร์แล้ว) */
-      replanProject(job.deal, tasks, outPhases);
-      router.push(`/pm/projects?deal=${encodeURIComponent(job.deal)}`);
+      replanProject(job.pj, tasks, outPhases);
+      router.push(projectHref(job.pj));
       return;
     }
-    confirmPlan(job.deal, tasks, `${me.name} (PM)`, outPhases);
+    confirmPlan(job.pj, tasks, `${me.name} (PM)`, outPhases);
     /* ยืนยันแล้วกลับไปหน้ารายการโปรเจคตามต้นแบบ — โฟลเดอร์ของงานนี้โผล่ในรายการทันที */
     router.push("/pm/projects");
   }
@@ -335,15 +341,15 @@ export function PmPlanPage() {
             {!ro && <RenameButton onClick={() => setRenaming(true)} />}
           </h1>
           <p className="num mt-1 text-[13px] font-semibold text-muted-foreground">
-            {job.deal}
+            {job.pj}
             {job.project ? " · แก้แผน" : ""}
           </p>
         </div>
         <div className="tools w-full flex-wrap items-center sm:w-auto sm:flex-nowrap">
           <Select
-            value={job.deal}
+            value={job.pj}
             onChange={(e) => {
-              setDealNo(e.target.value);
+              setPjNo(e.target.value);
               setPicked({});
               setOpen(null);
             }}
@@ -351,8 +357,8 @@ export function PmPlanPage() {
             className="h-9 w-full font-semibold max-sm:h-[46px] max-sm:rounded-full! sm:w-[300px]"
           >
             {targets.map((t) => (
-              <option key={t.deal} value={t.deal}>
-                {t.cus} ({t.deal}){t.project ? " · แก้แผน" : ""}
+              <option key={t.pj} value={t.pj}>
+                {t.cus} ({t.pj}){t.project ? " · แก้แผน" : ""}
               </option>
             ))}
           </Select>
@@ -405,7 +411,7 @@ export function PmPlanPage() {
             Proposal
           </button>
           {/* เอกสารอื่นที่แนบให้ทีมเห็น + ปุ่มแนบเพิ่ม (ยกมาจากระบบต้นฉบับ) */}
-          <DocChips deal={job.deal} docs={job.extra} canEdit={!ro} />
+          <DocChips pj={job.pj} docs={job.extra} canEdit={!ro} />
           {!ro && <AddDocButton onClick={() => setAddingDoc(true)} />}
         </span>
         {/* มือถือ: กรอบเวลาเป็นแคปซูลชมพูบรรทัดเดียว (ต้นแบบ pm-plan.html) */}
@@ -657,11 +663,11 @@ export function PmPlanPage() {
 
       {renaming && (
         <RenameDialog
-          project={{ deal: job.deal, name: job.name, cus: job.cus, scope: job.scope }}
+          project={{ pj: job.pj, name: job.name, cus: job.cus, scope: job.scope }}
           onClose={() => setRenaming(false)}
         />
       )}
-      {addingDoc && <AddDocsDialog deal={job.deal} onClose={() => setAddingDoc(false)} />}
+      {addingDoc && <AddDocsDialog pj={job.pj} onClose={() => setAddingDoc(false)} />}
 
       {phaseEdit !== null && (
         <PhaseDialog

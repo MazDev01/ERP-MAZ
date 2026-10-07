@@ -14,13 +14,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { daysBetween, thaiStamp, todayIso } from "@/lib/format";
-import { projName, projectProgress, type InboxJob, type Project } from "@/lib/pm-data";
+import { planHref, projName, projectHref, projectProgress, type InboxJob, type Project } from "@/lib/pm-data";
 import { usePm, type PlanDraft } from "@/lib/pm-store";
 import { ReadOnlyNote } from "./pm-readonly";
 import { useRole } from "@/lib/role";
-import { usePsMe } from "@/lib/presales-work";
+import { USERS } from "@/lib/mock-data";
 import { SearchIcon } from "./icons";
-import { NewProjectButton } from "./project-new-page";
+import "@/styles/mobile/pm-projects.css";
 
 type FolderKey = "all" | "plan" | "run" | "late" | "done" | "cancelled";
 
@@ -50,9 +50,7 @@ export function PmProjectsPage() {
    * โปรเจคของคนอื่นไม่ใช่เรื่องของ SA จึงกรองตั้งแต่ต้นทาง ไม่ใช่ซ่อนแค่บนหน้าจอ
    */
   const role = useRole();
-  /* สลับคนในทีมก่อนการขายได้แล้ว (SA/BD) — ต้องกรองตามคนที่ใช้อยู่ ไม่ใช่ SA ตายตัว */
-  const psMe = usePsMe();
-  const mine = role === "ps" ? psMe.full : "";
+  const mine = role === "ps" ? USERS.ps.name : "";
   const [folder, setFolder] = useState<FolderKey>("all");
   const [query, setQuery] = useState("");
 
@@ -71,7 +69,7 @@ export function PmProjectsPage() {
     ...(mine
       ? []
       : pm.inbox
-          .filter((j) => j.stage === "plan" && !pm.projects.some((p) => p.deal === j.deal))
+          .filter((j) => j.stage === "plan" && !pm.projects.some((p) => p.pj === j.pj))
           .map((j) => ({ kind: "plan" as const, j }))),
   ];
 
@@ -90,13 +88,14 @@ export function PmProjectsPage() {
   const rows = items.filter((x) => {
     if (!active.test(x)) return false;
     const r = x.kind === "project" ? x.p : x.j;
-    return !q || `${projName(r)} ${r.cus} ${r.deal} ${r.scope} ${r.quo}`.toLowerCase().includes(q);
+    return !q || `${projName(r)} ${r.cus} ${r.pj} ${r.deal ?? ""} ${r.scope} ${r.quo}`.toLowerCase().includes(q);
   });
 
   return (
-    <div className="space-y-4">
+    <div className="pj-m space-y-4">
       <div className="bar">
-        <div className="max-sm:hidden">
+        <div>
+          <h1>{mine ? "โปรเจคที่รับโอน" : "โปรเจค"}</h1>
           <p>
             {mine
               ? "โปรเจคที่ PM โอนมาให้ดูแล ดูแผนงาน ความคืบหน้า และพูดคุยกันในทีม"
@@ -110,13 +109,11 @@ export function PmProjectsPage() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="ค้นหาลูกค้า เลขที่ดีล หรือขอบเขตงาน"
+              placeholder="ค้นหาลูกค้า เลขที่โปรเจค หรือขอบเขตงาน"
               aria-label="ค้นหาโปรเจค"
               autoComplete="off"
             />
           </span>
-          {/* โปรเจคที่ไม่ได้มาจากดีล เช่นงานภายใน ตั้งเองได้จากที่นี่ (ต้นแบบ project-new.html) */}
-          {!mine && <NewProjectButton />}
         </div>
       </div>
       <ReadOnlyNote />
@@ -124,8 +121,7 @@ export function PmProjectsPage() {
       {/* ตัวกรองสถานะขึ้นบรรทัดใหม่เมื่อไม่พอ — ไม่ปัดข้าง (เจ้าของสั่ง 25 ก.ย. 2569)
           ตัวกรองที่อยู่นอกจอเท่ากับไม่มี เพราะไม่มีอะไรบอกว่าเลื่อนต่อได้ */}
       <div
-        /* มือถือ: ชิปแถวเดียวเลื่อนข้าง (ต้นแบบ pm-projects.html บล็อก pj-mobile 1 ต.ค. 2569) */
-        className="chip-scroll flex gap-2 max-sm:-mx-4 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 sm:flex-wrap"
+        className="pj-chips flex flex-wrap gap-2"
         role="group"
         aria-label="กรองตามสถานะโปรเจค"
       >
@@ -137,10 +133,10 @@ export function PmProjectsPage() {
               type="button"
               aria-pressed={on}
               onClick={() => setFolder(f.key)}
-              className={`inline-flex h-[34px] items-center gap-2 rounded-[20px] border px-[15px] text-[13px] font-semibold max-sm:h-[38px] max-sm:flex-none max-sm:border-0! max-sm:whitespace-nowrap ${
+              className={`pj-chip${on ? " on" : ""} inline-flex h-[34px] items-center gap-2 rounded-[20px] border px-[15px] text-[13px] font-semibold max-sm:h-10 max-sm:flex-none max-sm:whitespace-nowrap ${
                 on
-                  ? "border-primary bg-accent text-primary max-sm:bg-primary! max-sm:text-primary-foreground!"
-                  : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary max-sm:bg-[#EDE8EA]! max-sm:text-[#6E6164]!"
+                  ? "border-primary bg-accent text-primary"
+                  : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
               }`}
             >
               {f.name}
@@ -153,21 +149,21 @@ export function PmProjectsPage() {
       </div>
 
       <section>
-        <p className="mb-3 flex items-center gap-2.5 text-[15px] font-bold max-sm:hidden">
+        <p className="pj-sech mb-3 flex items-center gap-2.5 text-[15px] font-bold">
           โปรเจค (นับเป็นโปรเจค ไม่ใช่ใบงานย่อย)
           <b className="num rounded-[20px] bg-muted px-2.5 py-0.5 text-[11px] font-bold text-muted-foreground">
             {rows.length}
           </b>
         </p>
         {rows.length === 0 ? (
-          <p className="p-10 text-center text-[13px] text-muted-foreground">ไม่พบโปรเจคที่ตรงกับเงื่อนไข</p>
+          <p className="pj-empty p-10 text-center text-[13px] text-muted-foreground">ไม่พบโปรเจคที่ตรงกับเงื่อนไข</p>
         ) : (
-          <div className="grid gap-2.5 max-sm:grid-cols-1! [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))]">
+          <div className="pj-list grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))]">
             {rows.map((x) =>
               x.kind === "project" ? (
-                <Folder key={x.p.deal} project={x.p} today={today} late={late(x)} left={openLeft(x.p)} />
+                <Folder key={x.p.pj} project={x.p} today={today} late={late(x)} left={openLeft(x.p)} />
               ) : (
-                <PlanFolder key={x.j.deal} job={x.j} draft={pm.drafts[x.j.deal]} />
+                <PlanFolder key={x.j.pj} job={x.j} draft={pm.drafts[x.j.pj]} />
               ),
             )}
           </div>
@@ -202,103 +198,40 @@ function Folder({
 
   return (
     <Link
-      href={`/pm/projects?deal=${encodeURIComponent(p.deal)}`}
+      href={projectHref(p.pj)}
       title={`${projName(p)} · ${p.cus}`}
-      className="flex flex-col items-center gap-0.5 rounded-[14px] px-2.5 pt-[18px] pb-4 text-center transition-colors hover:bg-black/[.045] max-sm:block max-sm:rounded-[20px] max-sm:bg-card max-sm:p-3.5 max-sm:text-left max-sm:shadow-[0_1px_2px_rgb(40_20_25/0.04)] max-sm:active:bg-muted"
+      className="pj-card flex flex-col items-center gap-0.5 rounded-[14px] px-2.5 pt-[18px] pb-4 text-center transition-colors hover:bg-black/[.045] max-sm:border max-sm:border-border max-sm:bg-card max-sm:pt-3.5 max-sm:active:bg-muted"
     >
-      <PhoneRow
-        name={projName(p)}
-        cus={p.cus}
-        status={status}
-        foot={
-          p.status === "cancelled" ? (
-            <em className="text-[12.5px] text-muted-foreground not-italic">{p.cancelled?.why || "ยกเลิกแล้ว"}</em>
-          ) : (
-            <>
-              <span className="block h-2 w-full overflow-hidden rounded-full bg-muted">
-                <i className="block h-full rounded-full bg-primary" style={{ width: `${pr.pct}%` }} />
-              </span>
-              <em className="num flex justify-between text-[12.5px] text-muted-foreground not-italic">
-                <span>{pr.pct}%</span>
-                <span>
-                  {pr.done} จาก {pr.all} งาน
-                </span>
-              </em>
-            </>
-          )
-        }
-      />
-
-      <span className="contents max-sm:hidden">
       <FolderIcon tone={tone} />
+      <MobileFolderIcon />
       {/* ชื่อโปรเจคเป็นหัว ลูกค้าเป็นบรรทัดรอง (PM-BR-03) */}
-      <b className="mt-[9px] line-clamp-2 max-w-full text-[13.5px] leading-snug font-bold">{projName(p)}</b>
-      <em className="max-w-full truncate text-[11px] text-muted-foreground not-italic">{p.cus}</em>
-      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <b className="pj-name mt-[9px] line-clamp-2 max-w-full text-[13.5px] leading-snug font-bold">{projName(p)}</b>
+      <em className="pj-cus max-w-full truncate text-[11px] text-muted-foreground not-italic">{p.cus}</em>
+      <span className="pj-st flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <i className="inline-block size-1.5 flex-none rounded-full" style={{ background: status.dot }} />
         {status.text}
       </span>
       {p.status === "cancelled" ? (
         /* ยกเลิกแล้วไม่มีความคืบหน้าให้ดู — บอกเหตุผลที่ยกเลิกแทน (ตามต้นแบบ) */
-        <em className="mt-[7px] line-clamp-2 max-w-full text-[10.5px] text-muted-foreground not-italic">
+        <em className="pj-hint pj-hint-muted mt-[7px] line-clamp-2 max-w-full text-[10.5px] text-muted-foreground not-italic">
           {p.cancelled?.why || "ยกเลิกแล้ว"}
         </em>
       ) : (
-        <span className="mt-[7px] flex w-full max-w-[118px] flex-col items-center gap-1">
-          <span className="block h-1 w-full overflow-hidden rounded bg-muted">
+        <span className="pj-pg mt-[7px] flex w-full max-w-[118px] flex-col items-center gap-1">
+          <span className="pj-bar block h-1 w-full overflow-hidden rounded bg-muted">
             <i className="block h-full rounded bg-primary" style={{ width: `${pr.pct}%` }} />
           </span>
-          <em className="num text-[10.5px] text-muted-foreground not-italic">
-            {pr.pct}% · {pr.done} จาก {pr.all} งาน
+          <em className="pj-pct num text-[10.5px] text-muted-foreground not-italic">
+            {/* มือถือ: เปอร์เซ็นต์ชิดซ้าย จำนวนงานชิดขวา — เดสก์ท็อปยังอ่านเป็นบรรทัดเดียวเหมือนเดิม */}
+            <span>{pr.pct}%</span>
+            <span className="pj-sep">{" · "}</span>
+            <span>
+              {pr.done} จาก {pr.all} งาน
+            </span>
           </em>
         </span>
       )}
-      </span>
     </Link>
-  );
-}
-
-/*
- * การ์ดบนมือถือ — ไอคอนกลม ชื่อโปรเจค ลูกค้า ป้ายสถานะขวา เส้นประคั่น แล้วแถบความคืบหน้าเต็มกว้าง
- * (ต้นแบบ pm-projects.html บล็อก pj-mobile 1 ต.ค. 2569)
- */
-function PhoneRow({
-  name,
-  cus,
-  status,
-  foot,
-}: {
-  name: string;
-  cus: string;
-  status: { text: string; dot: string };
-  foot: React.ReactNode;
-}) {
-  return (
-    <span className="block sm:hidden">
-      <span className="flex items-start gap-3">
-        <span className="grid size-10 flex-none place-items-center rounded-full bg-[#E8F0FC] text-[#1A5DB5]">
-          <FolderGlyph />
-        </span>
-        <span className="min-w-0 flex-1">
-          <b className="block text-[15px] leading-snug font-bold">{name}</b>
-          <em className="block truncate text-[12.5px] text-muted-foreground not-italic">{cus}</em>
-        </span>
-        <span className="flex flex-none items-center gap-1.5 rounded-full bg-[#F3EEF0] px-2.5 py-[3px] text-[11.5px] font-bold whitespace-nowrap text-[#6E6164]">
-          <i className="inline-block size-1.5 flex-none rounded-full" style={{ background: status.dot }} />
-          {status.text}
-        </span>
-      </span>
-      <span className="my-3 block border-t border-dashed border-[#ECE3E5]" />
-      <span className="flex flex-col gap-1.5">{foot}</span>
-    </span>
-  );
-}
-
-function FolderGlyph() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-    </svg>
   );
 }
 
@@ -306,38 +239,26 @@ function FolderGlyph() {
 function PlanFolder({ job: j, draft }: { job: InboxJob; draft?: PlanDraft }) {
   return (
     <Link
-      href={`/pm/plan?deal=${encodeURIComponent(j.deal)}`}
+      href={planHref(j.pj)}
       title={`${projName(j)} · ${j.cus}`}
-      className="flex flex-col items-center gap-0.5 rounded-[14px] px-2.5 pt-[18px] pb-4 text-center transition-colors hover:bg-black/[.045] max-sm:block max-sm:rounded-[20px] max-sm:bg-card max-sm:p-3.5 max-sm:text-left max-sm:shadow-[0_1px_2px_rgb(40_20_25/0.04)] max-sm:active:bg-muted"
+      className="pj-card flex flex-col items-center gap-0.5 rounded-[14px] px-2.5 pt-[18px] pb-4 text-center transition-colors hover:bg-black/[.045] max-sm:border max-sm:border-border max-sm:bg-card max-sm:pt-3.5 max-sm:active:bg-muted"
     >
-      <PhoneRow
-        name={projName(j)}
-        cus={j.cus}
-        status={{ text: j.phases.length ? "ยังไม่ยืนยันแผน" : "ยังไม่มีแผนงาน", dot: "var(--warning)" }}
-        foot={
-          <em className="text-[12.5px] font-semibold text-primary not-italic">
-            {draft ? `มีร่างแผน · แก้ล่าสุด ${thaiStamp(draft.at)}` : "กดเพื่อไปวางแผนงาน"}
-          </em>
-        }
-      />
-
-      <span className="contents max-sm:hidden">
       <FolderIcon tone={FOLDER_TONE.d} />
-      <b className="mt-[9px] line-clamp-2 max-w-full text-[13.5px] leading-snug font-bold">{projName(j)}</b>
-      <em className="max-w-full truncate text-[11px] text-muted-foreground not-italic">{j.cus}</em>
-      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <MobileFolderIcon />
+      <b className="pj-name mt-[9px] line-clamp-2 max-w-full text-[13.5px] leading-snug font-bold">{projName(j)}</b>
+      <em className="pj-cus max-w-full truncate text-[11px] text-muted-foreground not-italic">{j.cus}</em>
+      <span className="pj-st flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <i className="inline-block size-1.5 flex-none rounded-full bg-[var(--warning)]" />
         {j.phases.length ? "ยังไม่ยืนยันแผน" : "ยังไม่มีแผนงาน"}
       </span>
       {/* ร่างที่ PM กรอกค้างไว้ — คนอื่นต้องเห็นว่ามีร่างอยู่ ไม่ใช่เห็นแค่ว่ายังไม่ยืนยัน */}
       {draft ? (
-        <em className="mt-[7px] text-[10.5px] font-semibold text-[var(--warning)] not-italic">
+        <em className="pj-hint mt-[7px] text-[10.5px] font-semibold text-[var(--warning)] not-italic">
           มีร่างแผน · แก้ล่าสุด {thaiStamp(draft.at)}
         </em>
       ) : (
-        <em className="mt-[7px] text-[10.5px] font-semibold text-primary not-italic">กดเพื่อไปวางแผนงาน</em>
+        <em className="pj-hint mt-[7px] text-[10.5px] font-semibold text-primary not-italic">กดเพื่อไปวางแผนงาน</em>
       )}
-      </span>
     </Link>
   );
 }
@@ -351,5 +272,25 @@ function FolderIcon({ tone }: { tone: { back: string; front: string } }) {
       />
       <path fill={tone.front} d="M2 17h60v25a6 6 0 0 1-6 6H8a6 6 0 0 1-6-6Z" />
     </svg>
+  );
+}
+
+/** ไอคอนโฟลเดอร์ในวงกลมฟ้า — แสดงเฉพาะการ์ดบนมือถือ (เดสก์ท็อปซ่อนด้วย hidden) */
+function MobileFolderIcon() {
+  return (
+    <span className="pj-ico hidden" aria-hidden="true">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      </svg>
+    </span>
   );
 }

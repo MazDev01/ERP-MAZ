@@ -95,7 +95,7 @@ function Chat({
     const text = draft.trim();
     if (!text && !pick.length) return;
     const now = bkkNow();
-    postChat(project.deal, text, `${toIsoDate(now)} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`, pick, me);
+    postChat(project.pj, text, `${toIsoDate(now)} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`, pick, me);
     setDraft("");
     setPick([]);
   }
@@ -403,7 +403,7 @@ export function ProjectChat({
           )}
         </div>
         {/* key = เลขโปรเจค — สลับไปโปรเจคอื่นแล้วข้อความที่พิมพ์ค้างไม่ติดข้ามไป */}
-        <Chat key={project.deal} project={project} today={today} win active={open} me={me} />
+        <Chat key={project.pj} project={project} today={today} win active={open} me={me} />
       </div>
     </>
   );

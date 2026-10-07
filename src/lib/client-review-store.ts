@@ -1,16 +1,14 @@
 "use client";
 
 /*
- * ลูกค้าตรวจงานผ่านลิงก์ (ยกมาจากระบบต้นฉบับ ERP_Test — เจ้าของสั่ง 5 ต.ค. 2569)
+ * ลูกค้าตรวจงานผ่านลิงก์ (เฟส 1 — หน้าบ้านอย่างเดียว เจ้าของสั่ง 2 ต.ค. 2569)
  *
  *   PM ส่งงานที่ตรวจผ่านแล้วให้ลูกค้า → ได้ลิงก์ /review/<token> หนึ่งรอบ (Draft N ต่องาน)
  *   ลูกค้าเปิดลิงก์ ไม่ต้องล็อกอิน → ดูไฟล์ คอมเมนต์ตามเวลาในวิดีโอ/ปักหมุดบนรูป → ส่งความเห็น หรืออนุมัติทั้งหมด
  *   PM เห็นความเห็น → ส่งให้ทีมแก้ (ใช้ทางตีกลับเดิม sendBackWork) หรือปิดงาน (approveWorkFlow)
  *
- * ต่างจากต้นฉบับตรงที่อ้างโปรเจคด้วย "เลขที่ดีล" (deal) ตามโครงสร้างของระบบนี้ ไม่ใช่เลขที่โปรเจค (pj)
- *
- * ยังไม่มี backend ทุกอย่างอยู่ใน localStorage ของเบราว์เซอร์นี้ — ลิงก์จึงเปิดได้แค่ในเครื่องเดียวกัน
- * TODO: ตารางรอบตรวจที่เซิร์ฟเวอร์ + token แบบลงลายเซ็น (หมดอายุฝั่งเซิร์ฟเวอร์) + ที่เก็บไฟล์จริง
+ * เฟส 1 ยังไม่มี backend ทุกอย่างอยู่ใน localStorage ของเบราว์เซอร์นี้ — ลิงก์จึงเปิดได้แค่ในเครื่องเดียวกัน
+ * TODO เฟส 2: ตารางรอบตรวจที่เซิร์ฟเวอร์ + token แบบลงลายเซ็น (หมดอายุฝั่งเซิร์ฟเวอร์) + ที่เก็บไฟล์จริง
  *   ไฟล์ที่ PM เลือกจากเครื่องตอนนี้เปิดได้ผ่าน object URL ในรอบเปิดหน้านั้นเท่านั้น รีโหลดแล้วหาย
  */
 
@@ -18,7 +16,8 @@ import { useSyncExternalStore } from "react";
 import { addDays, bkkStamp, todayIso } from "./format";
 import { approveWorkFlow } from "./flow";
 import { createPersistedStore } from "./persisted-store";
-import { addProjectAct, sendBackWork, sendToClientWork } from "./pm-store";
+import { addProjectAct, pmSnapshot, sendBackWork, sendToClientWork } from "./pm-store";
+import { isRef, legacyPj } from "./pm-data";
 
 export type ReviewFileKind = "image" | "video" | "pdf" | "link";
 
@@ -63,8 +62,8 @@ export type ReviewStatus = "open" | "submitted" | "approved" | "expired";
 
 export type ReviewRound = {
   token: string;
-  /** เลขที่ดีลของโปรเจค — คีย์เดียวกับที่ pm-store ใช้ */
-  deal: string;
+  /** เลขที่โปรเจค (PJ-) — เดิมเก็บเลขที่ดีล ย้ายตอนอ่านข้อมูลเก่า (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  pj: string;
   taskName: string;
   /** รอบที่ของงานใบนี้ (Draft N) */
   round: number;
@@ -132,7 +131,7 @@ export const DEMO_TOKEN = "mtk7Qd2LxR9vWp4aZc";
 const SEED: ReviewRound[] = [
   {
     token: DEMO_TOKEN,
-    deal: "DL-2569-0018",
+    pj: "PJ-2569-0002",
     taskName: "ออกแบบหน้าจอทั้งเว็บไซต์",
     round: 1,
     createdAt: "2026-10-01 10:30",
@@ -156,14 +155,46 @@ function isState(v: unknown): v is ClientReviewState {
   return typeof v === "object" && v !== null && Array.isArray((v as ClientReviewState).rounds);
 }
 
-/** เติมรอบตัวอย่างที่เพิ่มเข้าชุดตั้งต้นทีหลัง — ไม่ทับรอบที่ผู้ใช้ทำไว้แล้ว */
+/*
+ * เติมรอบตัวอย่างที่เพิ่มเข้าชุดตั้งต้นทีหลัง — ไม่ทับรอบที่ผู้ใช้ทำไว้แล้ว
+ * รอบรุ่นก่อน 5 ต.ค. 2569 อ้างโปรเจคด้วยเลขที่ดีล (ช่อง deal) — แปลงเป็นเลขที่โปรเจคจากสโตร์ของ PM
+ */
 function migrate(input: ClientReviewState): ClientReviewState {
-  const have = new Set(input.rounds.map((r) => r.token));
+  const legacy = input.rounds.some((r) => !r.pj);
+  const v = legacy
+    ? {
+        ...input,
+        rounds: input.rounds.map((r) => {
+          if (r.pj) return r;
+          const { deal, ...rest } = r as ReviewRound & { deal?: string };
+          const pj = (deal && pmSnapshot().projects.find((p) => isRef(p, deal))?.pj) || legacyPj(deal);
+          return { ...rest, pj };
+        }),
+      }
+    : input;
+  const have = new Set(v.rounds.map((r) => r.token));
   const added = SEED.filter((r) => !have.has(r.token));
-  return added.length ? { ...input, rounds: [...input.rounds, ...added] } : input;
+  return added.length ? { ...v, rounds: [...v.rounds, ...added] } : v;
 }
 
 const store = createPersistedStore<ClientReviewState>("maz-erp.client-review.v1", INITIAL, isState, migrate);
+
+/*
+ * ลูกค้ากับ PM มักเปิดคนละแท็บ (เฟส 1 ต้องเป็นเบราว์เซอร์เดียวกัน) — ถ้าไม่ฟังการเปลี่ยนจากแท็บอื่น
+ * แท็บ PM จะถือของเก่าในหน่วยความจำ แล้วเขียนทับคอมเมนต์ที่ลูกค้าเพิ่งส่งตอน PM กดอะไรสักอย่าง
+ */
+const STORE_KEY = "maz-erp.client-review.v1";
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== STORE_KEY || !e.newValue) return;
+    try {
+      const v: unknown = JSON.parse(e.newValue);
+      if (isState(v)) store.set(migrate(v));
+    } catch {
+      // ข้อมูลเสีย — คงของเดิมไว้
+    }
+  });
+}
 
 export function useClientReviews() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);
@@ -175,7 +206,7 @@ export function clientReviewSnapshot() {
 
 // ─── ตัวช่วย ──────────────────────────────────────────────────────
 
-/** token สุ่ม 20 ตัวอักษร — ของจริงต้องเป็น token ลงลายเซ็นที่ออกจากเซิร์ฟเวอร์ */
+/** token สุ่ม 20 ตัวอักษร — เฟส 2 ต้องเป็น token ลงลายเซ็นที่ออกจากเซิร์ฟเวอร์ */
 export function newToken(len = 20) {
   const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
   const buf = new Uint32Array(len);
@@ -193,12 +224,12 @@ export function roundStatus(r: ReviewRound, today = todayIso()): ReviewStatus {
   return r.status;
 }
 
-export function roundsOfTask(s: ClientReviewState, deal: string, taskName: string) {
-  return s.rounds.filter((r) => r.deal === deal && r.taskName === taskName).sort((a, b) => a.round - b.round);
+export function roundsOfTask(s: ClientReviewState, pj: string, taskName: string) {
+  return s.rounds.filter((r) => r.pj === pj && r.taskName === taskName).sort((a, b) => a.round - b.round);
 }
 
-export function latestRound(s: ClientReviewState, deal: string, taskName: string) {
-  const list = roundsOfTask(s, deal, taskName);
+export function latestRound(s: ClientReviewState, pj: string, taskName: string) {
+  const list = roundsOfTask(s, pj, taskName);
   return list[list.length - 1];
 }
 
@@ -291,7 +322,7 @@ export type NewReviewFile = Omit<ReviewFile, "id"> & { blobUrl?: string };
  * งานเปลี่ยนเป็น "รอลูกค้าตรวจ" และลงกิจกรรมของโปรเจค (sendToClientWork)
  */
 export function createRound(input: {
-  deal: string;
+  pj: string;
   taskName: string;
   project: string;
   createdBy: string;
@@ -303,7 +334,7 @@ export function createRound(input: {
   const token = newToken();
   const at = bkkStamp();
   const s = store.get();
-  const round = (latestRound(s, input.deal, input.taskName)?.round ?? 0) + 1;
+  const round = (latestRound(s, input.pj, input.taskName)?.round ?? 0) + 1;
   const files: ReviewFile[] = input.files.map((f) => {
     const id = newId("f");
     const { blobUrl, ...rest } = f;
@@ -312,7 +343,7 @@ export function createRound(input: {
   });
   const r: ReviewRound = {
     token,
-    deal: input.deal,
+    pj: input.pj,
     taskName: input.taskName,
     round,
     createdAt: at,
@@ -325,20 +356,8 @@ export function createRound(input: {
     status: "open",
     comments: [],
   };
-  /* ส่งรอบใหม่แล้วลิงก์รอบเก่าของงานเดียวกันต้องตาย — ไม่งั้นลูกค้าที่ยังเปิดลิงก์เดิมค้างไว้
-     จะคอมเมนต์ใส่งานรอบที่เลิกใช้แล้ว แล้วทีมไม่เห็นว่าเขาพูดถึงไฟล์ชุดไหน */
-  store.update((st) => ({
-    ...st,
-    rounds: [
-      ...st.rounds.map((x) =>
-        x.deal === input.deal && x.taskName === input.taskName && x.status === "open"
-          ? { ...x, status: "expired" as const }
-          : x,
-      ),
-      r,
-    ],
-  }));
-  sendToClientWork(input.deal, input.taskName, round, at);
+  store.update((st) => ({ ...st, rounds: [...st.rounds, r] }));
+  sendToClientWork(input.pj, input.taskName, round, at);
   return token;
 }
 
@@ -370,7 +389,7 @@ export function forwardToTeam(token: string) {
   const r = findRound(store.get(), token);
   if (!r || !r.comments.some((c) => !c.done)) return;
   const at = bkkStamp();
-  sendBackWork(r.deal, r.taskName, composeReason(r), at);
+  sendBackWork(r.pj, r.taskName, composeReason(r), at);
   patchRound(token, (x) => ({ ...x, forwardedAt: at }));
 }
 
@@ -379,7 +398,7 @@ export function closeFromClient(token: string) {
   const r = findRound(store.get(), token);
   if (!r) return;
   const at = bkkStamp();
-  approveWorkFlow(r.deal, r.taskName, at);
+  approveWorkFlow(r.pj, r.taskName, at);
   patchRound(token, (x) => ({ ...x, closedAt: at }));
 }
 
@@ -421,7 +440,7 @@ export function submitRound(token: string, all: boolean) {
   const files = all ? r.files.map((f) => ({ ...f, approved: true })) : r.files;
   const approved = files.every((f) => f.approved) && (all || r.comments.length === 0);
   patchRound(token, (x) => ({ ...x, files, status: approved ? "approved" : "submitted", submittedAt: at }));
-  addProjectAct(r.deal, {
+  addProjectAct(r.pj, {
     kind: "status",
     who: r.contact || "ลูกค้า",
     at,

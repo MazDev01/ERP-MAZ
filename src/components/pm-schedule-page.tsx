@@ -633,7 +633,7 @@ function EventForm({
     from: event?.from ?? "10:00",
     to: event?.to ?? "11:00",
     place: event && event.place !== "ยังไม่ระบุสถานที่" ? event.place : "",
-    deal: event?.deal ?? "",
+    pj: event?.pj ?? "",
     who: event?.who ?? [],
     note,
     /* ใบเดิมที่ยังไม่เคยเลือกสี เปิดมาให้ตรงกับสีที่เห็นในปฏิทินอยู่แล้ว ไม่ใช่เด้งเป็นแดง */
@@ -866,10 +866,10 @@ function EventForm({
         {/* นัดของฝ่ายขายยังไม่มีโปรเจค — ช่องนี้จึงมีเฉพาะของ PM */}
         {!sales && (
         <Field label="โปรเจคที่เกี่ยวข้อง">
-          <Select value={form.deal} onChange={(e) => set("deal", e.target.value)}>
+          <Select value={form.pj} onChange={(e) => set("pj", e.target.value)}>
             <option value="">ไม่ผูกกับโปรเจค</option>
             {projects.map((p) => (
-              <option key={p.deal} value={p.deal}>
+              <option key={p.pj} value={p.pj}>
                 {projName(p)}
               </option>
             ))}

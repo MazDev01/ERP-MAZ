@@ -9,7 +9,10 @@
  *                                                          ↓
  *   ใบงานขึ้นสถานะ "ส่งมอบ"                    ←    งานย่อยเสร็จครบทุกใบ
  *
- * ทั้งสามฝ่ายอ้างถึงงานเดียวกันด้วย "เลขที่ดีล" (DL-xxxx-xxxx) เสมอ
+ * ฝ่ายขายกับบัญชีอ้างถึงงานด้วย "เลขที่ดีล" (DL-xxxx-xxxx) · ฝั่ง PM อ้างด้วย "เลขที่โปรเจค" (PJ-xxxx-xxxx)
+ * โปรเจคเกิดจากวางบิลงวดแรก ไม่ใช่จากดีล (ผู้ใช้สั่ง 5 ต.ค. 2569) — มาได้สองทาง
+ *   ก. ดีลฝ่ายขายที่ส่งใบเสนอราคาไปวางบิล   ข. ลูกค้าเก่าที่ฝ่ายบัญชีออกใบเสนอราคาเอง
+ * ทั้งสองทางมาบรรจบที่ใบแจ้งหนี้งวดแรก โปรเจคเก็บเลขใบนั้น (bill) และเลขดีลเฉพาะเมื่อมี
  * ไฟล์นี้เป็นที่เดียวที่รู้จักสโตร์ของทั้งสามฝ่าย ตัวสโตร์เองไม่อ้างถึงกัน
  * จะได้ไม่เกิดการอ้างวนและยังแยกทดสอบทีละฝ่ายได้
  *
@@ -26,7 +29,7 @@ import {
   accSnapshot,
   type AccState,
 } from "./acc-store";
-import type { AccDeal } from "./acc-data";
+import type { AccDeal, Invoice } from "./acc-data";
 import { acceptQuotation, cancelDeal, crmSnapshot, markJobsDelivered } from "./crm-store";
 import { issuerOf, quotationTotals, type Customer, type Deal } from "./crm-data";
 import { addDays, bkkStamp, daysBetween, round2, todayIso } from "./format";
@@ -39,7 +42,7 @@ import {
   setTaskStatus,
   type PmState,
 } from "./pm-store";
-import type { InboxJob, Phase, Proposal, TeamRole } from "./pm-data";
+import { isRef, planHref, projectHref, type InboxJob, type Phase, type Proposal, type Project, type TeamRole } from "./pm-data";
 import type { TaskStatus } from "./pm-data";
 import { firstLine } from "./rich-text";
 import { closePayrun } from "./hr-store";
@@ -146,8 +149,9 @@ export function issueReceiptFlow(invoiceNo: string, date: string, received: numb
   const settled = after.invoices.find((v) => v.no === invoiceNo);
   if (!settled || invoiceStatus(after, settled) !== "paid") return no;
 
+  /* โปรเจคเกิดตรงนี้ — ผูกกับใบแจ้งหนี้งวดแรกใบนี้ ได้เลขที่โปรเจคของตัวเอง (ผู้ใช้สั่ง 5 ต.ค. 2569) */
   const deal = before.deals.find((d) => d.no === invoice.deal);
-  if (deal) addInboxJob(buildInboxJob(deal, date));
+  if (deal) addInboxJob(buildInboxJob(deal, date, invoice.no));
   return no;
 }
 
@@ -229,7 +233,7 @@ function proposalOf(crm: ReturnType<typeof crmSnapshot>, deal: AccDeal, salesDea
  * เฟสกับงานย่อยเป็นโครงตั้งต้นตามสัดส่วนเวลา ไม่ใช่แผนจริง
  * PM ต้องเข้าไปจัดวันและเลือกผู้รับผิดชอบในหน้าวางแผนงานก่อนยืนยัน
  */
-function buildInboxJob(deal: AccDeal, paidAt: string): InboxJob {
+function buildInboxJob(deal: AccDeal, paidAt: string, bill: string): Omit<InboxJob, "pj"> {
   const crm = crmSnapshot();
   const salesDeal = crm.deals.find((d) => d.no === deal.no);
   const customer: Customer | undefined = crm.customers.find(
@@ -269,7 +273,9 @@ function buildInboxJob(deal: AccDeal, paidAt: string): InboxJob {
       })();
 
   return {
-    deal: deal.no,
+    bill,
+    /* เลขดีลติดไปเฉพาะงานที่มาจากดีลฝ่ายขายจริง — ใบเสนอราคาที่บัญชีออกเองไม่มีดีล */
+    deal: salesDeal?.no,
     /* ประเภทบริการมาจากใบเสนอราคาที่ฝ่ายขายเลือกไว้ · ใบเก่าที่ยังไม่มีช่องนี้ถือเป็น "ระบบ" */
     service: crm.quotations.find((q) => q.no === deal.quo)?.service ?? "website",
     cus: deal.cus,
@@ -309,10 +315,10 @@ function buildInboxJob(deal: AccDeal, paidAt: string): InboxJob {
 }
 
 // ═══ PM → ขาย ══════════════════════════════════════════════════
-/** โปรเจคปิดครบทุกงานแล้วหรือยัง ถ้าใช่ให้ใบงานฝั่งขายขึ้น "ส่งมอบ" ตาม */
-function closeJobIfDone(dealNo: string) {
-  const project = pmSnapshot().projects.find((p) => p.deal === dealNo);
-  if (project?.status === "done") markJobsDelivered(dealNo);
+/** โปรเจคปิดครบทุกงานแล้วหรือยัง ถ้าใช่ให้ใบงานฝั่งขายขึ้น "ส่งมอบ" ตาม — โปรเจคที่ไม่มีดีลไม่มีใบงานฝั่งขายให้ปิด */
+function closeJobIfDone(pj: string) {
+  const project = pmSnapshot().projects.find((p) => isRef(p, pj));
+  if (project?.status === "done" && project.deal) markJobsDelivered(project.deal);
 }
 
 /**
@@ -322,17 +328,17 @@ function closeJobIfDone(dealNo: string) {
  * หน้างานรอตรวจต้องเรียกตัวนี้ ไม่ใช่ approveWork ตรง ๆ
  * ไม่งั้นฝ่ายขายจะเห็นใบงานค้างอยู่ทั้งที่ทีมทำเสร็จและส่งมอบไปแล้ว
  */
-export function approveWorkFlow(dealNo: string, taskName: string, stamp: string) {
-  approveWork(dealNo, taskName, stamp);
-  closeJobIfDone(dealNo);
+export function approveWorkFlow(pj: string, taskName: string, stamp: string) {
+  approveWork(pj, taskName, stamp);
+  closeJobIfDone(pj);
 }
 
 /**
  * เลื่อนสถานะงานย่อย แล้วถ้าโปรเจคเสร็จครบทุกใบ ให้ปิดใบงานฝั่งขายด้วย
  */
-export function setTaskStatusFlow(dealNo: string, taskIndex: number, status: TaskStatus) {
-  setTaskStatus(dealNo, taskIndex, status);
-  closeJobIfDone(dealNo);
+export function setTaskStatusFlow(pj: string, taskIndex: number, status: TaskStatus) {
+  setTaskStatus(pj, taskIndex, status);
+  closeJobIfDone(pj);
 }
 
 /**
@@ -340,9 +346,9 @@ export function setTaskStatusFlow(dealNo: string, taskIndex: number, status: Tas
  * จึงต้องเช็คการส่งมอบแบบเดียวกับการเลื่อนสถานะ
  * ไม่งั้นโปรเจคที่ปิดด้วยการลากแถบ จะไม่ไปปิดใบงานฝั่งขายให้
  */
-export function setTaskProgressFlow(dealNo: string, taskIndex: number, pct: number) {
-  setTaskProgress(dealNo, taskIndex, pct);
-  closeJobIfDone(dealNo);
+export function setTaskProgressFlow(pj: string, taskIndex: number, pct: number) {
+  setTaskProgress(pj, taskIndex, pct);
+  closeJobIfDone(pj);
 }
 
 // ═══ สถานะรวมของงานหนึ่งชิ้น ════════════════════════════════════
@@ -367,7 +373,7 @@ export function dealTrack(dealNo: string, acc: AccState, pm: PmState): DealTrack
   if (cancelled) return { label: "ยกเลิกแล้ว", cls: "t-miss", detail: `โดย${cancelled.by} · งานหยุด`, href: "" };
   const project = pm.projects.find((p) => p.deal === dealNo);
   if (project) {
-    const href = `/pm/projects?deal=${encodeURIComponent(dealNo)}`;
+    const href = projectHref(project.pj);
     const done = project.tasks.filter((t) => t.status === "done").length;
     const pct = project.tasks.length
       ? Math.round((done / project.tasks.length) * 100)
@@ -386,13 +392,13 @@ export function dealTrack(dealNo: string, acc: AccState, pm: PmState): DealTrack
           label: "กำลังวางแผนงาน",
           cls: "t-info",
           detail: "PM กำลังจัดงานย่อยและผู้รับผิดชอบ",
-          href: `/pm/plan?deal=${encodeURIComponent(dealNo)}`,
+          href: planHref(job.pj),
         }
       : {
           label: "รอ PM รับงาน",
           cls: "t-early",
           detail: `ชำระงวดแรกเมื่อ ${job.paidAt}`,
-          href: `/pm/inbox?find=${encodeURIComponent(dealNo)}`,
+          href: `/pm/inbox?find=${encodeURIComponent(job.pj)}`,
         };
   }
 
@@ -425,4 +431,23 @@ export function billingOf(dealNo: string, acc: AccState) {
     received,
     outstanding: Math.max(0, round2(deal.net + deal.wht - settled)),
   };
+}
+
+// ═══ โปรเจค → วางบิลงวดแรก → ใบเสนอราคา ═══════════════════════════
+/*
+ * โปรเจคผูกกับใบแจ้งหนี้งวดแรก (ผู้ใช้สั่ง 5 ต.ค. 2569) — หาใบเสนอราคาและลูกค้าผ่านใบนั้นเสมอ ไม่ผ่านดีล
+ * ข้อมูลรุ่นก่อนที่ยังไม่รู้เลขใบแจ้งหนี้ (bill ว่าง) หาใบงวดแรกจากเลขดีลแทนหนึ่งครั้ง
+ */
+export function firstBillOf(p: Pick<Project, "bill" | "deal">, acc: AccState): Invoice | null {
+  return (
+    (p.bill ? acc.invoices.find((v) => v.no === p.bill) : undefined) ??
+    (p.deal ? acc.invoices.find((v) => v.deal === p.deal && v.seq === 1) : undefined) ??
+    null
+  );
+}
+
+/** เลขที่ใบเสนอราคาของโปรเจค — ใบแจ้งหนี้งวดแรก → รายการวางบิล → ใบเสนอราคา · หาไม่เจอใช้ที่จำไว้ในโปรเจค */
+export function quotationNoOf(p: Pick<Project, "bill" | "deal" | "quo">, acc: AccState) {
+  const bill = firstBillOf(p, acc);
+  return (bill && acc.deals.find((d) => d.no === bill.deal)?.quo) || p.quo;
 }

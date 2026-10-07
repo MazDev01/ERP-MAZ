@@ -580,10 +580,12 @@ export function useComSource(): ComSource {
       const emp = empOfPm(d.seller ?? ownerOf.get(d.customerCode) ?? "");
       return emp ? [{ emp, date: d.closedAt, total: d.total }] : [];
     });
+    /* ใบเสร็จอ้างรายการวางบิล (เลขดีลฝั่งบัญชี) — โปรเจคผูกกับใบแจ้งหนี้งวดแรก หารายการวางบิลผ่านใบนั้น */
     const pmOfDeal = new Map<string, string>();
     for (const p of pm.projects) {
       const id = empOfPm(p.pm);
-      if (id) pmOfDeal.set(p.deal, id);
+      const billDeal = acc.invoices.find((v) => v.no === p.bill)?.deal ?? p.deal;
+      if (id && billDeal) pmOfDeal.set(billDeal, id);
     }
     const paid = acc.receipts.flatMap((r) => {
       const emp = pmOfDeal.get(r.deal);
@@ -649,7 +651,7 @@ export function useComSource(): ComSource {
       });
     }
     return { sales, paid, reimb };
-  }, [hr.emp, hr.payruns, crm.deals, crm.customers, acc.receipts, pm.projects, claims, reqs]);
+  }, [hr.emp, hr.payruns, crm.deals, crm.customers, acc.receipts, acc.invoices, pm.projects, claims, reqs]);
 }
 
 export type AttState = "ontime" | "late" | "leave" | "none";

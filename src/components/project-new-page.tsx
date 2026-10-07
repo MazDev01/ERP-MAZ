@@ -11,6 +11,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createOwnProject } from "@/lib/pm-store";
+import { projectHref } from "@/lib/pm-data";
 import { useProfile } from "@/lib/profile-data";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
@@ -90,7 +91,7 @@ function Body() {
     if (missing || opening) return;
     setOpening(true);
     /* เฟสของร่างไม่มีวันเริ่ม-จบของตัวเอง ใช้ช่วงของโปรเจคไปก่อน แก้ได้ในหน้าวางแผน */
-    const deal = createOwnProject({
+    const pj = createOwnProject({
       name: project.name.trim(),
       cus: project.cus.trim(),
       scope: project.desc.trim() || project.note.trim(),
@@ -103,7 +104,7 @@ function Body() {
       ),
     });
     resetNewProject();
-    router.push(`/pm/projects?deal=${encodeURIComponent(deal)}`);
+    router.push(projectHref(pj));
   }
 
   return (

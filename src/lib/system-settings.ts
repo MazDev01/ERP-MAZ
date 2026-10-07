@@ -124,6 +124,8 @@ export type DocPrefixes = {
   quotationMaz: string;
   quotationB1: string;
   deal: string;
+  /** เลขที่โปรเจค PJ-<พ.ศ.>-xxxx (ยกจากระบบต้นฉบับ) */
+  project: string;
   jobOrder: string;
   invoice: string;
   receipt: string;
@@ -343,6 +345,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     quotationMaz: "MAZ",
     quotationB1: "B1",
     deal: "DL",
+    project: "PJ",
     jobOrder: "JO",
     invoice: "INV",
     receipt: "RCP",

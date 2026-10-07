@@ -23,10 +23,10 @@ import {
   projectProgress,
   type Project,
   type ProjectTask,
+  projectHref,
 } from "@/lib/pm-data";
-import { colorOf, eventKind, eventsOn, isPsEvent } from "@/lib/pm-schedule-data";
+import { colorOf, eventKind, eventsOn, isPsEvent, isSalesEvent } from "@/lib/pm-schedule-data";
 import { useSchedule } from "@/lib/pm-schedule-store";
-import { DashWrap, DashHero, DashSection, DashWeek } from "./mobile-dash";
 import { memberName, usePm } from "@/lib/pm-store";
 import { ClockIcon, InboxIcon, ProjectIcon, TasksIcon } from "./icons";
 
@@ -57,8 +57,9 @@ export function PmDashboardPage() {
     () => projects.flatMap((p) => p.tasks.map((t) => ({ p, t, left: daysBetween(today, t.due) }))),
     [projects, today],
   );
-  /* โปรเจคที่ยกเลิกแล้วงานหยุด ไม่นับว่าใกล้กำหนดหรือเลยกำหนด (PM-BR-05) */
-  const open = tasks.filter((x) => x.t.status !== "done" && x.p.status !== "cancelled");
+  /* โปรเจคที่ยกเลิกแล้วงานหยุด ไม่นับว่าใกล้กำหนดหรือเลยกำหนด (PM-BR-05)
+     งานรอลูกค้าตรวจผ่านลิงก์ (wait) ทีมส่งและ PM ตรวจผ่านแล้ว ลูกบอลอยู่ที่ลูกค้า ไม่นับว่าทีมล่าช้า */
+  const open = tasks.filter((x) => x.t.status !== "done" && x.t.status !== "wait" && x.p.status !== "cancelled");
 
   const running = projects.filter((p) => p.status === "running").length;
   /*
@@ -66,7 +67,7 @@ export function PmDashboardPage() {
    * แต่ยังไม่ได้แตกเฟสด้วย ถ้านับแค่ pm.projects ตัวเลขสองหน้าจะไม่ตรงกัน
    */
   const awaitingPlan = pm.inbox.filter(
-    (j) => j.stage === "plan" && !projects.some((p) => p.deal === j.deal),
+    (j) => j.stage === "plan" && !projects.some((p) => p.pj === j.pj),
   ).length;
   const totalProjects = projects.length + awaitingPlan;
   const waiting = pm.inbox.filter((j) => j.stage === "new").length;
@@ -78,7 +79,7 @@ export function PmDashboardPage() {
   const soon = open.filter((x) => x.t.status !== "sent" && x.left >= 0 && x.left <= SOON_DAYS).length;
   /*
    * งานย่อยที่ล่าช้าจริง = ยังไม่เสร็จ ยังไม่ได้ส่งมาให้ตรวจ และเลยกำหนดส่งแล้ว
-   * งานที่ทีมส่งมาแล้วรอเราตรวจไม่นับตรงนี้ ไม่งั้นความช้าของ PM ถูกบันทึกใส่พนักงาน
+   * งานที่ทีมส่งมาแล้วรอเราตรวจไม่นับตรงนี้ ไม่งั้นความช้าของ PM ถูกบันทึกใส่ทีมงาน
    * (ไปนับที่การ์ด "งานรอตรวจ" แทน) · กติกาเดียวกับกระดิ่ง (notifications.ts กลุ่มงานย่อยเลยกำหนด)
    */
   const overdue = open.filter((x) => x.t.status !== "sent" && x.left < 0).length;
@@ -87,65 +88,17 @@ export function PmDashboardPage() {
     (p) => p.status === "done" && p.tasks.some((t) => t.status !== "done"),
   ).length;
 
-  /* ── มือถือ: แดชบอร์ดแบบแอป (ตัวเลขชุดเดียวกับจอคอม) ── */
-  const [pickDay, setPickDay] = useState(() => todayIso());
-  const evOf = (iso: string) =>
-    sc.events.filter((e) => e.date <= iso && (e.dateEnd ?? e.date) >= iso).sort((a, b) => (a.from < b.from ? -1 : 1));
-  const doneTasks = tasks.filter((x) => x.t.status === "done").length;
-  /* งานที่ต้องติดตาม = เลยกำหนด ขึ้นก่อน แล้วค่อยงานที่ใกล้ครบกำหนด */
-  const watch = open
-    .filter((x) => x.left < 0 || x.left <= SOON_DAYS)
-    .sort((a, b) => a.left - b.left)
-    .slice(0, 5);
-
   return (
     <div className="space-y-4">
-      <DashWrap>
-        <DashHero
-          label="โปรเจคที่กำลังทำ"
-          value={`${running} โปรเจค`}
-          foot={`จากทั้งหมด ${totalProjects} โปรเจค · งานรอตรวจ ${review} งาน`}
-          ringPct={tasks.length ? (doneTasks * 100) / tasks.length : 0}
-          ringLabel="งานเสร็จแล้ว"
-        />
-
-        <DashWeek value={pickDay} onPick={setPickDay} has={(iso) => evOf(iso).length > 0} />
-
-        <DashSection
-          title={pickDay === today ? "นัดหมายวันนี้" : `นัดหมาย ${thaiDate(pickDay)}`}
-          href="/pm/schedule"
-          rows={evOf(pickDay).map((e) => ({
-            key: e.id,
-            title: e.title,
-            meta: `${e.from}–${e.to}${e.place ? ` · ${e.place}` : ""}`,
-            metaTint: "sky" as const,
-            href: "/pm/schedule",
-          }))}
-          empty="ไม่มีนัดหมายในวันนี้"
-        />
-
-        <DashSection
-          title="งานที่ต้องติดตาม"
-          href="/pm/projects"
-          rows={watch.map((x) => ({
-            key: `${x.p.deal}-${x.t.name}`,
-            title: `${x.t.name} · ${x.p.cus}`,
-            meta: x.left < 0 ? `ล่าช้า ${Math.abs(x.left)} วัน` : `เหลือ ${x.left} วัน`,
-            metaTint: (x.left < 0 ? "rose" : "peach") as "rose" | "peach",
-            href: `/pm/projects?deal=${encodeURIComponent(x.p.deal)}`,
-          }))}
-          empty="ไม่มีงานที่ต้องติดตาม"
-        />
-      </DashWrap>
-
-      <div className="bar max-md:hidden!">
+      <div className="bar">
         <div>
+          <h1>แดชบอร์ด</h1>
           <p>ภาพรวมงานที่ต้องดูแล</p>
         </div>
       </div>
 
       {/* มือถือ: การ์ดใบที่ห้าเหลือเดี่ยวอยู่แถวสุดท้าย ให้กินเต็มแถวแทนการเว้นช่องว่าง */}
-      <div className="max-md:hidden grid grid-cols-2 gap-3.5 max-sm:gap-2.5 max-sm:[&>*:last-child]:col-span-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 max-sm:[&>*:last-child]:col-span-2 xl:grid-cols-5">
         <Kpi label="งานเข้ารอรับ" value={waiting} sub={waiting ? "รอ PM รับเข้าโปรเจค" : "รับครบแล้ว"} tone="info" icon={<InboxIcon className="size-[15px]" strokeWidth={1.9} />} />
         <Kpi
           label="งานย่อยรอตรวจ"
@@ -184,7 +137,7 @@ export function PmDashboardPage() {
         />
       </div>
 
-      <div className="max-md:hidden grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Card title="ความคืบหน้าโปรเจค">
           <ProjectProgress projects={projects} today={today} />
         </Card>
@@ -192,9 +145,9 @@ export function PmDashboardPage() {
         <NewJobs inbox={pm.inbox} />
       </div>
 
-      <div className="max-md:hidden grid items-stretch gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <DueTable open={open} />
-        <MiniCalendar events={sc.events.filter((e) => !isPsEvent(e))} today={today} />
+        <MiniCalendar events={sc.events.filter((e) => !isPsEvent(e) && !isSalesEvent(e))} today={today} />
       </div>
     </div>
   );
@@ -217,7 +170,7 @@ function NewJobs({ inbox }: { inbox: ReturnType<typeof usePm>["inbox"] }) {
         ) : (
           <>
             {rows.slice(0, INBOX_CAP).map((j) => (
-              <li key={j.deal} className="truncate">
+              <li key={j.pj} className="truncate">
                 {j.scope}
               </li>
             ))}
@@ -454,8 +407,8 @@ function ProjectProgress({ projects, today }: { projects: Project[]; today: stri
               : { cls: "text-[var(--success)]", text: "ตามแผน" };
         return (
           <Link
-            key={p.deal}
-            href={`/pm/projects?deal=${encodeURIComponent(p.deal)}`}
+            key={p.pj}
+            href={projectHref(p.pj)}
             className="flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 transition-colors hover:border-primary sm:gap-4 sm:px-4"
           >
             <span className="min-w-0 flex-1">
@@ -522,7 +475,7 @@ function DueTable({ open }: { open: TaskRow[] }) {
             const tag = dueTag(x);
             const first = t.whos[0] ? memberName(t.whos[0]) : "ยังไม่มอบหมาย";
             return (
-              <li key={`${p.deal}-${t.name}`} className="flex items-start gap-3 py-3">
+              <li key={`${p.pj}-${t.name}`} className="flex items-start gap-3 py-3">
                 <span className="min-w-0 flex-1">
                   <b className="block text-[13.5px] leading-snug font-semibold">{t.name}</b>
                   <em className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground not-italic">
@@ -572,7 +525,7 @@ function DueTable({ open }: { open: TaskRow[] }) {
                 const first = t.whos[0] ? memberName(t.whos[0]) : "";
                 const names = t.whos.map(memberName).join(" · ");
                 return (
-                  <tr key={`${p.deal}-${t.name}`}>
+                  <tr key={`${p.pj}-${t.name}`}>
                     <td data-label="งาน" className="truncate" title={t.name}>
                       {t.name}
                     </td>

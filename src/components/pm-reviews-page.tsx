@@ -3,7 +3,7 @@
 /*
  * งานรอตรวจ — งานที่ทีมส่งกลับมาให้ PM ตรวจก่อนปิด (ตามต้นแบบ pm-reviews.html)
  *
- * หน้านี้คู่กับ "งานที่ได้รับ" ของพนักงาน (my-tasks-page.tsx) งานใบเดียวกันเดินสองทาง
+ * หน้านี้คู่กับ "งานที่ได้รับ" ของทีมงาน (my-tasks-page.tsx) งานใบเดียวกันเดินสองทาง
  *   ทีมกดส่ง → status "sent" โผล่ที่นี่ → PM กดผ่าน (done) หรือส่งกลับแก้ (revise)
  *
  * ตีกลับต้องบอกเหตุผลเสมอ ไม่งั้นคนทำไม่รู้ว่าต้องแก้อะไรแล้วจะส่งกลับมาแบบเดิม
@@ -11,15 +11,15 @@
 
 import { useMemo, useState } from "react";
 import { bkkStamp, daysBetween, thaiDate, todayIso } from "@/lib/format";
-import { lastSub, projName, type Project, type ProjectTask } from "@/lib/pm-data";
+import { isRef, lastSub, projName, projectHref, type Project, type ProjectTask } from "@/lib/pm-data";
 import { approveWorkFlow } from "@/lib/flow";
 import { memberName, memberOf, sendBackWork, usePm } from "@/lib/pm-store";
 import { roleLabel } from "@/lib/pm-data";
 import { hrPos } from "@/lib/hr-data";
 import { useHr } from "@/lib/hr-store";
 import { Field, Sheet } from "./lead-dialogs";
-import { ApproveIcon, ClockIcon } from "./icons";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
+import { ClockIcon, TasksIcon } from "./icons";
 import Link from "next/link";
 import { roundStatus, useClientReviews, type ReviewRound } from "@/lib/client-review-store";
 import { roundChip } from "./client-review-pm";
@@ -55,10 +55,8 @@ export function PmReviewsPage() {
   const [open, setOpen] = useState<Row | null>(null);
   const position = usePosition();
   const ro = usePmReadOnly();
-  /* แท็บ: งานที่ทีมส่งมาให้ PM ตรวจ · รอบที่ลูกค้าตอบกลับผ่านลิงก์ตรวจงาน (ยกจากระบบต้นฉบับ) */
   const [tab, setTab] = useState<"team" | "client">("team");
-  const clientRows = useClientRows();
-  const clientCount = clientRows.filter((x) => !x.r.forwardedAt && !x.r.closedAt).length;
+  const clientCount = useClientRows().filter((x) => !x.r.forwardedAt && !x.r.closedAt).length;
 
   const rows = useMemo<Row[]>(() => {
     const out = pm.projects
@@ -72,14 +70,15 @@ export function PmReviewsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      <div className="bar max-md:hidden">
         <div>
+          <h1>งานรอตรวจ</h1>
           <p>งานที่ทีมส่งมาให้ตรวจก่อนปิดงาน</p>
         </div>
       </div>
       <ReadOnlyNote />
 
-      {/* แท็บจอคอมใช้ .tabs เหมือนหน้าอื่น · มือถือเป็นชิปกลม */}
+      {/* แท็บ: งานที่ทีมส่งมาให้ PM ตรวจ · รอบที่ลูกค้าตอบกลับผ่านลิงก์ตรวจงาน */}
       <div className="tabs max-md:hidden" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "team"} className={tab === "team" ? "on" : ""} onClick={() => setTab("team")}>
           งานรอตรวจ<b>{rows.length}</b>
@@ -102,7 +101,7 @@ export function PmReviewsPage() {
             aria-selected={tab === k}
             onClick={() => setTab(k)}
             className={`h-[38px] rounded-full px-4 text-[13.5px] font-semibold ${
-              tab === k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              tab === k ? "bg-[#C8102E] text-white" : "bg-[#EDE8EA] text-[#6E6164]"
             }`}
           >
             {label} {n}
@@ -110,73 +109,89 @@ export function PmReviewsPage() {
         ))}
       </div>
 
-      {/* มือถือ: การ์ดวางบนพื้นหน้าเลย ไม่มีกรอบขาวครอบอีกชั้น (ต้นแบบ pm-reviews.html) */}
       {tab === "team" && (
-      <section className="panel glass flex min-w-0 flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
-        <div className="strip max-sm:hidden!">
+      /* มือถือ: ไม่มีกรอบขาวครอบรายการ การ์ดแต่ละใบลอยบนพื้นหน้าเอง (ต้นแบบซ่อน .pch และถอดพื้น/ขอบ .pcard) */
+      <section className="panel glass flex min-w-0 flex-col max-md:!overflow-visible max-md:!rounded-none max-md:!border-0 max-md:!bg-transparent max-md:!shadow-none">
+        <div className="strip max-md:hidden">
           <h2 className="py-2.5 text-[14.5px] font-bold">
             งานรอตรวจ {rows.length ? `${rows.length} งาน` : ""}
           </h2>
         </div>
-        {/* มือถือ: การ์ดงานที่ทีมส่งมา (ต้นแบบ pm-reviews.html 1 ต.ค. 2569)
-            วงกลมไอคอนซ้าย · โปรเจค-ชื่องาน-ผู้ส่ง เรียงลงมา · เส้นประคั่น · วันที่ส่งกับปุ่มตรวจงานแถวล่าง */}
-        <ul className="flex flex-col gap-2.5 sm:hidden">
+        {/* มือถือ (ต้นแบบ ≤760px): การ์ดทั้งใบกดเปิดกล่องตรวจงาน — ไอคอนวงกลมซ้าย โปรเจคบน ชื่องานเด่น
+            ผู้ส่งกับป้ายตำแหน่ง เส้นประคั่น แล้ววันที่ส่งกับปุ่มตรวจงานอยู่แถวล่าง */}
+        <ul className="flex flex-col gap-2.5 md:hidden">
           {rows.length === 0 ? (
-            <li className="py-9 text-center text-[13px] text-muted-foreground">ไม่มีงานรอตรวจ</li>
+            <li className="block rounded-[20px] bg-white py-9 text-center text-[13px] text-[#6E6164] shadow-[0_1px_2px_rgba(40,20,25,.04)]">
+              ไม่มีงานรอตรวจ
+            </li>
           ) : (
             rows.map(({ p, t }) => {
               const sub = lastSub(t);
               const day = sub?.at.split(" ")[0] ?? "";
               const waited = day ? daysBetween(day, today) : 0;
               const who = sub?.by ?? t.whos[0] ?? "";
+              const pos = position(who);
               return (
-                <li key={`${p.deal}-${t.name}`}>
+                <li key={`${p.pj}-${t.name}`}>
                   <button
                     type="button"
                     onClick={() => setOpen({ p, t })}
-                    className="block w-full rounded-[20px] bg-card p-3.5 text-left shadow-[0_1px_2px_rgb(40_20_25/0.04)]"
+                    className="grid w-full cursor-pointer grid-cols-[40px_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 rounded-[20px] bg-white p-3.5 text-left shadow-[0_1px_2px_rgba(40,20,25,.04)]"
+                    style={{
+                      gridTemplateAreas: '"ico prj prj" "ico name name" "ico who who" "line line line" "day day take"',
+                    }}
                   >
-                    <span className="flex gap-3">
-                      <span className="grid size-10 flex-none place-items-center rounded-full bg-[#FDEDD6] text-[#94500A]">
-                        <ApproveIcon className="size-5" strokeWidth={2} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[12px] text-muted-foreground">{projName(p)}</span>
-                        <b className="mt-px block text-[15.5px] leading-snug font-bold">{t.name}</b>
-                        <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                          <b className="text-[13px] font-semibold text-[#6E6164]">{memberName(who)}</b>
-                          {position(who) && (
-                            <em className="rounded-full bg-[#F3EEF0] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#6E6164] not-italic">
-                              {position(who)}
-                            </em>
-                          )}
-                        </span>
-                      </span>
+                    <span
+                      className="grid size-10 place-items-center rounded-full bg-[#FDEDD6] text-[#94500A]"
+                      style={{ gridArea: "ico" }}
+                    >
+                      <TasksIcon className="size-5" />
                     </span>
-                    <span className="mt-2 block border-t border-dashed border-[#ECE3E5]" />
-                    <span className="mt-2.5 flex items-center gap-3">
-                      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[12.5px] font-semibold text-[#6E6164]">
-                        <ClockIcon className="size-3.5 flex-none text-muted-foreground" strokeWidth={2.2} />
-                        <span className="num truncate">
-                          {day ? agoText(day, today) : "—"}
-                          {waited >= WAITED_HOT && (
-                            <em className="ml-1.5 font-semibold text-destructive not-italic">รอ {waited} วัน</em>
-                          )}
-                        </span>
-                      </span>
-                      {!ro && (
-                        <span className="grid h-[38px] flex-none place-items-center rounded-xl bg-primary px-4 text-[13.5px] font-bold text-primary-foreground">
-                          ตรวจงาน
-                        </span>
+                    <span className="block text-[12px] text-[#8A7E81]" style={{ gridArea: "prj" }}>
+                      {projName(p)}
+                    </span>
+                    <b
+                      className="block text-[15.5px] leading-[1.35] font-bold break-words text-[#2A1F22]"
+                      style={{ gridArea: "name" }}
+                    >
+                      {t.name}
+                    </b>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5" style={{ gridArea: "who" }}>
+                      <b className="text-[13px] font-semibold text-[#6E6164]">{memberName(who)}</b>
+                      {pos && (
+                        <em className="rounded-full bg-[#F3EEF0] px-[9px] py-0.5 text-[11.5px] font-semibold text-[#6E6164] not-italic">
+                          {pos}
+                        </em>
                       )}
                     </span>
+                    <span
+                      className="mt-2 mb-1 block border-t-[1.5px] border-dashed border-[#ECE3E5]"
+                      style={{ gridArea: "line" }}
+                    />
+                    <span
+                      className={`num flex items-center gap-[5px] self-center text-[12.5px] font-semibold ${
+                        waited >= WAITED_HOT ? "text-destructive" : "text-[#6E6164]"
+                      }`}
+                      style={{ gridArea: "day" }}
+                    >
+                      <ClockIcon className="size-3.5 flex-none text-[#8A7E81]" />
+                      {day ? agoText(day, today) : "—"}
+                    </span>
+                    {!ro && (
+                      <span
+                        className="inline-flex h-[38px] items-center justify-self-end rounded-xl bg-[#C8102E] px-4 text-[13.5px] font-bold text-white"
+                        style={{ gridArea: "take" }}
+                      >
+                        ตรวจงาน
+                      </span>
+                    )}
                   </button>
                 </li>
               );
             })
           )}
         </ul>
-        <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">
+        <div className="scroll-stable min-h-0 flex-1 overflow-auto max-md:hidden">
           <table className="data-table cards-sm min-w-[760px]">
             <thead>
               <tr>
@@ -203,7 +218,7 @@ export function PmReviewsPage() {
                   return (
                     /* กดทั้งแถวเปิดกล่องตรวจงานได้ ตามต้นแบบ */
                     <tr
-                      key={`${p.deal}-${t.name}`}
+                      key={`${p.pj}-${t.name}`}
                       className="cursor-pointer"
                       onClick={() => setOpen({ p, t })}
                     >
@@ -249,7 +264,7 @@ export function PmReviewsPage() {
       </section>
       )}
 
-      {tab === "client" && <ClientReplies rows={clientRows} />}
+      {tab === "client" && <ClientReplies />}
 
       {open && (
         <ReviewDialog
@@ -296,11 +311,11 @@ function ReviewDialog({
         ) : <>
           <button
             type="button"
-            className="btn flex-1 justify-center !bg-destructive !text-white sm:flex-none"
+            className="btn flex-1 justify-center !bg-destructive !text-white max-sm:!h-12 max-sm:!rounded-[14px] max-sm:basis-0 sm:flex-none"
             onClick={() => {
               setTouched(true);
               if (!why.trim()) return;
-              sendBackWork(p.deal, t.name, why.trim(), bkkStamp());
+              sendBackWork(p.pj, t.name, why.trim(), bkkStamp());
               onDone();
             }}
           >
@@ -308,9 +323,9 @@ function ReviewDialog({
           </button>
           <button
             type="button"
-            className="btn solid flex-1 justify-center !bg-[var(--success)] !text-white sm:flex-none"
+            className="btn solid flex-1 justify-center !bg-[var(--success)] !text-white max-sm:!h-12 max-sm:!rounded-[14px] max-sm:basis-0 max-sm:grow-[1.4] sm:flex-none"
             onClick={() => {
-              approveWorkFlow(p.deal, t.name, bkkStamp());
+              approveWorkFlow(p.pj, t.name, bkkStamp());
               onDone();
             }}
           >
@@ -405,50 +420,43 @@ function Row2({ k, v }: { k: string; v: string }) {
   );
 }
 
+
 // ─── ลูกค้าตอบกลับ (ลิงก์ตรวจงาน) ─────────────────────────────────
 
-type ClientRow = { r: ReviewRound; p: Project };
-
 /** รอบที่ลูกค้าส่งความเห็นหรืออนุมัติแล้ว — ล่าสุดขึ้นก่อน · โปรเจคที่ยกเลิกไม่นับ */
-function useClientRows(): ClientRow[] {
+function useClientRows() {
   const pm = usePm();
   const cr = useClientReviews();
-  return useMemo(
-    () =>
-      cr.rounds
-        .filter((r) => {
-          const st = roundStatus(r);
-          return st === "submitted" || st === "approved";
-        })
-        .map((r) => ({ r, p: pm.projects.find((p) => p.deal === r.deal) }))
-        .filter((x): x is ClientRow => Boolean(x.p) && x.p?.status !== "cancelled")
-        .sort((a, b) => (b.r.submittedAt ?? "").localeCompare(a.r.submittedAt ?? "")),
-    [cr.rounds, pm.projects],
-  );
+  return cr.rounds
+    .filter((r) => {
+      const st = roundStatus(r);
+      return st === "submitted" || st === "approved";
+    })
+    .map((r) => ({ r, p: pm.projects.find((p) => isRef(p, r.pj)) }))
+    .filter((x): x is { r: ReviewRound; p: Project } => Boolean(x.p) && x.p?.status !== "cancelled")
+    .sort((a, b) => (b.r.submittedAt ?? "").localeCompare(a.r.submittedAt ?? ""));
 }
 
-function ClientReplies({ rows }: { rows: ClientRow[] }) {
+function ClientReplies() {
+  const rows = useClientRows();
   return (
-    <section className="panel glass flex min-w-0 flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
-      <div className="strip max-sm:hidden!">
-        <h2 className="py-2.5 text-[14.5px] font-bold">
-          ลูกค้าตอบกลับ {rows.length ? `${rows.length} รอบ` : ""}
-        </h2>
+    <section className="panel glass flex min-w-0 flex-col max-md:!overflow-visible max-md:!rounded-none max-md:!border-0 max-md:!bg-transparent max-md:!shadow-none">
+      <div className="strip max-md:hidden">
+        <h2 className="py-2.5 text-[14.5px] font-bold">ลูกค้าตอบกลับ {rows.length ? `${rows.length} รอบ` : ""}</h2>
       </div>
       {rows.length === 0 ? (
-        <p className="py-9 text-center text-[13px] text-muted-foreground max-sm:rounded-[20px] max-sm:bg-card">
+        <p className="py-9 text-center text-[13px] text-muted-foreground max-md:rounded-[20px] max-md:bg-white">
           ยังไม่มีลูกค้าตอบกลับจากลิงก์ตรวจงาน
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border max-sm:gap-2.5 max-sm:divide-y-0">
+        <ul className="flex flex-col divide-y divide-border max-md:gap-2.5 max-md:divide-y-0">
           {rows.map(({ r, p }) => {
             const chip = roundChip(r);
             return (
               <li key={r.token}>
-                {/* กดแล้วเปิดหน้าโปรเจคที่กล่องความเห็นของรอบนั้นเลย (?review=<token>) */}
                 <Link
-                  href={`/pm/projects?deal=${encodeURIComponent(p.deal)}&review=${encodeURIComponent(r.token)}`}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-3.5 hover:bg-muted/60 max-sm:rounded-[20px] max-sm:bg-card max-sm:p-3.5"
+                  href={`${projectHref(p?.pj ?? r.pj)}&review=${r.token}`}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-3.5 hover:bg-muted/60 max-md:rounded-[20px] max-md:bg-white max-md:p-3.5 max-md:shadow-[0_1px_2px_rgba(40,20,25,.04)]"
                 >
                   <span className="min-w-0">
                     <span className="block text-[12px] text-muted-foreground">{projName(p)}</span>
@@ -456,8 +464,7 @@ function ClientReplies({ rows }: { rows: ClientRow[] }) {
                       {r.taskName} · รอบที่ {r.round}
                     </b>
                     <span className="num mt-0.5 block text-[12px] text-muted-foreground">
-                      {r.contact || "ลูกค้า"} · ตอบเมื่อ{" "}
-                      {r.submittedAt ? thaiDate(r.submittedAt.slice(0, 10)) : "—"}
+                      {r.contact || "ลูกค้า"} · ตอบเมื่อ {r.submittedAt ? thaiDate(r.submittedAt.slice(0, 10)) : "—"}
                     </span>
                   </span>
                   <span className={`tag ${chip.cls} justify-self-end`}>

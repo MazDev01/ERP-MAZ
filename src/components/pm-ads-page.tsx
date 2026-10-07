@@ -27,6 +27,7 @@ import { addRun, markRun, saveMetric, useAds } from "@/lib/ads-store";
 import { baht, thaiDate, thaiMonth, thaiStamp, todayIso, commaInput } from "@/lib/format";
 import { currentProfile } from "@/lib/profile-data";
 import { memberOf, usePm } from "@/lib/pm-store";
+import { isRef } from "@/lib/pm-data";
 import { useHr } from "@/lib/hr-store";
 import { EyeIcon, PencilIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
@@ -58,17 +59,20 @@ export function PmAdsPage() {
     /* opened บอกว่าเปิดเป็นโปรเจคแล้วหรือยัง งานที่เปิดแล้วกดไปดูหน้าโปรเจคได้ */
     const fromInbox = pm.inbox
       .filter((j) => j.service === "dm")
-      .map((j) => ({ deal: j.deal, cus: j.cus, scope: j.scope, opened: false, planStart: j.planStart }));
+      .map((j) => ({ pj: j.pj, cus: j.cus, scope: j.scope, opened: false, planStart: j.planStart }));
     const fromProjects = pm.projects
       .filter((p) => p.service === "dm")
-      .map((p) => ({ deal: p.deal, cus: p.cus, scope: p.scope, opened: true, planStart: p.start }));
+      .map((p) => ({ pj: p.pj, cus: p.cus, scope: p.scope, opened: true, planStart: p.start }));
     return [...fromProjects, ...fromInbox];
   }, [pm.inbox, pm.projects]);
 
-  /* หน้าโปรเจคของงาน DM ส่งเลขที่ดีลมาทาง ?deal= ให้เปิดตรงงานนั้นเลย */
-  const wanted = useSearchParams().get("deal") ?? "";
-  const [deal, setDeal] = useState(wanted);
-  const current = jobs.find((j) => j.deal === deal) ?? jobs[0];
+  /* หน้าโปรเจคของงาน DM ส่งเลขที่โปรเจคมาทาง ?pj= ให้เปิดตรงงานนั้นเลย · ลิงก์เก่า ?deal= ยังเปิดได้ (5 ต.ค. 2569) */
+  const params = useSearchParams();
+  const wantedRaw = params.get("pj") ?? params.get("deal") ?? "";
+  const wanted = [...pm.projects, ...pm.inbox].find((x) => isRef(x, wantedRaw))?.pj ?? wantedRaw;
+  /* ว่าง = ยังไม่ได้สลับเอง ใช้งานตามลิงก์ */
+  const [picked, setPicked] = useState("");
+  const current = jobs.find((j) => j.pj === (picked || wanted)) ?? jobs[0];
   const [tab, setTab] = useState<Tab>("plan");
   const [adding, setAdding] = useState(false);
 
@@ -83,9 +87,9 @@ export function PmAdsPage() {
     );
   }
 
-  const plan = AD_PLANS[current.deal];
-  const runs = ads.runs.filter((r) => r.deal === current.deal);
-  const contents = ads.contents.filter((c) => c.deal === current.deal);
+  const plan = AD_PLANS[current.pj];
+  const runs = ads.runs.filter((r) => r.pj === current.pj);
+  const contents = ads.contents.filter((c) => c.pj === current.pj);
 
   return (
     <div className="space-y-4">
@@ -95,12 +99,12 @@ export function PmAdsPage() {
             โปรเจค
           </span>
           <Select
-            value={current.deal}
-            onChange={(e) => setDeal(e.target.value)}
+            value={current.pj}
+            onChange={(e) => setPicked(e.target.value)}
             className="w-auto min-w-[240px] max-sm:h-11 max-sm:min-w-0 max-sm:flex-1"
           >
             {jobs.map((j) => (
-              <option key={j.deal} value={j.deal}>
+              <option key={j.pj} value={j.pj}>
                 {j.cus}
               </option>
             ))}
@@ -136,7 +140,7 @@ export function PmAdsPage() {
         {tab === "plan" && <PlanTab plan={plan} />}
         {tab === "run" && (
           <RunTab
-            deal={current.deal}
+            pj={current.pj}
             cus={current.cus}
             planStart={current.planStart}
             runs={runs}
@@ -144,7 +148,7 @@ export function PmAdsPage() {
             onAdd={setAdding}
           />
         )}
-        {tab === "report" && <ReportTab deal={current.deal} contents={contents} />}
+        {tab === "report" && <ReportTab pj={current.pj} contents={contents} />}
       </section>
     </div>
   );
@@ -154,8 +158,8 @@ function Head({ children }: { children?: React.ReactNode }) {
   return (
     <div className="bar">
       <div>
-        {/* มือถือไม่ต้องมีคำอธิบายว่าหน้านี้คืออะไร (เจ้าของสั่ง 2 ต.ค. 2569) */}
-        <p className="max-md:hidden">แผนสื่อ การสั่งรันโฆษณา และผลที่ได้ ของงาน Digital Marketing</p>
+        <h1>โฆษณาและรายงาน</h1>
+        <p>แผนสื่อ การสั่งรันโฆษณา และผลที่ได้ ของงาน Digital Marketing</p>
       </div>
       {children && <div className="tools w-full sm:w-auto">{children}</div>}
     </div>
@@ -275,14 +279,14 @@ function Kv({ label, value }: { label: string; value: string }) {
 // ═══ แท็บที่ 2 · สั่งรันโฆษณา ══════════════════════════════════
 
 function RunTab({
-  deal,
+  pj,
   cus,
   planStart,
   runs,
   adding,
   onAdd,
 }: {
-  deal: string;
+  pj: string;
   cus: string;
   /** วันเริ่มตามแผนของงาน — ใบแรกของงานตั้งรอบเดือนตามนี้ ตามต้นแบบ */
   planStart?: string;
@@ -410,7 +414,7 @@ function RunTab({
       {open && <RunSheet run={open} onClose={() => setOpen(null)} />}
       {adding && (
         <NewRunSheet
-          deal={deal}
+          pj={pj}
           cus={cus}
           runs={runs}
           lastRound={runs[runs.length - 1]?.round ?? (planStart ? planStart.slice(0, 7) : undefined)}
@@ -428,13 +432,13 @@ function RunTab({
  * ส่วนช่วงวันคือช่วงที่โฆษณาเดินจริง ซึ่งคร่อมเดือนได้
  */
 function NewRunSheet({
-  deal,
+  pj,
   cus,
   runs,
   lastRound,
   onClose,
 }: {
-  deal: string;
+  pj: string;
   cus: string;
   /** ใบสั่งรันที่มีอยู่แล้วของงานนี้ — กันสั่งซ้ำใบเดิม */
   runs: AdRun[];
@@ -499,7 +503,7 @@ function NewRunSheet({
                 return;
               }
               addRun({
-                deal,
+                pj,
                 round: form.round,
                 /* ผู้ดูแลสื่อและผู้ดูแลลูกค้ายังไม่มีให้เลือก ระบบยังไม่รู้ว่าใครล็อกอินอยู่
                    TODO: ใช้ผู้ใช้ที่ล็อกอินเป็นผู้สั่งเมื่อต่อ auth แล้ว */
@@ -649,7 +653,7 @@ function RunSheet({ run, onClose }: { run: AdRun; onClose: () => void }) {
             className="btn solid btn-solid disabled:opacity-45"
             disabled={run.ran}
             onClick={() => {
-              markRun(run.deal, run.round, run.channel, run.tool, currentProfile().name);
+              markRun(run.pj, run.round, run.channel, run.tool, currentProfile().name);
               onClose();
             }}
           >
@@ -682,7 +686,7 @@ function RunSheet({ run, onClose }: { run: AdRun; onClose: () => void }) {
 
 // ═══ แท็บที่ 3 · รายงานผล ══════════════════════════════════════
 
-function ReportTab({ deal, contents }: { deal: string; contents: AdContent[] }) {
+function ReportTab({ pj, contents }: { pj: string; contents: AdContent[] }) {
   const [open, setOpen] = useState<AdContent | null>(null);
   const done = contents.filter((c) => c.m);
 
@@ -842,7 +846,7 @@ function ReportTab({ deal, contents }: { deal: string; contents: AdContent[] }) 
       </div>
 
       {open && (
-        <MetricSheet deal={deal} content={open} onClose={() => setOpen(null)} />
+        <MetricSheet pj={pj} content={open} onClose={() => setOpen(null)} />
       )}
     </>
   );
@@ -856,11 +860,11 @@ function blankForm(m: AdMetric | null): Record<string, string> {
 }
 
 function MetricSheet({
-  deal,
+  pj,
   content,
   onClose,
 }: {
-  deal: string;
+  pj: string;
   content: AdContent;
   onClose: () => void;
 }) {
@@ -893,7 +897,7 @@ function MetricSheet({
             disabled={!parsed}
             onClick={() => {
               if (!parsed) return;
-              saveMetric(deal, content.round, content.name, parsed, currentProfile().name);
+              saveMetric(pj, content.round, content.name, parsed, currentProfile().name);
               onClose();
             }}
           >

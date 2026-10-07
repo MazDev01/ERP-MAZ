@@ -37,6 +37,7 @@ import {
 } from "@/lib/pm-schedule-data";
 import { addEvent, cancelEvent, editEvent, useSchedule } from "@/lib/pm-schedule-store";
 import { usePm } from "@/lib/pm-store";
+import { projectHref } from "@/lib/pm-data";
 import { AppointmentSheet } from "./appointment-sheet";
 import { PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
@@ -49,7 +50,6 @@ import {
 } from "./schedule-board";
 import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select } from "./ui";
-import { useAddOption } from "./add-option";
 import { todayIso } from "@/lib/format";
 
 const KINDS: BoardKind[] = [
@@ -103,9 +103,6 @@ export function GmCalendarPage() {
         /* ใบที่ GM เป็นผู้อนุมัติ กดแล้วไปที่ใบนั้นในหน้ารายการรออนุมัติ */
         href: l.pending && l.mine && l.id ? `/approvals?kind=leave&find=${encodeURIComponent(l.id)}` : undefined,
         ...paintOf(l.pending ? "wait" : "leave"),
-        /* ใบลาที่ไม่มีที่ให้ไปต่อไม่ต้องทำเป็นปุ่ม — เดิมกดได้แต่ไม่เกิดอะไรขึ้น
-           (ทดสอบกดทุกปุ่ม 30 ก.ย. 2569) */
-        inert: true,
         data: null,
       });
 
@@ -113,14 +110,14 @@ export function GmCalendarPage() {
       if (p.status !== "running" || !p.due) continue;
       const name = p.name || p.cus;
       out.push({
-        id: `due-${p.deal}`,
+        id: `due-${p.pj}`,
         kind: "due",
         start: p.due,
         end: p.due,
         title: `ส่งมอบ · ${name}`,
         bar: `ส่งมอบ ${name}`,
         sub: `${p.cus} · PM ${p.pm}`,
-        href: `/pm/projects?deal=${encodeURIComponent(p.deal)}`,
+        href: projectHref(p.pj),
         ...paintOf("due"),
         data: null,
       });
@@ -149,8 +146,9 @@ export function GmCalendarPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar max-sm:hidden!">
+      <div className="bar">
         <div>
+          <h1>ตารางงาน</h1>
           <p>ปฏิทินของทั้งบริษัท · วันลาทุกคน กำหนดส่งมอบโปรเจค และนัดหมาย</p>
         </div>
         <div className="tools">
@@ -217,8 +215,6 @@ function GmEventForm({
   const staff = useHr().emp.filter((e) => e.status === "active");
   const [title, setTitle] = useState(event?.title ?? "");
   const [kind, setKind] = useState<EventKind>(event?.kind ?? "meeting");
-  /* เพิ่มประเภทนัดหมายใหม่ได้จากหน้างาน (ข้อมูลหลัก HR-10) */
-  const addKind = useAddOption({ catalog: "eventKinds" }, (v) => setKind(v as EventKind));
   const [date, setDate] = useState(event?.date ?? day ?? todayIso());
   const [from, setFrom] = useState(event?.from ?? "10:00");
   const [to, setTo] = useState(event?.to ?? "11:00");
@@ -252,7 +248,7 @@ function GmEventForm({
       from,
       to,
       place: place.trim(),
-      deal: event?.deal ?? "",
+      pj: event?.pj ?? "",
       who,
       note,
       col: event?.col ?? KIND_COLOR[kind],
@@ -333,21 +329,13 @@ function GmEventForm({
         </Field>
 
         <Field label="ประเภท">
-          <Select
-            value={kind}
-            onChange={(e) => {
-              if (addKind.pick(e.target.value)) return;
-              setKind(e.target.value as EventKind);
-            }}
-          >
+          <Select value={kind} onChange={(e) => setKind(e.target.value as EventKind)}>
             {eventKindList().map((k) => (
               <option key={k.key} value={k.key}>
                 {k.label}
               </option>
             ))}
-            {addKind.option}
           </Select>
-          {addKind.dialog}
         </Field>
 
         {/* จอแคบให้วันที่กินเต็มแถวบน แล้วเวลาเริ่ม–ถึงอยู่แถวล่าง

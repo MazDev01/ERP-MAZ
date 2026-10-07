@@ -7,18 +7,21 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { addDays, bkkStamp, daysBetween, todayIso } from "./format";
+import { addDays, bkkStamp, daysBetween, nextDocNo, todayIso } from "./format";
+import { settings } from "./system-settings";
+import { currentRole } from "./role";
 import {
   PM_INBOX,
   PM_PROJECTS,
   PM_TEAM,
   fileKind,
+  isRef,
   type Activity,
   type ChatMessage,
   type InboxJob,
   type Member,
-  type ProjectDoc,
   type Project,
+  type ProjectDoc,
   type ProjectPhase,
   type TaskFile,
   type TeamRole,
@@ -73,7 +76,7 @@ export type PlanDraft = {
 /*
  * ข้อความที่ผูกกับงานย่อยใบเดียว — คนละอันกับแชทโปรเจค
  *
- * แชทโปรเจคอยู่ในหน้าของ PM ซึ่งพนักงาน (บทบาท staff) เปิดไม่ได้ตามกติกาเมนูตามบทบาท
+ * แชทโปรเจคอยู่ในหน้าของ PM ซึ่งทีมงาน (บทบาท staff) เปิดไม่ได้ตามกติกาเมนูตามบทบาท
  * PM จึงพิมพ์ทวงงานไปโดยที่ไม่มีใครเห็น แล้วต้องไปตามกันในไลน์อีกที
  * สายนี้ผูกกับ "งานใบนั้น" ผู้รับงานจึงเห็นได้ในหน้างานที่ได้รับของตัวเอง โดยไม่ต้องเปิดหน้าของ PM
  * ทุกข้อความส่งเข้าแชทโปรเจคด้วย (postTaskTalk) PM จึงยังอ่านที่เดียวได้เหมือนเดิม
@@ -88,9 +91,9 @@ export type TaskTalk = {
   nudge?: boolean;
 };
 
-/** คีย์ของสายข้อความหนึ่งงาน — เลขที่ดีลกับชื่องาน (ชื่องานไม่ซ้ำกันในโปรเจคเดียว) */
-export function talkKey(deal: string, taskName: string) {
-  return `${deal}|${taskName}`;
+/** คีย์ของสายข้อความหนึ่งงาน — เลขที่โปรเจคกับชื่องาน (ชื่องานไม่ซ้ำกันในโปรเจคเดียว) · เดิมใช้เลขดีล (เปลี่ยน 5 ต.ค. 2569) */
+export function talkKey(pj: string, taskName: string) {
+  return `${pj}|${taskName}`;
 }
 
 export type PmState = {
@@ -104,7 +107,7 @@ export type PmState = {
    */
   team: Member[];
   /*
-   * ร่างแผนที่ยังไม่ยืนยัน แยกตามเลขที่ดีล — กติกาเดียวกับใบเสนอราคา
+   * ร่างแผนที่ยังไม่ยืนยัน แยกตามเลขที่โปรเจค (เดิมเลขที่ดีล — เปลี่ยน 5 ต.ค. 2569) — กติกาเดียวกับใบเสนอราคา
    * บันทึกตั้งแต่ตอนแก้ ไม่มีปุ่มบันทึก · "ยืนยันแผน" เป็นแค่การเปลี่ยนสถานะ
    *
    * TODO: ระบบจริงต้องเก็บร่างไว้ที่เซิร์ฟเวอร์ ไม่ใช่ในเบราว์เซอร์
@@ -128,12 +131,46 @@ function isPmState(value: unknown): value is PmState {
  * ไม่เปลี่ยนคีย์ เพราะจะทิ้งงานที่ทีมส่งและผลตรวจที่ PM กดไปแล้วทั้งหมด
  * กติกาคือ "เติมของที่หาย ไม่ทับของที่มี" — สถานะงานที่ผู้ใช้ทำไว้เองต้องอยู่เหมือนเดิม
  */
+/*
+ * ข้อมูลรุ่นก่อน 5 ต.ค. 2569 ระบุโปรเจคด้วยเลขที่ดีล ยังไม่มีเลขที่โปรเจค (ผู้ใช้สั่ง 5 ต.ค. 2569)
+ * รายการที่ตรงกับชุดตั้งต้น (เทียบเลขดีล) ได้เลข PJ กับใบแจ้งหนี้งวดแรกตามชุดตั้งต้น
+ * ที่เหลือออกเลข PJ ใหม่ต่อจากเลขสูงสุดที่มี · ใบแจ้งหนี้งวดแรกปล่อยว่างไว้ — หน้าจอหาเองจากเลขดีลผ่าน flow.ts
+ * ร่างแผนกับสายข้อความที่เก็บคีย์ด้วยเลขดีล ย้ายไปคีย์ด้วยเลข PJ
+ */
+function assignPj(v: PmState): PmState {
+  const legacy = (x: { pj?: string }) => !x.pj;
+  if (!v.inbox.some(legacy) && !v.projects.some(legacy)) return v;
+  const seed = new Map([...PM_PROJECTS, ...PM_INBOX].map((x) => [x.deal ?? "", x]));
+  const used = [...v.inbox, ...v.projects, ...PM_PROJECTS, ...PM_INBOX].map((x) => x.pj).filter(Boolean);
+  const byDeal = new Map<string, string>();
+  const fix = <T extends InboxJob | Project>(x: T): T => {
+    if (x.pj) return x;
+    const dealNo = (x as { deal?: string }).deal ?? "";
+    const known = byDeal.get(dealNo) ?? seed.get(dealNo)?.pj;
+    const pj = known ?? nextDocNo(settings().docs.project, used);
+    if (!known) used.push(pj);
+    byDeal.set(dealNo, pj);
+    return { ...x, pj, bill: x.bill ?? seed.get(dealNo)?.bill ?? "", deal: dealNo || undefined };
+  };
+  const inbox = v.inbox.map(fix);
+  const projects = v.projects.map(fix);
+  const rekey = <T,>(rec: Record<string, T> | undefined, key: (k: string) => string) =>
+    Object.fromEntries(Object.entries(rec ?? {}).map(([k, x]) => [key(k), x]));
+  const drafts = rekey(v.drafts, (k) => byDeal.get(k) ?? k);
+  const talks = rekey(v.talks, (k) => {
+    const i = k.indexOf("|");
+    const pj = i > 0 ? byDeal.get(k.slice(0, i)) : undefined;
+    return pj ? `${pj}${k.slice(i)}` : k;
+  });
+  return { ...v, inbox, projects, drafts, talks };
+}
+
 function migratePm(input: PmState): PmState {
-  const v = input;
-  const seedOf = new Map(PM_PROJECTS.map((p) => [p.deal, p]));
+  const v = assignPj(input);
+  const seedOf = new Map(PM_PROJECTS.map((p) => [p.pj, p]));
 
   const projects = v.projects.map((p) => {
-    const seed = seedOf.get(p.deal);
+    const seed = seedOf.get(p.pj);
     if (!seed) return p;
     const has = new Set(p.tasks.map((t) => t.name));
     return {
@@ -155,13 +192,13 @@ function migratePm(input: PmState): PmState {
   });
 
   /* โปรเจคที่เพิ่งเพิ่มเข้าชุดตั้งต้น — ของเก่ายังไม่มี ต้องต่อท้ายให้ */
-  const known = new Set(v.projects.map((p) => p.deal));
-  const added = PM_PROJECTS.filter((p) => !known.has(p.deal));
+  const known = new Set(v.projects.map((p) => p.pj));
+  const added = PM_PROJECTS.filter((p) => !known.has(p.pj));
 
   /* ตัวอย่างดีลที่ถูกยกเลิก (ครัวคุณจิ) เพิ่มเข้าชุดตั้งต้น 21 ก.ย. 2569 — เครื่องที่เก็บข้อมูลไว้ก่อนให้เห็นด้วย
      ใช้เฉพาะรายการตั้งต้นที่มีการยกเลิก และของในเครื่องยังเดินอยู่ ไม่ทับของที่ผู้ใช้ยกเลิกเอง */
   const cancelled = [...projects, ...added].map((p) => {
-    const seed = seedOf.get(p.deal);
+    const seed = seedOf.get(p.pj);
     return seed?.cancelled && p.status === "running" && !p.cancelled
       ? { ...p, status: "cancelled" as const, cancelled: seed.cancelled, updated: seed.updated }
       : p;
@@ -169,7 +206,25 @@ function migratePm(input: PmState): PmState {
 
   /* ร่างแผนเพิ่มเข้ามา 23 ก.ย. · สายข้อความของงานย่อยเพิ่ม 24 ก.ย. —
      ข้อมูลที่ยังไม่มีช่องพวกนี้ถือว่ายังว่าง เติมให้ ไม่เปลี่ยนคีย์ จะได้ไม่ทิ้งงานที่ทำไว้แล้ว */
-  return { ...v, projects: cancelled, drafts: v.drafts ?? {}, talks: v.talks ?? {} };
+  /* ชื่อคนรับงานเพิ่ม 5 ต.ค. 2569 (กระดานรับงาน) — งานตั้งต้นที่รับไปแล้วเติมชื่อจากชุดตั้งต้น
+     งานอื่นที่รับไปก่อนมีช่องนี้ปล่อยว่าง หน้าจอขึ้นแค่ "รับแล้ว" */
+  const inboxSeed = new Map(PM_INBOX.map((j) => [j.pj, j]));
+  const inbox = v.inbox.map((j) => {
+    const seed = inboxSeed.get(j.pj);
+    return j.stage === "plan" && !j.takenBy && seed?.takenBy
+      ? { ...j, takenBy: seed.takenBy, takenAt: j.takenAt ?? seed.takenAt }
+      : j;
+  });
+
+  /* เอกสารแนบของโปรเจคเพิ่ม 5 ต.ค. 2569 — ข้อมูลเก่าที่ยังไม่มีช่องนี้ถือว่ายังไม่มีเอกสาร (ผู้ใช้สั่ง 5 ต.ค. 2569)
+     ชื่อโปรเจคที่เก็บไว้แล้วไม่แตะ แม้จะเป็นรูปแบบเดิม "ลูกค้า – ขอบเขตงาน" */
+  return {
+    ...v,
+    inbox: inbox.map((j) => (j.docs ? j : { ...j, docs: [] })),
+    projects: cancelled.map((p) => (p.docs ? p : { ...p, docs: [] })),
+    drafts: v.drafts ?? {},
+    talks: v.talks ?? {},
+  };
 }
 
 /* ขึ้นเป็น v4 เพราะรูปข้อมูลเปลี่ยน — งานย่อยมีผู้มอบหมาย/เวลา และสโตร์มีร่างแผน */
@@ -190,7 +245,8 @@ const store = createPersistedStore<PmState>("maz-erp.pm.v4", INITIAL, isPmState,
 export function cancelDealWork(deal: string, c: { at: string; by: string; why: string }) {
   store.update((s) => {
     const job = s.inbox.find((j) => j.deal === deal && j.stage === "plan");
-    const draft = s.drafts[deal];
+    /* ร่างแผนคีย์ด้วยเลขที่โปรเจค — ดีลเป็นแค่ตัวบอกว่าโปรเจคไหนต้องหยุด */
+    const draft = job ? s.drafts[job.pj] : undefined;
     const known = s.projects.some((p) => p.deal === deal);
     const day = c.at.slice(0, 10);
     /* แผนร่าง → งานของโปรเจคที่ถูกยกเลิก (สถานะ "ยังไม่เริ่ม" เพราะยังไม่เคยมอบหมายจริง) */
@@ -212,6 +268,8 @@ export function cancelDealWork(deal: string, c: { at: string; by: string; why: s
       job && !known
         ? [
             {
+              pj: job.pj,
+              bill: job.bill,
               deal: job.deal,
               service: job.service,
               name: job.name,
@@ -296,7 +354,7 @@ export function pmSnapshot() {
  * ไม่งั้นชื่อที่ PM เพิ่งแก้จะไม่เปลี่ยนตามในการ์ดงานและหน้าแผนงาน
  */
 /*
- * พนักงาน = ทะเบียนพนักงานชุดเดียวกับฝ่ายบุคคล (ERD HR-BR-19)
+ * ทีมงาน = ทะเบียนพนักงานชุดเดียวกับฝ่ายบุคคล (ERD HR-BR-19)
  * ชื่อและสถานะอ่านจากทะเบียนเสมอ (แก้ชื่อที่ฝ่ายบุคคลแล้วตามมาเอง) · ทักษะและจำนวนงานเป็นของฝั่ง PM
  * พนักงานใหม่ในตำแหน่งสายผลิตเข้าทีมเอง · คนที่พ้นสภาพยังอยู่ (left) เพื่อแสดงชื่อในงานเก่า
  */
@@ -329,7 +387,7 @@ if (typeof window !== "undefined") {
   queueMicrotask(syncTeamFromHr);
 }
 
-/** พนักงานสำหรับหน้าจอ — ซิงก์จากทะเบียนฝ่ายบุคคลแล้ว */
+/** ทีมงานสำหรับหน้าจอ — ซิงก์จากทะเบียนฝ่ายบุคคลแล้ว */
 export function useTeam() {
   return usePm().team;
 }
@@ -343,15 +401,19 @@ export function memberName(id: string) {
 }
 
 /**
- * บัญชีรับเงินงวดแรกแล้ว งานจึงเข้ากล่องงานใหม่ของ PM
- * กันซ้ำด้วยเลขที่ดีล เผื่อบัญชีแก้แล้วบันทึกเงินเข้าซ้ำ
+ * บัญชีรับเงินงวดแรกแล้ว งานจึงเข้ากล่องงานใหม่ของ PM — เกิดโปรเจคพร้อมเลขที่โปรเจคตรงนี้ (ผู้ใช้สั่ง 5 ต.ค. 2569)
+ * กันซ้ำด้วยใบแจ้งหนี้งวดแรก (และเลขดีลถ้ามี) เผื่อบัญชีแก้แล้วบันทึกเงินเข้าซ้ำ
+ * คืนเลขที่โปรเจค — ของที่มีอยู่แล้วคืนเลขเดิม
  */
-export function addInboxJob(job: InboxJob) {
-  store.update((s) =>
-    s.inbox.some((j) => j.deal === job.deal) || s.projects.some((p) => p.deal === job.deal)
-      ? s
-      : { ...s, inbox: [job, ...s.inbox] },
-  );
+export function addInboxJob(job: Omit<InboxJob, "pj">): string {
+  const same = (x: InboxJob | Project) =>
+    (Boolean(job.bill) && x.bill === job.bill) || (Boolean(job.deal) && x.deal === job.deal);
+  const cur = store.get();
+  const had = cur.inbox.find(same) ?? cur.projects.find(same);
+  if (had) return had.pj;
+  const pj = nextDocNo(settings().docs.project, [...cur.inbox, ...cur.projects].map((x) => x.pj));
+  store.update((s) => ({ ...s, inbox: [{ ...job, pj }, ...s.inbox] }));
+  return pj;
 }
 
 function today() {
@@ -359,10 +421,10 @@ function today() {
 }
 
 /** เปิดดูเอกสารของงานแล้ว — จุดแดงหน้าแถวในกล่องงานเข้าใหม่หายไป */
-export function markInboxSeen(deal: string) {
+export function markInboxSeen(pj: string) {
   store.update((s) => ({
     ...s,
-    inbox: s.inbox.map((j) => (j.deal === deal && !j.seen ? { ...j, seen: true } : j)),
+    inbox: s.inbox.map((j) => (isRef(j, pj) && !j.seen ? { ...j, seen: true } : j)),
   }));
 }
 
@@ -373,16 +435,26 @@ export function markInboxSeen(deal: string) {
  * เลือกวันเริ่มแล้วเลื่อนทุกเฟสไปทั้งชุด ระยะของแต่ละเฟสเท่าเดิมตามที่ตกลงกับลูกค้า
  * งานที่ไม่มีข้อเสนอไม่มีเฟส — แค่จำวันเริ่มไว้ แล้ว PM สร้างเฟสเองในหน้าวางแผน
  */
-export function acceptInboxJob(deal: string, start: string, name = "") {
-  if (!start) return;
+export type AcceptResult = { ok: true } | { ok: false; reason: "taken" | "start"; takenBy: string };
+
+/*
+ * กระดานรับงาน (ผู้ใช้สั่ง 5 ต.ค. 2569) — ใครรับก่อนได้งาน จดชื่อคนรับไว้
+ * งานที่ไม่อยู่ขั้น "new" แล้วคือมีคนรับไปก่อน (เช่นเปิดแท็บค้างไว้) ปฏิเสธและบอกชื่อคนที่รับไป
+ */
+export function acceptInboxJob(pj: string, start: string, name = ""): AcceptResult {
+  const cur = store.get().inbox.find((j) => isRef(j, pj));
+  if (!cur || cur.stage !== "new") return { ok: false, reason: "taken", takenBy: cur?.takenBy ?? "" };
+  if (!start) return { ok: false, reason: "start", takenBy: "" };
+  const by = USERS[currentRole()]?.name ?? "";
+  const at = today();
   store.update((s) => ({
     ...s,
     inbox: s.inbox.map((j) => {
-      if (j.deal !== deal || j.stage !== "new") return j;
-      /* ชื่อโปรเจค (PM-BR-03) — ว่างใช้ "ลูกค้า – ขอบเขตงาน" ตามต้นแบบ */
-      const nm = name.trim() || `${j.cus} – ${j.scope}`;
+      if (!isRef(j, pj) || j.stage !== "new") return j;
+      /* ชื่อโปรเจค (PM-BR-03) — ว่างใช้แค่ชื่อลูกค้า PM ค่อยแก้ชื่อหลังเปิดโฟลเดอร์ (ผู้ใช้สั่ง 5 ต.ค. 2569 — เดิม "ลูกค้า – ขอบเขตงาน") */
+      const nm = name.trim() || j.cus;
       if (!j.phases.length || !j.planStart) {
-        return { ...j, stage: "plan" as const, seen: true, projectStart: start, planStart: start, name: nm };
+        return { ...j, stage: "plan" as const, seen: true, projectStart: start, planStart: start, name: nm, takenBy: by, takenAt: at };
       }
       const d = daysBetween(j.planStart, start);
       return {
@@ -390,6 +462,8 @@ export function acceptInboxJob(deal: string, start: string, name = "") {
         stage: "plan" as const,
         seen: true,
         name: nm,
+        takenBy: by,
+        takenAt: at,
         projectStart: start,
         planStart: addDays(j.planStart, d),
         planEnd: j.planEnd ? addDays(j.planEnd, d) : j.planEnd,
@@ -397,6 +471,7 @@ export function acceptInboxJob(deal: string, start: string, name = "") {
       };
     }),
   }));
+  return { ok: true };
 }
 
 export type PlannedTask = {
@@ -417,19 +492,19 @@ export type PlannedTask = {
  * กติกาเดียวกับใบเสนอราคา — แก้ปุ๊บบันทึกปั๊บ ไม่มีปุ่มบันทึก
  * "ยืนยันแผน" เปลี่ยนแค่สถานะ (ร่าง → โปรเจค) ไม่ใช่จุดที่เพิ่งเริ่มบันทึก
  */
-export function savePlanDraft(deal: string, draft: Omit<PlanDraft, "at" | "by">, by: string) {
+export function savePlanDraft(pj: string, draft: Omit<PlanDraft, "at" | "by">, by: string) {
   store.update((s) => ({
     ...s,
-    drafts: { ...s.drafts, [deal]: { ...draft, at: bkkStamp(), by } },
+    drafts: { ...s.drafts, [pj]: { ...draft, at: bkkStamp(), by } },
   }));
 }
 
 /** ทิ้งร่างของดีลนี้ — ยืนยันแผนแล้วร่างหมดหน้าที่ */
-export function clearPlanDraft(deal: string) {
+export function clearPlanDraft(pj: string) {
   store.update((s) => {
-    if (!s.drafts[deal]) return s;
+    if (!s.drafts[pj]) return s;
     const next = { ...s.drafts };
-    delete next[deal];
+    delete next[pj];
     return { ...s, drafts: next };
   });
 }
@@ -452,7 +527,7 @@ function stampAssign(t: ProjectTask, what: "assign" | "due" | "owner", at: strin
  * โทนสีปกวนสามแบบตามจำนวนโปรเจคที่มีอยู่ จะได้ไม่ซ้ำกับใบก่อนหน้าติดกัน
  */
 export function confirmPlan(
-  deal: string,
+  pj: string,
   tasks: PlannedTask[],
   pmName: string,
   /** เฟสหลัง PM แก้หรือเพิ่มเองในหน้าวางแผน */
@@ -460,12 +535,14 @@ export function confirmPlan(
 ) {
   const at = bkkStamp();
   store.update((s) => {
-    const job = s.inbox.find((j) => j.deal === deal);
+    const job = s.inbox.find((j) => isRef(j, pj));
     if (!job) return s;
     /* งานที่ไม่มีข้อเสนอไม่มีวันจบจากใบเสนอราคา ใช้วันจบของเฟสสุดท้ายที่ PM วางไว้แทน */
     const lastEnd = phases.reduce((m, ph) => (ph.end > m ? ph.end : m), "");
     const tones = ["a", "b", "c"] as const;
     const project: Project = {
+      pj: job.pj,
+      bill: job.bill,
       deal: job.deal,
       service: job.service,
       name: job.name,
@@ -481,6 +558,8 @@ export function confirmPlan(
       tone: tones[s.projects.length % tones.length],
       phases: phases.map((ph) => ({ ...ph })),
       source: job,
+      /* เอกสารที่แนบไว้ตอนวางแผนติดไปกับโปรเจค ทีมจะได้เห็น (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+      docs: (job.docs ?? []).map((d) => ({ ...d })),
       /* ทุกใบเพิ่งถูกมอบหมายรอบแรก จึงประทับเวลาและผู้มอบให้ทั้งชุด */
       tasks: tasks.map<ProjectTask>((t) =>
         stampAssign(
@@ -506,21 +585,16 @@ export function confirmPlan(
     };
     /* ยืนยันแล้วร่างหมดหน้าที่ — แผนจริงอยู่ในโปรเจคแล้ว */
     const drafts = { ...s.drafts };
-    delete drafts[deal];
+    delete drafts[pj];
     return {
       ...s,
-      inbox: s.inbox.filter((j) => j.deal !== deal),
+      inbox: s.inbox.filter((j) => !isRef(j, pj)),
       projects: [project, ...s.projects],
       drafts,
     };
   });
 }
 
-/**
- * เปิดโปรเจคที่ PM ตั้งเองจากหน้า "โปรเจคใหม่" (ไม่ได้มาจากดีลของฝ่ายขาย)
- * ใช้กับงานภายในหรืองานที่ยังไม่มีใบเสนอราคา — ยอดเงินและเลขใบเสนอราคาจึงว่าง
- * เลขโปรเจคออกเป็น PRJ-ปี-ลำดับ เพื่อไม่ชนกับเลขดีลของฝ่ายขาย
- */
 export function createOwnProject(input: {
   name: string;
   cus: string;
@@ -535,14 +609,14 @@ export function createOwnProject(input: {
   const day = today();
   let created = "";
   store.update((s) => {
-    /* เลขปีพุทธศักราชเต็ม ให้รูปแบบเดียวกับเลขดีล (DL-2569-0018) */
-    const year = Number(day.slice(0, 4)) + 543;
-    const seq = s.projects.filter((p) => p.deal.startsWith("PRJ-")).length + 1;
-    const deal = `PRJ-${year}-${String(seq).padStart(4, "0")}`;
-    created = deal;
+    /* เลขที่โปรเจคชุดเดียวกับงานที่มาจากวางบิล (PJ-2569-xxxx) ออกเลขต่อจากที่มีอยู่ */
+    const pj = nextDocNo(settings().docs.project, [...s.projects, ...s.inbox].map((x) => x.pj));
+    created = pj;
     const tones = ["a", "b", "c"] as const;
     const project: Project = {
-      deal,
+      pj,
+      /* โปรเจคที่ตั้งเองไม่ได้มาจากวางบิลและไม่มีดีล */
+      bill: "",
       /* งานที่ตั้งเองยังไม่รู้ประเภทบริการ ใช้ค่าตั้งต้นให้การ์ดมีไอคอน แล้ว PM แก้ทีหลังได้ */
       service: "website",
       name: input.name,
@@ -582,16 +656,16 @@ export function createOwnProject(input: {
  * งานเดิมเก็บสถานะ ความคืบหน้า ไฟล์ และรอบส่งงานไว้ทั้งหมด เปลี่ยนแค่ชื่อ เฟส คน และวัน
  * งานที่เพิ่มใหม่เริ่มที่ "ยังไม่เริ่ม"
  */
-export function replanProject(deal: string, tasks: PlannedTask[], phases: ProjectPhase[]) {
+export function replanProject(pj: string, tasks: PlannedTask[], phases: ProjectPhase[]) {
   const at = bkkStamp();
   store.update((s) => {
     const drafts = { ...s.drafts };
-    delete drafts[deal];
+    delete drafts[pj];
     return {
     ...s,
     drafts,
     projects: s.projects.map((p) => {
-      if (p.deal !== deal) return p;
+      if (!isRef(p, pj)) return p;
       const lastEnd = phases.reduce((m, ph) => (ph.end > m ? ph.end : m), p.due);
       return {
         ...p,
@@ -632,22 +706,22 @@ export function replanProject(deal: string, tasks: PlannedTask[], phases: Projec
  * แก้ชื่อโปรเจค (PM-BR-03) — PM ตั้งและแก้ได้เอง ส่วนลูกค้า บริการ และขอบเขตมาจากดีล แก้ตรงนี้ไม่ได้
  * งานที่ยังรอวางแผน (อยู่ในกล่องงานเข้า) แก้ที่งานนั้น ชื่อจะติดไปตอนยืนยันแผน
  */
-export function renameProject(deal: string, name: string) {
+export function renameProject(pj: string, name: string) {
   const v = name.trim();
   if (!v) return;
   store.update((s) => ({
     ...s,
-    inbox: s.inbox.map((j) => (j.deal === deal ? { ...j, name: v } : j)),
-    projects: s.projects.map((p) => (p.deal === deal ? { ...p, name: v, updated: today() } : p)),
+    inbox: s.inbox.map((j) => (isRef(j, pj) ? { ...j, name: v } : j)),
+    projects: s.projects.map((p) => (isRef(p, pj) ? { ...p, name: v, updated: today() } : p)),
   }));
 }
 
 /*
- * แนบเอกสารอื่นให้โปรเจค (ยกมาจากระบบต้นฉบับ) — ปุ่ม "+" ข้างใบเสนอราคา/Proposal
+ * แนบเอกสารอื่นให้โปรเจค (ผู้ใช้สั่ง 5 ต.ค. 2569) — ปุ่ม "+" ข้างใบเสนอราคา/Proposal
  * งานที่ยังวางแผนอยู่เก็บที่ใบงานในกล่องเข้า (ติดไปตอนยืนยันแผน) · โปรเจคที่เดินแล้วเก็บที่โปรเจค
  * ชื่อซ้ำกับที่มีอยู่ไม่เพิ่มซ้ำ — ลบใช้ชื่อเป็นตัวระบุ
  */
-export function addProjectDocs(deal: string, docs: ProjectDoc[]) {
+export function addProjectDocs(pj: string, docs: ProjectDoc[]) {
   if (!docs.length) return;
   const at = bkkStamp();
   const merge = (cur: ProjectDoc[] | undefined) => {
@@ -656,9 +730,9 @@ export function addProjectDocs(deal: string, docs: ProjectDoc[]) {
   };
   store.update((s) => ({
     ...s,
-    inbox: s.inbox.map((j) => (j.deal === deal ? { ...j, docs: merge(j.docs) } : j)),
+    inbox: s.inbox.map((j) => (isRef(j, pj) ? { ...j, docs: merge(j.docs) } : j)),
     projects: s.projects.map((p) =>
-      p.deal === deal
+      isRef(p, pj)
         ? {
             ...p,
             docs: merge(p.docs),
@@ -674,12 +748,12 @@ export function addProjectDocs(deal: string, docs: ProjectDoc[]) {
 }
 
 /** เอาเอกสารแนบของโปรเจคออก (PM/GM กดยืนยันก่อน) */
-export function removeProjectDoc(deal: string, name: string) {
+export function removeProjectDoc(pj: string, name: string) {
   store.update((s) => ({
     ...s,
-    inbox: s.inbox.map((j) => (j.deal === deal ? { ...j, docs: (j.docs ?? []).filter((d) => d.n !== name) } : j)),
+    inbox: s.inbox.map((j) => (isRef(j, pj) ? { ...j, docs: (j.docs ?? []).filter((d) => d.n !== name) } : j)),
     projects: s.projects.map((p) =>
-      p.deal === deal ? { ...p, docs: (p.docs ?? []).filter((d) => d.n !== name), updated: today() } : p,
+      isRef(p, pj) ? { ...p, docs: (p.docs ?? []).filter((d) => d.n !== name), updated: today() } : p,
     ),
   }));
 }
@@ -690,7 +764,7 @@ export function removeProjectDoc(deal: string, name: string) {
  * โอนหลังตกลงกันแล้วเท่านั้น จึงบังคับให้ใส่เหตุผล และเก็บไว้เป็นประวัติทุกครั้ง
  * งานย่อยกับคนที่ถูกมอบหมายไม่เปลี่ยน — เปลี่ยนแค่คนที่ดูแลโปรเจค
  */
-export function transferProject(deal: string, to: string, why: string, by: string) {
+export function transferProject(pj: string, to: string, why: string, by: string) {
   const name = to.trim();
   const reason = why.trim();
   if (!name || !reason) return false;
@@ -698,7 +772,7 @@ export function transferProject(deal: string, to: string, why: string, by: strin
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) => {
-      if (p.deal !== deal) return p;
+      if (!isRef(p, pj)) return p;
       /* โอนให้คนเดิมไม่ใช่การโอน อย่าลงประวัติหลอก ๆ ไว้ */
       if (p.pm === name) return p;
       done = true;
@@ -719,11 +793,11 @@ export function transferProject(deal: string, to: string, why: string, by: strin
 }
 
 /** เลื่อนสถานะงานย่อย — เสร็จแล้วให้ความคืบหน้าเต็ม 100 เสมอ */
-export function setTaskStatus(deal: string, taskIndex: number, status: TaskStatus) {
+export function setTaskStatus(pj: string, taskIndex: number, status: TaskStatus) {
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) => {
-      if (p.deal !== deal) return p;
+      if (!isRef(p, pj)) return p;
       const tasks = p.tasks.map((t, i) =>
         i === taskIndex
           ? { ...t, status, pct: status === "done" ? 100 : status === "todo" ? 0 : t.pct }
@@ -747,12 +821,12 @@ export function setTaskStatus(deal: string, taskIndex: number, status: TaskStatu
  * สถานะกับเปอร์เซ็นต์ต้องไม่ขัดกัน — 0 คือยังไม่เริ่ม 100 คือเสร็จ
  * จึงเลื่อนสถานะให้ตามค่าที่กรอกด้วย ไม่ให้เกิดงาน "เสร็จแล้ว 40%"
  */
-export function setTaskProgress(deal: string, taskIndex: number, pct: number) {
+export function setTaskProgress(pj: string, taskIndex: number, pct: number) {
   const clamped = Math.max(0, Math.min(100, Math.round(pct)));
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) => {
-      if (p.deal !== deal) return p;
+      if (!isRef(p, pj)) return p;
       const tasks = p.tasks.map((t, i) =>
         i === taskIndex
           ? {
@@ -781,11 +855,11 @@ export function setTaskProgress(deal: string, taskIndex: number, pct: number) {
  * ตัวไฟล์เปิดได้เฉพาะในรอบที่เพิ่งเลือกเข้ามา (ดู objectURL ในหน้าโปรเจค)
  * เมื่อต่อ backend ให้อัปโหลดขึ้น storage แล้วเก็บ URL แทน
  */
-export function attachFile(deal: string, taskIndex: number, file: TaskFile) {
+export function attachFile(pj: string, taskIndex: number, file: TaskFile) {
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) =>
-      p.deal === deal
+      isRef(p, pj)
         ? {
             ...p,
             tasks: p.tasks.map((t, i) =>
@@ -798,11 +872,11 @@ export function attachFile(deal: string, taskIndex: number, file: TaskFile) {
   }));
 }
 
-export function removeFile(deal: string, taskIndex: number, name: string) {
+export function removeFile(pj: string, taskIndex: number, name: string) {
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) =>
-      p.deal === deal
+      isRef(p, pj)
         ? {
             ...p,
             tasks: p.tasks.map((t, i) =>
@@ -819,7 +893,7 @@ export function removeFile(deal: string, taskIndex: number, name: string) {
 /** หางานย่อยใบเดียวจากรหัสดีลกับชื่องาน — สองอย่างนี้รวมกันไม่ซ้ำกันในระบบ */
 function patchTask(
   s: PmState,
-  deal: string,
+  pj: string,
   taskName: string,
   fn: (t: ProjectTask) => ProjectTask,
   /* ความเคลื่อนไหวที่จะขึ้นในกิจกรรมล่าสุดของโปรเจค — งานขยับแล้วต้องมีร่องรอยเสมอ
@@ -829,7 +903,7 @@ function patchTask(
   return {
     ...s,
     projects: s.projects.map((p) => {
-      if (p.deal !== deal) return p;
+      if (!isRef(p, pj)) return p;
       const tasks = p.tasks.map((t) => (t.name === taskName ? fn(t) : t));
       const allDone = tasks.every((t) => t.status === "done");
       return {
@@ -850,7 +924,7 @@ function patchTask(
  * แล้วรอบนี้แก้ตรงนั้นหรือยัง · ส่งใหม่แล้วเหตุผลที่ตีกลับถือว่าจบไป จึงล้าง back ทิ้ง
  */
 export function submitWork(
-  deal: string,
+  pj: string,
   taskName: string,
   input: { by: string; files: string[]; note: string; at: string },
 ) {
@@ -863,7 +937,7 @@ export function submitWork(
   store.update((s) =>
     patchTask(
       s,
-      deal,
+      pj,
       taskName,
       (t) => ({
         ...t,
@@ -883,11 +957,11 @@ export function submitWork(
 }
 
 /** PM ตรวจผ่าน — งานจบที่ 100% ไม่ต้องให้ทีมมากดปิดซ้ำอีกที */
-export function approveWork(deal: string, taskName: string, stamp: string) {
+export function approveWork(pj: string, taskName: string, stamp: string) {
   store.update((s) =>
     patchTask(
       s,
-      deal,
+      pj,
       taskName,
       (t) => ({
         ...t,
@@ -902,11 +976,11 @@ export function approveWork(deal: string, taskName: string, stamp: string) {
 }
 
 /** PM ตีกลับให้แก้ — เหตุผลบังคับ ฝั่งที่เรียกต้องกันไว้ก่อนแล้ว */
-export function sendBackWork(deal: string, taskName: string, why: string, stamp: string) {
+export function sendBackWork(pj: string, taskName: string, why: string, stamp: string) {
   store.update((s) =>
     patchTask(
       s,
-      deal,
+      pj,
       taskName,
       (t) => ({
         ...t,
@@ -921,50 +995,49 @@ export function sendBackWork(deal: string, taskName: string, why: string, stamp:
 /**
  * PM ส่งงานที่ตรวจผ่านแล้วให้ลูกค้าตรวจผ่านลิงก์ (client-review-store) — งานเป็น "รอลูกค้าตรวจ"
  * ลูกค้าอนุมัติแล้ว PM ปิดด้วย approveWork · ลูกค้ามีความเห็นก็ตีกลับด้วย sendBackWork ตามทางเดิม
- * (ยกมาจากระบบต้นฉบับ ERP_Test 5 ต.ค. 2569 — ปรับให้อ้างโปรเจคด้วยเลขที่ดีลตามโครงสร้างของเรา)
  */
-export function sendToClientWork(deal: string, taskName: string, round: number, stamp: string) {
+export function sendToClientWork(pj: string, taskName: string, round: number, stamp: string) {
   store.update((s) =>
     patchTask(
       s,
-      deal,
+      pj,
       taskName,
-      (t) => ({ ...t, status: "wait" as const, back: undefined }),
+      (t) => ({ ...t, status: "wait", back: undefined }),
       { kind: "status", who: "PM", at: stamp, tx: `ส่ง ${taskName} ให้ลูกค้าตรวจ รอบที่ ${round}` },
     ),
   );
 }
 
-/** ลงกิจกรรมของโปรเจคจากนอกสโตร์ — ใช้กับลูกค้าที่ส่งความเห็นผ่านลิงก์ตรวจงาน */
-export function addProjectAct(deal: string, act: Activity) {
+/** ลงกิจกรรมของโปรเจคจากนอกสโตร์ — ตอนนี้ใช้กับลูกค้าที่ส่งความเห็นผ่านลิงก์ตรวจงาน */
+export function addProjectAct(pj: string, act: Activity) {
   store.update((s) => ({
     ...s,
-    projects: s.projects.map((p) => (p.deal === deal ? { ...p, acts: [act, ...p.acts], updated: today() } : p)),
+    projects: s.projects.map((p) => (isRef(p, pj) ? { ...p, acts: [act, ...p.acts], updated: today() } : p)),
   }));
 }
 
 export function postChat(
-  deal: string,
+  pj: string,
   text: string,
   stamp: string,
   files: { n: string; sz: string }[] = [],
-  /** ผู้ส่ง — "PM" หรือรหัสพนักงานของทีมงานที่ส่งจากหน้างานที่ได้รับ (ยกจากระบบต้นฉบับ 6 ต.ค. 2569) */
+  /** ผู้ส่ง — "PM" หรือรหัสพนักงานของทีมงานที่ส่งจากหน้างานที่ได้รับ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
   who = "PM",
 ) {
   const message: ChatMessage = { who, at: stamp, tx: text, files: files.length ? files : undefined };
   const act = files.length ? `ส่งไฟล์ในแชทโปรเจค ${files.length} ไฟล์` : "ส่งข้อความในแชทโปรเจค";
   /* ไฟล์ที่ส่งในแชทเก็บเข้าไฟล์ของโปรเจคด้วย จะได้หาเจอโดยไม่ต้องไล่อ่านแชท (ตามต้นแบบ) */
-  const kept: TaskFile[] = files.map((f) => ({ n: f.n, k: fileKind(f.n), sz: f.sz, at: stamp.slice(0, 10), by: "PM" }));
+  const kept: TaskFile[] = files.map((f) => ({ n: f.n, k: fileKind(f.n), sz: f.sz, at: stamp.slice(0, 10), by: who }));
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) =>
       /* ส่งแชทแล้วขึ้นในกิจกรรมล่าสุดด้วย ตามต้นแบบ — คนที่ไล่ดูกิจกรรมจะรู้ว่ามีข้อความใหม่ */
-      p.deal === deal
+      isRef(p, pj)
         ? {
             ...p,
             chat: [...p.chat, message],
             files: kept.length ? [...kept, ...(p.files ?? [])] : p.files,
-            acts: [...p.acts, { kind: "chat" as const, who: "PM", at: stamp, tx: act }],
+            acts: [...p.acts, { kind: "chat" as const, who, at: stamp, tx: act }],
             updated: today(),
           }
         : p,
@@ -975,8 +1048,8 @@ export function postChat(
 // ─── ข้อความของงานย่อย ─────────────────────────────────────────────
 
 /** สายข้อความของงานหนึ่งใบ เรียงเก่าไปใหม่ */
-export function taskTalks(s: PmState, deal: string, taskName: string): TaskTalk[] {
-  return s.talks[talkKey(deal, taskName)] ?? [];
+export function taskTalks(s: PmState, pj: string, taskName: string): TaskTalk[] {
+  return s.talks[talkKey(pj, taskName)] ?? [];
 }
 
 /**
@@ -986,7 +1059,7 @@ export function taskTalks(s: PmState, deal: string, taskName: string): TaskTalk[
  * ถ้าเก็บแยกอย่างเดียว PM จะไม่รู้ว่าทีมตอบกลับมาแล้ว ก็กลับไปตามกันในไลน์เหมือนเดิม
  */
 export function postTaskTalk(
-  deal: string,
+  pj: string,
   taskName: string,
   who: string,
   tx: string,
@@ -994,13 +1067,13 @@ export function postTaskTalk(
   nudge = false,
 ) {
   const note: TaskTalk = { who, at: stamp, tx, ...(nudge ? { nudge: true } : {}) };
-  const key = talkKey(deal, taskName);
+  const key = talkKey(pj, taskName);
   const act = nudge ? `ทวงงาน ${taskName}` : `ส่งข้อความเรื่อง ${taskName}`;
   store.update((s) => ({
     ...s,
     talks: { ...s.talks, [key]: [...(s.talks[key] ?? []), note] },
     projects: s.projects.map((p) =>
-      p.deal === deal
+      isRef(p, pj)
         ? {
             ...p,
             /* ติดชื่องานไว้หน้าข้อความ คนอ่านแชทโปรเจคจะได้รู้ว่าพูดถึงงานใบไหน */
@@ -1015,15 +1088,15 @@ export function postTaskTalk(
 
 /**
  * PM ทวงงานที่ค้าง — ผลคือผู้รับงานเห็นข้อความนี้ในหน้างานที่ได้รับของตัวเอง
- * (กระดิ่งของพนักงานอ่านจาก talks ตัวเดียวกัน ดูหมายเหตุใน notifications)
+ * (กระดิ่งของทีมงานอ่านจาก talks ตัวเดียวกัน ดูหมายเหตุใน notifications)
  */
-export function nudgeTask(deal: string, taskName: string, tx: string, stamp: string) {
-  postTaskTalk(deal, taskName, "PM", tx, stamp, true);
+export function nudgeTask(pj: string, taskName: string, tx: string, stamp: string) {
+  postTaskTalk(pj, taskName, "PM", tx, stamp, true);
 }
 
 /** ทวงล่าสุดของงานใบนี้ — ยังไม่มีใครตอบหลังจากนั้นถึงจะนับว่ายังค้าง */
-export function openNudge(s: PmState, deal: string, taskName: string) {
-  const list = taskTalks(s, deal, taskName);
+export function openNudge(s: PmState, pj: string, taskName: string) {
+  const list = taskTalks(s, pj, taskName);
   const last = list[list.length - 1];
   return last?.nudge ? last : undefined;
 }

@@ -111,7 +111,7 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
   /* แชทกลุ่มของโปรเจคที่เปิดอยู่ — มีได้ทีละหน้าต่าง กดของอีกงานก็สลับสาย (ยกจากระบบต้นฉบับ 6 ต.ค. 2569) */
   const [chatDeal, setChatDeal] = useState("");
   const [chatOpen, setChatOpen] = useState(false);
-  const chatProject = pm.projects.find((p) => p.deal === chatDeal);
+  const chatProject = pm.projects.find((p) => p.pj === chatDeal);
   /* ข้อความที่ยังไม่ได้อ่านของแต่ละงาน — ใช้ขึ้นจุดแดงบนปุ่มคุยกับ PM
      อ่านจากเครื่อง ฝั่งเซิร์ฟเวอร์จึงไม่มี ต้องรอ hydrate ก่อนค่อยขึ้นป้าย ไม่งั้น React ฟ้องว่าวาดไม่ตรงกัน */
   const marks = useTalkRead();
@@ -216,17 +216,17 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
         ) : (
           rows.map((x) => (
             <TaskCard
-              key={`${x.p.deal}-${x.t.name}`}
+              key={`${x.p.pj}-${x.t.name}`}
               row={x}
               today={today}
-              talks={taskTalks(pm, x.p.deal, x.t.name)}
-              unread={hydrated ? unreadCount(marks, me.employeeId, x.p.deal, x.t.name, taskTalks(pm, x.p.deal, x.t.name)) : 0}
-              nudge={openNudge(pm, x.p.deal, x.t.name)}
+              talks={taskTalks(pm, x.p.pj, x.t.name)}
+              unread={hydrated ? unreadCount(marks, me.employeeId, x.p.pj, x.t.name, taskTalks(pm, x.p.pj, x.t.name)) : 0}
+              nudge={openNudge(pm, x.p.pj, x.t.name)}
               onOpen={() => setViewing(x)}
               onSend={() => setSending(x)}
               onTalk={() => setTalking(x)}
               onChat={() => {
-                setChatDeal(x.p.deal);
+                setChatDeal(x.p.pj);
                 setChatOpen(true);
               }}
             />
@@ -652,7 +652,7 @@ function SubmitDialog({
                 setBrief(false);
                 return;
               }
-              submitWork(p.deal, t.name, {
+              submitWork(p.pj, t.name, {
                 by: me,
                 files: files.map((f) => f.name),
                 note: note.trim(),
@@ -777,23 +777,23 @@ function TalkDialog({
   onSent: () => void;
 }) {
   const { p, t } = row;
-  const talks = taskTalks(usePm(), p.deal, t.name);
+  const talks = taskTalks(usePm(), p.pj, t.name);
   const [tx, setTx] = useState("");
   const [err, setErr] = useState(false);
 
   /* เปิดอ่านแล้วถือว่าอ่านถึงข้อความล่าสุด — จุดแดงบนปุ่มจะได้หายไป */
   const talkCount = talks.length;
   useEffect(() => {
-    markTalkRead(me, p.deal, t.name, talks);
+    markTalkRead(me, p.pj, t.name, talks);
     /* ใช้จำนวนข้อความเป็นตัวกระตุ้น ไม่ใช่ตัวอาเรย์ที่สร้างใหม่ทุกครั้งที่วาดจอ */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me, p.deal, t.name, talkCount]);
+  }, [me, p.pj, t.name, talkCount]);
 
   /* ส่งแล้วไม่ปิดกล่อง ข้อความต่อท้ายให้เห็นทันทีเหมือนแอปแชท (เจ้าของสั่ง 5 ต.ค. 2569) */
   function send() {
     const v = tx.trim();
     if (!v) return setErr(true);
-    postTaskTalk(p.deal, t.name, me, v, bkkStamp());
+    postTaskTalk(p.pj, t.name, me, v, bkkStamp());
     setTx("");
     onSent();
   }
