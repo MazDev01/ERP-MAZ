@@ -446,11 +446,11 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         </div>
 
 
-        {/* บนมือถือแถบหน้าย่อยถูกซ่อนตามต้นแบบ attendance.html ปุ่มนี้จึงเป็นทางเดียวที่เข้าดูทั้งเดือน
-           จอใหญ่ยังมีชิป "บันทึกเวลาของฉัน" อยู่ ปุ่มนี้เลยซ่อนเมื่อฝังอยู่ในหน้าตอกบัตร */}
+        {/* ปุ่มเข้าหน้าบันทึกเวลาทั้งเดือน — เห็นทุกขนาดจอ (ผู้ใช้สั่ง 7 ต.ค. 2569)
+           เดิมซ่อนบนจอกว้างเพราะมีชิป "บันทึกเวลาของฉัน" อยู่แล้ว แต่หาไม่เจอ */}
         {canRecords && <Link
           href="/records"
-          className={`btn glass-thin btn-mini w-full justify-center ${embedded ? "sm:hidden" : ""}`}
+          className="btn glass-thin btn-mini w-full justify-center"
         >
           ดูตารางเวลาทำงานทั้งเดือน
           <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
@@ -538,7 +538,8 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
             />
           </div>
 
-          {!embedded && canRecords && (
+          {/* เห็นทุกจอ รวมตอนฝังอยู่ในหน้าลงเวลางาน (ผู้ใช้สั่ง 7 ต.ค. 2569) */}
+          {canRecords && (
             <Link href="/records" className="btn glass-thin btn-mini mt-6">
               ดูตารางเวลาทำงานทั้งเดือน
               <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
