@@ -34,6 +34,7 @@ import type { NotifyEventKey } from "./notify-settings";
 import type { OtRecord } from "./ot-data";
 import { canBill, invoiceDue, invoiceStatus, type AccState } from "./acc-store";
 import { isRef, lastSub, projectHref, type ProjectTask } from "./pm-data";
+import { canVisit } from "./nav";
 import { memberName, openNudge } from "./pm-store";
 import { eventChangeNotices, eventNotices, type PmEvent } from "./pm-schedule-data";
 import type { PmState } from "./pm-store";
@@ -1112,9 +1113,14 @@ export function buildNotices(input: {
   // ═══ ประกาศจากผู้ดูแลระบบ — การตั้งค่าที่เปลี่ยนแล้วมีผลกับบทบาทนี้ ═══
   for (const n of adminNotices(role, input.adminLog ?? [], today)) out.push(n);
 
-  return out.sort(
-    (a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || a.date.localeCompare(b.date),
-  );
+  /*
+   * กันลิงก์ข้ามฝ่าย — บางเรื่องเป็นของทุกคน แต่หน้าปลายทางไม่ได้อยู่ในเมนูของบางบทบาท
+   * (เช่นแม่บ้านกับนักศึกษาฝึกงานไม่มีหน้าโอทีและหน้าบันทึกเวลา) กดแล้วจะเจอหน้ากันสิทธิ์
+   * พบตอนไล่กดลิงก์ในกระดิ่งทุกบทบาท 7 ต.ค. 2569
+   */
+  return out
+    .filter((n) => !n.href || canVisit(n.href.split("?")[0], role))
+    .sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || a.date.localeCompare(b.date));
 }
 
 // ─── ประกาศจากผู้ดูแลระบบ ─────────────────────────────────────────

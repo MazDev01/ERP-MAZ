@@ -28,6 +28,7 @@ import {
 import { bkkOf, toIsoDate, thaiDate, TH_MONTHS_FULL } from "@/lib/format";
 import { leavesOnDate, useLeaveRecords } from "@/lib/leave-store";
 import { useRole } from "@/lib/role";
+import { canVisit } from "@/lib/nav";
 import { expectedInMinutes, expectedOutMinutes, formatMinutes, formatMinutesOfDay, leaveWindowOf, looksForgotten, minutesOfTime, requiredMinutes } from "@/lib/work-schedule";
 import { popupOn, useNotifySettings } from "@/lib/notify-settings";
 import { areaSettings, freshFix, judge, locate, meters, useLiveGeo, type LiveGeo, type PunchGeo } from "@/lib/work-area";
@@ -56,6 +57,10 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   );
   const leaveRecords = useLeaveRecords();
   const role = useRole();
+  /* บางบทบาทไม่มีหน้าโอทีและหน้าบันทึกเวลาทั้งเดือน (แม่บ้าน · นักศึกษาฝึกงาน)
+     ปุ่มที่พาไปหน้าที่เขาเปิดไม่ได้ต้องไม่ขึ้นเลย (พบตอนไล่กดลิงก์ 7 ต.ค. 2569) */
+  const canOt = canVisit("/ot", role);
+  const canRecords = canVisit("/records", role);
   const now = useMemo(() => (tick ? new Date(tick) : null), [tick]);
 
   const [popOpen, setPopOpen] = useState(false);
@@ -310,13 +315,13 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
               {now && <span className="num"> · {formatClock(now)} น.</span>}
             </p>
           </div>
-          <Link
+          {canOt && <Link
             href="/ot?new=1"
             className="glass-thin flex h-9 flex-none items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold"
           >
             ขอโอที
             <PlusIcon className="size-3.5" strokeWidth={2.4} />
-          </Link>
+          </Link>}
         </div>
 
         <nav className="grid grid-cols-7 gap-1.5" aria-label="สัปดาห์นี้">
@@ -443,13 +448,13 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
 
         {/* บนมือถือแถบหน้าย่อยถูกซ่อนตามต้นแบบ attendance.html ปุ่มนี้จึงเป็นทางเดียวที่เข้าดูทั้งเดือน
            จอใหญ่ยังมีชิป "บันทึกเวลาของฉัน" อยู่ ปุ่มนี้เลยซ่อนเมื่อฝังอยู่ในหน้าตอกบัตร */}
-        <Link
+        {canRecords && <Link
           href="/records"
           className={`btn glass-thin btn-mini w-full justify-center ${embedded ? "sm:hidden" : ""}`}
         >
           ดูตารางเวลาทำงานทั้งเดือน
           <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
-        </Link>
+        </Link>}
       </div>
 
       {/* การ์ดตอกบัตรของจอกว้าง — เป็น section ไม่ใช่ main เพราะหน้านี้อยู่ใน <main> ของเปลือกแอปอยู่แล้ว
@@ -533,7 +538,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
             />
           </div>
 
-          {!embedded && (
+          {!embedded && canRecords && (
             <Link href="/records" className="btn glass-thin btn-mini mt-6">
               ดูตารางเวลาทำงานทั้งเดือน
               <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
