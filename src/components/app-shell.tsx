@@ -379,12 +379,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <MenuIcon className="size-6" />
               </button>
-              <p className="truncate text-base font-semibold">{title}</p>
+              {/* ชื่อหน้าเป็นหัวเรื่องหลัก — โปรแกรมอ่านหน้าจอใช้ตัวนี้บอกว่ากำลังอยู่หน้าไหน (ตรวจ 7 ต.ค. 2569) */}
+              <h1 className="truncate text-base font-semibold">{title}</h1>
             </div>
           )}
 
           <div className="hidden min-w-0 md:block">
-            <p className="truncate text-[19px] leading-tight font-bold">{title}</p>
+            <h1 className="truncate text-[19px] leading-tight font-bold">{title}</h1>
             <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
               <b className="font-semibold text-primary">{weekdayOf(today)}</b>{" "}
               {thaiDate(today)}
@@ -413,7 +414,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <ChevronLeftIcon className="size-5" strokeWidth={2.4} />
               </button>
-              <p className="truncate text-center text-[18px] leading-tight font-bold">{title}</p>
+              <h1 className="truncate text-center text-[18px] leading-tight font-bold">{title}</h1>
               <span aria-hidden="true" />
             </div>
           )}

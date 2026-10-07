@@ -262,9 +262,10 @@ export function LoginForm() {
               <polyline points="1215,170 1565,170 1215,470 1565,470" />
             </g>
           </svg>
-          <p className="mt-2.5 mb-9 text-center text-[13.5px] text-muted-foreground">
+          {/* หัวเรื่องของหน้า — โลโก้เป็นรูป โปรแกรมอ่านหน้าจอจึงต้องมีข้อความบอกว่าหน้านี้คือหน้าอะไร */}
+          <h1 className="mt-2.5 mb-9 text-center text-[13.5px] font-normal text-muted-foreground">
             เข้าสู่ระบบเพื่อใช้งาน ERP MAZ
-          </p>
+          </h1>
 
           {/*
             บทบาท "พนักงาน" มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
