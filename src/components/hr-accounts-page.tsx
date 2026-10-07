@@ -11,6 +11,7 @@
  *    ของจริงต้องสร้างบัญชีที่ระบบยืนยันตัวตนแล้วส่งรหัสชั่วคราวให้พนักงาน
  */
 
+import { ConfirmDialog } from "./confirm-dialog";
 import { useMemo, useState } from "react";
 import { thaiDate } from "@/lib/format";
 import {
@@ -58,6 +59,9 @@ export function HrAccountsPage() {
   const [filter, setFilter] = useState<Filter>("all");
   /** บัญชีที่กำลังตั้งรหัสใหม่ */
   const [editing, setEditing] = useState<{ id: string; reset: boolean } | null>(null);
+  /* ระงับบัญชีแล้วคนนั้นเข้าระบบไม่ได้ทันที — ต้องถามก่อน กดพลาดแล้วเพื่อนร่วมงานทำงานไม่ได้
+     (พบตอนทดสอบแบบสวมบทบาท 7 ต.ค. 2569) · คืนสิทธิ์ไม่ต้องถาม เพราะเป็นการเปิดให้ใช้งาน */
+  const [suspending, setSuspending] = useState<Employee | null>(null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -127,9 +131,10 @@ export function HrAccountsPage() {
                     emp={e}
                     onReset={() => setEditing({ id: e.id, reset: true })}
                     onRoles={() => setRoling(e.id)}
-                    onToggle={() =>
-                      setAccountStatus(e.id, e.account?.status === "active" ? "suspended" : "active")
-                    }
+                    onToggle={() => {
+                      if (e.account?.status === "active") return setSuspending(e);
+                      setAccountStatus(e.id, "active");
+                    }}
                   />
                 ))
               )}
@@ -183,9 +188,10 @@ export function HrAccountsPage() {
                       <button
                         type="button"
                         className="btn glass-thin"
-                        onClick={() =>
-                          setAccountStatus(e.id, a.status === "active" ? "suspended" : "active")
-                        }
+                        onClick={() => {
+                          if (a.status === "active") return setSuspending(e);
+                          setAccountStatus(e.id, "active");
+                        }}
                       >
                         {a.status === "active" ? "ระงับบัญชี" : "คืนสิทธิ์"}
                       </button>
@@ -212,6 +218,20 @@ export function HrAccountsPage() {
       {roling && hr.emp.find((e) => e.id === roling)?.account && (
         <RolesDialog emp={hr.emp.find((e) => e.id === roling)!} onClose={() => setRoling(null)} />
       )}
+
+      <ConfirmDialog
+        open={suspending !== null}
+        tone="destructive"
+        title="ระงับบัญชีนี้"
+        description={suspending ? `${suspending.name} จะเข้าระบบไม่ได้ทันที` : ""}
+        detail="งานที่ทำค้างไว้ยังอยู่ครบ · คืนสิทธิ์ให้ใหม่ได้ทุกเมื่อจากหน้านี้"
+        confirmLabel="ระงับบัญชี"
+        onConfirm={() => {
+          if (suspending) setAccountStatus(suspending.id, "suspended");
+          setSuspending(null);
+        }}
+        onCancel={() => setSuspending(null)}
+      />
 
     </div>
   );
