@@ -65,7 +65,53 @@ function isRole(value: unknown): value is Role {
   return ROLES.some((r) => r.key === value);
 }
 
-const store = createPersistedStore<Role>("maz-erp.role.v1", "sales", isRole);
+/*
+ * บทบาทแยกตามแท็บ (ยกจากระบบต้นฉบับ) — เปิดหลายแท็บเป็นคนละบทบาทได้ ไม่ต้องออกแล้วเข้าใหม่
+ * เดิมเก็บใน localStorage ที่เดียวทั้งเบราว์เซอร์ พอเข้าบทบาทใหม่ในอีกแท็บ แท็บเดิมก็เปลี่ยนตามตอนโหลดหน้า
+ * ตอนนี้: อ่านจาก sessionStorage ของแท็บก่อน (อยู่รอดตอนรีเฟรช) · แท็บใหม่ที่ยังไม่มีค่าใช้บทบาทล่าสุดที่เข้าระบบ
+ */
+const KEY = "maz-erp.role.v1";
+const shared = createPersistedStore<Role>(KEY, "sales", isRole);
+let tabRole: Role | undefined;
+const tabListeners = new Set<() => void>();
+const store = {
+  subscribe(onChange: () => void) {
+    tabListeners.add(onChange);
+    return () => {
+      tabListeners.delete(onChange);
+    };
+  },
+  get(): Role {
+    if (tabRole) return tabRole;
+    try {
+      const raw = window.sessionStorage.getItem(KEY);
+      const parsed: unknown = raw ? JSON.parse(raw) : null;
+      if (isRole(parsed)) return (tabRole = parsed);
+    } catch {
+      // ฝั่งเซิร์ฟเวอร์หรือโหมดส่วนตัว — ใช้ค่าล่าสุดของเบราว์เซอร์แทน
+    }
+    const next = shared.get();
+    try {
+      window.sessionStorage.setItem(KEY, JSON.stringify(next));
+      tabRole = next;
+    } catch {
+      // ยังใช้ค่าในหน่วยความจำได้ แต่อย่าจำไว้ตอนวาดฝั่งเซิร์ฟเวอร์
+    }
+    return next;
+  },
+  getServer: shared.getServer,
+  set(next: Role) {
+    tabRole = next;
+    try {
+      window.sessionStorage.setItem(KEY, JSON.stringify(next));
+    } catch {
+      // โหมดส่วนตัว
+    }
+    /* จำเป็นค่าเริ่มของแท็บที่เปิดใหม่ด้วย */
+    shared.set(next);
+    for (const l of tabListeners) l();
+  },
+};
 
 export function useRole() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);
