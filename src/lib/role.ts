@@ -15,6 +15,7 @@ import { useSyncExternalStore } from "react";
 import { createPersistedStore } from "./persisted-store";
 import { settings } from "./system-settings";
 import { HR_EMP, ROLE_EMPLOYEE } from "./hr-data";
+import { setShiftRole } from "./work-schedule";
 
 /*
  * บริษัทไม่มีผู้ดูแลระบบแยก ฝ่ายบุคคลดูแลการตั้งค่าทั้งหมด (Full Proposal · M5)
@@ -71,6 +72,11 @@ export function useRole() {
 }
 
 /** อ่านนอก React เช่นตอนบันทึกใบงาน */
+/* เวลาทำงานของบางบทบาทไม่เท่ากัน (แม่บ้าน) — ส่งบทบาทปัจจุบันให้ work-schedule รู้
+   ส่งทางเดียวแบบนี้เพราะ work-schedule import ไฟล์นี้ไม่ได้ (hr-data อ่าน work-schedule ตอนโหลดโมดูล) */
+setShiftRole(store.get());
+store.subscribe(() => setShiftRole(store.get()));
+
 export function currentRole() {
   return store.get();
 }

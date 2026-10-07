@@ -17,11 +17,12 @@ import { DateField } from "./thai-date-picker";
 import { thaiDate, todayIso } from "@/lib/format";
 import { minutesOfDay, formatMinutes } from "@/lib/work-schedule";
 import { logChange } from "@/lib/admin-log";
-import { saveAttFrom, useSystemSettings, type AttChange, type LateMode, type RateSettings, type ScheduleSettings } from "@/lib/system-settings";
+import { saveAttFrom, saveRoleShift, useSystemSettings, type AttChange, type LateMode, type RateSettings, type ScheduleSettings } from "@/lib/system-settings";
 import { Card as UiCard, Input2 as UiInput2, SaveBar, useSectionDraft } from "./admin-ui";
 import { baht, thaiMonth } from "@/lib/format";
 import { RADIUS_MAX, RADIUS_MIN, locate, mapLink, saveWorkplace, useAreaSettings, workplaceOf } from "@/lib/work-area";
 import { lockedUntil, useHr } from "@/lib/hr-store";
+import { ROLES, type Role } from "@/lib/role";
 
 /** รัศมีเป็นกิโลเมตรตามต้นแบบ — ระบบเก็บเป็นเมตร */
 const KM_MIN = RADIUS_MIN / 1000;
@@ -174,6 +175,10 @@ export function AdminAttendancePage() {
               </>
             )}
           </p>
+        </Card>
+
+        <Card title="กะเฉพาะบทบาท">
+          <RoleShifts />
         </Card>
 
         <Card title="จุดลงเวลา">
@@ -482,4 +487,85 @@ function PayAndLate() {
       />
     </>
   );
+}
+
+/*
+ * บทบาทที่เข้า-ออกไม่ตรงกับเวลาบริษัท (แม่บ้าน 08:00–17:00 · ผู้ใช้สั่ง 7 ต.ค. 2569)
+ * เว้นว่างทั้งสองช่อง = ใช้เวลาบริษัทเหมือนคนอื่น · พักเที่ยงใช้ชุดเดียวกับบริษัท
+ */
+function RoleShifts() {
+  const s = useSystemSettings();
+  const shifts = s.schedule.shifts ?? {};
+  /* บทบาทที่ตั้งกะไว้แล้ว ขึ้นก่อน แล้วค่อยให้เลือกเพิ่มจากบทบาทที่เหลือ */
+  const [adding, setAdding] = useState<Role | "">("");
+  const keys = Object.keys(shifts) as Role[];
+  const rest = ROLES.filter((r) => !keys.includes(r.key));
+
+  function set(role: string, start: string, end: string) {
+    if (start && end && minutesOfDay(end) <= minutesOfDay(start)) return;
+    saveRoleShift(role, start, end);
+    logChange("เวลาทำงาน", start && end ? `กะของ${roleName(role)} ${start}–${end}` : `${roleName(role)} กลับไปใช้เวลาบริษัท`);
+  }
+
+  return (
+    <div className="space-y-3">
+      {keys.length === 0 && (
+        <p className="text-[12.5px] text-muted-foreground">ยังไม่มีบทบาทที่ใช้เวลาต่างจากบริษัท</p>
+      )}
+      {keys.map((role) => (
+        <div key={role} className="grid items-end gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
+          <b className="text-[13.5px] font-semibold">{roleName(role)}</b>
+          <Input2 label="เวลาเข้างาน">
+            <input
+              type="time"
+              value={shifts[role].start}
+              onChange={(e) => set(role, e.target.value, shifts[role].end)}
+              className={`${inputCls} num`}
+            />
+          </Input2>
+          <Input2 label="เวลาเลิกงาน">
+            <input
+              type="time"
+              value={shifts[role].end}
+              onChange={(e) => set(role, shifts[role].start, e.target.value)}
+              className={`${inputCls} num`}
+            />
+          </Input2>
+          <button type="button" className="btn glass-thin mb-0.5" onClick={() => set(role, "", "")}>
+            ใช้เวลาบริษัท
+          </button>
+        </div>
+      ))}
+      {rest.length > 0 && (
+        <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto]">
+          <Input2 label="เพิ่มกะของบทบาท">
+            <select value={adding} onChange={(e) => setAdding(e.target.value as Role | "")} className={inputCls}>
+              <option value="">เลือกบทบาท…</option>
+              {rest.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </Input2>
+          <button
+            type="button"
+            className="btn glass-thin mb-0.5"
+            disabled={!adding}
+            onClick={() => {
+              if (!adding) return;
+              set(adding, s.schedule.start, s.schedule.end);
+              setAdding("");
+            }}
+          >
+            เพิ่ม
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function roleName(role: string) {
+  return ROLES.find((r) => r.key === role)?.label ?? role;
 }

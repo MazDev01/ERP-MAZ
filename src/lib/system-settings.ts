@@ -29,6 +29,12 @@ export type ScheduleSettings = {
   forgotPunchOutAfterHours: number;
   /** วันที่ตัดรอบเงินเดือน — รอบถัดไปเริ่มวันรุ่งขึ้น (25 = 26 เดือนก่อน ถึง 25 เดือนนี้) */
   payCutDay: number;
+  /*
+   * กะของบทบาทที่เข้า-ออกไม่ตรงกับเวลาบริษัท — คีย์เป็นชื่อบทบาท (maid, intern, ...)
+   * เก็บเป็น string ธรรมดาเพราะไฟล์นี้ห้าม import role.ts (จะวนกับการอ่านการตั้งค่า)
+   * บทบาทที่ไม่อยู่ในนี้ใช้ start/end ของบริษัท
+   */
+  shifts: Record<string, { start: string; end: string }>;
 };
 
 /** note = คำอธิบายสั้นใต้ชื่อ (ใช้กับประเภทที่ผู้ดูแลระบบเพิ่มเอง) */
@@ -264,6 +270,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     otStart: "19:00",
     forgotPunchOutAfterHours: 3,
     payCutDay: 25,
+    /* แม่บ้านเข้างานเช้ากว่าคนอื่นหนึ่งชั่วโมง (ผู้ใช้สั่ง 7 ต.ค. 2569) */
+    shifts: { maid: { start: "08:00", end: "17:00" } },
   },
   /* วันหยุดราชการ ปี 2569 — วันตามจันทรคติและวันชดเชยต้องเทียบประกาศ ครม. ทุกปี */
   holidays: {
@@ -573,6 +581,25 @@ export function saveAttFrom(at: string, times: AttTimes, place: AttPlace, note: 
     const hit = attOn(todayIso(), { ...s, attHistory });
     return { ...s, attHistory, schedule: hit ? { ...s.schedule, ...hit.times } : s.schedule };
   });
+}
+
+/*
+ * กะเฉพาะบทบาท (เช่นแม่บ้าน 08:00–17:00) — เขียนทับค่าเดิมของบทบาทนั้นตรง ๆ
+ * ไม่เข้าประวัติแบบเวลาทำงานของบริษัท เพราะเป็นเวลาเข้างานของคนกลุ่มเล็ก ไม่ได้ใช้ย้อนคิดรอบเก่า
+ * ส่ง start/end ว่าง = เลิกใช้กะพิเศษ กลับไปใช้เวลาบริษัท
+ */
+export function saveRoleShift(role: string, start: string, end: string) {
+  store.update((s) => {
+    const shifts = { ...(s.schedule.shifts ?? {}) };
+    if (start && end) shifts[role] = { start, end };
+    else delete shifts[role];
+    return { ...s, schedule: { ...s.schedule, shifts } };
+  });
+}
+
+/** ค่าจริงถูกเปิดใช้หลัง hydrate แล้วหรือยัง — ที่อื่นใช้กันไม่ให้วาดต่างจากฝั่งเซิร์ฟเวอร์ */
+export function settingsLive() {
+  return live;
 }
 
 function subscribeLive(onChange: () => void) {

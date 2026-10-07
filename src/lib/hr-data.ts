@@ -282,7 +282,8 @@ const POSITION_ROLES: Record<string, Role[]> = {
   sales: ["sales"],
   sa: ["ps", "staff"],
   bd: ["ps", "staff"],
-  maid: ["staff"],
+  /* แม่บ้านมีบทบาทของตัวเอง — เมนูและเวลาทำงาน (08:00–17:00) ไม่เหมือนทีมงาน */
+  maid: ["maid"],
   graphic: ["staff"],
   content: ["staff"],
   website: ["staff"],

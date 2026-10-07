@@ -1,16 +1,50 @@
 import { bkkNow, bkkOf, fromBkk } from "./format";
-import { settings } from "./system-settings";
+import { settings, settingsLive } from "./system-settings";
 /*
  * เวลาทำงานของบริษัท — ผู้ดูแลระบบตั้งได้ที่ /admin/schedule (เก็บใน system-settings.ts)
  *
  * เป็น getter ทุกช่อง อ่านค่าล่าสุดทุกครั้งที่ใช้ ห้ามเอาไปคำนวณเก็บเป็นค่าคงที่ระดับไฟล์
  * ไม่งั้นพอผู้ดูแลแก้เวลา หน้าที่โหลดไว้แล้วจะยังคิดด้วยเวลาเก่า
  */
+/*
+ * บางบทบาทเข้า-ออกไม่ตรงกับเวลาบริษัท (แม่บ้าน 08:00–17:00) — ตั้งไว้ที่ schedule.shifts
+ * ไม่ส่งบทบาทมา = คนที่ล็อกอินอยู่ · ส่วนพักกลางวันกับวันตัดรอบใช้ของบริษัทชุดเดียว
+ */
+let shiftRole = "";
+
+/*
+ * บทบาทของคนที่ล็อกอินอยู่ — role.ts ส่งเข้ามาให้ (ไฟล์นี้ import role.ts ไม่ได้ เพราะวนกับ hr-data)
+ * ฝั่งเซิร์ฟเวอร์ไม่มีใครล็อกอิน จึงเป็นค่าว่าง = ใช้เวลาบริษัท
+ */
+export function setShiftRole(role: string) {
+  shiftRole = role;
+}
+
+export function roleShift(role: string = shiftRole) {
+  const sc = settings().schedule;
+  /* ก่อน goLive วาดด้วยเวลาบริษัทเหมือนฝั่งเซิร์ฟเวอร์ ไม่งั้น hydrate ไม่ตรง (ดู system-settings) */
+  const own = settingsLive() ? sc.shifts?.[role] : undefined;
+  return { start: own?.start ?? sc.start, end: own?.end ?? sc.end };
+}
+
+/** เวลาเริ่มนับโอทีของบทบาทนั้น — ห่างจากเวลาเลิกงานเท่ากับของบริษัท (เลิก 18:00 เริ่มโอที 19:00) */
+function otStartOf(role: string = shiftRole) {
+  const sc = settings().schedule;
+  const gap = minutesOfDay(sc.otStart) - minutesOfDay(sc.end);
+  const end = minutesOfDay(roleShift(role).end);
+  return hhmmOf(end + gap);
+}
+
+function hhmmOf(minute: number) {
+  const m = Math.max(0, Math.min(24 * 60, minute));
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
 export const WORK_SCHEDULE = {
-  /** เวลาเข้างาน */
-  get start() { return settings().schedule.start; },
-  /** เวลาเลิกงาน */
-  get end() { return settings().schedule.end; },
+  /** เวลาเข้างานของคนที่ล็อกอินอยู่ */
+  get start() { return roleShift().start; },
+  /** เวลาเลิกงานของคนที่ล็อกอินอยู่ */
+  get end() { return roleShift().end; },
   /** ไม่มีผ่อนผันสาย — ผู้ใช้สั่งเอาช่องตั้งค่าออก (18 ก.ย. 2569) เลยเวลาเข้างานนาทีเดียวก็นับว่าสาย
    *  ตรึงเป็น 0 ไว้ ค่าที่เคยตั้งค้างในเครื่องจะได้ไม่ซ่อนการมาสายโดยไม่มีใครเห็น */
   get lateGraceMinutes() { return 0; },
@@ -23,18 +57,16 @@ export const WORK_SCHEDULE = {
     return Math.max(0, minutesOfDay(this.lunchEnd) - minutesOfDay(this.lunchStart));
   },
   /** เวลาเริ่มนับโอทีของวันทำงาน */
-  get otStart() { return settings().schedule.otStart; },
+  get otStart() { return otStartOf(); },
   /** ถ้ายังไม่ตอกออกหลังเลิกงานเกินกี่ชั่วโมง ให้เตือนว่าอาจลืม */
   get forgotPunchOutAfterHours() { return settings().schedule.forgotPunchOutAfterHours; },
 };
 
-/** ชั่วโมงที่ต้องทำงานจริงต่อวัน (เป็นมิลลิวินาที) */
-export function targetWorkMs() {
+/** ชั่วโมงที่ต้องทำงานจริงต่อวัน (เป็นมิลลิวินาที) — ของบทบาทนั้น ไม่ระบุคือคนที่ล็อกอินอยู่ */
+export function targetWorkMs(role?: string) {
+  const sh = roleShift(role);
   return (
-    (minutesOfDay(WORK_SCHEDULE.end) -
-      minutesOfDay(WORK_SCHEDULE.start) -
-      WORK_SCHEDULE.breakMinutes) *
-    60_000
+    (minutesOfDay(sh.end) - minutesOfDay(sh.start) - WORK_SCHEDULE.breakMinutes) * 60_000
   );
 }
 

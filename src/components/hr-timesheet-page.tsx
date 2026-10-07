@@ -34,6 +34,7 @@ import {
   otKindAt,
   otHours,
   recIn,
+  rolesOfEmployee,
   workedDaysIn,
   type Employee,
   type TimeRec,
@@ -59,7 +60,9 @@ type Tab = "month" | "daily";
  * ชั่วโมงทำงาน (ระบบต้นฉบับ 5 ต.ค. 2569) — วันทำงาน × ชั่วโมงต่อวันตามเวลางานที่ตั้งไว้ (หักพักแล้ว) − นาทีที่มาสาย
  * ไม่รวมโอที (แยกคอลัมน์อยู่แล้ว) · ระบบยังไม่มีเวลากดออกจริงของทุกวัน จึงคิดจากตารางเวลางาน
  */
-const workHours = (days: number, r: TimeRec) => Math.max(0, days * (targetWorkMs() / 3_600_000) - lateMin(r) / 60);
+const workHours = (days: number, r: TimeRec, e: Employee) =>
+  /* คิดตามกะของคนนั้น — แม่บ้านเข้า 08:00 เลิก 17:00 ไม่เท่ากับคนอื่น */
+  Math.max(0, days * (targetWorkMs(rolesOfEmployee(e)[0]) / 3_600_000) - lateMin(r) / 60);
 
 type Sum = { lateMin: number; lateN: number; lv: number; ot: number };
 type Line = { e: Employee; r: TimeRec; days: number };
@@ -478,7 +481,7 @@ function TimeRow({
       <td data-label={dayLabel} className="c num">
         {days}
       </td>
-      <Num label="ชั่วโมงทำงาน (ชม.)" v={workHours(days, r)} fixed2 />
+      <Num label="ชั่วโมงทำงาน (ชม.)" v={workHours(days, r, e)} fixed2 />
       <Num label="มาสาย (นาที)" v={lateMin(r)} />
       {/* ลา = ที่อนุมัติแล้วเท่านั้น · ใบที่ยังรออนุมัติบอกไว้ข้างล่าง ยังไม่นับเป็นวันลา */}
       <td data-label="ลา (วัน)" className={`c num ${leaveDays(r) ? "" : "text-muted-foreground"}`}>

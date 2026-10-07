@@ -376,7 +376,9 @@ export function MobileHome({
 
         {/* ── การ์ดทักทาย + สรุปสั้น ๆ ── */}
         <section className={`mx-4 flex flex-col gap-4 rounded-[28px] p-4 ${CARD}`}>
-          <div className="flex items-center gap-3">
+          {/* กดรูปหรือชื่อเพื่อไปหน้าโปรไฟล์ — บนมือถือเป็นทางเดียวที่เข้าถึงการออกจากระบบ
+              เมนูบัญชีมุมขวาบนมีเฉพาะจอกว้าง และบางบทบาทไม่ได้วางโปรไฟล์ไว้ในแถบล่าง */}
+          <Link href="/profile" aria-label="โปรไฟล์และออกจากระบบ" className="flex items-center gap-3">
           <span className="grid size-[52px] flex-none place-items-center overflow-hidden rounded-full bg-[#FCE3E7] text-[17px] font-bold text-primary shadow-[0_0_0_2.5px_#fff,0_0_0_4.5px_rgb(200_16_46/0.35)]">
             {photo ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -393,7 +395,8 @@ export function MobileHome({
               <em className="text-[12px] text-muted-foreground not-italic">{roleLabel(role)}</em>
             )}
           </span>
-          </div>
+          <ChevronRightIcon className="ml-auto size-4 flex-none text-muted-foreground" />
+          </Link>
 
           {/* แถวสรุปสี่ช่อง — กดแล้วไปหน้าของเรื่องนั้น */}
           <nav aria-label={role === "sales" ? "สรุปการขายเดือนนี้" : "สรุปของฉัน"} className="flex rounded-[16px] border border-[#E3D3D7] bg-[rgb(250_244_245/0.9)] py-3">
