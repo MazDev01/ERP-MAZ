@@ -338,11 +338,19 @@ function DealCards({
         const isOpen = Boolean(open[d.no]) && can;
         const name = nameOf.get(d.customerCode) ?? d.customerCode;
         return (
+          /* การ์ดที่กางได้ต้องเป็นปุ่มในสายตาโปรแกรมอ่านหน้าจอ li เปล่า ๆ รับ aria-expanded ไม่ได้ */
           <li
             key={d.id}
             className="dl-card"
             style={{ cursor: can ? "pointer" : undefined }}
+            role={can ? "button" : undefined}
+            tabIndex={can ? 0 : undefined}
             aria-expanded={can ? isOpen : undefined}
+            onKeyDown={(e) => {
+              if (!can || (e.key !== "Enter" && e.key !== " ")) return;
+              e.preventDefault();
+              onToggle(d.no);
+            }}
             onClick={() => can && onToggle(d.no)}
           >
             <span className="dl-av" aria-hidden>

@@ -26,7 +26,6 @@ import {
   probLine,
   type Employee,
 } from "@/lib/hr-data";
-import { useHr } from "@/lib/hr-store";
 import { CloseIcon } from "./icons";
 
 /**
@@ -102,7 +101,6 @@ export function EmployeeDetail({
 }) {
   const hydrated = useHydrated();
   const role = useRole();
-  const hr = useHr();
   const [tab, setTab] = useState<TabKey>("over");
 
   useEffect(() => {
@@ -123,7 +121,6 @@ export function EmployeeDetail({
   /* ตำแหน่งควบ (ถ้ามี) — เงินเดือนกับสายอนุมัติยังอิงตำแหน่งหลัก */
   const more = (emp.posMore ?? []).map((v) => hrPos(v).label).join(" · ");
   const cur = emp.history[emp.history.length - 1];
-  const bossName = emp.boss ? hr.emp.find((e) => e.id === emp.boss)?.name : "";
   /* เงินเดือนเป็นข้อมูลค่าจ้างของคนอื่น — เปิดให้เฉพาะฝ่ายบุคคลกับผู้บริหาร */
   const seePay = role === "hr" || role === "ceo";
   const tabs = TABS.filter((t) => t.k !== "pay" || seePay);
