@@ -314,6 +314,8 @@ const MAID: NavItem[] = [
       { label: "บันทึกเวลาของฉัน", href: "/records" },
     ],
   },
+  /* ตารางงานชุดเดียวกับทีมงาน — เห็นเฉพาะนัดที่ตัวเองต้องเข้าร่วม (ผู้ใช้สั่ง 7 ต.ค. 2569) */
+  { group: "ของฉัน", label: "ตารางงาน", icon: "leave", href: "/my-schedule" },
   { group: "ของฉัน", label: "เบิกค่าใช้จ่าย", icon: "commission", href: "/expense" },
   { group: "ของฉัน", label: "การลา", icon: "leave", href: "/leave" },
   { group: "ของฉัน", label: "สลิปเงินเดือน", icon: "receipt", href: "/payslip" },
