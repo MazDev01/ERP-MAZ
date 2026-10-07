@@ -618,7 +618,7 @@ const EXTRA_OWNER: Record<string, Role | Role[]> = {
   "/my-home": "staff",
   "/leads-quotes": "sales",
   /* ทุกบทบาทเปิด /home ได้ — บทบาทที่มีหน้าหลักของตัวเอง (พนักงาน · CEO) ถูกพาไปหน้านั้นต่อ (HomePage) */
-  "/home": ["sales", "ps", "pm", "acc", "hr", "gm", "staff", "ceo"],
+  "/home": ["sales", "ps", "pm", "acc", "hr", "gm", "staff", "ceo", "maid"],
 };
 
 /**

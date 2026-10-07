@@ -33,6 +33,7 @@ import { useAcc } from "@/lib/acc-store";
 import { usePm } from "@/lib/pm-store";
 import { psBucket, psMine } from "@/lib/presales-work";
 import { useHr } from "@/lib/hr-store";
+import { claimOf, monthKey, useExpenseClaims } from "@/lib/expense-store";
 import { expectedInMinutes, formatMinutesOfDay } from "@/lib/work-schedule";
 import { pageTitle, type NavItem } from "@/lib/nav";
 import { botnavChoices, botnavDefault, botnavOf, useBotnavPrefs } from "@/lib/botnav-prefs";
@@ -108,6 +109,7 @@ function useHomeStats(role: Role): { k: string; v: string; u?: string; href: str
   const pm = usePm();
   const hr = useHr();
   const leaveRecords = useLeaveRecords();
+  const claims = useExpenseClaims();
   const policy = useMyLeavePolicy();
   const me = useProfile();
 
@@ -211,6 +213,20 @@ function useHomeStats(role: Role): { k: string; v: string; u?: string; href: str
       { k: "งานรอตรวจ", v: String(running.flatMap((p) => p.tasks).filter((t) => t.status === "sent").length), u: "งาน", href: "/pm/reviews" },
       mine,
     ];
+  /*
+   * แม่บ้าน — ไม่มีงานย่อยจาก PM จึงไม่ขึ้นสถิติงานและไม่ลิงก์ไปหน้างานที่ได้รับ
+   * (หน้านั้นไม่อยู่ในเมนูของแม่บ้าน กดแล้วจะเจอหน้ากันสิทธิ์) · ผู้ใช้สั่ง 7 ต.ค. 2569
+   */
+  if (role === "maid") {
+    const claim = claimOf(claims, monthKey(bkkNow()));
+    const fuelDays = claim.fuel.length;
+    return [
+      mine,
+      { k: "ใบเบิกเดือนนี้", v: claim.status, href: "/expense" },
+      { k: "รายการเดินทาง", v: String(fuelDays), u: "รายการ", href: "/expense" },
+    ];
+  }
+
   /* พนักงานและทีมก่อนการขาย — งานของตัวเองเป็นหลัก */
   return [
     { k: "งานที่ได้รับ", v: String(myTasks.filter((t) => t.status !== "done").length), u: "งาน", href: "/my-tasks" },
