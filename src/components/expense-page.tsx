@@ -441,7 +441,8 @@ function OtherCard({
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {!locked && (
-          <button type="button" className="btn glass-thin" onClick={() => addOtherRow(month)}>
+          /* ปุ่มเพิ่มรายการไม่ต้องติดไปกับใบที่พิมพ์ (ตรวจการพิมพ์ 7 ต.ค. 2569) */
+          <button type="button" className="btn glass-thin no-print" onClick={() => addOtherRow(month)}>
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
             เพิ่มค่าใช้จ่าย
           </button>

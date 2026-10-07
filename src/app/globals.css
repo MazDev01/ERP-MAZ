@@ -817,6 +817,14 @@ table.inner .r, table.inner th.r { text-align: right; }
   body::before, body::after { display: none; }
   .no-print { display: none !important; }
   .app-side, .app-top, .app-sub, .botnav { display: none !important; }
+  /* เปิดเอกสารอยู่ในกล่อง (สลิป ใบแจ้งหนี้ ใบเสร็จ) — พิมพ์เฉพาะกล่อง
+     ไม่งั้นตารางรายการที่อยู่ข้างหลังจะติดไปด้วยและล้นขอบกระดาษ (ตรวจการพิมพ์ 7 ต.ค. 2569) */
+  body:has([role="dialog"], [role="alertdialog"]) #main { display: none !important; }
+  /* แถบปุ่มของกล่อง (ปิด · ดาวน์โหลด) เป็นเครื่องมือบนจอ ไม่ใช่ส่วนหนึ่งของเอกสาร */
+  .ui-sheet-foot, .ui-sheet-head { display: none !important; }
+  /* กล่องเอกสารกินเต็มหน้ากระดาษ ไม่มีฉากหลังสีเทา */
+  .ui-sheet { position: absolute !important; inset: 0 auto auto 0 !important; display: block !important; padding: 0 !important; background: none !important; }
+  .ui-sheet-panel { max-height: none !important; overflow: visible !important; border-radius: 0 !important; box-shadow: none !important; background: #fff !important; }
   #main { padding: 0 !important; }
   .paper { width: auto; min-height: auto; padding: 0; box-shadow: none; }
   @page { size: A4; margin: 14mm; }
