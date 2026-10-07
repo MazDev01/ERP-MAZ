@@ -11,7 +11,7 @@
  * "คืนค่าทั้งหมด" คืนเฉพาะข้อมูลงาน ไม่แตะการตั้งค่า — กันกดทีเดียวแล้วเวลาทำงานและสิทธิ์หายไปด้วย
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { clearRecords } from "@/lib/attendance-store";
 import { resetAcc } from "@/lib/acc-store";
 import { resetAccounts } from "@/lib/accounts";
@@ -32,6 +32,7 @@ import { resetTemplates } from "@/lib/presales-templates";
 import { resetApprovalRoute } from "@/lib/role";
 import { resetSystemSettings } from "@/lib/system-settings";
 import { resetAreaSettings } from "@/lib/work-area";
+import { applyBackup, backupWhen, downloadBackup, readBackup, type Backup } from "@/lib/backup";
 import { AdminHead, Card } from "./admin-ui";
 import { ConfirmDialog } from "./confirm-dialog";
 import { TrashIcon } from "./icons";
@@ -72,6 +73,22 @@ export function AdminDataPage() {
   const [asking, setAsking] = useState<DataSet | null>(null);
   const [all, setAll] = useState(false);
   const [done, setDone] = useState("");
+  /* ไฟล์สำรองที่เลือกมาและยังไม่ได้ยืนยัน — ยืนยันแล้วค่อยเขียนทับของเดิม */
+  const [restoring, setRestoring] = useState<Backup | null>(null);
+  const [fileErr, setFileErr] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function pickFile(file: File | undefined) {
+    if (!file) return;
+    const got = readBackup(await file.text());
+    if (!got.ok) {
+      setRestoring(null);
+      setFileErr(got.why);
+      return;
+    }
+    setFileErr("");
+    setRestoring(got.backup);
+  }
 
   const list = (sets: DataSet[]) => (
     <div className="flex flex-col gap-2">
@@ -101,6 +118,52 @@ export function AdminDataPage() {
           {done}
         </p>
       )}
+
+      {fileErr && (
+        <p role="alert" className="rounded-[12px] bg-[var(--destructive-soft)] px-4 py-2.5 text-[13px] text-destructive">
+          {fileErr}
+        </p>
+      )}
+
+      {/* สำรองข้อมูล — ยังไม่มีฐานข้อมูลจริง ข้อมูลอยู่ในเครื่องนี้เครื่องเดียว */}
+      <Card
+        title="สำรองข้อมูลและนำกลับเข้ามา"
+        note="ข้อมูลทั้งหมดอยู่ในเครื่องนี้ ถ้าล้างข้อมูลเบราว์เซอร์หรือเปลี่ยนเครื่องจะหาย — ดาวน์โหลดไฟล์สำรองเก็บไว้ แล้วนำกลับเข้ามาทีหลังได้"
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            className="btn solid btn-solid"
+            onClick={() => {
+              const n = downloadBackup();
+              logChange("ข้อมูลตัวอย่าง", `ดาวน์โหลดไฟล์สำรองข้อมูล ${n} รายการ`);
+              setFileErr("");
+              setDone(`ดาวน์โหลดไฟล์สำรองแล้ว ${n} รายการ`);
+            }}
+          >
+            ดาวน์โหลดไฟล์สำรอง
+          </button>
+          <button type="button" className="btn glass-thin" onClick={() => fileRef.current?.click()}>
+            เลือกไฟล์สำรองที่จะนำกลับเข้ามา
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            aria-label="ไฟล์สำรองข้อมูล"
+            onChange={(e) => {
+              void pickFile(e.target.files?.[0]);
+              /* เลือกไฟล์เดิมซ้ำต้องทำงานอีกครั้ง จึงล้างค่าทุกครั้ง */
+              e.target.value = "";
+            }}
+          />
+        </div>
+        <p className="mt-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
+          ไฟล์สำรองเก็บงานของทุกฝ่าย การตั้งค่าระบบ และข้อมูลส่วนตัวของทุกบทบาทในเครื่องนี้ ·
+          ไฟล์แนบที่อัปโหลดไว้ไม่รวมอยู่ในไฟล์สำรอง
+        </p>
+      </Card>
 
       <Card
         title="ข้อมูลงานของทุกฝ่าย"
@@ -150,6 +213,28 @@ export function AdminDataPage() {
           setAll(false);
         }}
         onCancel={() => setAll(false)}
+      />
+
+      <ConfirmDialog
+        open={restoring !== null}
+        title="นำไฟล์สำรองกลับเข้ามา"
+        description={
+          restoring
+            ? `ไฟล์สำรองเมื่อ ${backupWhen(restoring.at)} · ${Object.keys(restoring.data).length} รายการ`
+            : ""
+        }
+        detail="ข้อมูลที่อยู่ในเครื่องตอนนี้จะถูกเขียนทับทั้งหมด แล้วหน้าจอจะโหลดใหม่ · ทำแล้วย้อนกลับไม่ได้"
+        confirmLabel="นำกลับเข้ามา"
+        tone="destructive"
+        onConfirm={() => {
+          if (!restoring) return;
+          const n = applyBackup(restoring);
+          logChange("ข้อมูลตัวอย่าง", `นำไฟล์สำรองกลับเข้ามา ${n} รายการ`);
+          setRestoring(null);
+          /* โหลดหน้าใหม่ เพื่อให้ทุกสโตร์อ่านค่าที่เพิ่งเขียนทับ ไม่ใช่ค่าที่ค้างในหน่วยความจำ */
+          window.location.reload();
+        }}
+        onCancel={() => setRestoring(null)}
       />
     </div>
   );
