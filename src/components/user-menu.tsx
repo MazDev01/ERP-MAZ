@@ -7,6 +7,7 @@ import { useProfile } from "@/lib/profile-data";
 import { useMyRoles } from "@/lib/hr-link";
 import { roleLabel, useRole } from "@/lib/role";
 import { useProfilePhoto } from "@/lib/profile-store";
+import { clearSession } from "@/lib/local-data";
 import { ConfirmDialog } from "./confirm-dialog";
 import { DownloadIcon, LockIcon, LogoutIcon, UserIcon } from "./icons";
 
@@ -182,6 +183,9 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
         onCancel={() => setAskLogout(false)}
         onConfirm={() => {
           setAskLogout(false);
+          /* ลืมว่าใครล็อกอินอยู่ก่อนออก — ไม่งั้นคนที่มาใช้เครื่องต่อเปิดหน้าเดิมแล้วเห็นข้อมูลของคนก่อน
+             (งานที่กรอกไว้ยังอยู่ครบ ล้างเฉพาะตัวบอกว่าใครใช้อยู่) */
+          clearSession();
           router.push("/login");
         }}
       />

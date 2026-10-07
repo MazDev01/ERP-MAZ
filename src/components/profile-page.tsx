@@ -1,5 +1,6 @@
 "use client";
 
+import { clearSession } from "@/lib/local-data";
 import { DevicePushCard } from "./device-push-card";
 import { isIOS, useHydrated } from "@/lib/pwa";
 
@@ -260,7 +261,8 @@ function ProfileCard({
         </Link>
       </div>
       <div className="pf-rows">
-        <a href="/login" className="pf-row pf-row-out">
+        {/* ลืมว่าใครล็อกอินอยู่ก่อนออก — เครื่องที่ใช้ร่วมกันจะได้ไม่เปิดเจอข้อมูลของคนก่อน */}
+        <a href="/login" className="pf-row pf-row-out" onClick={() => clearSession()}>
           <span className="pf-row-ico">
             <LogoutIcon className="size-4" />
           </span>
@@ -332,6 +334,7 @@ function ProfileCard({
         <hr className="mx-1 my-1.5 hidden border-border lg:block" />
         <a
           href="/login"
+          onClick={() => clearSession()}
           className="col-span-3 flex items-center justify-center gap-2 rounded-[14px] bg-secondary px-3.5 py-2.5 text-[13px] font-medium text-primary transition-colors lg:w-full lg:justify-start lg:gap-[11px] lg:rounded-xl lg:bg-transparent lg:py-[11px] lg:hover:bg-accent/60"
         >
           <LogoutIcon className="size-4" />
