@@ -27,8 +27,19 @@ const PER_PAGE = 7;
  * รายการใบเสนอราคา — ตามต้นแบบ quotations.html
  * ไม่มีร่างและแก้ใบเดิมไม่ได้ ถ้าต้องเปลี่ยนให้ "ออกใบใหม่แทนใบนี้" ใบเดิมกลายเป็นแทนที่แล้ว
  * ประวัติคือจำนวนใบที่ออกแทนกันมา กดชิป "ฉบับที่ N" กางดูได้
- * ไม่มีแท็บสถานะ ระบบอนุมานจาก มีดีล / ถูกแทน / ถูกปฏิเสธ / เลยวันมีผล · มีตัวกรองเดียวคือ "ใกล้หมดอายุ"
+ * แท็บสถานะ ทั้งหมด · รอดำเนินการ · วางบิลแล้ว · ปฏิเสธ · หมดอายุ (ยกจากระบบต้นฉบับ) + ตัวกรอง "ใกล้หมดอายุ"
+ * สถานะอนุมานจากข้อมูลจริงของใบ (rowStatus) ไม่ได้เก็บแยก · ใบที่ถูกออกใบใหม่แทนอยู่ในแท็บ "ทั้งหมด" เท่านั้น
  */
+
+/** สถานะของแถว — อนุมานจากใบ ไม่ได้เก็บไว้ในข้อมูล */
+type RowStatus = "pending" | "billed" | "rejected" | "expired" | "replaced";
+const TABS: [RowStatus | "all", string][] = [
+  ["all", "ทั้งหมด"],
+  ["pending", "รอดำเนินการ"],
+  ["billed", "วางบิลแล้ว"],
+  ["rejected", "ปฏิเสธ"],
+  ["expired", "หมดอายุ"],
+];
 export function QuotationsPage() {
   const crm = useCrm();
   const router = useRouter();
@@ -37,6 +48,7 @@ export function QuotationsPage() {
   const find = useFindParam();
   const [query, setQuery] = useState(find);
   const [soonOnly, setSoonOnly] = useState(false);
+  const [tab, setTab] = useState<RowStatus | "all">("all");
   const [rejecting, setRejecting] = useState<Quotation | null>(null);
   const [billing, setBilling] = useState<Quotation | null>(null);
   /* สายใบที่กางดูประวัติอยู่ — เก็บเป็นเลขที่ใบ */
@@ -69,6 +81,17 @@ export function QuotationsPage() {
   const isSoon = (q: Quotation) =>
     Boolean(q.sentAt) && !hasDeal.has(q.no) && !q.replacedBy && daysLeft(q) >= 0 && daysLeft(q) <= EXPIRING_DAYS;
   const canBill = (q: Quotation) => canBillQuotation(q, hasDeal.has(q.no), today);
+  /* ลำดับการอนุมาน: วางบิลแล้ว → ถูกแทน → ปฏิเสธ → เลยวันมีผล → รอดำเนินการ */
+  const rowStatus = (q: Quotation): RowStatus =>
+    hasDeal.has(q.no)
+      ? "billed"
+      : q.replacedBy
+        ? "replaced"
+        : q.rejectedAt
+          ? "rejected"
+          : daysLeft(q) < 0
+            ? "expired"
+            : "pending";
 
   const rows = useMemo(() => {
     const qq = query.trim().toLowerCase();
@@ -80,8 +103,11 @@ export function QuotationsPage() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crm.quotations, query, soonOnly, nameOf, hasDeal, today]);
-  const paged = usePaged(rows, PER_PAGE);
-  const total = rows.reduce((sum, q) => sum + quotationTotals(q).grand, 0);
+  const tabRows = tab === "all" ? rows : rows.filter((q) => rowStatus(q) === tab);
+  const countOf = (t: RowStatus | "all") =>
+    t === "all" ? rows.length : rows.filter((q) => rowStatus(q) === t).length;
+  const paged = usePaged(tabRows, PER_PAGE);
+  const total = tabRows.reduce((sum, q) => sum + quotationTotals(q).grand, 0);
 
   const docHref = (q: Quotation) => `/quotations/${encodeURIComponent(q.no)}`;
   const openDoc = (q: Quotation) => router.push(docHref(q));
@@ -225,6 +251,23 @@ export function QuotationsPage() {
 
       <section className="panel glass hidden flex-col md:flex">
         <div className="strip">
+          <div className="tabs" role="tablist" aria-label="สถานะใบเสนอราคา">
+            {TABS.map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={tab === k}
+                className={tab === k ? "on" : undefined}
+                onClick={() => {
+                  setTab(k);
+                  paged.setPage(1);
+                }}
+              >
+                {label} <b className="num">{countOf(k)}</b>
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => {

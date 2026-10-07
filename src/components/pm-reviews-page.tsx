@@ -20,6 +20,9 @@ import { useHr } from "@/lib/hr-store";
 import { Field, Sheet } from "./lead-dialogs";
 import { ApproveIcon, ClockIcon } from "./icons";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
+import Link from "next/link";
+import { roundStatus, useClientReviews, type ReviewRound } from "@/lib/client-review-store";
+import { roundChip } from "./client-review-pm";
 
 /** รอเกินกี่วันถึงขึ้นเตือนว่าค้างนาน — ตรงกับต้นแบบ */
 const WAITED_HOT = 3;
@@ -52,6 +55,10 @@ export function PmReviewsPage() {
   const [open, setOpen] = useState<Row | null>(null);
   const position = usePosition();
   const ro = usePmReadOnly();
+  /* แท็บ: งานที่ทีมส่งมาให้ PM ตรวจ · รอบที่ลูกค้าตอบกลับผ่านลิงก์ตรวจงาน (ยกจากระบบต้นฉบับ) */
+  const [tab, setTab] = useState<"team" | "client">("team");
+  const clientRows = useClientRows();
+  const clientCount = clientRows.filter((x) => !x.r.forwardedAt && !x.r.closedAt).length;
 
   const rows = useMemo<Row[]>(() => {
     const out = pm.projects
@@ -72,7 +79,39 @@ export function PmReviewsPage() {
       </div>
       <ReadOnlyNote />
 
+      {/* แท็บจอคอมใช้ .tabs เหมือนหน้าอื่น · มือถือเป็นชิปกลม */}
+      <div className="tabs max-md:hidden" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === "team"} className={tab === "team" ? "on" : ""} onClick={() => setTab("team")}>
+          งานรอตรวจ<b>{rows.length}</b>
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "client"} className={tab === "client" ? "on" : ""} onClick={() => setTab("client")}>
+          ลูกค้าตอบกลับ<b>{clientCount}</b>
+        </button>
+      </div>
+      <div className="flex gap-2 md:hidden" role="tablist">
+        {(
+          [
+            ["team", "งานรอตรวจ", rows.length],
+            ["client", "ลูกค้าตอบกลับ", clientCount],
+          ] as const
+        ).map(([k, label, n]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={tab === k}
+            onClick={() => setTab(k)}
+            className={`h-[38px] rounded-full px-4 text-[13.5px] font-semibold ${
+              tab === k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+            }`}
+          >
+            {label} {n}
+          </button>
+        ))}
+      </div>
+
       {/* มือถือ: การ์ดวางบนพื้นหน้าเลย ไม่มีกรอบขาวครอบอีกชั้น (ต้นแบบ pm-reviews.html) */}
+      {tab === "team" && (
       <section className="panel glass flex min-w-0 flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
         <div className="strip max-sm:hidden!">
           <h2 className="py-2.5 text-[14.5px] font-bold">
@@ -208,6 +247,9 @@ export function PmReviewsPage() {
           </table>
         </div>
       </section>
+      )}
+
+      {tab === "client" && <ClientReplies rows={clientRows} />}
 
       {open && (
         <ReviewDialog
@@ -363,3 +405,71 @@ function Row2({ k, v }: { k: string; v: string }) {
   );
 }
 
+// ─── ลูกค้าตอบกลับ (ลิงก์ตรวจงาน) ─────────────────────────────────
+
+type ClientRow = { r: ReviewRound; p: Project };
+
+/** รอบที่ลูกค้าส่งความเห็นหรืออนุมัติแล้ว — ล่าสุดขึ้นก่อน · โปรเจคที่ยกเลิกไม่นับ */
+function useClientRows(): ClientRow[] {
+  const pm = usePm();
+  const cr = useClientReviews();
+  return useMemo(
+    () =>
+      cr.rounds
+        .filter((r) => {
+          const st = roundStatus(r);
+          return st === "submitted" || st === "approved";
+        })
+        .map((r) => ({ r, p: pm.projects.find((p) => p.deal === r.deal) }))
+        .filter((x): x is ClientRow => Boolean(x.p) && x.p?.status !== "cancelled")
+        .sort((a, b) => (b.r.submittedAt ?? "").localeCompare(a.r.submittedAt ?? "")),
+    [cr.rounds, pm.projects],
+  );
+}
+
+function ClientReplies({ rows }: { rows: ClientRow[] }) {
+  return (
+    <section className="panel glass flex min-w-0 flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
+      <div className="strip max-sm:hidden!">
+        <h2 className="py-2.5 text-[14.5px] font-bold">
+          ลูกค้าตอบกลับ {rows.length ? `${rows.length} รอบ` : ""}
+        </h2>
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-9 text-center text-[13px] text-muted-foreground max-sm:rounded-[20px] max-sm:bg-card">
+          ยังไม่มีลูกค้าตอบกลับจากลิงก์ตรวจงาน
+        </p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-border max-sm:gap-2.5 max-sm:divide-y-0">
+          {rows.map(({ r, p }) => {
+            const chip = roundChip(r);
+            return (
+              <li key={r.token}>
+                {/* กดแล้วเปิดหน้าโปรเจคที่กล่องความเห็นของรอบนั้นเลย (?review=<token>) */}
+                <Link
+                  href={`/pm/projects?deal=${encodeURIComponent(p.deal)}&review=${encodeURIComponent(r.token)}`}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-3.5 hover:bg-muted/60 max-sm:rounded-[20px] max-sm:bg-card max-sm:p-3.5"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[12px] text-muted-foreground">{projName(p)}</span>
+                    <b className="block text-[14px] font-bold break-words">
+                      {r.taskName} · รอบที่ {r.round}
+                    </b>
+                    <span className="num mt-0.5 block text-[12px] text-muted-foreground">
+                      {r.contact || "ลูกค้า"} · ตอบเมื่อ{" "}
+                      {r.submittedAt ? thaiDate(r.submittedAt.slice(0, 10)) : "—"}
+                    </span>
+                  </span>
+                  <span className={`tag ${chip.cls} justify-self-end`}>
+                    <i />
+                    {chip.text}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
