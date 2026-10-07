@@ -89,6 +89,23 @@ const SETTINGS_SUB: SubItem[] = [
   { label: "ข้อมูลตัวอย่าง", href: "/admin/data" },
 ];
 
+/*
+ * คำขออนุมัติของ CEO แยกสองเมนูย่อย (ยกจากระบบต้นฉบับ) — ส่งต่อกันทาง ?k= ไม่ใช่แท็บในหน้า
+ * ไม่มี ?k= ถือเป็นลาและโอที (ลิงก์เก่า ?req= จากแดชบอร์ดหรือ LINE เป็นคำขอของพนักงานทั้งหมด)
+ */
+const CEO_APPROVALS_SUB: SubItem[] = [
+  {
+    label: "ลาและโอที",
+    href: "/ceo/approvals?k=time",
+    on: (p, q) => p === "/ceo/approvals" && q.get("k") !== "pay",
+  },
+  {
+    label: "ยอดเงินเดือน",
+    href: "/ceo/approvals?k=pay",
+    on: (p, q) => p === "/ceo/approvals" && q.get("k") === "pay",
+  },
+];
+
 export type NavItem = {
   group: NavGroup;
   label: string;
@@ -275,7 +292,7 @@ const GM: NavItem[] = [
  */
 const CEO: NavItem[] = [
   { group: "ผู้บริหาร", label: "แดชบอร์ด", icon: "chart", href: "/ceo/dashboard" },
-  { group: "ผู้บริหาร", label: "คำขออนุมัติ", icon: "approve", href: "/ceo/approvals" },
+  { group: "ผู้บริหาร", label: "คำขออนุมัติ", icon: "approve", href: "/ceo/approvals", sub: CEO_APPROVALS_SUB },
   { group: "ภาพรวมระบบ", label: "งานขาย", icon: "deals", href: "/ceo/sales" },
   { group: "ภาพรวมระบบ", label: "บัญชี", icon: "accboard", href: "/ceo/acc" },
   { group: "ภาพรวมระบบ", label: "บุคคล", icon: "team", href: "/ceo/hr" },
