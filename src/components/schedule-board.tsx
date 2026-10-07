@@ -287,7 +287,8 @@ export function ScheduleBoard<T>({
       <button
         type="button"
         onClick={() => nav.jumpTo(nextUp.day)}
-        className="font-semibold text-primary hover:underline"
+        /* ขยายพื้นที่กดบนมือถือด้วย padding ติดลบ — ตัวอักษรยังอยู่ในบรรทัดเดิม */
+        className="font-semibold text-primary hover:underline max-sm:-my-2 max-sm:py-2"
       >
         {thaiDate(nextUp.day)} · {nextUp.title}
       </button>

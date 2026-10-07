@@ -250,7 +250,8 @@ export function SummaryCalendar({
                 <button
                   type="button"
                   onClick={() => jump(nearDay)}
-                  className="text-left font-semibold text-primary hover:underline"
+                  /* บนมือถือขยายพื้นที่กดเป็น 36px ด้วย padding ติดลบ — ตัวอักษรยังอยู่ในบรรทัดเดิม */
+                  className="text-left font-semibold text-primary hover:underline max-sm:-my-2 max-sm:py-2"
                 >
                   {shortDate(nearDay)} {near.title}
                 </button>
