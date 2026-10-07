@@ -89,7 +89,8 @@ export function SubNav({
                 key={`${item.href}-${i}`}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`shrink-0 rounded-full px-4 py-1.5 text-sm whitespace-nowrap font-medium transition-colors ${
+                /* สูง 40px บนมือถือ — ชิป 32px กดพลาดง่าย (พบตอนทดสอบจอ 360–390px · 7 ต.ค. 2569) */
+                className={`inline-flex h-10 shrink-0 items-center rounded-full px-4 text-sm whitespace-nowrap font-medium transition-colors sm:h-8 ${
                   active
                     ? "bg-primary font-semibold text-white"
                     : "bg-secondary text-muted-foreground hover:bg-accent hover:text-primary"

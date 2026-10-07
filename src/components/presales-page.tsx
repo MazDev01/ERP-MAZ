@@ -198,7 +198,8 @@ export function PresalesPage() {
               paged.setPage(1);
             }}
             aria-pressed={lateOnly}
-            className={`my-2 inline-flex h-[34px] items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${
+            /* 38px บนมือถือ — ตัวกรองนี้เตี้ยกว่ามาตรฐานจนกดพลาด (7 ต.ค. 2569) */
+            className={`my-2 inline-flex h-[38px] items-center gap-2 rounded-[9px] border px-3 text-[12.5px] sm:h-[34px] ${
               lateOnly
                 ? "border-primary bg-accent font-semibold text-primary"
                 : "glass-thin border-border text-muted-foreground"
