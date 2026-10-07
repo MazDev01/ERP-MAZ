@@ -67,7 +67,7 @@ const SEED: EmpRequest[] = [
   { id: "OT-2569-0015", emp: "E08", to: "exec", kind: "ot", date: "2026-08-29", start: "09:00", end: "12:00", hours: 3, holiday: true, note: "ทดสอบระบบก่อนขึ้นใช้งานจริง", at: "2026-08-29 12:10", status: "approved", decidedAt: "2026-08-31 08:40" },
   { id: "OT-2569-0011", emp: "E03", to: "exec", kind: "ot", date: "2026-09-04", start: "18:00", end: "21:30", hours: 3.5, holiday: false, note: "แก้บั๊กหน้าเมนูของครัวคุณจิก่อนส่งลูกค้า", at: "2026-09-04 21:40", status: "pending" },
   { id: "OT-2569-0012", emp: "E04", to: "exec", kind: "ot", date: "2026-09-05", start: "09:00", end: "17:00", hours: 8, holiday: true, note: "ติดตั้งระบบหน้างานลูกค้า นัดวันเสาร์ตามที่ลูกค้าสะดวก", at: "2026-09-05 17:15", status: "pending" },
-  { id: "OT-2569-0015", emp: "E06", to: "exec", kind: "ot", date: "2026-09-06", start: "18:00", end: "19:30", hours: 1.5, holiday: false, note: "ย้ายฐานข้อมูลขึ้นเซิร์ฟเวอร์ใหม่ ต้องทำนอกเวลาทำการ", at: "2026-09-06 19:40", status: "pending" },
+  { id: "OT-2569-0019", emp: "E06", to: "exec", kind: "ot", date: "2026-09-06", start: "18:00", end: "19:30", hours: 1.5, holiday: false, note: "ย้ายฐานข้อมูลขึ้นเซิร์ฟเวอร์ใหม่ ต้องทำนอกเวลาทำการ", at: "2026-09-06 19:40", status: "pending" },
 
   /* ── คิวของ PM (ต้นแบบ pm-approvals.html PM_APPROVALS) ── */
   { id: "OT-2569-0013", emp: "E07", to: "gm", kind: "ot", date: "2026-09-07", start: "18:00", end: "20:00", hours: 2, holiday: false, note: "ทดสอบระบบจองโต๊ะรอบสุดท้ายก่อนส่งมอบ", at: "2026-09-07 09:40", status: "pending" },

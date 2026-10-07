@@ -23,6 +23,7 @@ import { BUILTIN_HR_DEPT, BUILTIN_HR_DOCS, BUILTIN_HR_POSITION, holdsPos } from 
 import { BUILTIN_WHT_TYPES } from "@/lib/acc-data";
 import { AdminHead, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
 import { GripIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
+import { ConfirmDialog } from "./confirm-dialog";
 import { Sheet } from "./lead-dialogs";
 import { DateField } from "./thai-date-picker";
 import { thaiDate, todayIso } from "@/lib/format";
@@ -299,6 +300,9 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
     });
   }
 
+  /* ลบตัวเลือกแล้วกู้คืนไม่ได้ ต้องถามยืนยันก่อนทุกครั้ง (พบจากการทดสอบ 6 ต.ค. 2569) */
+  const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
+
   function removeRow(id: string) {
     if (spec) {
       setCat(
@@ -460,7 +464,7 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
                     danger
                     disabled={Boolean(r.block)}
                     title={r.block || undefined}
-                    onClick={() => removeRow(r.id)}
+                    onClick={() => setRemoving({ id: r.id, label: r.label })}
                   >
                     <TrashIcon className="size-3.5" strokeWidth={1.9} />
                   </IconBtn>
@@ -489,6 +493,20 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
           </div>
         </section>
       )}
+
+      <ConfirmDialog
+        open={Boolean(removing)}
+        tone="destructive"
+        title="ลบตัวเลือกนี้"
+        description={removing ? `ลบ "${removing.label}" ออกจากรายการ` : ""}
+        detail="ข้อมูลเก่าที่เคยเลือกไว้ยังเก็บข้อความเดิม แต่ตัวเลือกนี้จะไม่ขึ้นในดรอปดาวน์อีก และต้องกดบันทึกเพื่อให้มีผล"
+        confirmLabel="ลบ"
+        onConfirm={() => {
+          if (removing) removeRow(removing.id);
+          setRemoving(null);
+        }}
+        onCancel={() => setRemoving(null)}
+      />
 
       {editing && editGroup && (
         <OptionDialog

@@ -81,13 +81,23 @@ function walk(src: Node, dest: HTMLElement, doc: Document) {
   });
 }
 
+/*
+ * อ่าน HTML ที่ยังไม่ได้ล้างให้เป็นต้นไม้ที่ "ตาย" ด้วย DOMParser
+ * ห้ามใช้ innerHTML ของ element ในหน้าจริง เพราะ <img onerror> ยิงสคริปต์ทันทีตอนวาง
+ * ถึงจะถอดแท็กทิ้งทีหลังก็สายไปแล้ว — เอกสารของ DOMParser ไม่โหลดรูปและไม่รันสคริปต์
+ */
+function parseDead(html: string) {
+  return new DOMParser().parseFromString(
+    `<body>${String(html).replace(/<!--[\s\S]*?-->/g, "")}</body>`,
+    "text/html",
+  );
+}
+
 /** ล้าง HTML ให้เหลือเฉพาะแท็กที่อนุญาต ใช้ทั้งตอนวางและตอนบันทึก */
 export function cleanHtml(html: string) {
   if (typeof document === "undefined") return "";
-  const src = document.createElement("div");
-  src.innerHTML = String(html).replace(/<!--[\s\S]*?-->/g, "");
   const out = document.createElement("div");
-  walk(src, out, document);
+  walk(parseDead(html).body, out, document);
   return out.innerHTML;
 }
 
@@ -118,9 +128,8 @@ export function htmlToText(html: string) {
   if (typeof document === "undefined") {
     return String(html).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   }
-  const el = document.createElement("div");
-  el.innerHTML = String(html || "");
-  return (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  /* อ่านผ่านเอกสารที่ตายแล้วเหมือน cleanHtml — ข้อความที่เอามาอาจยังไม่ได้ล้าง */
+  return (parseDead(html || "").body.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 /** บรรทัดแรกที่มีตัวอักษร ใช้ตั้งชื่อดีลและใบงาน */
