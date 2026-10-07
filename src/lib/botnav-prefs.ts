@@ -55,10 +55,9 @@ export function resetBotnav(role: Role) {
   });
 }
 
-/** หน้าหลักกับโปรไฟล์ไม่ได้อยู่ในเมนูข้าง แต่เลือกมาไว้ในแถบล่างได้
- *  บทบาทที่หน้าหลักคือหน้าลงเวลาเอง (นักศึกษาฝึกงาน) ไม่มีช่องหน้าหลัก เพราะซ้ำกับปุ่มกลาง */
+/** หน้าหลักกับโปรไฟล์ไม่ได้อยู่ในเมนูข้าง แต่เลือกมาไว้ในแถบล่างได้ */
 export const BOTNAV_EXTRA = (role: Role) => [
-  ...(mobileHomeOf(role) === "/" ? [] : [{ href: mobileHomeOf(role), label: "หน้าหลัก", icon: "home" as const }]),
+  { href: mobileHomeOf(role), label: "หน้าหลัก", icon: "home" as const },
   { href: "/profile", label: "โปรไฟล์", icon: "user" as const },
 ];
 
@@ -94,6 +93,6 @@ export function botnavDefault(items: NavItem[], role: Role) {
   const second =
     items.find((i) => i.href.endsWith("/dashboard") || i.href === "/presales-dash") ?? work[0];
   const leave = items.find((i) => i.href === "/leave");
-  const home = mobileHomeOf(role) === "/" ? BOTNAV_EMPTY : mobileHomeOf(role);
+  const home = mobileHomeOf(role);
   return [home, second?.href ?? BOTNAV_EMPTY, leave?.href ?? BOTNAV_EMPTY, "/profile"];
 }

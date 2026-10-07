@@ -301,19 +301,10 @@ const CEO: NavItem[] = [
 
 
 /*
- * นักศึกษาฝึกงาน — ลงเวลางานกับใบลาเท่านั้น (ยกมาจากระบบต้นฉบับ 6 ต.ค. 2569)
- * ไม่มีค่าจ้าง จึงไม่มีโอที ไม่มีเบิกค่าใช้จ่าย และไม่มีสลิป
+ * นักศึกษาฝึกงาน — หน้าเหมือนทีมงานทุกอย่าง ตัดโอที เบิกค่าใช้จ่าย และสลิปเงินเดือนออก
+ * (ผู้ใช้สั่ง 7 ต.ค. 2569) เพราะฝึกงานไม่มีค่าจ้าง · กลุ่ม "ของฉัน" กรองด้วย mineFor("intern")
  */
-const INTERN: NavItem[] = [
-  /* ดูบันทึกเวลาทั้งเดือนของตัวเองได้ แต่ไม่มีโอที (ผู้ใช้สั่ง 7 ต.ค. 2569) */
-  { group: "ของฉัน", label: "ลงเวลางาน", icon: "clock", href: "/",
-    sub: [
-      { label: "ตอกบัตรเข้า/ออก", href: "/", title: "เวลาทำงาน" },
-      { label: "บันทึกเวลาของฉัน", href: "/records" },
-    ],
-  },
-  { group: "ของฉัน", label: "การลา", icon: "leave", href: "/leave" },
-];
+const INTERN: NavItem[] = STAFF;
 
 /* แม่บ้าน — ลงเวลางาน · เบิกค่าใช้จ่าย · การลา · สลิปเงินเดือน · ดูบันทึกเวลาทั้งเดือนได้ ไม่มีโอที */
 const MAID: NavItem[] = [
@@ -339,12 +330,14 @@ const BY_ROLE: Record<Role, { work: NavItem[]; group: NavGroup; approvalsAfter?:
   /* รายการรออนุมัติอยู่ท้ายกลุ่มตามต้นแบบ */
   gm: { work: GM, group: "ผู้จัดการทั่วไป" },
   ceo: { work: CEO, group: "ผู้บริหาร" },
-  /* สองบทบาทนี้มีแต่เมนูของตัวเอง จึงไม่ต้องต่อกลุ่ม "ของฉัน" ซ้ำอีก */
-  intern: { work: INTERN, group: "ของฉัน" },
+  /* ฝึกงานใช้กลุ่มเดียวกับทีมงาน — เมนูงานชุดเดียวกัน */
+  intern: { work: INTERN, group: "งานของฉัน" },
+  /* แม่บ้านมีแต่เมนูของตัวเอง จึงไม่ต้องต่อกลุ่ม "ของฉัน" ซ้ำอีก */
   maid: { work: MAID, group: "ของฉัน" },
 };
 
-const NO_MINE: Role[] = ["ceo", "intern", "maid"];
+/* ฝึกงานใช้กลุ่ม "ของฉัน" เหมือนทีมงาน แต่ mineFor("intern") ตัดโอที/เบิก/สลิปออกให้แล้ว */
+const NO_MINE: Role[] = ["ceo", "maid"];
 
 /*
  * เมนู "รายการรออนุมัติ" ไม่ได้ผูกกับบทบาทตายตัว — โผล่ให้บทบาทที่เป็นผู้อนุมัติของใครสักคน
@@ -414,7 +407,8 @@ export function navItems(
   const shown = (i: NavItem) => !hidden.has(i.href);
   const approves = role !== "ceo" && approvesFor(role, route).length > 0;
   const approvals: NavItem[] = approves ? [{ ...APPROVALS_ITEM, group }] : [];
-  const mine = NO_MINE.includes(role) ? [] : mineFor(empType).filter(shown);
+  /* บทบาทฝึกงานใช้ชุดของฝึกงานเสมอ ไม่ว่าทะเบียนจะบันทึกประเภทการจ้างไว้อย่างไร */
+  const mine = NO_MINE.includes(role) ? [] : mineFor(role === "intern" ? "intern" : empType).filter(shown);
   return [...all.slice(0, at || all.length).filter(shown), ...approvals, ...all.slice(at || all.length).filter(shown), ...mine];
 }
 
@@ -470,9 +464,8 @@ export function navGroups(role: Role): NavGroup[] {
  */
 export function mobileHomeOf(role: Role) {
   if (role === "ceo") return "/ceo/home";
-  if (role === "staff") return "/my-home";
-  /* ฝึกงานมีแค่หน้าลงเวลา ไม่มีหน้าหลักการ์ดเมนู */
-  if (role === "intern") return "/";
+  /* ฝึกงานใช้หน้าหลักการ์ดเมนูชุดเดียวกับทีมงาน (ผู้ใช้สั่ง 7 ต.ค. 2569) */
+  if (role === "staff" || role === "intern") return "/my-home";
   return "/home";
 }
 
@@ -502,7 +495,7 @@ const BOTTOM_HREFS: Record<Role, string[]> = {
   staff: ["/", "/my-tasks", "/my-schedule", "/leave"],
   gm: ["/", "/gm/dashboard", "/pm/inbox", "/approvals"],
   ceo: ["/ceo/home", "/ceo/dashboard", "/ceo/approvals"],
-  intern: ["/", "/leave"],
+  intern: ["/", "/my-tasks", "/my-schedule", "/leave"],
   maid: ["/", "/expense", "/leave", "/payslip"],
 };
 
@@ -643,7 +636,7 @@ const EXTRA_OWNER: Record<string, Role | Role[]> = {
   "/hr/cycles": "hr",
   "/ceo/deals": "ceo",
   "/ceo/home": "ceo",
-  "/my-home": "staff",
+  "/my-home": ["staff", "intern"],
   "/leads-quotes": "sales",
   /* ทุกบทบาทเปิด /home ได้ — บทบาทที่มีหน้าหลักของตัวเอง (พนักงาน · CEO) ถูกพาไปหน้านั้นต่อ (HomePage) */
   "/home": ["sales", "ps", "pm", "acc", "hr", "gm", "staff", "ceo", "maid"],
