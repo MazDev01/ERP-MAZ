@@ -25,6 +25,7 @@ export function createPersistedStore<T>(
 ): PersistedStore<T> {
 
   let cache: T | undefined;
+  let watching = false;
   const listeners = new Set<() => void>();
 
   function read(): T {
@@ -51,8 +52,24 @@ export function createPersistedStore<T>(
     for (const listener of listeners) listener();
   }
 
+  /*
+   * อีกแท็บของเบราว์เซอร์เดียวกันแก้ข้อมูลชุดนี้ — ทิ้งค่าที่จำไว้แล้ววาดใหม่
+   * ไม่งั้นแต่ละแท็บทำงานบนข้อมูลคนละชุด แล้วแท็บที่บันทึกทีหลังจะเขียนทับของอีกแท็บ
+   * (เจอตอนทดสอบสองแท็บกดรับงานใบเดียวกัน 7 ต.ค. 2569 — รับได้ทั้งคู่ทั้งที่ควรได้คนเดียว)
+   */
+  function watchOtherTabs() {
+    if (typeof window === "undefined" || watching) return;
+    watching = true;
+    window.addEventListener("storage", (e) => {
+      if (e.key !== key && e.key !== null) return;
+      cache = undefined;
+      notify();
+    });
+  }
+
   return {
     subscribe(onChange) {
+      watchOtherTabs();
       listeners.add(onChange);
       return () => {
         listeners.delete(onChange);
