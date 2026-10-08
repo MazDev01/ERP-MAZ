@@ -281,6 +281,15 @@ export function ScheduleBoard<T>({
     const later = liveRows.filter((e) => e.start > sel).sort((a, b) => a.start.localeCompare(b.start))[0];
     return later ? { day: later.start, title: later.title } : null;
   })();
+  /*
+   * รายการข้าง ๆ ปฏิทินของจอกว้าง — ห้านัดถัดไปนับจากวันที่เลือก
+   * เดือนไหนไม่มีนัดข้างหน้าแล้ว แสดงนัดล่าสุดของเดือนนั้นแทน จะได้ไม่เหลือช่องว่างยาวข้างปฏิทิน
+   */
+  const ahead = liveRows.filter((e) => e.start >= sel).sort((a, b) => a.start.localeCompare(b.start));
+  const past = liveRows.filter((e) => e.start < sel).sort((a, b) => b.start.localeCompare(a.start));
+  const upcoming = [...ahead.slice(0, 5), ...past.slice(0, Math.max(0, 5 - ahead.length))];
+  const upcomingTitle = ahead.length ? "นัดที่กำลังจะถึง" : "นัดหมายล่าสุด";
+
   const nextHint = nextUp && (
     <>
       {" · ถัดไป "}
@@ -457,6 +466,37 @@ export function ScheduleBoard<T>({
             )}
           </div>
           {dayList}
+        </section>
+
+        {/* นัดที่กำลังจะถึง — เติมคอลัมน์ซ้ายที่เคยว่างยาวข้างปฏิทิน และช่วยให้เห็นงานข้างหน้าโดยไม่ต้องกดไล่วัน
+           (ผู้ใช้สั่งจัดเลย์เอาต์ไม่ให้มีช่องว่าง 8 ต.ค. 2569) */}
+        <section className="glass order-3 rounded-[16px] p-[16px_18px] max-[1099px]:hidden min-[1100px]:order-none">
+          <h2 className="mb-2.5 text-[13.5px] font-bold">{upcomingTitle}</h2>
+          {upcoming.length === 0 ? (
+            <p className="text-[12.5px] text-muted-foreground">
+              ยังไม่มีนัดหมายในระบบ กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น
+            </p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-border">
+              {upcoming.map((e, i) => (
+                <li key={`${e.start}-${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => nav.jumpTo(e.start)}
+                    className="flex w-full items-start gap-2.5 py-2.5 text-left hover:text-primary"
+                  >
+                    <span className="num mt-[2px] w-[58px] flex-none text-[11.5px] font-semibold text-muted-foreground">
+                      {thaiDate(e.start)}
+                    </span>
+                    <span className="min-w-0">
+                      <b className="block truncate text-[12.5px] font-semibold">{e.title}</b>
+                      {e.sub && <em className="block truncate text-[11.5px] text-muted-foreground not-italic">{e.sub}</em>}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </aside>
 

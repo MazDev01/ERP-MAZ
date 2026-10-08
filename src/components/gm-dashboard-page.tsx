@@ -159,7 +159,8 @@ function CappedList({ count, href, empty, children }: { count: number; href: str
   const extra = count - LIST_CAP;
   return (
     <div
-      className="flex flex-col md:h-[var(--cap-h)]"
+      /* ไม่มีรายการ = ไม่ต้องกันความสูงไว้ ไม่งั้นเหลือกล่องว่างสูงเปล่า ๆ (ผู้ใช้สั่งจัดเลย์เอาต์ 8 ต.ค. 2569) */
+      className={`flex flex-col ${count === 0 ? "" : "md:h-[var(--cap-h)]"}`}
       style={{ "--cap-h": `${LIST_CAP * ROW_H + FOOT_H}px`, "--row-h": `${ROW_H}px` } as React.CSSProperties}
     >
       {count === 0 ? (

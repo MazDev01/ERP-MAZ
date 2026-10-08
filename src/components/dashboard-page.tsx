@@ -347,7 +347,7 @@ export function DashboardPage({ dealsHref = "/deals" }: { dealsHref?: string } =
             สรุปช่วงที่เลือกเป็นประโยคเดียวปิดท้ายคอลัมน์ขวา (โครง mockup 24 ก.ย. 2569)
             ตัวเลขชุดเดียวกับการ์ดด้านบน ไม่ได้นับใหม่ — พื้นสีหลัก ไม่มีภาพตกแต่งแบบ mockup
           */}
-          <section className="rounded-[15px] bg-primary px-[18px] py-4 text-white md:col-span-3 xl:col-span-2">
+          <section className="rounded-[15px] bg-primary px-[18px] py-4 text-white md:col-span-3 xl:col-span-8">
             <b className="block text-[15.5px] leading-[1.35] font-bold">
               {d.wonDeals
                 ? `${RANGE_LABEL[range]}ปิดได้ ${d.wonDeals} ดีลแล้ว`
