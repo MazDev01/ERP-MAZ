@@ -18,6 +18,7 @@
  */
 
 import Link from "next/link";
+import { DashWrap, DashHero, DashChips, DashSection } from "./mobile-dash";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useAcc } from "@/lib/acc-store";
@@ -183,7 +184,58 @@ export function CeoDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      {/* ── มือถือ: แดชบอร์ดแบบแอปเหมือนบทบาทอื่น (เจ้าของสั่ง 8 ต.ค. 2569) — ตัวเลขชุดเดียวกับจอคอม ── */}
+      <DashWrap>
+        <DashHero
+          chips={
+            <DashChips
+              value={range}
+              items={(Object.keys(RANGE_LABEL) as Range[]).map((r) => ({ key: r, label: RANGE_LABEL[r] }))}
+              onPick={setRange}
+            />
+          }
+          label="รับชำระแล้ว"
+          value={`${whole(got)} บาท`}
+          foot={`ค้างรับ ${whole(open.reduce((a, v) => a + v.outstanding, 0))} บาท · ดีลที่ปิดได้ ${won.length} ดีล`}
+          ringPct={null}
+        />
+
+        <DashSection
+          title="คำขอรออนุมัติ"
+          href="/ceo/approvals"
+          linkLabel="ไปอนุมัติ"
+          empty="ไม่มีคำขอรออนุมัติ"
+          rows={pending.slice(0, 6).map((r) => ({
+            key: r.key,
+            title: r.who,
+            meta: `${r.type} · ${r.when}`,
+            metaTint: "grey" as const,
+            href: r.href,
+          }))}
+        />
+
+        <DashSection
+          title="พนักงานวันนี้"
+          empty="ยังไม่มีการลงเวลา"
+          rows={ATT.filter((a) => cnt(a.key) > 0).map((a) => ({
+            key: a.key,
+            title: a.label,
+            end: `${cnt(a.key)} คน`,
+            endTint: a.key === "late" ? ("peach" as const) : a.key === "ontime" ? ("mint" as const) : ("grey" as const),
+          }))}
+        />
+
+        <DashSection
+          title="ยอดขายแยกบริการ"
+          empty="ยังไม่มีดีลที่ปิดได้ในช่วงนี้"
+          rows={svc
+            .filter((x) => x.v > 0)
+            .slice(0, 6)
+            .map((x) => ({ key: x.label, title: x.label, end: whole(x.v), endTint: "grey" as const }))}
+        />
+      </DashWrap>
+
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ด</h1>
           {/* ช่วงนี้มีผลเฉพาะการ์ดเงิน ยอดขายแยกบริการ และประสิทธิภาพ
@@ -215,7 +267,7 @@ export function CeoDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 max-md:hidden xl:grid-cols-4">
         <Kpi title="รับชำระแล้ว" value={`${whole(got)} บาท`} note={`จาก ${pays.length} ใบแจ้งหนี้ในช่วงที่เลือก`} />
         <Kpi
           title="ค้างรับ"

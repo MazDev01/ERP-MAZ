@@ -12,6 +12,7 @@
  */
 
 import Link from "next/link";
+import { DashWrap, DashHero, DashSection } from "./mobile-dash";
 import { useMemo, useState } from "react";
 import { addDays, daysBetween, parseIsoDate, TH_MONTHS_SHORT, toIsoDate, todayIso } from "@/lib/format";
 import { useApprovedOtHours, useGmPending, useTeamLeave, type TeamLeave } from "@/lib/gm-data";
@@ -67,21 +68,73 @@ export function GmDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      {/* ── มือถือ: แดชบอร์ดแบบแอปเหมือนบทบาทอื่น (เจ้าของสั่ง 8 ต.ค. 2569) — ตัวเลขชุดเดียวกับจอคอม ── */}
+      <DashWrap>
+        <DashHero
+          label="คำขอรออนุมัติ"
+          value={`${pending.length} คำขอ`}
+          foot={`ลาวันนี้ ${todayNames.length} คน · โปรเจคเลยกำหนด ${late.length} · OT เดือนนี้ ${otHours} ชม.`}
+          /* ไม่มีวงแหวน — จำนวนคำขอไม่ใช่สัดส่วนของอะไร วงเต็ม 100% อ่านแล้วเข้าใจผิด */
+          ringPct={null}
+        />
+
+        <DashSection
+          title="รออนุมัติ"
+          href="/approvals"
+          linkLabel="ไปอนุมัติ"
+          empty="ไม่มีคำขอรออนุมัติ"
+          rows={pending.slice(0, 6).map((r) => ({
+            key: r.key,
+            title: r.name,
+            meta: r.kind === "leave" && r.from ? `${r.what} ${range(r.from, r.to ?? r.from)}` : r.what,
+            metaTint: "grey" as const,
+          }))}
+        />
+
+        <DashSection
+          title="ลาในสัปดาห์นี้"
+          href="/gm/calendar"
+          linkLabel="ดูตารางงาน"
+          empty="ไม่มีใครลาในสัปดาห์นี้"
+          rows={week.slice(0, 6).map((l) => ({
+            key: l.key,
+            title: l.name,
+            meta: `${l.type} ${range(l.from, l.to)}`,
+            metaTint: "grey" as const,
+            end: l.pending ? "รออนุมัติ" : "อนุมัติแล้ว",
+            endTint: l.pending ? ("peach" as const) : ("mint" as const),
+          }))}
+        />
+
+        <DashSection
+          title="โปรเจคที่กำลังดำเนินการ"
+          empty="ไม่มีโปรเจคที่กำลังดำเนินการ"
+          rows={running.slice(0, 6).map((p) => ({
+            key: p.pj,
+            title: p.name || p.cus,
+            meta: `${p.cus} · PM ${p.pm}`,
+            metaTint: "grey" as const,
+            end: p.due ? (p.due < today ? "เลยกำหนด" : "ตามแผน") : "ยังไม่มีกำหนด",
+            endTint: p.due && p.due < today ? ("rose" as const) : ("grey" as const),
+          }))}
+        />
+      </DashWrap>
+
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ด</h1>
           <p>{USERS.gm.name} · ผู้จัดการทั่วไป</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 max-md:hidden max-sm:gap-2.5 xl:grid-cols-4">
         <Kpi label="รออนุมัติ" value={pending.length} sub="การลา OT และใบเบิก" />
         <Kpi label="ลาวันนี้" value={todayNames.length} sub={todayNames.length ? todayNames.join(" · ") : "มาทำงานครบ"} />
         <Kpi label="โปรเจคเลยกำหนด" value={late.length} sub={`จาก ${running.length} โปรเจคที่กำลังทำ`} bad={late.length > 0} />
         <Kpi label="OT เดือนนี้" value={otHours} sub="ชั่วโมงที่อนุมัติแล้วทั้งบริษัท" />
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 max-md:hidden lg:grid-cols-2">
         {/* คอลัมน์ซ้าย: ลาในสัปดาห์นี้ + ปฏิทินเดือนย่อ (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
         <div className="min-w-0 space-y-4">
           <Card title="ลาในสัปดาห์นี้" more={{ href: "/gm/calendar", label: "ดูตารางงาน" }}>

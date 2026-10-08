@@ -29,6 +29,7 @@ import { colorOf, eventKind, eventsOn, isPsEvent, isSalesEvent } from "@/lib/pm-
 import { useSchedule } from "@/lib/pm-schedule-store";
 import { memberName, usePm } from "@/lib/pm-store";
 import { ClockIcon, InboxIcon, ProjectIcon, TasksIcon } from "./icons";
+import { DashWrap, DashHero, DashSection } from "./mobile-dash";
 
 /** งานย่อยหนึ่งใบพร้อมโปรเจคต้นทางและจำนวนวันที่เหลือ — ใช้ซ้ำหลายบล็อก จึงคิดครั้งเดียว */
 type TaskRow = { p: Project; t: ProjectTask; left: number };
@@ -90,7 +91,66 @@ export function PmDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bar">
+      {/* ── มือถือ: แดชบอร์ดแบบแอปเหมือนบทบาทอื่น (เจ้าของสั่ง 8 ต.ค. 2569) ──
+           ตัวเลขชุดเดียวกับจอคอม ไม่ได้คิดใหม่ */}
+      <DashWrap>
+        <DashHero
+          label="งานย่อยที่ต้องดูแล"
+          value={`${open.length} งาน`}
+          foot={`รอตรวจ ${review} · ใกล้ครบกำหนด ${soon} · ล่าช้า ${overdue}`}
+          ringPct={open.length ? ((open.length - overdue) * 100) / open.length : 100}
+          ringLabel="ยังไม่เลยกำหนด"
+        />
+
+        <DashSection
+          title="งานเข้ารอรับ"
+          href="/pm/inbox"
+          empty="ไม่มีงานรอรับ"
+          rows={pm.inbox
+            .filter((j) => j.stage === "new")
+            .slice(0, 5)
+            .map((j) => ({
+              key: j.pj,
+              title: j.scope || j.cus,
+              meta: `${j.pj} · ${j.cus}`,
+              metaTint: "grey" as const,
+            }))}
+        />
+
+        <DashSection
+          title="งานย่อยรอตรวจ"
+          href="/pm/reviews"
+          empty="ไม่มีงานรอตรวจ"
+          rows={reviewRows.slice(0, 5).map((x) => ({
+            key: `${x.p.pj}-${x.t.name}`,
+            title: x.t.name,
+            meta: `${x.p.name || x.p.cus} · ${thaiDate(x.t.due)}`,
+            metaTint: "grey" as const,
+            end: x.left < 0 ? `เลย ${-x.left}ว` : `${x.left}ว`,
+            endTint: x.left < 0 ? ("rose" as const) : ("peach" as const),
+          }))}
+        />
+
+        <DashSection
+          title="งานย่อยที่ต้องส่งเร็ว ๆ นี้"
+          href="/pm/projects"
+          empty="ไม่มีงานใกล้ครบกำหนด"
+          rows={open
+            .filter((x) => x.t.status !== "sent")
+            .sort((a, b) => a.left - b.left)
+            .slice(0, 6)
+            .map((x) => ({
+              key: `${x.p.pj}-${x.t.name}`,
+              title: x.t.name,
+              meta: `${x.p.name || x.p.cus} · ${x.t.whos.join(" · ") || "ยังไม่มีผู้รับผิดชอบ"}`,
+              metaTint: "grey" as const,
+              end: x.left < 0 ? `เลย ${-x.left}ว` : x.left === 0 ? "วันนี้" : `${x.left}ว`,
+              endTint: x.left < 0 ? ("rose" as const) : x.left <= SOON_DAYS ? ("peach" as const) : ("grey" as const),
+            }))}
+        />
+      </DashWrap>
+
+      <div className="bar max-md:hidden!">
         <div>
           <h1>แดชบอร์ด</h1>
           <p>ภาพรวมงานที่ต้องดูแล</p>
@@ -98,7 +158,7 @@ export function PmDashboardPage() {
       </div>
 
       {/* มือถือ: การ์ดใบที่ห้าเหลือเดี่ยวอยู่แถวสุดท้าย ให้กินเต็มแถวแทนการเว้นช่องว่าง */}
-      <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 max-sm:[&>*:last-child]:col-span-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3.5 max-md:hidden max-sm:gap-2.5 max-sm:[&>*:last-child]:col-span-2 xl:grid-cols-5">
         <Kpi label="งานเข้ารอรับ" value={waiting} sub={waiting ? "รอ PM รับเข้าโปรเจค" : "รับครบแล้ว"} tone="info" icon={<InboxIcon className="size-[15px]" strokeWidth={1.9} />} />
         <Kpi
           label="งานย่อยรอตรวจ"
@@ -137,7 +197,7 @@ export function PmDashboardPage() {
         />
       </div>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 max-md:hidden xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Card title="ความคืบหน้าโปรเจค">
           <ProjectProgress projects={projects} today={today} />
         </Card>
@@ -145,7 +205,7 @@ export function PmDashboardPage() {
         <NewJobs inbox={pm.inbox} />
       </div>
 
-      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid items-stretch gap-4 max-md:hidden xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <DueTable open={open} />
         <MiniCalendar events={sc.events.filter((e) => !isPsEvent(e) && !isSalesEvent(e))} today={today} />
       </div>
