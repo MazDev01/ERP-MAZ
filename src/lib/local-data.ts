@@ -13,6 +13,32 @@
  * TODO: ต่อ backend แล้วข้อมูลงานจะอยู่ที่เซิร์ฟเวอร์ เหลือแค่ล้างโทเคนกับแคชของเครื่อง
  */
 
+import { forgetRole } from "./role";
+
+/*
+ * ธงว่าแท็บนี้ล็อกอินอยู่ไหม — เก็บใน sessionStorage ของแท็บ
+ * ปิดแท็บ = ออกจากระบบไปในตัว · ออกจากระบบแล้วกดย้อนกลับจะไม่หลุดเข้ามาได้อีก
+ */
+const SIGNED_KEY = "maz-erp.signed-in.v1";
+
+/** เพิ่งเข้าสู่ระบบสำเร็จ — หน้าเข้าสู่ระบบเรียกตัวนี้ */
+export function signIn() {
+  try {
+    window.sessionStorage.setItem(SIGNED_KEY, "1");
+  } catch {
+    // โหมดส่วนตัว — ใช้งานต่อได้ แต่จำข้ามหน้าไม่ได้
+  }
+}
+
+/** ยังล็อกอินอยู่ไหม — เปลือกหน้าจอใช้ตัดสินว่าต้องพาไปหน้าเข้าสู่ระบบหรือยัง */
+export function isSignedIn() {
+  try {
+    return window.sessionStorage.getItem(SIGNED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /** คีย์ที่บอกว่าใครกำลังใช้ระบบอยู่ — ไม่ใช่ข้อมูลงาน */
 const SESSION_KEYS = [
   "maz-erp.role.v1",
@@ -25,8 +51,13 @@ const SESSION_KEYS = [
 const PREFIXES = ["maz-erp.", "maz-hrm."];
 
 export function clearSession() {
+  forgetRole();
   try {
-    for (const k of SESSION_KEYS) window.localStorage.removeItem(k);
+    window.sessionStorage.removeItem(SIGNED_KEY);
+    for (const k of SESSION_KEYS) {
+      window.localStorage.removeItem(k);
+      window.sessionStorage.removeItem(k);
+    }
   } catch {
     // เบราว์เซอร์ไม่ให้เข้าถึงที่เก็บข้อมูล — ไม่มีอะไรให้ล้างอยู่แล้ว
   }

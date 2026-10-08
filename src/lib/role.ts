@@ -131,6 +131,21 @@ export function setRole(role: Role) {
   store.set(role);
 }
 
+/*
+ * ลืมบทบาทของแท็บนี้ตอนออกจากระบบ (แก้บั๊กที่พบตอนทดสอบ 8 ต.ค. 2569)
+ * บทบาทที่ใช้จริงอยู่ใน sessionStorage กับตัวแปรในหน่วยความจำ
+ * clearSession ลบแต่ของใน localStorage แท็บเดิมจึงยังจำได้ว่าเป็นใคร กดย้อนกลับก็เข้าระบบต่อได้เลย
+ */
+export function forgetRole() {
+  tabRole = undefined;
+  try {
+    window.sessionStorage.removeItem(KEY);
+  } catch {
+    // โหมดส่วนตัว — ไม่มีอะไรให้ลบ
+  }
+  for (const l of tabListeners) l();
+}
+
 /** ให้สโตร์อื่นเกาะไปด้วยได้ เช่นโปรไฟล์ที่ต้องเปลี่ยนตามบทบาท */
 export const subscribeRole = store.subscribe;
 

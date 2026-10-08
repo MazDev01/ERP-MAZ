@@ -27,7 +27,7 @@
  *   แท็บที่ต้นแบบซ่อน ยังโผล่ถ้าสายอนุมัติส่งคำขอประเภทนั้นมาจริง (ผู้ดูแลระบบย้ายสายได้) — ไม่ให้คำขอตกหล่น
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { decideEmpRequest, empFuelKm, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
 import { claimParts, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
 import { hrPos } from "@/lib/hr-data";
@@ -305,7 +305,23 @@ export function ApprovalsBoard({
     setMode(m);
     setViewing(item);
   };
+  /*
+   * กันอนุมัติซ้อนจากการกดรัว (พบตอนทดสอบ 8 ต.ค. 2569)
+   * พออนุมัติใบแรก แถวนั้นหายจากคิว แถวถัดไปเลื่อนขึ้นมาอยู่ใต้เมาส์พอดี
+   * คลิกครั้งที่สองของดับเบิลคลิกจึงไปอนุมัติใบของคนอื่นทันที และอนุมัติแล้วย้อนไม่ได้
+   * จึงไม่รับคำสั่งอนุมัติซ้ำภายในครึ่งวินาทีหลังเพิ่งตัดสินไป
+   */
+  const justDecided = useRef(false);
+  const tooSoon = () => {
+    if (justDecided.current) return true;
+    justDecided.current = true;
+    setTimeout(() => {
+      justDecided.current = false;
+    }, 600);
+    return false;
+  };
   const quickApprove = (item: Request) => {
+    if (tooSoon()) return;
     /* CEO แก้ชั่วโมงโอทีไม่ได้ — อนุมัติเท่าที่ขอทันที ไม่ผ่านขั้นยืนยันชั่วโมง (ผู้ใช้สั่ง 5 ต.ค. 2569) */
     if (item.kind === "ot" && fixedOt) return applyDecision(item, true, "", item.hours ?? 0);
     if (item.kind === "ot" && item.ot) return open(item, "approve");
@@ -320,6 +336,7 @@ export function ApprovalsBoard({
         className={`btn justify-center border border-[rgba(192,18,31,.35)] bg-transparent !text-destructive hover:!border-destructive hover:bg-[var(--destructive-soft)] ${big ? "h-10 w-full rounded-[10px]" : "h-[30px] px-3"}`}
         onClick={(e) => {
           e.stopPropagation();
+          if (tooSoon()) return;
           open(item, "reject");
         }}
       >

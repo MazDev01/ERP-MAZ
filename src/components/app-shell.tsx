@@ -12,6 +12,11 @@ import { useHydrated } from "@/lib/pwa";
 import { lockScroll } from "@/lib/scroll-lock";
 import { clearStorageTrouble, troubleText, useStorageTrouble } from "@/lib/storage-health";
 import { runMobileBack } from "@/lib/mobile-back";
+import { isSignedIn } from "@/lib/local-data";
+
+/* หน้าที่เปิดได้โดยไม่ต้องล็อกอิน — หน้าเข้าสู่ระบบ ตั้งรหัสผ่านใหม่ หน้าแนะนำติดตั้ง หน้าออฟไลน์
+   และลิงก์ตรวจงานที่ส่งให้ลูกค้า (/review/<โทเคน>) ซึ่งลูกค้าไม่มีบัญชีในระบบ */
+const PUBLIC_PAGES = ["/login", "/set-password", "/install", "/offline", "/review"];
 import { roleLabel, useApprovalRoute, useRole, type Role } from "@/lib/role";
 import {
   AccBoardIcon,
@@ -150,6 +155,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     mobileHomeOf(role);
   /* มือถือ: เปิดแอปครั้งแรกของรอบที่หน้า "/" (start_url) ให้เด้งหน้าหลักการ์ดเมนูก่อน (ผู้ใช้สั่ง 22 ก.ย. 2569)
      จดไว้ใน sessionStorage ตั้งแต่หน้าแรกที่เปิด กดการ์ด "เวลาทำงาน" ทีหลังจะเข้าหน้าตอกบัตรได้ตามปกติ */
+  /*
+   * ด่านเข้าระบบ (แก้บั๊กที่พบตอนทดสอบ 8 ต.ค. 2569)
+   * เดิมพิมพ์ที่อยู่หน้าไหนก็เข้าได้เลยในฐานะฝ่ายขาย และออกจากระบบแล้วกดย้อนกลับก็เข้ามาต่อได้
+   * ตอนนี้ต้องผ่านหน้าเข้าสู่ระบบก่อนเสมอ ยกเว้นหน้าที่เปิดได้โดยไม่ต้องล็อกอิน
+   * (ยังไม่มีหลังบ้าน จึงเป็นด่านฝั่งเบราว์เซอร์ — ต่อ backend แล้วต้องกันที่เซิร์ฟเวอร์ด้วย)
+   */
+  const signedIn = hydrated ? isSignedIn() : true;
+  useEffect(() => {
+    if (!hydrated || signedIn) return;
+    if (PUBLIC_PAGES.some((x) => pathname === x || pathname.startsWith(x + "/"))) return;
+    router.replace("/login");
+  }, [hydrated, signedIn, pathname, router]);
+
   const firstOpen = useRef<boolean | null>(null);
   useEffect(() => {
     if (!hydrated) return;

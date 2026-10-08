@@ -16,6 +16,7 @@ import { useHr } from "@/lib/hr-store";
 import { accountRoles } from "@/lib/hr-data";
 import { bkkStamp } from "@/lib/format";
 import { ROLES, setRole, useRole, type Role } from "@/lib/role";
+import { signIn } from "@/lib/local-data";
 
 /** ผิดครบกี่ครั้งจึงระงับบัญชี — ยืนยันกับฝ่ายบุคคล (ต้นแบบ login.html MAX_TRIES) */
 const MAX_TRIES = 5;
@@ -138,6 +139,7 @@ export function LoginForm() {
       if (account.suspended) return setLocked("admin");
       if (role === "staff") setStaffEmployee(who);
       setRole(role);
+      signIn();
       keepDevice("");
       markLogin(key, bkkStamp());
       setBusy(true);
@@ -194,6 +196,7 @@ export function LoginForm() {
       /* เข้าด้วยชื่อผู้ใช้จริง — คนในทะเบียนใช้รหัสพนักงานของเขา ไม่ใช่ตัวเลือกในดรอปดาวน์ */
       if (r === "staff") setStaffEmployee(person?.id ?? who);
       setRole(r);
+      signIn();
       keepDevice(user);
       markLogin(key, bkkStamp());
       setBusy(true);
