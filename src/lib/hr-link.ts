@@ -120,7 +120,7 @@ function counted(r: LeaveRecord) {
  * ไล่ใบที่อนุมัติแล้วของแต่ละประเภทตามลำดับวัน นับสะสมเทียบกับสิทธิ์ของรอบปีนั้น
  * วันที่เกินสิทธิ์ขึ้นไปถือว่าไม่ได้ค่าจ้าง — ลาคลอดใช้กติกาเดียวกัน เพราะวันที่บริษัทจ่ายตั้งไว้ที่สิทธิ์วันลา
  */
-function unpaidDaysOf(records: LeaveRecord[]) {
+function unpaidDaysOf(records: LeaveRecord[], empId: string) {
   const out = new Set<string>();
   const byType = new Map<string, LeaveRecord[]>();
   for (const r of records.filter(counted)) byType.set(r.type, [...(byType.get(r.type) ?? []), r]);
@@ -133,7 +133,7 @@ function unpaidDaysOf(records: LeaveRecord[]) {
       byPeriod.set(k, [...(byPeriod.get(k) ?? []), r]);
     }
     for (const [period, rows] of byPeriod) {
-      const quota = always ? 0 : entitlementDays(type, period, list);
+      const quota = always ? 0 : entitlementDays(type, period, list, empId);
       let used = 0;
       for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
         for (let d = r.date; d <= r.toDate; d = addDays(d, 1)) {
@@ -252,7 +252,7 @@ export function useHrTime(): Record<string, TimeRec> {
       const days = new Set<string>();
       /* วันที่ไม่ได้ค่าจ้างคิดจากใบของทุกบทบาทรวมกัน สิทธิ์เป็นของ "คน" ไม่ใช่ของบทบาท */
       const mineLeave = roles.flatMap((r) => leave[r]);
-      const unpaid = unpaidDaysOf(mineLeave);
+      const unpaid = unpaidDaysOf(mineLeave, id);
       const lv = roles
         .flatMap((r) => leave[r].filter(counted).flatMap((x) => spread(x, unpaid)))
         .filter((x) => !days.has(x.d) && days.add(x.d));

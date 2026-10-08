@@ -22,8 +22,9 @@ import {
   subscribeRecords,
 } from "@/lib/attendance-store";
 import { baht, bkkNow, daysBetween, greetNow, thaiMonth, todayIso } from "@/lib/format";
-import { currentPeriod, entitlementDays, leaveTypes } from "@/lib/leave-data";
-import { leaveUsage, useLeaveRecords } from "@/lib/leave-store";
+import { currentPeriod, leaveTypes } from "@/lib/leave-data";
+/* สิทธิ์วันลาอ่านจาก leave-store — คิดรวมสิทธิ์เฉพาะคนที่ฝ่ายบุคคลตั้งไว้ด้วย */
+import { entitlementDays, leaveUsage, useLeaveRecords } from "@/lib/leave-store";
 import { useMyLeavePolicy } from "@/lib/leave-policy";
 import { useProfile } from "@/lib/profile-data";
 import { useProfilePhoto } from "@/lib/profile-store";

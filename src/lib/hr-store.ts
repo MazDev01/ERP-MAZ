@@ -310,6 +310,18 @@ export function setEmpPositions(id: string, positions: PosKey[]) {
   });
 }
 
+/*
+ * สิทธิ์วันลาเฉพาะคน (ผู้ใช้สั่ง 8 ต.ค. 2569) — ส่งเฉพาะประเภทที่ต่างจากค่ากลาง
+ * ค่าว่างหรือเท่ากับค่ากลางให้ลบทิ้ง จะได้ไม่ต้องตามแก้ทุกคนเวลาค่ากลางเปลี่ยน
+ */
+export function setEmpLeaveDays(id: string, days: Record<string, number>) {
+  const clean: Record<string, number> = {};
+  for (const [type, n] of Object.entries(days)) {
+    if (Number.isFinite(n) && n >= 0) clean[type] = n;
+  }
+  editEmp(id, (e) => ({ ...e, leaveDays: Object.keys(clean).length ? clean : undefined }));
+}
+
 /** เปลี่ยนบทบาทที่บัญชีนี้เข้าใช้ได้ (คนควบสองตำแหน่งได้สองบทบาท) */
 export function setAccountRoles(id: string, roles: Role[]) {
   editEmp(id, (e) => (e.account ? { ...e, account: { ...e.account, roles } } : e));

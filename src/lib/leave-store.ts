@@ -16,7 +16,9 @@ import { currentRole, type Role } from "./role";
 import { settings } from "./system-settings";
 import { createRoleStore } from "./role-store";
 import { bkkStamp, nextDocNo } from "./format";
-import { HR_INTERN_LEAVE } from "./hr-data";
+import { HR_INTERN_LEAVE, ROLE_EMPLOYEE } from "./hr-data";
+import { hrSnapshot } from "./hr-store";
+import { staffEmployeeId } from "./staff-identity";
 import { USERS } from "./mock-data";
 import { empRequestIds } from "./emp-requests";
 
@@ -142,22 +144,35 @@ export function daysByStatus(
     .reduce((sum, r) => sum + r.days, 0);
 }
 
-function baseDays(type: LeaveType, period: string) {
+/*
+ * สิทธิ์ของประเภทนั้นในรอบปีนั้น — ค่ากลางจากตั้งค่าระบบ
+ * ถ้าฝ่ายบุคคลตั้งไว้เฉพาะคน (Employee.leaveDays) ใช้ของคนนั้นแทน (ผู้ใช้สั่ง 8 ต.ค. 2569)
+ * ไม่ส่ง empId มา = คนที่ล็อกอินอยู่
+ */
+function baseDays(type: LeaveType, period: string, empId = myEmployeeId()) {
+  const own = empId ? hrSnapshot().emp.find((e) => e.id === empId)?.leaveDays?.[type] : undefined;
+  if (typeof own === "number") return own;
   return entitlements().filter((e) => e.type === type && e.period === period).reduce(
     (sum, e) => sum + e.days,
     0,
   );
 }
 
+/** รหัสพนักงานของคนที่ล็อกอินอยู่ — ทีมงานอ่านจากคนที่เลือกไว้ บทบาทอื่นอ่านจากคนที่ผูกกับบทบาท */
+function myEmployeeId() {
+  const role = currentRole();
+  return role === "staff" ? staffEmployeeId() : (ROLE_EMPLOYEE[role] ?? "");
+}
+
 /**
  * ลาพักร้อนที่ยกมาจากปีก่อน — ส่วนที่ปีก่อนยังไม่ได้ใช้ ไม่เกินเพดานที่ผู้ดูแลระบบตั้ง (vacationCarryMax)
  * คิดจากสิทธิ์ปกติของปีก่อนเท่านั้น วันที่ยกมาแล้วไม่ยกต่ออีกทอด · เพดาน 0 = ไม่ยกยอด
  */
-export function carriedDays(records: LeaveRecord[], type: LeaveType, period: string) {
+export function carriedDays(records: LeaveRecord[], type: LeaveType, period: string, empId?: string) {
   const max = settings().rates.vacationCarryMax;
   if (type !== "ลาพักร้อน" || !(max > 0)) return 0;
   const prev = leavePeriodOf(leaveYearOf(periodRange(period)[0]) - 1);
-  const base = baseDays(type, prev);
+  const base = baseDays(type, prev, empId);
   if (!base) return 0;
   /* ยกมาเฉพาะส่วนที่ปีก่อน "ไม่ได้ใช้จริง" — ใบที่ยังรออนุมัติข้ามปียังไม่ได้ตัดสิทธิ์ */
   const used = daysByStatus(records, type, prev, "อนุมัติแล้ว");
@@ -165,8 +180,8 @@ export function carriedDays(records: LeaveRecord[], type: LeaveType, period: str
 }
 
 /** สิทธิ์ของรอบปีนั้น — ส่งใบลาของคนนั้นมาด้วยเพื่อรวมลาพักร้อนที่ยกมาจากปีก่อน */
-export function entitlementDays(type: LeaveType, period: string, records?: LeaveRecord[]) {
-  return baseDays(type, period) + (records ? carriedDays(records, type, period) : 0);
+export function entitlementDays(type: LeaveType, period: string, records?: LeaveRecord[], empId?: string) {
+  return baseDays(type, period, empId) + (records ? carriedDays(records, type, period, empId) : 0);
 }
 
 /**
@@ -199,8 +214,10 @@ export function leaveUsage(
   records: LeaveRecord[],
   type: LeaveType,
   period: string = currentPeriod(),
+  /** ดูสิทธิ์ของคนอื่น (ฝ่ายบุคคล) — ไม่ส่งมาคือของคนที่ล็อกอินอยู่ */
+  empId?: string,
 ): LeaveUsage {
-  const entitled = entitlementDays(type, period, records);
+  const entitled = entitlementDays(type, period, records, empId);
   const approved = daysByStatus(records, type, period, "อนุมัติแล้ว");
   const pending = daysByStatus(records, type, period, "รอการอนุมัติ");
   return {
