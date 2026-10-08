@@ -538,13 +538,8 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
             />
           </div>
 
-          {/* เห็นทุกจอ รวมตอนฝังอยู่ในหน้าลงเวลางาน (ผู้ใช้สั่ง 7 ต.ค. 2569) */}
-          {canRecords && (
-            <Link href="/records" className="btn glass-thin btn-mini mt-6">
-              ดูตารางเวลาทำงานทั้งเดือน
-              <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
-            </Link>
-          )}
+          {/* จอคอมไม่มีปุ่มนี้แล้ว (เจ้าของสั่ง 8 ต.ค. 2569) — เข้าหน้าบันทึกเวลาจากเมนูย่อยทางซ้ายแทน
+             ปุ่มยังอยู่บนมือถือ เพราะที่นั่นไม่มีเมนูข้าง */}
 
         </section>
       </section>
