@@ -779,18 +779,6 @@ export function buildNotices(input: {
     }
     /* ไม่มีเรื่อง "รับเงินแล้วรอออกใบเสร็จ" อีก — ออกใบเสร็จคือการบันทึกรับชำระ (AC-BR-05)
        ใบที่ยังไม่ชำระขึ้นเป็นใบแจ้งหนี้ใกล้/เกินกำหนดด้านบนแล้ว */
-    for (const w of acc.wht) {
-      if (w.no) continue;
-      out.push({
-        id: `wht-${w.id}`,
-        level: "info",
-        group: "ยังไม่ออกหนังสือรับรอง",
-        title: w.name,
-        detail: `จ่ายเมื่อ ${thaiDate(w.date)} · ผู้รับเงินต้องได้เอกสาร`,
-        href: "/acc/wht",
-        date: w.date,
-      });
-    }
   }
 
   // ── ใบลาและโอทีของเราที่ยังรอหัวหน้าอนุมัติ ──

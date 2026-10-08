@@ -224,7 +224,7 @@ function useHomeStats(role: Role): { k: string; v: string; u?: string; href: str
     return [
       mine,
       { k: "ใบเบิกเดือนนี้", v: claim.status, href: "/expense" },
-      { k: "รายการเดินทาง", v: String(fuelDays), u: "รายการ", href: "/expense" },
+      { k: "รายการค่าน้ำมัน", v: String(fuelDays), u: "รายการ", href: "/expense" },
     ];
   }
 

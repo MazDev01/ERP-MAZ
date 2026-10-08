@@ -110,6 +110,32 @@ export function otherTotal(rows: OtherRow[] = []) {
   return round2(rows.reduce((sum, r) => sum + num(r.amount), 0));
 }
 
+/*
+ * ค่าเดินทางเป็นคนละก้อนกับค่าน้ำมันรถ (เจ้าของระบบสั่ง 8 ต.ค. 2569)
+ * ค่าน้ำมัน = ระยะทางที่ขับเอง × อัตราต่อกิโลเมตร
+ * ค่าเดินทาง = ค่าโดยสารที่จ่ายจริง เช่น แท็กซี่ รถทัวร์ ตั๋วเครื่องบิน ต้องมีหลักฐานแนบ
+ * สองก้อนนี้ห้ามรวมเป็นยอดเดียวหรือเรียกชื่อเดียวกัน ไม่งั้นคนอนุมัติแยกไม่ออกว่าจ่ายอะไรไป
+ */
+export const TRAVEL_KIND = "ค่าเดินทาง";
+
+/** ค่าเดินทางที่จ่ายจริงในใบนี้ — ไม่รวมค่าน้ำมันรถ */
+export function travelTotal(rows: OtherRow[] = []) {
+  return round2(rows.filter((r) => r.kind === TRAVEL_KIND).reduce((sum, r) => sum + num(r.amount), 0));
+}
+
+/** ค่าใช้จ่ายอื่นที่ไม่ใช่ทั้งค่าน้ำมันและค่าเดินทาง */
+export function otherOnlyTotal(rows: OtherRow[] = []) {
+  return round2(rows.filter((r) => r.kind !== TRAVEL_KIND).reduce((sum, r) => sum + num(r.amount), 0));
+}
+
+/** สรุปยอดแยกก้อนของใบเบิกหนึ่งใบ — ที่เดียวที่แยกค่าน้ำมัน / ค่าเดินทาง / อื่น ๆ */
+export function claimParts(claim: ExpenseClaim) {
+  const fuel = fuelTotal(claim.fuel);
+  const travel = travelTotal(claim.other);
+  const other = otherOnlyTotal(claim.other);
+  return { fuel, travel, other, total: round2(fuel + travel + other) };
+}
+
 /** กรอกครบไหม — ว่างช่องไหนบอกช่องนั้น */
 export function otherRowProblem(r: OtherRow, month: string) {
   if (!r.kind) return "ยังไม่ได้เลือกประเภท";

@@ -9,6 +9,7 @@ import {
   fuelRate,
   fuelAmount,
   fuelRowMiss,
+  claimParts,
   fuelTotal,
   otherRowProblem,
   otherTotal,
@@ -81,6 +82,8 @@ export function ExpensePage() {
     : check.reasons;
   const fuelSum = fuelTotal(claim.fuel);
   const otherSum = otherTotal(claim.other);
+  /* ค่าเดินทางเป็นคนละก้อนกับค่าน้ำมัน — ท้ายใบต้องบอกทีละก้อน (เจ้าของระบบสั่ง 8 ต.ค. 2569) */
+  const part = claimParts(claim);
   /* กล่องบอกเหตุผล — กดยื่นแล้วต้องเห็นทันที ถึงจะกำลังมองตารางอยู่ก็ตาม
      (เคยขึ้นข้อความไว้เหนือตารางเฉย ๆ คนกดเลยคิดว่ากดแล้วไม่มีอะไรเกิดขึ้น) */
   const alertRef = useRef<HTMLDivElement>(null);
@@ -289,8 +292,9 @@ export function ExpensePage() {
 
         <div className="foot no-print flex-col items-stretch gap-3 text-center sm:flex-row sm:items-center sm:text-left">
           <span>
-            ค่าน้ำมัน {claim.fuel.length} รายการ
-            {claim.other?.length ? ` · ค่าใช้จ่ายอื่น ${claim.other.length} รายการ` : ""}
+            ค่าน้ำมัน {baht(part.fuel)} บาท
+            {part.travel ? ` · ค่าเดินทาง ${baht(part.travel)} บาท` : ""}
+            {part.other ? ` · ค่าใช้จ่ายอื่น ${baht(part.other)} บาท` : ""}
           </span>
           {/* ยอดนี้เป็นค่าน้ำมันอย่างเดียว — ค่าคอมมิชชั่นย้ายไปคิดในเงินเดือนแล้ว
               กระดิ่งแจ้งเตือนอ่านยอดเดียวกันนี้ผ่าน claimTotal() ตัวเลขสองที่จึงตรงกัน */}
@@ -333,8 +337,10 @@ function OtherCard({
   return (
     <section className="panel glass mt-4 px-4 py-4 sm:px-6 sm:py-5">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-[15px] font-bold">ค่าใช้จ่ายอื่น</h2>
-        <p className="text-[12.5px] text-muted-foreground">นอกจากค่าน้ำมัน — เลือกประเภท กรอกวันที่ จำนวนเงิน และแนบหลักฐาน</p>
+        <h2 className="text-[15px] font-bold">ค่าเดินทางและค่าใช้จ่ายอื่น</h2>
+        <p className="text-[12.5px] text-muted-foreground">
+          คนละส่วนกับค่าน้ำมันรถ — ค่าโดยสารที่จ่ายจริง เช่น แท็กซี่ รถทัวร์ ตั๋วเครื่องบิน ให้ลงที่นี่ พร้อมแนบหลักฐาน
+        </p>
       </div>
 
       {rows.length === 0 ? (
@@ -448,7 +454,7 @@ function OtherCard({
           </button>
         )}
         <span className="sum ml-auto text-[13px]">
-          รวมค่าใช้จ่ายอื่น<b>{baht(total)}</b> บาท
+          รวมค่าเดินทางและค่าใช้จ่ายอื่น<b>{baht(total)}</b> บาท
         </span>
       </div>
     </section>

@@ -139,7 +139,7 @@ export function useGmPending(): GmPending[] {
       if (kind === "expense")
         for (const v of claims[from])
           if (v.status === "รออนุมัติ")
-            out.push({ key: `ex-${from}-${v.month}`, kind, name, what: `ค่าน้ำมัน ${thaiMonth(v.month)}`, at: v.submittedAt || `${v.month}-01 00:00` });
+            out.push({ key: `ex-${from}-${v.month}`, kind, name, what: `ใบเบิกค่าใช้จ่าย ${thaiMonth(v.month)}`, at: v.submittedAt || `${v.month}-01 00:00` });
     }
     const nameOf = new Map(hr.emp.map((e) => [e.id, e.name]));
     for (const r of extra) {

@@ -29,7 +29,7 @@
 
 import { useMemo, useState } from "react";
 import { decideEmpRequest, empFuelKm, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
-import { claimTotal, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
+import { claimParts, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
 import { hrPos } from "@/lib/hr-data";
 import { useHr } from "@/lib/hr-store";
 import { approveClaim, rejectClaim, useAllClaims } from "@/lib/expense-store";
@@ -921,7 +921,15 @@ function fromOt(role: Role, v: OtRecord, as: Role): Request {
 
 function fromClaim(role: Role, v: ExpenseClaim, as: Role): Request {
   const km = v.fuel.reduce((sum, r) => sum + (Number(String(r.km).replace(/,/g, "")) || 0), 0);
-  const lines = [`ค่าน้ำมัน ${thaiMonth(v.month)}`, `รวม ${km.toFixed(2)} กม.`, `เป็นเงิน ${baht(claimTotal(v))} บาท`];
+  /* แยกค่าน้ำมันกับค่าเดินทางให้คนอนุมัติเห็นทีละก้อน (เจ้าของระบบสั่ง 8 ต.ค. 2569) */
+  const part = claimParts(v);
+  const lines = [
+    `ใบเบิก ${thaiMonth(v.month)}`,
+    `ค่าน้ำมัน ${km.toFixed(2)} กม. · ${baht(part.fuel)} บาท`,
+    ...(part.travel ? [`ค่าเดินทาง ${baht(part.travel)} บาท`] : []),
+    ...(part.other ? [`ค่าใช้จ่ายอื่น ${baht(part.other)} บาท`] : []),
+    `รวม ${baht(part.total)} บาท`,
+  ];
   return {
     kind: "expense",
     ...who(role),
@@ -930,7 +938,7 @@ function fromClaim(role: Role, v: ExpenseClaim, as: Role): Request {
     no: v.no ?? "",
     status: statusOf(v.status),
     at: stampOf(v.submittedAt, `${v.month}-01`),
-    topic: "ค่าน้ำมัน",
+    topic: part.travel || part.other ? "ใบเบิกค่าใช้จ่าย" : "ค่าน้ำมัน",
     line: `${v.no ?? ""} ${lines.join(" ")}`,
     lines,
     why: v.comment,

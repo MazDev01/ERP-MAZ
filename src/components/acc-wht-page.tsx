@@ -40,7 +40,6 @@ export function AccWhtPage() {
 
   const k53 = inMonth.filter((r) => r.kind === "53");
   const k3 = inMonth.filter((r) => r.kind === "3");
-  const noCert = inMonth.filter((r) => !r.no);
   const sum = (list: WhtRow[]) => list.reduce((a, r) => a + whtAmount(r), 0);
   const base = (list: WhtRow[]) => list.reduce((a, r) => a + r.base, 0);
 
@@ -76,7 +75,7 @@ export function AccWhtPage() {
           </b>
         </p>
         {/* มือถือ: สรุปสี่ช่องวางสองคอลัมน์ ไม่ต้องปัดผ่านกล่องใหญ่สี่กล่อง */}
-        <div className="mt-3.5 grid grid-cols-2 gap-3 max-sm:gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-3.5 grid grid-cols-2 gap-3 max-sm:gap-2.5 sm:grid-cols-3">
           <Sum
             title="ภ.ง.ด.53 · นิติบุคคล"
             value={baht(sum(k53))}
@@ -92,12 +91,7 @@ export function AccWhtPage() {
             value={baht(sum(inMonth))}
             meta={`${inMonth.length} ราย`}
             tone="ok"
-          />
-          <Sum
-            title="ยังไม่ได้ออกหนังสือรับรอง"
-            value={`${noCert.length} ราย`}
-            meta={noCert.length ? "ผู้รับเงินต้องได้เอกสารทุกราย" : "ออกครบแล้ว"}
-            tone={noCert.length ? "bad" : undefined}
+            className="max-sm:col-span-2"
           />
         </div>
       </section>
@@ -126,13 +120,12 @@ export function AccWhtPage() {
                 <th style={{ width: 200 }}>ประเภทเงินได้</th>
                 <th className="r" style={{ width: 130 }}>ยอดก่อนภาษี</th>
                 <th className="r" style={{ width: 120 }}>ภาษีที่หัก</th>
-                <th style={{ width: 160 }}>หนังสือรับรอง</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="py-10 text-center text-muted-foreground">
                     ไม่มีรายการในเดือนนี้
                   </td>
                 </tr>
@@ -156,13 +149,6 @@ export function AccWhtPage() {
                     </td>
                     <td data-label="ยอดก่อนภาษี" className="r num">{baht(r.base)}</td>
                     <td data-label="ภาษีที่หัก" className="r num font-semibold">{baht(whtAmount(r))}</td>
-                    <td data-label="หนังสือรับรอง" className="muted">
-                      {r.no ? (
-                        <span className="num">{r.no}</span>
-                      ) : (
-                        <span className="font-semibold text-destructive">ยังไม่ได้ออก</span>
-                      )}
-                    </td>
                   </tr>
                 ))
               )}
@@ -181,19 +167,6 @@ export function AccWhtPage() {
               amountNote="ภาษีที่หัก (บาท)"
               onOpen={() => setEditing(r)}
               openLabel={`แก้ไขรายการของ ${r.name}`}
-              badge={
-                r.no ? (
-                  <span className="tag t-ok">
-                    <i />
-                    <span className="num">{r.no}</span>
-                  </span>
-                ) : (
-                  <span className="tag t-late">
-                    <i />
-                    หนังสือรับรองยังไม่ได้ออก
-                  </span>
-                )
-              }
               stats={[
                 { label: "วันที่จ่าย", value: thaiDate(r.date) },
                 { label: "ยอดก่อนภาษี", value: baht(r.base) },
@@ -231,11 +204,13 @@ function Sum({
   value,
   meta,
   tone,
+  className = "",
 }: {
   title: string;
   value: string;
   meta: string;
   tone?: "ok" | "bad";
+  className?: string;
 }) {
   const skin =
     tone === "ok"
@@ -246,7 +221,7 @@ function Sum({
   const num =
     tone === "ok" ? "text-[var(--success)]" : tone === "bad" ? "text-destructive" : "text-foreground";
   return (
-    <div className={`min-w-0 rounded-[13px] border px-4 py-3.5 max-sm:px-3 max-sm:py-3 ${skin}`}>
+    <div className={`min-w-0 rounded-[13px] border px-4 py-3.5 max-sm:px-3 max-sm:py-3 ${skin} ${className}`}>
       <span className="block text-[12.5px] font-semibold text-muted-foreground max-sm:text-[11.5px] max-sm:leading-snug">{title}</span>
       <b className={`num mt-1 block text-[19px] font-bold max-sm:text-[16px] ${num}`}>{value}</b>
       <span className="mt-1 block text-[11.5px] leading-[1.5] text-muted-foreground">{meta}</span>
@@ -274,7 +249,6 @@ function WhtDialog({
     setType(v);
     setRate(String(whtType(v).rate));
   });
-  const [no, setNo] = useState(row?.no ?? "");
   const [tried, setTried] = useState(false);
 
   /* ช่องกรอกมีจุลภาคคั่นหลักพัน — ตัดออกก่อนแปลงเป็นตัวเลข ไม่งั้นได้ NaN แล้วภาษีเป็นศูนย์ */
@@ -315,7 +289,6 @@ function WhtDialog({
                 type,
                 base: Math.round(baseNum * 100) / 100,
                 rate: rateNum,
-                no: no.trim(),
               });
               onSaved(date);
             }}
@@ -423,19 +396,6 @@ function WhtDialog({
             value={rate}
             inputMode="decimal"
             onChange={(e) => setRate(e.target.value.replace(/[^\d.]/g, ""))}
-            className="field-control num h-[38px] w-full rounded-[10px] px-3 text-[13.5px]"
-          />
-        </Field>
-      </div>
-
-      <div className="mt-4">
-        <Field
-          label="เลขที่หนังสือรับรองที่ออกให้ผู้รับเงิน"
-        >
-          <input
-            value={no}
-            placeholder="ออกให้ผู้รับเงินเก็บไว้เป็นหลักฐาน"
-            onChange={(e) => setNo(e.target.value)}
             className="field-control num h-[38px] w-full rounded-[10px] px-3 text-[13.5px]"
           />
         </Field>
