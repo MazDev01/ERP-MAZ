@@ -10,11 +10,12 @@ import {
   type WhtRow,
   type WhtType,
 } from "@/lib/acc-data";
-import { newWhtId, saveWht, useAcc } from "@/lib/acc-store";
+import { newWhtId, removeWht, saveWht, useAcc } from "@/lib/acc-store";
 import { TH_MONTHS_FULL, baht, bkkNow, parseIsoDate, thaiDate, todayIso, commaInput } from "@/lib/format";
 import { MonthNav } from "./acc-ui";
-import { PlusIcon } from "./icons";
+import { PlusIcon, TrashIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
+import { ConfirmDialog } from "./confirm-dialog";
 import { Field, Select } from "./ui";
 import { PhoneCard, PhoneList } from "./acchr-phone";
 
@@ -193,6 +194,7 @@ export function AccWhtPage() {
             setView(new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, 1));
             setEditing(null);
           }}
+          onRemoved={() => setEditing(null)}
         />
       )}
     </div>
@@ -233,11 +235,15 @@ function WhtDialog({
   row,
   onClose,
   onSaved,
+  onRemoved,
 }: {
   row: WhtRow | null;
   onClose: () => void;
   onSaved: (iso: string) => void;
+  onRemoved: () => void;
 }) {
+  /* ลบรายการที่บันทึกผิด — ถามยืนยันก่อนเสมอ เพราะยอดนี้ไปอยู่ในแบบยื่นของเดือนนั้น */
+  const [asking, setAsking] = useState(false);
   const [name, setName] = useState(row?.name ?? "");
   const [tax, setTax] = useState(row?.tax ?? "");
   const [kind, setKind] = useState<WhtKind>(row?.kind ?? "53");
@@ -271,6 +277,16 @@ function WhtDialog({
       onClose={onClose}
       footer={
         <>
+          {row && (
+            <button
+              type="button"
+              className="btn glass-thin mr-auto text-destructive"
+              onClick={() => setAsking(true)}
+            >
+              <TrashIcon className="size-4" strokeWidth={1.9} />
+              ลบรายการ
+            </button>
+          )}
           <button type="button" className="btn glass-thin" onClick={onClose}>
             ยกเลิก
           </button>
@@ -408,6 +424,21 @@ function WhtDialog({
       <p className="mt-2 text-[12.5px] text-muted-foreground">
         จ่ายจริงให้ผู้รับเงิน {baht(Math.round((baseNum - wht) * 100) / 100)} บาท
       </p>
+
+      <ConfirmDialog
+        open={asking}
+        title="ลบรายการหักภาษี ณ ที่จ่าย"
+        description={row ? `${row.name} · ${thaiDate(row.date)} · ภาษีที่หัก ${baht(whtAmount(row))} บาท` : ""}
+        detail="ยอดนี้จะหายจากแบบยื่นของเดือนนั้น ลบแล้วเรียกคืนไม่ได้"
+        confirmLabel="ลบรายการ"
+        tone="destructive"
+        onConfirm={() => {
+          if (row) removeWht(row.id);
+          setAsking(false);
+          onRemoved();
+        }}
+        onCancel={() => setAsking(false)}
+      />
     </Sheet>
   );
 }
