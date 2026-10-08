@@ -448,122 +448,154 @@ function TypeDialog({
 function PersonQuota({ central }: { central: LeaveQuota[] }) {
   const hr = useHr();
   const types = leaveTypes();
-  const [editing, setEditing] = useState<string | null>(null);
-  const [clearing, setClearing] = useState<Employee | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Employee | null>(null);
+  const [clearing, setClearing] = useState<{ emp: Employee; type: string } | null>(null);
+  /* ตัวเลขที่กำลังพิมพ์อยู่ในแถว — เก็บชั่วคราวจนกดออกจากช่อง ค่อยบันทึกจริง (คีย์ = รหัสคน|ประเภท) */
+  const [typing, setTyping] = useState<Record<string, string>>({});
 
   const people = hr.emp.filter((e) => e.status === "active");
-  const custom = people.filter((e) => e.leaveDays && Object.keys(e.leaveDays).length > 0);
   const centralOf = (t: string) => central.find((q) => q.type === t)?.days ?? 0;
 
-  function clear(emp: Employee) {
-    setEmpLeaveDays(emp.id, {});
-    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${emp.name}: กลับไปใช้ค่ากลาง`);
+  /* หนึ่งแถว = หนึ่งประเภทของหนึ่งคน เรียงตามคน แล้วตามลำดับประเภทในตารางค่ากลาง */
+  const rows = people.flatMap((e) =>
+    types.filter((t) => e.leaveDays?.[t] != null).map((t) => ({ emp: e, type: t, days: e.leaveDays![t] })),
+  );
+
+  function setDays(emp: Employee, type: string, days: number) {
+    const next = { ...(emp.leaveDays ?? {}), [type]: days };
+    setEmpLeaveDays(emp.id, next);
+    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${emp.name}: ${type} ${days} วัน (ค่ากลาง ${centralOf(type)})`);
+  }
+
+  function drop(emp: Employee, type: string) {
+    const next = { ...(emp.leaveDays ?? {}) };
+    delete next[type];
+    setEmpLeaveDays(emp.id, next);
+    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${emp.name}: ${type} กลับไปใช้ค่ากลาง ${centralOf(type)} วัน`);
     setClearing(null);
   }
 
   return (
-    <Card
-      title="สิทธิ์เฉพาะบุคคล"
-      note="ค่ากลางด้านบนใช้กับทุกคน · ใครที่ตกลงกันไว้ต่างออกไป ตั้งทับเฉพาะคนนั้นได้ที่นี่ ประเภทที่ไม่ได้กรอกยังใช้ค่ากลาง"
-      aside={
-        <button type="button" className="btn solid btn-solid" onClick={() => setEditing("")}>
+    <section className="glass overflow-hidden rounded-[18px]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5">
+        <div>
+          <h2 className="text-[14.5px] font-bold">สิทธิ์เฉพาะบุคคล</h2>
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+            ค่ากลางด้านบนใช้กับทุกคน · ใครที่ตกลงกันไว้ต่างออกไป ตั้งทับเฉพาะคนนั้นได้ที่นี่
+          </p>
+        </div>
+        <button type="button" className="btn solid btn-solid" onClick={() => setAdding(true)}>
           <PlusIcon className="size-4" strokeWidth={2.4} />
           ตั้งสิทธิ์เฉพาะคน
         </button>
-      }
-    >
-      {custom.length === 0 ? (
-        <p className="text-[12.5px] text-muted-foreground">
-          ตอนนี้ทุกคนใช้ค่ากลาง — ยังไม่มีใครตั้งสิทธิ์เฉพาะตัว
-        </p>
-      ) : (
-        /* ตารางคอลัมน์ตรงกันทุกแถวแบบเดียวกับตารางค่ากลางด้านบน (ผู้ใช้สั่ง 8 ต.ค. 2569)
-           ประเภทการลาเพิ่มได้เรื่อย ๆ จำนวนคอลัมน์จึงคิดจากรายการจริง ไม่ฟิกซ์ไว้ */
-        <div className="overflow-x-auto">
-          <div className="min-w-[560px]" style={{ "--cols": `26px minmax(140px,1fr) repeat(${types.length}, 96px) 84px` } as React.CSSProperties}>
-            <div className="grid grid-cols-[var(--cols)] items-end gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground">
-              <span className="text-center">#</span>
-              <span>ชื่อ</span>
-              {types.map((t) => (
-                <span key={t} className="text-right leading-tight">
-                  {t}
-                  <small className="block font-medium">กลาง {centralOf(t)}</small>
-                </span>
-              ))}
-              <span />
-            </div>
+      </div>
 
-            {custom.map((e, i) => (
+      <div className="px-4 pt-3 pb-4 sm:px-5">
+        {/* หัวตารางและความกว้างคอลัมน์ชุดเดียวกับตารางสิทธิ์วันลาด้านบน */}
+        <div className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_84px]">
+          <span className="text-center max-sm:hidden">#</span>
+          <span>พนักงาน</span>
+          <span className="text-right sm:text-left">สิทธิ์ต่อปี</span>
+          <span className="max-sm:hidden">ค่ากลาง</span>
+          <span />
+        </div>
+
+        {rows.length === 0 ? (
+          <p className="py-6 text-center text-[12.5px] text-muted-foreground">
+            ตอนนี้ทุกคนใช้ค่ากลาง — ยังไม่มีใครตั้งสิทธิ์เฉพาะตัว
+          </p>
+        ) : (
+          rows.map((r, i) => {
+            const key = `${r.emp.id}|${r.type}`;
+            const mid = centralOf(r.type);
+            return (
               <div
-                key={e.id}
-                className="grid grid-cols-[var(--cols)] items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40"
+                key={key}
+                className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40 sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_84px]"
               >
-                <span className="num text-center text-[12px] text-muted-foreground">{i + 1}</span>
+                <span className="num text-center text-[12px] text-muted-foreground max-sm:hidden">{i + 1}</span>
                 <span className="min-w-0">
-                  <b className="block truncate text-[13.5px] font-semibold">{e.name}</b>
+                  <b className="block truncate text-[13.5px] font-semibold">{r.emp.name}</b>
                   <small className="block truncate text-[11.5px] text-muted-foreground">
-                    {hrPos(e.pos).label} · {e.id}
+                    {r.type} · {hrPos(r.emp.pos).label} · {r.emp.id}
                   </small>
                 </span>
-                {types.map((t) => {
-                  const own = e.leaveDays?.[t];
-                  return (
-                    <span key={t} className="text-right text-[13px]">
-                      {own == null ? (
-                        <em className="text-[12px] text-muted-foreground not-italic">ค่ากลาง</em>
-                      ) : (
-                        <>
-                          <b className="num font-semibold text-primary">{own}</b>
-                          <span className="text-[11.5px] text-muted-foreground"> วัน</span>
-                        </>
-                      )}
-                    </span>
-                  );
-                })}
+                <span className="flex items-center justify-end gap-1.5 sm:justify-start">
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    step={0.5}
+                    value={typing[key] ?? String(r.days)}
+                    aria-label={`สิทธิ์${r.type}ของ ${r.emp.name} (วันต่อปี)`}
+                    onChange={(e) => setTyping({ ...typing, [key]: e.target.value })}
+                    onBlur={() => {
+                      const v = (typing[key] ?? "").trim();
+                      setTyping((old) => {
+                        const next = { ...old };
+                        delete next[key];
+                        return next;
+                      });
+                      if (v === "") return;
+                      const n = Number(v);
+                      if (Number.isFinite(n) && n >= 0 && n <= 365 && n !== r.days) setDays(r.emp, r.type, n);
+                    }}
+                    className="field-control num h-9 w-[78px] text-right text-[13.5px]"
+                  />
+                  <span className="text-[12px] whitespace-nowrap text-muted-foreground">วัน/ปี</span>
+                </span>
+                <span className="text-[12px] text-muted-foreground max-sm:hidden">
+                  {mid} วัน{r.days === mid ? " · เท่ากับค่ากลาง" : ""}
+                </span>
                 <span className="flex justify-end gap-1.5">
                   <button
                     type="button"
-                    aria-label={`แก้ไขสิทธิ์วันลาของ ${e.name}`}
-                    onClick={() => setEditing(e.id)}
+                    aria-label={`เพิ่มประเภทให้ ${r.emp.name}`}
+                    title="ตั้งประเภทอื่นให้คนนี้"
+                    onClick={() => setEditing(r.emp)}
                     className="btn glass-thin btn-mini"
                   >
                     <PencilIcon className="size-4" strokeWidth={1.9} />
                   </button>
                   <button
                     type="button"
-                    aria-label={`คืนค่ากลางให้ ${e.name}`}
-                    onClick={() => setClearing(e)}
+                    aria-label={`คืนค่ากลาง ${r.type} ให้ ${r.emp.name}`}
+                    onClick={() => setClearing({ emp: r.emp, type: r.type })}
                     className="btn glass-thin btn-mini"
                   >
                     <TrashIcon className="size-4" strokeWidth={1.9} />
                   </button>
                 </span>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            );
+          })
+        )}
+      </div>
 
-      {editing !== null && (
+      {(adding || editing) && (
         <PersonDialog
           people={people}
-          emp={people.find((e) => e.id === editing)}
+          emp={editing ?? undefined}
           types={types}
           centralOf={centralOf}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setAdding(false);
+            setEditing(null);
+          }}
         />
       )}
 
       <ConfirmDialog
         open={Boolean(clearing)}
         title="คืนไปใช้ค่ากลาง"
-        description={clearing ? `${clearing.name} จะใช้สิทธิ์วันลาเท่ากับคนอื่นทั้งหมด` : ""}
+        description={clearing ? `${clearing.emp.name} จะใช้สิทธิ์${clearing.type}เท่ากับคนอื่น (${centralOf(clearing.type)} วัน)` : ""}
         detail="วันลาที่ใช้ไปแล้วยังอยู่ครบ เปลี่ยนเฉพาะจำนวนวันที่มีสิทธิ์"
         confirmLabel="คืนค่ากลาง"
-        onConfirm={() => clearing && clear(clearing)}
+        onConfirm={() => clearing && drop(clearing.emp, clearing.type)}
         onCancel={() => setClearing(null)}
       />
-    </Card>
+    </section>
   );
 }
 
