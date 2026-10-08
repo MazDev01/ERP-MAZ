@@ -101,8 +101,8 @@ export function AreaMap({
     }
   }
   const rPx = ready ? radius / metersPerPixel(lat, z) : 0;
-  /* ขนาดทั้งวงที่ผู้ใช้ตั้ง */
-  const across = Math.round(radius * 2);
+  /* ป้ายบนวงบอก "รัศมี" ให้ตรงกับช่องที่กรอก (ผู้ใช้ทักท้วง 8 ต.ค. 2569 — เดิมบอกขนาดทั้งวงเลยอ่านแล้วงง) */
+  const label = Math.round(radius);
 
   function pick(e: React.MouseEvent<HTMLDivElement>) {
     if (!onPick || !box.current) return;
@@ -119,7 +119,7 @@ export function AreaMap({
       onClick={pick}
       className={`relative overflow-hidden bg-[#e8e4dc] ${onPick ? "cursor-crosshair" : ""} ${className}`}
       role="img"
-      aria-label={`แผนที่ที่ทำงาน พื้นที่ทั้งวง ${radius * 2} เมตร`}
+      aria-label={`แผนที่ที่ทำงาน รัศมีที่ลงเวลาได้ ${Math.round(radius)} เมตร`}
     >
       {tiles.map((t) => (
         // eslint-disable-next-line @next/next/no-img-element -- ภาพ tile ภายนอกขนาดคงที่ ไม่ต้องผ่าน next/image
@@ -143,13 +143,13 @@ export function AreaMap({
             stroke="#db0000"
             strokeWidth={2}
           />
-          {/* เส้นผ่านศูนย์กลางจากขอบถึงขอบ พร้อมป้ายขนาดทั้งวง */}
-          <line x1={w / 2 - rPx} y1={h / 2} x2={w / 2 + rPx} y2={h / 2} stroke="#db0000" strokeWidth={1.5} strokeDasharray="4 3" />
+          {/* เส้นรัศมีจากหมุดถึงขอบวง พร้อมป้ายบอกระยะ — ตรงกับช่อง "รัศมีที่ลงเวลาได้" */}
+          <line x1={w / 2} y1={h / 2} x2={w / 2 + rPx} y2={h / 2} stroke="#db0000" strokeWidth={1.5} strokeDasharray="4 3" />
           {/* ป้ายไว้ใต้หมุด วงเล็กจนป้ายล้นวง ย้ายไปไว้ใต้ขอบวง */}
           <g transform={`translate(${w / 2}, ${rPx < 40 ? h / 2 + rPx + 16 : h / 2 + 20})`}>
-            <rect x={-34} y={-10} width={68} height={18} rx={9} fill="#fff" stroke="#db0000" strokeWidth={1} />
+            <rect x={-46} y={-10} width={92} height={18} rx={9} fill="#fff" stroke="#db0000" strokeWidth={1} />
             <text textAnchor="middle" y={3.5} fontSize={11} fontWeight={600} fill="#db0000">
-              {across >= 1000 ? `${(across / 1000).toFixed(across % 1000 ? 1 : 0)} กม.` : `${across} ม.`}
+              {label >= 1000 ? `รัศมี ${(label / 1000).toFixed(label % 1000 ? 1 : 0)} กม.` : `รัศมี ${label} ม.`}
             </text>
           </g>
           {/* หมุดที่ทำงาน */}

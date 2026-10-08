@@ -25,7 +25,8 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob:",
+              /* แผนที่จุดลงเวลาใช้ภาพ tile ของ OpenStreetMap — ไม่อนุญาตไว้ แผนที่จะขึ้นเป็นรูปแตก */
+              "img-src 'self' data: blob: https://tile.openstreetmap.org",
               "font-src 'self' data:",
               "connect-src 'self'",
               "worker-src 'self' blob:",
