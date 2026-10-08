@@ -448,143 +448,147 @@ function TypeDialog({
 function PersonQuota({ central }: { central: LeaveQuota[] }) {
   const hr = useHr();
   const types = leaveTypes();
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<Employee | null>(null);
+  const people = hr.emp.filter((e) => e.status === "active");
+
+  const [who, setWho] = useState("");
   const [clearing, setClearing] = useState<{ emp: Employee; type: string } | null>(null);
-  /* ตัวเลขที่กำลังพิมพ์อยู่ในแถว — เก็บชั่วคราวจนกดออกจากช่อง ค่อยบันทึกจริง (คีย์ = รหัสคน|ประเภท) */
+  /* ตัวเลขที่กำลังพิมพ์อยู่ — เก็บชั่วคราวจนออกจากช่องค่อยบันทึกจริง (คีย์ = รหัสคน|ประเภท) */
   const [typing, setTyping] = useState<Record<string, string>>({});
 
-  const people = hr.emp.filter((e) => e.status === "active");
+  const emp = people.find((e) => e.id === who);
   const centralOf = (t: string) => central.find((q) => q.type === t)?.days ?? 0;
+  const mineCount = (e: Employee) => Object.keys(e.leaveDays ?? {}).length;
 
-  /* หนึ่งแถว = หนึ่งประเภทของหนึ่งคน เรียงตามคน แล้วตามลำดับประเภทในตารางค่ากลาง */
-  const rows = people.flatMap((e) =>
-    types.filter((t) => e.leaveDays?.[t] != null).map((t) => ({ emp: e, type: t, days: e.leaveDays![t] })),
-  );
-
-  function setDays(emp: Employee, type: string, days: number) {
-    const next = { ...(emp.leaveDays ?? {}), [type]: days };
-    setEmpLeaveDays(emp.id, next);
-    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${emp.name}: ${type} ${days} วัน (ค่ากลาง ${centralOf(type)})`);
-  }
-
-  function drop(emp: Employee, type: string) {
-    const next = { ...(emp.leaveDays ?? {}) };
-    delete next[type];
-    setEmpLeaveDays(emp.id, next);
-    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${emp.name}: ${type} กลับไปใช้ค่ากลาง ${centralOf(type)} วัน`);
-    setClearing(null);
+  function write(target: Employee, type: string, days: number | null) {
+    const next = { ...(target.leaveDays ?? {}) };
+    if (days === null) delete next[type];
+    else next[type] = days;
+    setEmpLeaveDays(target.id, next);
+    logChange(
+      "การลา",
+      days === null
+        ? `สิทธิ์วันลาเฉพาะคน ${target.name}: ${type} กลับไปใช้ค่ากลาง ${centralOf(type)} วัน`
+        : `สิทธิ์วันลาเฉพาะคน ${target.name}: ${type} ${days} วัน (ค่ากลาง ${centralOf(type)})`,
+    );
   }
 
   return (
     <section className="glass overflow-hidden rounded-[18px]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-[14.5px] font-bold">สิทธิ์เฉพาะบุคคล</h2>
           <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-            ค่ากลางด้านบนใช้กับทุกคน · ใครที่ตกลงกันไว้ต่างออกไป ตั้งทับเฉพาะคนนั้นได้ที่นี่
+            เลือกพนักงานทีละคน แล้วกรอกเฉพาะประเภทที่ได้ไม่เท่าคนอื่น · เว้นว่าง = ใช้ค่ากลางด้านบน
           </p>
         </div>
-        <button type="button" className="btn solid btn-solid" onClick={() => setAdding(true)}>
-          <PlusIcon className="size-4" strokeWidth={2.4} />
-          ตั้งสิทธิ์เฉพาะคน
-        </button>
+        <label className="flex items-center gap-2">
+          <span className="text-[12.5px] font-semibold text-muted-foreground">พนักงาน</span>
+          <Select
+            value={who}
+            onChange={(e) => setWho(e.target.value)}
+            aria-label="เลือกพนักงาน"
+            className="w-[260px] max-sm:w-full"
+          >
+            <option value="">เลือกพนักงาน…</option>
+            {people.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name} · {hrPos(e.pos).label}
+                {mineCount(e) ? ` (ตั้งเอง ${mineCount(e)})` : ""}
+              </option>
+            ))}
+          </Select>
+        </label>
       </div>
 
       <div className="px-4 pt-3 pb-4 sm:px-5">
-        {/* หัวตารางและความกว้างคอลัมน์ชุดเดียวกับตารางสิทธิ์วันลาด้านบน */}
-        <div className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_84px]">
-          <span className="text-center max-sm:hidden">#</span>
-          <span>พนักงาน</span>
-          <span className="text-right sm:text-left">สิทธิ์ต่อปี</span>
-          <span className="max-sm:hidden">ค่ากลาง</span>
-          <span />
-        </div>
-
-        {rows.length === 0 ? (
+        {!emp ? (
           <p className="py-6 text-center text-[12.5px] text-muted-foreground">
-            ตอนนี้ทุกคนใช้ค่ากลาง — ยังไม่มีใครตั้งสิทธิ์เฉพาะตัว
+            เลือกพนักงานที่ต้องการตั้งสิทธิ์เฉพาะตัวจากช่องด้านบน
           </p>
         ) : (
-          rows.map((r, i) => {
-            const key = `${r.emp.id}|${r.type}`;
-            const mid = centralOf(r.type);
-            return (
-              <div
-                key={key}
-                className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40 sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_84px]"
-              >
-                <span className="num text-center text-[12px] text-muted-foreground max-sm:hidden">{i + 1}</span>
-                <span className="min-w-0">
-                  <b className="block truncate text-[13.5px] font-semibold">{r.emp.name}</b>
-                  <small className="block truncate text-[11.5px] text-muted-foreground">
-                    {r.type} · {hrPos(r.emp.pos).label} · {r.emp.id}
-                  </small>
-                </span>
-                <span className="flex items-center justify-end gap-1.5 sm:justify-start">
-                  <input
-                    type="number"
-                    min={0}
-                    max={365}
-                    step={0.5}
-                    value={typing[key] ?? String(r.days)}
-                    aria-label={`สิทธิ์${r.type}ของ ${r.emp.name} (วันต่อปี)`}
-                    onChange={(e) => setTyping({ ...typing, [key]: e.target.value })}
-                    onBlur={() => {
-                      const v = (typing[key] ?? "").trim();
-                      setTyping((old) => {
-                        const next = { ...old };
-                        delete next[key];
-                        return next;
-                      });
-                      if (v === "") return;
-                      const n = Number(v);
-                      if (Number.isFinite(n) && n >= 0 && n <= 365 && n !== r.days) setDays(r.emp, r.type, n);
-                    }}
-                    className="field-control num h-9 w-[78px] text-right text-[13.5px]"
-                  />
-                  <span className="text-[12px] whitespace-nowrap text-muted-foreground">วัน/ปี</span>
-                </span>
-                <span className="text-[12px] text-muted-foreground max-sm:hidden">
-                  {mid} วัน{r.days === mid ? " · เท่ากับค่ากลาง" : ""}
-                </span>
-                <span className="flex justify-end gap-1.5">
-                  <button
-                    type="button"
-                    aria-label={`เพิ่มประเภทให้ ${r.emp.name}`}
-                    title="ตั้งประเภทอื่นให้คนนี้"
-                    onClick={() => setEditing(r.emp)}
-                    className="btn glass-thin btn-mini"
-                  >
-                    <PencilIcon className="size-4" strokeWidth={1.9} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`คืนค่ากลาง ${r.type} ให้ ${r.emp.name}`}
-                    onClick={() => setClearing({ emp: r.emp, type: r.type })}
-                    className="btn glass-thin btn-mini"
-                  >
-                    <TrashIcon className="size-4" strokeWidth={1.9} />
-                  </button>
-                </span>
-              </div>
-            );
-          })
+          <>
+            {/* หัวตารางและความกว้างคอลัมน์ชุดเดียวกับตารางสิทธิ์วันลาด้านบน */}
+            <div className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_84px]">
+              <span className="text-center max-sm:hidden">#</span>
+              <span>ชื่อ</span>
+              <span className="text-right sm:text-left">สิทธิ์ต่อปี</span>
+              <span className="max-sm:hidden">ค่ากลาง</span>
+              <span />
+            </div>
+
+            {types.map((t, i) => {
+              const key = `${emp.id}|${t}`;
+              const own = emp.leaveDays?.[t];
+              const mid = centralOf(t);
+              return (
+                <div
+                  key={t}
+                  className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40 sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_84px]"
+                >
+                  <span className="num text-center text-[12px] text-muted-foreground max-sm:hidden">{i + 1}</span>
+                  <span className="min-w-0">
+                    <b className={`block text-[13.5px] ${own == null ? "font-medium text-muted-foreground" : "font-semibold"}`}>
+                      {t}
+                      {own != null && (
+                        <em className="ml-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary not-italic">
+                          ตั้งเอง
+                        </em>
+                      )}
+                    </b>
+                    <small className="block text-[11.5px] text-muted-foreground">{leaveNote(t)}</small>
+                  </span>
+                  <span className="flex items-center justify-end gap-1.5 sm:justify-start">
+                    <input
+                      type="number"
+                      min={0}
+                      max={365}
+                      step={0.5}
+                      value={typing[key] ?? (own != null ? String(own) : "")}
+                      placeholder={String(mid)}
+                      aria-label={`สิทธิ์${t}ของ ${emp.name} (วันต่อปี)`}
+                      onChange={(e) => setTyping({ ...typing, [key]: e.target.value })}
+                      onBlur={() => {
+                        const v = (typing[key] ?? "").trim();
+                        setTyping((old) => {
+                          const next = { ...old };
+                          delete next[key];
+                          return next;
+                        });
+                        if (typing[key] === undefined) return;
+                        if (v === "") {
+                          if (own != null) write(emp, t, null);
+                          return;
+                        }
+                        const n = Number(v);
+                        if (Number.isFinite(n) && n >= 0 && n <= 365 && n !== own) write(emp, t, n);
+                      }}
+                      className="field-control num h-9 w-[78px] text-right text-[13.5px]"
+                    />
+                    <span className="text-[12px] whitespace-nowrap text-muted-foreground">วัน/ปี</span>
+                  </span>
+                  <span className="text-[12px] text-muted-foreground max-sm:hidden">{mid} วัน</span>
+                  <span className="flex justify-end">
+                    <button
+                      type="button"
+                      aria-label={`คืนค่ากลาง ${t} ให้ ${emp.name}`}
+                      title={own == null ? "ใช้ค่ากลางอยู่แล้ว" : "คืนไปใช้ค่ากลาง"}
+                      disabled={own == null}
+                      onClick={() => setClearing({ emp, type: t })}
+                      className="btn glass-thin btn-mini disabled:opacity-40"
+                    >
+                      <TrashIcon className="size-4" strokeWidth={1.9} />
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+
+            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+              ช่องที่เว้นว่างใช้ค่ากลางของทั้งบริษัท · แก้ตัวเลขแล้วบันทึกทันทีที่ออกจากช่อง
+            </p>
+          </>
         )}
       </div>
-
-      {(adding || editing) && (
-        <PersonDialog
-          people={people}
-          emp={editing ?? undefined}
-          types={types}
-          centralOf={centralOf}
-          onClose={() => {
-            setAdding(false);
-            setEditing(null);
-          }}
-        />
-      )}
 
       <ConfirmDialog
         open={Boolean(clearing)}
@@ -592,119 +596,13 @@ function PersonQuota({ central }: { central: LeaveQuota[] }) {
         description={clearing ? `${clearing.emp.name} จะใช้สิทธิ์${clearing.type}เท่ากับคนอื่น (${centralOf(clearing.type)} วัน)` : ""}
         detail="วันลาที่ใช้ไปแล้วยังอยู่ครบ เปลี่ยนเฉพาะจำนวนวันที่มีสิทธิ์"
         confirmLabel="คืนค่ากลาง"
-        onConfirm={() => clearing && drop(clearing.emp, clearing.type)}
+        onConfirm={() => {
+          if (!clearing) return;
+          write(clearing.emp, clearing.type, null);
+          setClearing(null);
+        }}
         onCancel={() => setClearing(null)}
       />
     </section>
-  );
-}
-
-/** กล่องตั้งสิทธิ์ของคนเดียว — เลือกคนแล้วกรอกเฉพาะประเภทที่ต่างจากค่ากลาง */
-function PersonDialog({
-  people,
-  emp,
-  types,
-  centralOf,
-  onClose,
-}: {
-  people: Employee[];
-  emp?: Employee;
-  types: string[];
-  centralOf: (t: string) => number;
-  onClose: () => void;
-}) {
-  const [who, setWho] = useState(emp?.id ?? "");
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(types.map((t) => [t, emp?.leaveDays?.[t] != null ? String(emp.leaveDays[t]) : ""])),
-  );
-  const picked = people.find((e) => e.id === who);
-  const bad = types.some((t) => {
-    const v = (draft[t] ?? "").trim();
-    if (v === "") return false;
-    const n = Number(v);
-    return !Number.isFinite(n) || n < 0 || n > 365;
-  });
-
-  /* เลือกคนใหม่ในกล่องเดียวกัน — ดึงค่าที่คนนั้นมีอยู่มาให้เห็นก่อนแก้ */
-  function pick(id: string) {
-    setWho(id);
-    const next = people.find((e) => e.id === id);
-    setDraft(Object.fromEntries(types.map((t) => [t, next?.leaveDays?.[t] != null ? String(next.leaveDays[t]) : ""])));
-  }
-
-  function save() {
-    if (!picked) return;
-    const out: Record<string, number> = {};
-    for (const t of types) {
-      const v = (draft[t] ?? "").trim();
-      if (v === "") continue;
-      const n = Number(v);
-      if (Number.isFinite(n) && n >= 0) out[t] = n;
-    }
-    setEmpLeaveDays(picked.id, out);
-    const what = Object.entries(out)
-      .map(([k, v]) => `${k} ${v} วัน`)
-      .join(" · ");
-    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${picked.name}: ${what || "กลับไปใช้ค่ากลาง"}`);
-    onClose();
-  }
-
-  return (
-    <Sheet
-      title={emp ? `สิทธิ์วันลาของ ${emp.name}` : "ตั้งสิทธิ์วันลาเฉพาะคน"}
-      onClose={onClose}
-      steady
-      footer={
-        <>
-          <button type="button" className="btn glass-thin" onClick={onClose}>
-            ยกเลิก
-          </button>
-          <button type="button" className="btn solid btn-solid" disabled={!picked || bad} onClick={save}>
-            บันทึก
-          </button>
-        </>
-      }
-    >
-      {!emp && (
-        <label className="mb-3.5 block">
-          <span className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">พนักงาน</span>
-          <Select value={who} onChange={(e) => pick(e.target.value)} aria-label="เลือกพนักงาน">
-            <option value="">เลือกพนักงาน…</option>
-            {people.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name} · {hrPos(e.pos).label}
-              </option>
-            ))}
-          </Select>
-        </label>
-      )}
-
-      <p className="mb-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
-        เว้นว่าง = ใช้ค่ากลาง · กรอกตัวเลขเฉพาะประเภทที่คนนี้ได้ไม่เท่าคนอื่น
-      </p>
-      <div className="grid gap-2">
-        {types.map((t) => (
-          /* .field-control กว้าง 100% เสมอ (อยู่นอก @layer) — กำหนดความกว้างที่ช่องของกริดแทน
-             ไม่งั้นช่องตัวเลขกินที่จนชื่อประเภทถูกบีบเหลือตัวอักษรเดียวต่อบรรทัด */
-          <label key={t} className="grid grid-cols-[minmax(0,1fr)_110px_46px] items-center gap-3">
-            <span className="min-w-0 text-[13.5px]">{t}</span>
-            <input
-              type="number"
-              min={0}
-              max={365}
-              step={0.5}
-              value={draft[t] ?? ""}
-              placeholder={`ค่ากลาง ${centralOf(t)}`}
-              disabled={!picked}
-              onChange={(e) => setDraft({ ...draft, [t]: e.target.value })}
-              className="field-control num h-9 text-right text-[13.5px] disabled:opacity-50"
-              aria-label={`สิทธิ์${t} ของคนนี้ (วันต่อปี)`}
-            />
-            <span className="text-[12px] text-muted-foreground">วัน/ปี</span>
-          </label>
-        ))}
-      </div>
-      {bad && <p className="mt-2.5 text-[12.5px] font-semibold text-destructive">จำนวนวันต้องอยู่ระหว่าง 0 ถึง 365</p>}
-    </Sheet>
   );
 }
