@@ -296,7 +296,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
                 type="button"
                 aria-label="สัปดาห์ก่อน"
                 onClick={() => setWeekOffset((v) => v - 1)}
-                className="glass-thin grid size-8 flex-none place-items-center rounded-full"
+                className="glass-thin grid size-10 flex-none place-items-center rounded-full"
               >
                 <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
               </button>
@@ -305,7 +305,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
                 aria-label="สัปดาห์ถัดไป"
                 disabled={weekOffset >= 0}
                 onClick={() => setWeekOffset((v) => v + 1)}
-                className="glass-thin grid size-8 flex-none place-items-center rounded-full disabled:opacity-40"
+                className="glass-thin grid size-10 flex-none place-items-center rounded-full disabled:opacity-40"
               >
                 <ChevronRightIcon className="size-4" strokeWidth={2.4} />
               </button>

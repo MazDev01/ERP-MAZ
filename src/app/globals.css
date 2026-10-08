@@ -1775,7 +1775,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .sd-mcal .hd { display: flex; align-items: center; justify-content: space-between; }
   .sd-mcal .hd b { font-size: 16px; }
   .sd-mcal .hd div { display: flex; gap: 8px; }
-  .sd-mcal .hd button { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--sd-line); background: #fff; color: var(--sd-ink2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .sd-mcal .hd button { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--sd-line); background: #fff; color: var(--sd-ink2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .sd-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 12px; text-align: center; }
   .sd-week button { border: 0; background: none; border-radius: 16px; padding: 6px 0 8px; font: inherit; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--sd-ink); }
   .sd-week small { font-size: 11px; color: var(--sd-ink3); }
@@ -1787,7 +1787,8 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .sd-week .sel b { background: var(--primary); color: #fff; box-shadow: none; }
   .sd-sec { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
   .sd-sec h3 { font-size: 16px; font-weight: 700; }
-  .sd-sec a { font-size: 12.5px; font-weight: 600; color: var(--primary); }
+  /* ลิงก์ท้ายหัวข้อ — ขยายพื้นที่กดให้ถึง 40px ด้วย padding ติดลบ ตัวอักษรยังอยู่ที่เดิม (ตรวจบนมือถือจริง 8 ต.ค. 2569) */
+  .sd-sec a { font-size: 12.5px; font-weight: 600; color: var(--primary); padding: 10px 8px; margin: -10px -8px; }
   .sd-mlist { display: flex; flex-direction: column; gap: 10px; }
   .sd-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #fff; border-radius: 20px; padding: 14px; box-shadow: var(--sd-shadow); color: var(--sd-ink); }
   .sd-item b { display: block; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
