@@ -112,6 +112,15 @@ export type RateSettings = {
   workDaysPerMonth: number;
   /** จ่ายคืนค่าน้ำมันกิโลเมตรละกี่บาท (Full Proposal · M5 การคำนวณเงินเดือน) */
   fuelPerKm: number;
+  /*
+   * เพดานกันพิมพ์ผิดในใบเบิก (พบตอนทดสอบ 8 ต.ค. 2569)
+   * เดิมพิมพ์ 999999 กม. เป็นเงินห้าล้านก็ยื่นผ่าน ไม่มีอะไรทัก
+   * 0 = ไม่จำกัด (ผู้ดูแลปิดเพดานเองได้)
+   */
+  /** ระยะทางต่อครั้งสูงสุดในใบเบิกค่าน้ำมัน (กม.) */
+  fuelKmMax: number;
+  /** จำนวนเงินต่อรายการสูงสุดของค่าเดินทางและค่าใช้จ่ายอื่น (บาท) */
+  expenseItemMax: number;
   /** ลาพักร้อนที่เหลือยกไปปีถัดไปได้สูงสุดกี่วัน — 0 = ไม่ยกยอด หมดสิ้นปี (ตั้งที่ /admin/leave) */
   vacationCarryMax: number;
   /** วันเริ่มรอบปีการลา "MM-DD" — รอบขึ้นใหม่เองทุกปีในวันนี้ (ตั้งที่ /admin/leave) */
@@ -335,6 +344,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     probationMonths: 3,
     workDaysPerMonth: 22,
     fuelPerKm: 5,
+    fuelKmMax: 500,
+    expenseItemMax: 50000,
     /* ตั้งต้นไม่ยกยอด ตาม ERD (HR-BR-13 ไม่สะสมข้ามปี) — ผู้ดูแลเปิดได้ที่หน้าประเภทการลา */
     vacationCarryMax: 0,
     leaveYearStart: "01-01",

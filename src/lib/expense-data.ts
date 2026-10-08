@@ -11,6 +11,11 @@ import { round2 } from "./format";
 
 /** จ่ายคืนกิโลเมตรละกี่บาท — ฝ่ายบุคคลตั้งได้ที่ /admin/rates (Full Proposal · M5) */
 export const fuelRate = () => settings().rates.fuelPerKm;
+/* เพดานกันพิมพ์ผิด — ตั้งที่หน้าอัตราและภาษี · 0 = ไม่จำกัด */
+const kmMax = () => settings().rates.fuelKmMax;
+const itemMax = () => settings().rates.expenseItemMax;
+/** เลขหลักพันคั่นจุลภาค ใช้ในข้อความเตือน */
+const commas = (n: number) => n.toLocaleString("en-US");
 
 /** ค่าคอมมิชชั่นกี่เปอร์เซ็นต์ของมูลค่าดีล — ผู้ดูแลระบบตั้งได้ที่ /admin/rates */
 export const commissionRate = () => settings().rates.commission;
@@ -142,6 +147,8 @@ export function otherRowProblem(r: OtherRow, month: string) {
   if (!r.date) return "ยังไม่ได้เลือกวันที่";
   if (r.date.slice(0, 7) !== month) return "วันที่ไม่อยู่ในเดือนของใบนี้";
   if (!(num(r.amount) > 0)) return "ยังไม่ได้กรอกจำนวนเงิน";
+  if (itemMax() > 0 && num(r.amount) > itemMax())
+    return `จำนวนเงินต่อรายการไม่เกิน ${commas(itemMax())} บาท — ตรวจดูว่าพิมพ์เกินหรือเปล่า`;
   if (!r.note.trim()) return "ยังไม่ได้กรอกรายละเอียด";
   return "";
 }
@@ -303,6 +310,9 @@ export function fuelRowMiss(row: FuelRow, month: string): FuelMiss {
   if (!routeEnds(row.place))
     return { field: "place", why: "เส้นทางต้องบอกทั้งต้นทางและปลายทาง เช่น ออฟฟิศ → ลูกค้า" };
   if (num(row.km) <= 0) return { field: "km", why: "ระยะทางต้องมากกว่า 0" };
+  /* พิมพ์ผิดเป็นหลักแสนแล้วยื่นผ่าน ผู้อนุมัติเห็นเป็นเงินหลายล้าน (ตรวจระบบ 8 ต.ค. 2569) */
+  if (kmMax() > 0 && num(row.km) > kmMax())
+    return { field: "km", why: `ระยะทางต่อครั้งไม่เกิน ${commas(kmMax())} กม. — ตรวจดูว่าพิมพ์เกินหรือเปล่า` };
   if (!row.work.trim()) return { field: "work", why: "ยังไม่ได้กรอกงานที่ไปปฏิบัติ" };
   return { field: "", why: "" };
 }
