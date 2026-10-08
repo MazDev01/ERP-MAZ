@@ -443,7 +443,7 @@ export function HrPayrollPage() {
               </thead>
               <tbody>
                 {blocked ? (
-                  <BlockedRow cols={12} month={month} />
+                  <BlockedRow cols={14} month={month} />
                 ) : monthly.length === 0 ? (
                   <tr>
                     <td colSpan={14} className="py-12 text-center text-muted-foreground">
