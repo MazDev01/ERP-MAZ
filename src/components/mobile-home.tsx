@@ -424,7 +424,9 @@ export function MobileHome({
           <>
             <h2 className="px-5 text-[16px] font-bold">{role === "ceo" ? "ภาพรวม" : "เมนู"}</h2>
             <nav aria-label={role === "ceo" ? "ภาพรวม" : "เมนู"} className={`grid gap-2 px-3 ${role === "ceo" ? "grid-cols-4" : "grid-cols-5"}`}>
-              {work.slice(0, 10).map((i, n) => {
+              {/* เดิมตัดเหลือ 10 การ์ดตามต้นแบบที่มีสองแถว คนที่ควบสองตำแหน่งเมนูจึงหายไปเงียบ ๆ
+                  (เจ้าของแจ้ง 8 ต.ค. 2569) — แสดงครบทุกเมนู ตารางไหลลงแถวที่สามเอง */}
+              {work.map((i, n) => {
                 const Icon = ICONS[i.icon] ?? HomeIcon;
                 return (
                   <Link key={i.href} href={i.href} className="flex flex-col items-center gap-[7px] text-foreground">
