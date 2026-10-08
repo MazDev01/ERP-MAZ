@@ -477,50 +477,71 @@ function PersonQuota({ central }: { central: LeaveQuota[] }) {
           ตอนนี้ทุกคนใช้ค่ากลาง — ยังไม่มีใครตั้งสิทธิ์เฉพาะตัว
         </p>
       ) : (
-        <ul className="divide-y divide-border">
-          {custom.map((e) => (
-            <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 first:pt-0 last:pb-0">
-              <span className="min-w-0 flex-1">
-                <b className="block text-[13.5px] font-semibold">{e.name}</b>
-                <small className="block text-[11.5px] text-muted-foreground">
-                  {hrPos(e.pos).label} · {e.id}
-                </small>
-              </span>
-              <span className="flex flex-wrap gap-1.5">
-                {types
-                  .filter((t) => e.leaveDays?.[t] != null)
-                  .map((t) => (
-                    <em
-                      key={t}
-                      className="rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-semibold not-italic"
-                      title={`ค่ากลาง ${centralOf(t)} วัน`}
-                    >
-                      {t} <b className="num text-primary">{e.leaveDays?.[t]}</b> วัน
-                      <span className="text-muted-foreground"> (กลาง {centralOf(t)})</span>
-                    </em>
-                  ))}
-              </span>
-              <span className="flex gap-1.5">
-                <button
-                  type="button"
-                  aria-label={`แก้ไขสิทธิ์วันลาของ ${e.name}`}
-                  onClick={() => setEditing(e.id)}
-                  className="btn glass-thin btn-mini"
-                >
-                  <PencilIcon className="size-4" strokeWidth={1.9} />
-                </button>
-                <button
-                  type="button"
-                  aria-label={`คืนค่ากลางให้ ${e.name}`}
-                  onClick={() => setClearing(e)}
-                  className="btn glass-thin btn-mini"
-                >
-                  <TrashIcon className="size-4" strokeWidth={1.9} />
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
+        /* ตารางคอลัมน์ตรงกันทุกแถวแบบเดียวกับตารางค่ากลางด้านบน (ผู้ใช้สั่ง 8 ต.ค. 2569)
+           ประเภทการลาเพิ่มได้เรื่อย ๆ จำนวนคอลัมน์จึงคิดจากรายการจริง ไม่ฟิกซ์ไว้ */
+        <div className="overflow-x-auto">
+          <div className="min-w-[560px]" style={{ "--cols": `26px minmax(140px,1fr) repeat(${types.length}, 96px) 84px` } as React.CSSProperties}>
+            <div className="grid grid-cols-[var(--cols)] items-end gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground">
+              <span className="text-center">#</span>
+              <span>ชื่อ</span>
+              {types.map((t) => (
+                <span key={t} className="text-right leading-tight">
+                  {t}
+                  <small className="block font-medium">กลาง {centralOf(t)}</small>
+                </span>
+              ))}
+              <span />
+            </div>
+
+            {custom.map((e, i) => (
+              <div
+                key={e.id}
+                className="grid grid-cols-[var(--cols)] items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40"
+              >
+                <span className="num text-center text-[12px] text-muted-foreground">{i + 1}</span>
+                <span className="min-w-0">
+                  <b className="block truncate text-[13.5px] font-semibold">{e.name}</b>
+                  <small className="block truncate text-[11.5px] text-muted-foreground">
+                    {hrPos(e.pos).label} · {e.id}
+                  </small>
+                </span>
+                {types.map((t) => {
+                  const own = e.leaveDays?.[t];
+                  return (
+                    <span key={t} className="text-right text-[13px]">
+                      {own == null ? (
+                        <em className="text-[12px] text-muted-foreground not-italic">ค่ากลาง</em>
+                      ) : (
+                        <>
+                          <b className="num font-semibold text-primary">{own}</b>
+                          <span className="text-[11.5px] text-muted-foreground"> วัน</span>
+                        </>
+                      )}
+                    </span>
+                  );
+                })}
+                <span className="flex justify-end gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={`แก้ไขสิทธิ์วันลาของ ${e.name}`}
+                    onClick={() => setEditing(e.id)}
+                    className="btn glass-thin btn-mini"
+                  >
+                    <PencilIcon className="size-4" strokeWidth={1.9} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`คืนค่ากลางให้ ${e.name}`}
+                    onClick={() => setClearing(e)}
+                    className="btn glass-thin btn-mini"
+                  >
+                    <TrashIcon className="size-4" strokeWidth={1.9} />
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {editing !== null && (
