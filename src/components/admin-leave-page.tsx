@@ -631,8 +631,10 @@ function PersonDialog({
       </p>
       <div className="grid gap-2">
         {types.map((t) => (
-          <label key={t} className="flex items-center gap-3">
-            <span className="min-w-0 flex-1 text-[13.5px]">{t}</span>
+          /* .field-control กว้าง 100% เสมอ (อยู่นอก @layer) — กำหนดความกว้างที่ช่องของกริดแทน
+             ไม่งั้นช่องตัวเลขกินที่จนชื่อประเภทถูกบีบเหลือตัวอักษรเดียวต่อบรรทัด */
+          <label key={t} className="grid grid-cols-[minmax(0,1fr)_110px_46px] items-center gap-3">
+            <span className="min-w-0 text-[13.5px]">{t}</span>
             <input
               type="number"
               min={0}
@@ -642,10 +644,10 @@ function PersonDialog({
               placeholder={`ค่ากลาง ${centralOf(t)}`}
               disabled={!picked}
               onChange={(e) => setDraft({ ...draft, [t]: e.target.value })}
-              className="field-control num h-9 w-[120px] text-right text-[13.5px] disabled:opacity-50"
+              className="field-control num h-9 text-right text-[13.5px] disabled:opacity-50"
               aria-label={`สิทธิ์${t} ของคนนี้ (วันต่อปี)`}
             />
-            <span className="w-[42px] text-[12px] text-muted-foreground">วัน/ปี</span>
+            <span className="text-[12px] text-muted-foreground">วัน/ปี</span>
           </label>
         ))}
       </div>
