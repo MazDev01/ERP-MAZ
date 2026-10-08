@@ -243,24 +243,20 @@ export function HrDashboardPage() {
           </Link>
         </Panel>
 
-        <div className="md:col-span-3 h-full">
-          <TodoTable
-            active={active}
-            probation={probation}
-            hr={hr}
-            lastMonth={lastMonth}
-            span={span}
-          />
-        </div>
-
-        <div className="md:col-span-3 h-full">
+        {/* การ์ดใบลาเต็มแถวซ้าย สูงเท่าคอลัมน์ขวา (ต้นแบบวางใบลาเต็มความกว้างเหมือนกัน) */}
+        <div className="h-full md:col-span-3 xl:col-span-6">
           <InternLeaveCard hr={hr} />
         </div>
 
-        <div className="flex h-full flex-col gap-3.5 md:col-span-6 xl:col-span-2">
+        <div className="flex h-full flex-col gap-3.5 md:col-span-3 xl:col-span-2">
           <RecentStarters active={active} />
           <TeamNote active={active} today={today} />
         </div>
+      </div>
+
+      {/* งานที่ต้องดำเนินการ — ตารางเต็มความกว้างท้ายหน้าตามต้นแบบ (เจ้าของสั่ง 8 ต.ค. 2569) */}
+      <div className="max-md:hidden">
+        <TodoTable active={active} probation={probation} hr={hr} lastMonth={lastMonth} span={span} />
       </div>
     </div>
   );
@@ -486,11 +482,12 @@ function InternLeaveCard({ hr }: { hr: ReturnType<typeof useHr> }) {
         การลาของนักศึกษาฝึกงาน <b className="ml-1 text-primary">{wait.length}</b>
       </h2>
       {wait.length === 0 ? (
-        <p className="grid min-h-[240px] flex-1 place-items-center px-5 text-[13px] text-muted-foreground">
+        /* การ์ดนี้ยืนเดี่ยวเต็มแถวแล้ว ไม่ต้องกันความสูงให้เท่าการ์ดข้าง ๆ เหมือนตอนอยู่สามใบ */
+        <p className="grid min-h-[120px] flex-1 place-items-center px-5 pb-4 text-[13px] text-muted-foreground">
           ไม่มีคำขอลาของนักศึกษาฝึกงานที่รออนุมัติ
         </p>
       ) : (
-        <div className="min-h-[240px] flex-1 overflow-y-auto">
+        <div className="flex-1 pb-1.5">
         {wait.map((r) => (
           <div
             key={r.id}
@@ -693,11 +690,11 @@ function TodoTable({
 
   return (
     /*
-     * โครง mockup 24 ก.ย. 2569 — รายการแถวเดียวจบ ไม่ใช่ตารางกว้าง
-     * เพราะการ์ดนี้อยู่คอลัมน์แคบข้างการ์ดใบลา และแต่ละแถวอ่านแค่ "เรื่อง ใคร และด่วนแค่ไหน"
-     * สูงคงที่ แถวเกินเลื่อนในกล่อง การ์ดข้าง ๆ จะได้ไม่ถูกดันจนสูงตาม
+     * ตารางเต็มความกว้างตามต้นแบบ hr-dashboard.html (เจ้าของสั่ง 8 ต.ค. 2569)
+     * เรื่อง · พนักงาน · รายละเอียด · กำหนด · สถานะ — คอลัมน์ชุดเดียวกับต้นแบบ
+     * เดิมเป็นการ์ดรายการแคบข้างการ์ดใบลา อ่านแล้วเทียบกำหนดของแต่ละเรื่องไม่ได้
      */
-    <section className="glass flex h-full min-w-0 flex-col rounded-[14px] px-5 py-[18px]">
+    <section className="glass min-w-0 rounded-[14px] px-5 py-[18px]">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[15px] font-bold">งานที่ต้องดำเนินการ</h2>
         {/* ช่วงนี้เป็นตัวกรอง "งานที่มีกำหนด" ตามปุ่มช่วงเวลา ไม่ใช่รอบเงินเดือน (รอบตัดวันที่ 25) */}
@@ -705,32 +702,50 @@ function TodoTable({
           กำหนดในช่วง {thaiDate(span.from)} – {thaiDate(span.to)}
         </span>
       </div>
-      {/* การ์ดสามใบในแถวนี้สูงเท่ากันทั้งแถว รายการกินที่ที่เหลือ แถวเกินเลื่อนในกล่อง
-         (ตั้งความสูงตายตัวไม่ได้ เพราะหัวการ์ดแต่ละใบสูงไม่เท่ากัน การ์ดจะเหลื่อมกัน) */}
-      {rows.length === 0 ? (
-        <p className="grid min-h-[240px] flex-1 place-items-center text-[13px] text-muted-foreground">
-          ไม่มีงานที่ต้องดำเนินการ
-        </p>
-      ) : (
-        <ul className="mt-1.5 min-h-[240px] flex-1 divide-y divide-border overflow-y-auto">
-          {rows.map((r) => (
-            <li key={r.key} className="flex items-center gap-3 py-[11px]">
-              <span className="min-w-0 flex-1">
-                <b className="block truncate text-[13.5px] font-medium">
-                  {r.what} · {r.who}
-                </b>
-                <em className="block truncate text-[11.5px] text-muted-foreground not-italic">
-                  {r.detail} · {r.due ? `กำหนด ${thaiDate(r.due)}` : "ไม่มีกำหนด"}
-                </em>
-              </span>
-              <span className={`tag flex-none ${r.late ? "t-late" : "t-early"}`}>
-                <i />
-                {r.state}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+
+      <div className="scroll-stable mt-2.5 overflow-auto">
+        <table className="data-table cards-sm min-w-[760px]">
+          <thead>
+            <tr>
+              <th>เรื่อง</th>
+              <th style={{ width: 200 }}>พนักงาน</th>
+              <th style={{ width: 230 }}>รายละเอียด</th>
+              <th style={{ width: 150 }}>กำหนด</th>
+              <th style={{ width: 130 }}>สถานะ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                  ไม่มีงานที่ต้องดำเนินการ
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.key}>
+                  <td data-label="เรื่อง">
+                    <b className="font-semibold">{r.what}</b>
+                  </td>
+                  <td data-label="พนักงาน">{r.who}</td>
+                  <td data-label="รายละเอียด" className="muted">
+                    {r.detail}
+                  </td>
+                  <td data-label="กำหนด" className="num muted">
+                    {r.due ? thaiDate(r.due) : "ไม่มีกำหนด"}
+                  </td>
+                  <td data-label="สถานะ">
+                    <span className={`tag ${r.late ? "t-late" : "t-early"}`}>
+                      <i />
+                      {r.state}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
