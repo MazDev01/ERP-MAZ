@@ -15,13 +15,18 @@
  */
 
 import { useState } from "react";
-import { LEAVE_TYPES, currentPeriod, isBuiltinLeave, leaveNote } from "@/lib/leave-data";
+import { LEAVE_TYPES, currentPeriod, isBuiltinLeave, leaveNote, leaveTypes } from "@/lib/leave-data";
 import type { LeaveQuota, RateSettings } from "@/lib/system-settings";
 import { thaiDate } from "@/lib/format";
 import { AdminHead, Card, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
 import { useAllLeave } from "@/lib/leave-store";
 import { PencilIcon, PlusIcon, TrashIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
+import { ConfirmDialog } from "./confirm-dialog";
+import { Select } from "./ui";
+import { hrPos, type Employee } from "@/lib/hr-data";
+import { setEmpLeaveDays, useHr } from "@/lib/hr-store";
+import { logChange } from "@/lib/admin-log";
 
 /** รายการครบทุกประเภท — ประเภทตั้งต้นที่หายไปจากค่าที่บันทึกไว้เติมให้เป็น 0 วัน */
 function withBuiltins(list: LeaveQuota[]): LeaveQuota[] {
@@ -297,6 +302,8 @@ export function AdminLeavePage() {
         </p>
       </Card>
 
+      <PersonQuota central={list} />
+
       <p className="text-[12px] leading-relaxed text-muted-foreground">
         ลดสิทธิ์ลงต่ำกว่าวันที่พนักงานใช้ไปแล้ว วันคงเหลือจะเป็นศูนย์ ไม่ติดลบ · สิทธิ์ของรอบปีก่อน ๆ ไม่เปลี่ยน ·
         ลบประเภทที่เพิ่มเองแล้ว ใบลาที่ยื่นไปแล้วยังอยู่ครบ
@@ -427,6 +434,222 @@ function TypeDialog({
           ? "เปลี่ยนชื่อแล้ว ใบลาที่ยื่นไปแล้วยังใช้ชื่อเดิม และไม่ถูกนับเข้าสิทธิ์ของชื่อใหม่"
           : "ประเภทใหม่ขึ้นให้พนักงานเลือกในใบลาทันทีที่กดบันทึกที่แถบล่าง"}
       </p>
+    </Sheet>
+  );
+}
+
+/*
+ * สิทธิ์เฉพาะบุคคล — คนที่ตกลงกันไว้ไม่เท่าค่ากลางด้านบน (ผู้ใช้สั่ง 8 ต.ค. 2569)
+ *
+ * ค่ากลางคือสิทธิ์ที่ทุกคนได้เท่ากัน ส่วนตรงนี้เขียนทับเป็นรายคน เฉพาะประเภทที่กรอก
+ * ประเภทที่เว้นว่างยังใช้ค่ากลางเหมือนเดิม — เก็บที่ emp.leaveDays ตัวเดียวกับแท็บในแฟ้มพนักงาน
+ * บันทึกทันทีเมื่อกดในกล่อง ไม่ผ่านแถบบันทึกด้านล่างที่เป็นของค่ากลาง
+ */
+function PersonQuota({ central }: { central: LeaveQuota[] }) {
+  const hr = useHr();
+  const types = leaveTypes();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [clearing, setClearing] = useState<Employee | null>(null);
+
+  const people = hr.emp.filter((e) => e.status === "active");
+  const custom = people.filter((e) => e.leaveDays && Object.keys(e.leaveDays).length > 0);
+  const centralOf = (t: string) => central.find((q) => q.type === t)?.days ?? 0;
+
+  function clear(emp: Employee) {
+    setEmpLeaveDays(emp.id, {});
+    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${emp.name}: กลับไปใช้ค่ากลาง`);
+    setClearing(null);
+  }
+
+  return (
+    <Card
+      title="สิทธิ์เฉพาะบุคคล"
+      note="ค่ากลางด้านบนใช้กับทุกคน · ใครที่ตกลงกันไว้ต่างออกไป ตั้งทับเฉพาะคนนั้นได้ที่นี่ ประเภทที่ไม่ได้กรอกยังใช้ค่ากลาง"
+      aside={
+        <button type="button" className="btn solid btn-solid" onClick={() => setEditing("")}>
+          <PlusIcon className="size-4" strokeWidth={2.4} />
+          ตั้งสิทธิ์เฉพาะคน
+        </button>
+      }
+    >
+      {custom.length === 0 ? (
+        <p className="text-[12.5px] text-muted-foreground">
+          ตอนนี้ทุกคนใช้ค่ากลาง — ยังไม่มีใครตั้งสิทธิ์เฉพาะตัว
+        </p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {custom.map((e) => (
+            <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 first:pt-0 last:pb-0">
+              <span className="min-w-0 flex-1">
+                <b className="block text-[13.5px] font-semibold">{e.name}</b>
+                <small className="block text-[11.5px] text-muted-foreground">
+                  {hrPos(e.pos).label} · {e.id}
+                </small>
+              </span>
+              <span className="flex flex-wrap gap-1.5">
+                {types
+                  .filter((t) => e.leaveDays?.[t] != null)
+                  .map((t) => (
+                    <em
+                      key={t}
+                      className="rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-semibold not-italic"
+                      title={`ค่ากลาง ${centralOf(t)} วัน`}
+                    >
+                      {t} <b className="num text-primary">{e.leaveDays?.[t]}</b> วัน
+                      <span className="text-muted-foreground"> (กลาง {centralOf(t)})</span>
+                    </em>
+                  ))}
+              </span>
+              <span className="flex gap-1.5">
+                <button
+                  type="button"
+                  aria-label={`แก้ไขสิทธิ์วันลาของ ${e.name}`}
+                  onClick={() => setEditing(e.id)}
+                  className="btn glass-thin btn-mini"
+                >
+                  <PencilIcon className="size-4" strokeWidth={1.9} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`คืนค่ากลางให้ ${e.name}`}
+                  onClick={() => setClearing(e)}
+                  className="btn glass-thin btn-mini"
+                >
+                  <TrashIcon className="size-4" strokeWidth={1.9} />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {editing !== null && (
+        <PersonDialog
+          people={people}
+          emp={people.find((e) => e.id === editing)}
+          types={types}
+          centralOf={centralOf}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={Boolean(clearing)}
+        title="คืนไปใช้ค่ากลาง"
+        description={clearing ? `${clearing.name} จะใช้สิทธิ์วันลาเท่ากับคนอื่นทั้งหมด` : ""}
+        detail="วันลาที่ใช้ไปแล้วยังอยู่ครบ เปลี่ยนเฉพาะจำนวนวันที่มีสิทธิ์"
+        confirmLabel="คืนค่ากลาง"
+        onConfirm={() => clearing && clear(clearing)}
+        onCancel={() => setClearing(null)}
+      />
+    </Card>
+  );
+}
+
+/** กล่องตั้งสิทธิ์ของคนเดียว — เลือกคนแล้วกรอกเฉพาะประเภทที่ต่างจากค่ากลาง */
+function PersonDialog({
+  people,
+  emp,
+  types,
+  centralOf,
+  onClose,
+}: {
+  people: Employee[];
+  emp?: Employee;
+  types: string[];
+  centralOf: (t: string) => number;
+  onClose: () => void;
+}) {
+  const [who, setWho] = useState(emp?.id ?? "");
+  const [draft, setDraft] = useState<Record<string, string>>(() =>
+    Object.fromEntries(types.map((t) => [t, emp?.leaveDays?.[t] != null ? String(emp.leaveDays[t]) : ""])),
+  );
+  const picked = people.find((e) => e.id === who);
+  const bad = types.some((t) => {
+    const v = (draft[t] ?? "").trim();
+    if (v === "") return false;
+    const n = Number(v);
+    return !Number.isFinite(n) || n < 0 || n > 365;
+  });
+
+  /* เลือกคนใหม่ในกล่องเดียวกัน — ดึงค่าที่คนนั้นมีอยู่มาให้เห็นก่อนแก้ */
+  function pick(id: string) {
+    setWho(id);
+    const next = people.find((e) => e.id === id);
+    setDraft(Object.fromEntries(types.map((t) => [t, next?.leaveDays?.[t] != null ? String(next.leaveDays[t]) : ""])));
+  }
+
+  function save() {
+    if (!picked) return;
+    const out: Record<string, number> = {};
+    for (const t of types) {
+      const v = (draft[t] ?? "").trim();
+      if (v === "") continue;
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0) out[t] = n;
+    }
+    setEmpLeaveDays(picked.id, out);
+    const what = Object.entries(out)
+      .map(([k, v]) => `${k} ${v} วัน`)
+      .join(" · ");
+    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${picked.name}: ${what || "กลับไปใช้ค่ากลาง"}`);
+    onClose();
+  }
+
+  return (
+    <Sheet
+      title={emp ? `สิทธิ์วันลาของ ${emp.name}` : "ตั้งสิทธิ์วันลาเฉพาะคน"}
+      onClose={onClose}
+      steady
+      footer={
+        <>
+          <button type="button" className="btn glass-thin" onClick={onClose}>
+            ยกเลิก
+          </button>
+          <button type="button" className="btn solid btn-solid" disabled={!picked || bad} onClick={save}>
+            บันทึก
+          </button>
+        </>
+      }
+    >
+      {!emp && (
+        <label className="mb-3.5 block">
+          <span className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">พนักงาน</span>
+          <Select value={who} onChange={(e) => pick(e.target.value)} aria-label="เลือกพนักงาน">
+            <option value="">เลือกพนักงาน…</option>
+            {people.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name} · {hrPos(e.pos).label}
+              </option>
+            ))}
+          </Select>
+        </label>
+      )}
+
+      <p className="mb-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
+        เว้นว่าง = ใช้ค่ากลาง · กรอกตัวเลขเฉพาะประเภทที่คนนี้ได้ไม่เท่าคนอื่น
+      </p>
+      <div className="grid gap-2">
+        {types.map((t) => (
+          <label key={t} className="flex items-center gap-3">
+            <span className="min-w-0 flex-1 text-[13.5px]">{t}</span>
+            <input
+              type="number"
+              min={0}
+              max={365}
+              step={0.5}
+              value={draft[t] ?? ""}
+              placeholder={`ค่ากลาง ${centralOf(t)}`}
+              disabled={!picked}
+              onChange={(e) => setDraft({ ...draft, [t]: e.target.value })}
+              className="field-control num h-9 w-[120px] text-right text-[13.5px] disabled:opacity-50"
+              aria-label={`สิทธิ์${t} ของคนนี้ (วันต่อปี)`}
+            />
+            <span className="w-[42px] text-[12px] text-muted-foreground">วัน/ปี</span>
+          </label>
+        ))}
+      </div>
+      {bad && <p className="mt-2.5 text-[12.5px] font-semibold text-destructive">จำนวนวันต้องอยู่ระหว่าง 0 ถึง 365</p>}
     </Sheet>
   );
 }
