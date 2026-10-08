@@ -180,8 +180,13 @@ export function AdminAttendancePage() {
         <Card title="กะเฉพาะบทบาท">
           <RoleShifts />
         </Card>
+      </div>
 
-        <Card title="จุดลงเวลา">
+      {/* จุดลงเวลาเต็มความกว้าง — แผนที่ซ้าย ช่องกรอกขวา ไม่ปล่อยพื้นที่ว่างข้างขวาเหมือนเดิม
+         (ผู้ใช้สั่งจัดใหม่ 8 ต.ค. 2569) */}
+      <Card title="จุดลงเวลา">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div>
           {Number.isFinite(lat) && Number.isFinite(lng) ? (
             <div className="overflow-hidden rounded-[12px] border border-border">
               <AreaMap
@@ -208,8 +213,10 @@ export function AdminAttendancePage() {
           <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
             กดบนแผนที่เพื่อย้ายหมุด วงกลมเส้นประคือรัศมีที่ลงเวลาได้
           </p>
+          </div>
 
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
             <Input2 label="ละติจูด">
               <input value={d.lat} inputMode="decimal" onChange={(e) => set("lat", e.target.value)} className={`${inputCls} num`} />
             </Input2>
@@ -237,8 +244,9 @@ export function AdminAttendancePage() {
             </button>
             <span className="text-[12px] text-muted-foreground">กดขณะอยู่ที่สำนักงาน</span>
           </div>
-        </Card>
-      </div>
+          </div>
+        </div>
+      </Card>
 
       <section className="glass rounded-[18px] px-4 py-4 sm:px-5">
         {err && (
