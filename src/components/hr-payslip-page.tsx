@@ -303,7 +303,7 @@ export function HrPayslipPage() {
         )}
 
         <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">
-          <table className="data-table cards-sm min-w-[1160px]">
+          <table className="data-table cards-sm min-w-[1420px]">
             <thead>
               <tr>
                 <th>พนักงาน</th>
@@ -335,6 +335,16 @@ export function HrPayslipPage() {
                 </th>
                 <th className="r" style={{ width: 110 }}>
                   หักมาสาย
+                  <span className="mt-0.5 block text-[10.5px] font-medium text-muted-foreground">(บาท)</span>
+                </th>
+                {/* สองช่องนี้มีในแถวข้อมูลแต่หัวตารางหายไป ทำให้ตัวเลขทุกช่องถัดจากนี้ไปอยู่ใต้หัวผิดคอลัมน์
+                    (พบตอนตรวจท่อจ่ายคืน 8 ต.ค. 2569 — ยอดสุทธิไปโผล่ใต้หัว "จัดการ") */}
+                <th className="r" style={{ width: 118 }}>
+                  หักขาดงาน
+                  <span className="mt-0.5 block text-[10.5px] font-medium text-muted-foreground">(บาท)</span>
+                </th>
+                <th className="r" style={{ width: 140 }}>
+                  หักลาไม่รับค่าจ้าง
                   <span className="mt-0.5 block text-[10.5px] font-medium text-muted-foreground">(บาท)</span>
                 </th>
                 <th className="r" style={{ width: 126 }}>
