@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanHtml, textToHtml } from "@/lib/rich-text";
 
 /*
@@ -34,10 +34,34 @@ export function RichEditor({ value, onChange, disabled, placeholder, invalid, la
     onChange(ref.current?.innerHTML ?? "");
   }
 
+  /*
+   * ปุ่ม B I U ต้องติดไฟเมื่อเคอร์เซอร์อยู่บนข้อความที่จัดรูปแบบไว้แล้ว
+   * (ตรวจปุ่มทั้งระบบ 12 ต.ค. 2569 — เดิมกดแล้วหน้าตาไม่เปลี่ยน คนกดไม่รู้ว่าติดหรือยัง)
+   */
+  const [on, setOn] = useState({ bold: false, italic: false, underline: false });
+
+  const readState = useCallback(() => {
+    const el = ref.current;
+    if (!el || disabled) return;
+    /* อ่านเฉพาะตอนเคอร์เซอร์อยู่ในช่องนี้ ไม่งั้นค่าจะมาจากช่องอื่นในหน้า */
+    if (!el.contains(document.getSelection()?.anchorNode ?? null)) return;
+    setOn({
+      bold: document.queryCommandState("bold"),
+      italic: document.queryCommandState("italic"),
+      underline: document.queryCommandState("underline"),
+    });
+  }, [disabled]);
+
+  useEffect(() => {
+    document.addEventListener("selectionchange", readState);
+    return () => document.removeEventListener("selectionchange", readState);
+  }, [readState]);
+
   function run(command: string) {
     if (disabled) return;
     ref.current?.focus();
     document.execCommand(command, false);
+    readState();
     emit();
   }
 
@@ -102,13 +126,13 @@ export function RichEditor({ value, onChange, disabled, placeholder, invalid, la
   return (
     <div>
       <div className="mb-2 flex flex-wrap gap-1.5">
-        <ToolButton onClick={() => run("bold")} disabled={disabled} title="ตัวหนา">
+        <ToolButton onClick={() => run("bold")} disabled={disabled} title="ตัวหนา" on={on.bold}>
           <b>B</b>
         </ToolButton>
-        <ToolButton onClick={() => run("italic")} disabled={disabled} title="ตัวเอียง">
+        <ToolButton onClick={() => run("italic")} disabled={disabled} title="ตัวเอียง" on={on.italic}>
           <i>I</i>
         </ToolButton>
-        <ToolButton onClick={() => run("underline")} disabled={disabled} title="ขีดเส้นใต้">
+        <ToolButton onClick={() => run("underline")} disabled={disabled} title="ขีดเส้นใต้" on={on.underline}>
           <u>U</u>
         </ToolButton>
         <ToolButton
@@ -160,12 +184,15 @@ function ToolButton({
   disabled,
   title,
   wide,
+  on,
   children,
 }: {
   onClick: () => void;
   disabled?: boolean;
   title: string;
   wide?: boolean;
+  /** ปุ่มสลับที่กำลังเปิดอยู่ (B I U) — ปุ่มคำสั่งครั้งเดียวไม่ต้องส่ง */
+  on?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -174,11 +201,12 @@ function ToolButton({
       title={title}
       aria-label={title}
       disabled={disabled}
+      aria-pressed={on}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className={`glass-thin inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-border text-[13px] font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-45 ${
-        wide ? "px-3" : "w-9"
-      }`}
+      className={`glass-thin inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border text-[13px] font-medium transition-colors hover:border-primary hover:text-primary disabled:opacity-45 ${
+        on ? "border-primary bg-accent text-primary" : "border-border text-muted-foreground"
+      } ${wide ? "px-3" : "w-9"}`}
     >
       {children}
     </button>

@@ -71,13 +71,15 @@ export function FileDrop({
 }) {
   const pickerRef = useRef<HTMLInputElement>(null);
   const [link, setLink] = useState("");
-  const [linkErr, setLinkErr] = useState(false);
+  /* ข้อความเตือนใต้ช่องลิงก์ — ว่างคือไม่มีปัญหา
+     เดิมเป็น true/false แล้วกดทั้งที่ช่องว่างจะเงียบสนิท ผู้ใช้ไม่รู้ว่าต้องพิมพ์ก่อน */
+  const [linkErr, setLinkErr] = useState("");
 
   function addLink() {
     const v = link.trim();
-    if (!v) return;
-    if (!/^https?:\/\//i.test(v)) return setLinkErr(true);
-    setLinkErr(false);
+    if (!v) return setLinkErr("พิมพ์ลิงก์ในช่องก่อนกดแนบ");
+    if (!/^https?:\/\//i.test(v)) return setLinkErr("ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://");
+    setLinkErr("");
     onChange([...files, { id: newId(), name: v, size: 0, url: v }]);
     setLink("");
   }
@@ -195,7 +197,7 @@ export function FileDrop({
               value={link}
               onChange={(e) => {
                 setLink(e.target.value);
-                setLinkErr(false);
+                setLinkErr("");
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -212,7 +214,7 @@ export function FileDrop({
             </button>
           </div>
           {linkErr && (
-            <p className="mt-1.5 text-[12.5px] text-destructive">ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://</p>
+            <p role="alert" className="mt-1.5 text-[12.5px] text-destructive">{linkErr}</p>
           )}
         </>
       )}
