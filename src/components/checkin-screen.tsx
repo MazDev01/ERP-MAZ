@@ -138,6 +138,63 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   })();
 
   /*
+   * สรุปสัปดาห์นี้และลงเวลาล่าสุด — เติมพื้นที่ว่างใต้การ์ดตอกบัตรบนจอคอม (ผู้ใช้สั่ง 12 ต.ค. 2569)
+   * ใช้บันทึกชุดเดียวกับหน้าบันทึกเวลา ไม่ได้นับใหม่ · นับเฉพาะวันที่ผ่านมาแล้วถึงวันนี้
+   */
+  const weekSum = (() => {
+    if (!now || !today) return null;
+    const base = bkkOf(now);
+    const start = new Date(base);
+    start.setDate(base.getDate() - base.getDay());
+    let minutes = 0, days = 0, late = 0;
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const iso = toIsoDate(d);
+      if (iso > today) break;
+      const rows = recordsOfDay(records, iso);
+      if (!rows.length) continue;
+      days += 1;
+      const lv = leaveWindowOf(leavesOnDate(leaveRecords, iso)[0]);
+      minutes += Math.round(workedMsOfDay(rows, iso === today ? (tick ?? 0) : 0, lv) / 60000);
+      const first = rows.find((r) => r.type === "in");
+      if (first) {
+        const at = bkkOf(new Date(first.at));
+        const over = at.getHours() * 60 + at.getMinutes() - expectedInMinutes(lv);
+        if (over > 0) late += over;
+      }
+    }
+    return { from: toIsoDate(start), to: toIsoDate(end), minutes, days, late };
+  })();
+
+  /* ห้าวันล่าสุดที่มีการลงเวลา ใหม่สุดขึ้นก่อน */
+  const recent = (() => {
+    if (!today) return [];
+    const out: { iso: string; in: string | null; out: string | null; minutes: number }[] = [];
+    const base = bkkOf(new Date(`${today}T00:00:00`));
+    for (let i = 0; i < 30 && out.length < 5; i++) {
+      const d = new Date(base);
+      d.setDate(base.getDate() - i);
+      const iso = toIsoDate(d);
+      const rows = recordsOfDay(records, iso);
+      if (!rows.length) continue;
+      const inAt = rows.find((r) => r.type === "in");
+      const outAt = [...rows].reverse().find((r) => r.type === "out");
+      out.push({
+        iso,
+        in: inAt ? formatClock(new Date(inAt.at)) : null,
+        out: outAt ? formatClock(new Date(outAt.at)) : null,
+        minutes: Math.round(
+          workedMsOfDay(rows, iso === today ? (tick ?? 0) : 0, leaveWindowOf(leavesOnDate(leaveRecords, iso)[0])) / 60000,
+        ),
+      });
+    }
+    return out;
+  })();
+
+  /*
    * ลืมตอกบัตรออก — เลยเวลาเลิกงานเกินที่ผู้ดูแลตั้งไว้แต่ยังไม่ตอกออก แจ้งเข้า LINE ให้เจ้าตัว
    * ส่งจากหน้าจอที่เปิดอยู่เท่านั้น (ยังไม่มีตัวตั้งเวลาฝั่งเซิร์ฟเวอร์) และส่งได้วันละครั้ง
    */
@@ -544,6 +601,61 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         </section>
       </section>
 
+      {/* สรุปสัปดาห์นี้ + ลงเวลาล่าสุด — เติมพื้นที่ว่างใต้การ์ดตอกบัตรบนจอคอม
+          (ผู้ใช้สั่งเติมหน้าที่โล่ง 12 ต.ค. 2569) ตัวเลขอ่านจากบันทึกเวลาชุดเดียวกับหน้าบันทึกเวลา */}
+      {weekSum && (
+        <section
+          aria-label="สรุปเวลาทำงานสัปดาห์นี้"
+          className="mt-4 w-full max-w-[920px] max-md:hidden"
+        >
+          <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+            <div className="glass rounded-[18px] px-5 py-[18px]">
+              <h2 className="text-[15px] font-bold">สัปดาห์นี้</h2>
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                {thaiDate(weekSum.from)} – {thaiDate(weekSum.to)}
+              </p>
+              <div className="mt-3.5 grid grid-cols-3 gap-2.5">
+                <WeekStat label="ชั่วโมงรวม" value={formatMinutes(weekSum.minutes)} />
+                <WeekStat label="วันที่ลงเวลา" value={`${weekSum.days} วัน`} />
+                <WeekStat
+                  label="มาสาย"
+                  value={weekSum.late ? formatMinutes(weekSum.late) : "ไม่มี"}
+                  bad={weekSum.late > 0}
+                />
+              </div>
+            </div>
+
+            <div className="glass rounded-[18px] px-5 py-[18px]">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-bold">ลงเวลาล่าสุด</h2>
+                {canRecords && (
+                  <Link href="/records" className="text-[12.5px] font-semibold text-primary">
+                    ดูทั้งเดือน
+                  </Link>
+                )}
+              </div>
+              {recent.length === 0 ? (
+                <p className="mt-4 text-[13px] text-muted-foreground">ยังไม่มีการลงเวลาในช่วงนี้</p>
+              ) : (
+                <ul className="mt-1.5 divide-y divide-border">
+                  {recent.map((r) => (
+                    <li key={r.iso} className="flex items-center gap-3 py-2.5">
+                      <span className="min-w-0 flex-1">
+                        <b className="block text-[13.5px] font-semibold">{thaiDate(r.iso)}</b>
+                        <em className="num block text-[11.5px] text-muted-foreground not-italic">
+                          {r.in ?? "—"} – {r.out ?? "ยังไม่ออกงาน"}
+                        </em>
+                      </span>
+                      <b className="num flex-none text-[13px] font-semibold">{formatMinutes(r.minutes)}</b>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* กล่องตอกบัตร — ยิงออกไปที่ body เพราะการ์ดตอกบัตรมี backdrop-filter
           ซึ่งกลายเป็นกรอบอ้างอิงของ position: fixed ทำให้ฉากหลังคลุมแค่การ์ด */}
       {popOpen && popAt && typeof document !== "undefined" &&
@@ -844,6 +956,16 @@ function MobStat({
         {value ?? "--:--"}
       </b>
       <span className="text-[12px] text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+/** ช่องตัวเลขเล็กในการ์ดสรุปสัปดาห์ */
+function WeekStat({ label, value, bad }: { label: string; value: string; bad?: boolean }) {
+  return (
+    <div className="min-w-0 rounded-[12px] border border-border bg-muted/50 px-3 py-2.5">
+      <span className="block text-[11.5px] text-muted-foreground">{label}</span>
+      <b className={`num mt-0.5 block text-[16px] font-bold ${bad ? "text-destructive" : ""}`}>{value}</b>
     </div>
   );
 }

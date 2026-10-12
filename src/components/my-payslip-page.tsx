@@ -76,6 +76,16 @@ export function MyPayslipPage() {
 
   const picked = rows.find((r) => r.month === open);
 
+  /*
+   * สรุปสามตัวเลขเหนือรายการ (ผู้ใช้สั่งเติมหน้าที่โล่ง 12 ต.ค. 2569)
+   * หน้านี้เคยมีแค่ตารางแถวเดียว เปิดมาแล้วเหลือพื้นที่ว่างเกือบทั้งจอ
+   * ตัวเลขทั้งหมดบวกจากสลิปที่เผยแพร่แล้วเท่านั้น ไม่ได้คิดใหม่จากฐานเงินเดือน
+   */
+  const thisYear = String(new Date().getFullYear());
+  const ofYear = rows.filter((r) => r.month.startsWith(thisYear));
+  const sum = (pick: (r: Row) => number) => ofYear.reduce((a, r) => a + pick(r), 0);
+  const latest = rows[0];
+
   /* ฝึกงานไม่ได้รับค่าจ้าง จึงไม่มีสลิป — บอกเหตุผลตรง ๆ ดีกว่าโชว์ตารางว่าง */
   const why = !me
     ? "บัญชีนี้ยังไม่ได้ผูกกับทะเบียนพนักงาน จึงยังไม่มีสลิปเงินเดือน"
@@ -92,6 +102,29 @@ export function MyPayslipPage() {
           </div>
         </div>
       </div>
+
+      {/* การ์ดสรุป — ขึ้นเฉพาะตอนมีสลิปแล้ว ไม่งั้นหน้าเปล่าจะมีการ์ดศูนย์บาทลอยอยู่ */}
+      {rows.length > 0 && (
+        <div className="grid grid-cols-2 gap-3.5 max-sm:gap-2.5 xl:grid-cols-3">
+          <Sum
+            title="ยอดสุทธิรอบล่าสุด"
+            value={`${baht(latest.line.net)} บาท`}
+            note={`รอบ ${thaiMonth(latest.month)} · เผยแพร่ ${thaiDate(latest.at)}`}
+            tone="ok"
+          />
+          <Sum
+            title={`รวมรับทั้งปี ${Number(thisYear) + 543}`}
+            value={`${baht(sum((r) => r.line.net))} บาท`}
+            note={`จากสลิปที่เผยแพร่แล้ว ${ofYear.length} รอบ`}
+          />
+          <Sum
+            title={`ประกันสังคมสะสมปี ${Number(thisYear) + 543}`}
+            value={`${baht(sum((r) => r.line.ss))} บาท`}
+            note="ยอดที่ถูกหักจากสลิปในปีนี้ · บริษัทสมทบเท่ากัน"
+            className="max-sm:col-span-2 xl:col-span-1"
+          />
+        </div>
+      )}
 
       <section className="panel glass flex flex-col">
         <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">
@@ -470,6 +503,35 @@ function Row2({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
       <dd className={`num text-right ${strong ? "text-[14px] font-bold" : "text-[13px] font-medium"}`}>
         {v}
       </dd>
+    </div>
+  );
+}
+
+/** การ์ดตัวเลขสรุปบนหัวหน้าสลิป — หน้าตาเดียวกับการ์ดสรุปหน้าอื่นของระบบ */
+function Sum({
+  title,
+  value,
+  note,
+  tone,
+  className = "",
+}: {
+  title: string;
+  value: string;
+  note: string;
+  tone?: "ok";
+  className?: string;
+}) {
+  return (
+    <div
+      className={`min-w-0 rounded-[13px] border px-4 py-3.5 max-sm:px-3 max-sm:py-3 ${
+        tone === "ok" ? "border-transparent bg-[var(--success-soft)]" : "border-border bg-muted/60"
+      } ${className}`}
+    >
+      <span className="block text-[12.5px] font-semibold text-muted-foreground max-sm:text-[11.5px]">{title}</span>
+      <b className={`num mt-1 block text-[19px] font-bold max-sm:text-[16px] ${tone === "ok" ? "text-[var(--success)]" : ""}`}>
+        {value}
+      </b>
+      <span className="mt-1 block text-[11.5px] leading-[1.5] text-muted-foreground">{note}</span>
     </div>
   );
 }
