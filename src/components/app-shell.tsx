@@ -404,9 +404,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="hidden min-w-0 md:block">
             <h1 className="truncate text-[19px] leading-tight font-bold">{title}</h1>
-            <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
-              <b className="font-semibold text-primary">{weekdayOf(today)}</b>{" "}
-              {thaiDate(today)}
+            {/*
+              วันที่ขึ้นหลัง hydrate เท่านั้น (พบตอนตรวจงานพิมพ์ 12 ต.ค. 2569)
+              หน้าเหล่านี้ถูก prerender ตอน build วันที่จึงถูกอบติดไปใน HTML
+              พอเปิดใช้วันถัดไป ฝั่งเบราว์เซอร์ได้วันใหม่ ข้อความไม่ตรงกับของเซิร์ฟเวอร์
+              React เลยทิ้ง HTML ของเซิร์ฟเวอร์แล้ววาดใหม่ทั้งก้อน (hydration error) ทุกหน้า
+            */}
+            <p className="mt-0.5 h-[18px] truncate text-[12.5px] text-muted-foreground">
+              {hydrated && (
+                <>
+                  <b className="font-semibold text-primary">{weekdayOf(today)}</b> {thaiDate(today)}
+                </>
+              )}
             </p>
           </div>
 
