@@ -62,10 +62,16 @@ export function OtPage() {
   /* ลิงก์จากแจ้งเตือน LINE — /ot?find=OT-2569-0123 เปิดเดือนของคำขอนั้นแล้วไฮไลต์ให้ */
   const findId = useSearchParams().get("find") ?? "";
   const found = records.find((r) => r.id === findId);
+  /* เปิดมาที่เดือนปัจจุบันเสมอ — เดิมฝังเดือนกันยายนไว้ตายตัว พอถึงเดือนใหม่
+     ใบที่เพิ่งยื่นวันนี้จะไม่อยู่ในเดือนที่เปิดมา ผู้ยื่นหาไม่เจอ (ไล่ทดสอบ 12 ต.ค. 2569)
+     หน้าเบิกค่าใช้จ่าย บันทึกเวลา และฝั่งบัญชี ใช้วิธีเดียวกันนี้อยู่แล้ว */
   const [view, setView] = useState(() => {
-    if (!found) return new Date(2026, 8, 1);
-    const [y, m] = found.date.split("-").map(Number);
-    return new Date(y, m - 1, 1);
+    if (found) {
+      const [y, m] = found.date.split("-").map(Number);
+      return new Date(y, m - 1, 1);
+    }
+    const now = bkkNow();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [tab, setTab] = useState<"all" | OtStatus>("all");
   const [page, setPage] = useState(1);
