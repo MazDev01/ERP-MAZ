@@ -267,6 +267,12 @@ function QuotationForm({
     issuer: !issuer,
     days: days <= 0,
     items: !htmlToText(body) || totals.gross <= 0,
+    /*
+     * ส่วนลดกินจำนวนเงินจนหมด — ยอดสุทธิเหลือ 0 (ไล่ทดสอบสายงาน 12 ต.ค. 2569)
+     * เดิมตรวจแค่ยอดก่อนหักส่วนลด จึงออกใบเสนอราคา 0 บาทได้ และใบนั้นแก้ไม่ได้อีก
+     * แถมส่งไปวางบิลต่อได้ด้วย ต้องกันตั้งแต่ตอนออกใบ
+     */
+    discount: totals.gross > 0 && totals.base <= 0,
   };
   const miss = [
     problems.customer && who,
@@ -275,6 +281,7 @@ function QuotationForm({
     problems.issuer && "ออกในนาม",
     problems.days && "จำนวนวันยืนราคา",
     problems.items && "รายละเอียดและจำนวนเงิน",
+    problems.discount && "ส่วนลด",
   ].filter((x): x is string => Boolean(x));
 
   /** ค่าที่จะบันทึกลงใบใหม่ */
@@ -516,13 +523,21 @@ function QuotationForm({
                   className="field-control num text-right"
                 />
               </Field>
-              <Field label="ส่วนลด">
+              <Field
+                label="ส่วนลด"
+                error={
+                  touched && problems.discount
+                    ? "ส่วนลดเท่ากับหรือมากกว่าจำนวนเงิน ยอดสุทธิเป็น 0"
+                    : undefined
+                }
+              >
                 <input
                   value={discount}
                   inputMode="decimal"
+                  aria-invalid={touched && problems.discount}
                   onChange={(e) => setDiscount(commaInput(e.target.value))}
                   placeholder="0"
-                  className="field-control num text-right"
+                  className={`field-control num text-right ${touched && problems.discount ? "border-destructive" : ""}`}
                 />
               </Field>
             </div>
