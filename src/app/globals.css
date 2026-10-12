@@ -874,6 +874,9 @@ table.inner .r, table.inner th.r { text-align: right; }
 .claim .mrow > b { font-weight: 600; }
 .claim .mrow input { flex: 1; min-width: 0; height: 34px; }
 .claim .lead { margin-top: 14px; font-size: 13px; color: var(--muted-foreground); }
+/* ใบที่ยื่นแล้วแสดงเป็นข้อความแทนช่องกรอก — ตัดบรรทัดได้ ข้อความยาวจึงไม่หายตอนพิมพ์
+   (ตรวจงานพิมพ์ 12 ต.ค. 2569) */
+.claim .cellwrap { display: block; font-size: 12.5px; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; padding: 4px 2px; }
 
 table.sheet { width: 100%; border-collapse: collapse; margin-top: 12px; }
 table.sheet th {

@@ -34,7 +34,7 @@ import {
   useExpenseClaims,
   withdrawClaim,
 } from "@/lib/expense-store";
-import { TH_MONTHS_FULL, baht, bkkNow, pad2, thaiMonth as thaiMonthName, thaiStamp } from "@/lib/format";
+import { TH_MONTHS_FULL, baht, bkkNow, pad2, thaiDate, thaiMonth as thaiMonthName, thaiStamp } from "@/lib/format";
 import { useProfile } from "@/lib/profile-data";
 import { hasNoApprover, useApprovalRoute, useRole } from "@/lib/role";
 import {
@@ -249,15 +249,24 @@ export function ExpensePage() {
                 <b>{me.department}</b>
               </div>
               <div className="mrow">
-                <label htmlFor="plate">ป้ายทะเบียนรถ</label>
-                <input
-                  id="plate"
-                  className={`field-control ${tried && claim.fuel.length && !claim.plate.trim() ? "border-destructive" : ""}`}
-                  value={claim.plate}
-                  disabled={locked}
-                  placeholder="เช่น 1กก 1234 เชียงใหม่"
-                  onChange={(e) => setClaimField(month, "plate", e.target.value)}
-                />
+                {/* ใบที่ยื่นแล้วเป็นเอกสาร ป้ายทะเบียนจึงเป็นข้อความ ไม่ใช่ช่องกรอกที่พิมพ์ออกมาเป็นกรอบ */}
+                {locked ? (
+                  <>
+                    <span>ป้ายทะเบียนรถ</span>
+                    <b>{claim.plate || "—"}</b>
+                  </>
+                ) : (
+                  <>
+                    <label htmlFor="plate">ป้ายทะเบียนรถ</label>
+                    <input
+                      id="plate"
+                      className={`field-control ${tried && claim.fuel.length && !claim.plate.trim() ? "border-destructive" : ""}`}
+                      value={claim.plate}
+                      placeholder="เช่น 1กก 1234 เชียงใหม่"
+                      onChange={(e) => setClaimField(month, "plate", e.target.value)}
+                    />
+                  </>
+                )}
               </div>
             </div>
             <p className="lead">ซึ่งข้าพเจ้าได้สำรองจ่ายไปก่อนในเดือนนี้ ตามรายละเอียดดังนี้</p>
@@ -560,6 +569,9 @@ function FuelTable({
                 <tr key={r.id} className={tried && why ? "bad" : ""}>
                   <td className="c num">{i + 1}</td>
                   <td>
+                    {locked ? (
+                      <span className="cellwrap num">{r.date ? thaiDate(r.date) : "—"}</span>
+                    ) : (
                     <span data-miss={bad("date") ? "1" : undefined}>
                       <DateField
                         value={r.date}
@@ -573,23 +585,43 @@ function FuelTable({
                         onChange={(iso) => set(r.id, { date: iso })}
                       />
                     </span>
+                    )}
                     {bad("date") && <span className="over">{why}</span>}
                   </td>
+                  {/* ใบที่ยื่นไปแล้วเป็นเอกสาร ไม่ใช่ฟอร์ม — แสดงเป็นข้อความที่ตัดบรรทัดได้
+                      ไม่งั้นเวลาพิมพ์ออกกระดาษ ข้อความยาวจะถูกตัดหายไปเพราะช่องกรอกเลื่อนดูไม่ได้
+                      (พบตอนตรวจงานพิมพ์ 12 ต.ค. 2569) */}
                   <td>
-                    <input data-miss={bad("place") ? "1" : undefined} value={r.place} disabled={locked} placeholder="เริ่มต้น – สิ้นสุด" aria-label={`สถานที่ ครั้งที่ ${i + 1}`} onChange={(e) => set(r.id, { place: e.target.value })} />
+                    {locked ? (
+                      <span className="cellwrap">{r.place || "—"}</span>
+                    ) : (
+                      <input data-miss={bad("place") ? "1" : undefined} value={r.place} placeholder="เริ่มต้น – สิ้นสุด" aria-label={`สถานที่ ครั้งที่ ${i + 1}`} onChange={(e) => set(r.id, { place: e.target.value })} />
+                    )}
                     {bad("place") && <span className="over">{why}</span>}
                   </td>
                   <td>
-                    <input data-miss={bad("work") ? "1" : undefined} value={r.work} disabled={locked} placeholder="งานที่ไปปฏิบัติ" aria-label={`งาน ครั้งที่ ${i + 1}`} onChange={(e) => set(r.id, { work: e.target.value })} />
+                    {locked ? (
+                      <span className="cellwrap">{r.work || "—"}</span>
+                    ) : (
+                      <input data-miss={bad("work") ? "1" : undefined} value={r.work} placeholder="งานที่ไปปฏิบัติ" aria-label={`งาน ครั้งที่ ${i + 1}`} onChange={(e) => set(r.id, { work: e.target.value })} />
+                    )}
                     {bad("work") && <span className="over">{why}</span>}
                   </td>
                   <td>
-                    <input className="c num" data-miss={bad("km") ? "1" : undefined} inputMode="decimal" value={r.km} disabled={locked} placeholder="0" aria-label={`ระยะทาง ครั้งที่ ${i + 1}`} onChange={(e) => set(r.id, { km: onlyNumber(e.target.value) })} />
+                    {locked ? (
+                      <span className="cellwrap num block text-center">{r.km || "0"}</span>
+                    ) : (
+                      <input className="c num" data-miss={bad("km") ? "1" : undefined} inputMode="decimal" value={r.km} placeholder="0" aria-label={`ระยะทาง ครั้งที่ ${i + 1}`} onChange={(e) => set(r.id, { km: onlyNumber(e.target.value) })} />
+                    )}
                     {bad("km") && <span className="over">{why}</span>}
                   </td>
                   <td className="r num">{baht(fuelAmount(r))}</td>
                   <td>
-                    <input value={r.note} disabled={locked} placeholder="—" aria-label={`หมายเหตุ ครั้งที่ ${i + 1}`} onChange={(e) => set(r.id, { note: e.target.value })} />
+                    {locked ? (
+                      <span className="cellwrap">{r.note || "—"}</span>
+                    ) : (
+                      <input value={r.note} placeholder="—" aria-label={`หมายเหตุ ครั้งที่ ${i + 1}`} onChange={(e) => set(r.id, { note: e.target.value })} />
+                    )}
                   </td>
                   <td className="c no-print">
                     {!locked && (
