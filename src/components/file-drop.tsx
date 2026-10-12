@@ -43,6 +43,9 @@ function newId() {
   return `f${seq}-${Date.now()}`;
 }
 
+/** ความยาวลิงก์สูงสุดที่รับ — เผื่อลิงก์แชร์ของ Google Drive ที่ยาวอยู่แล้ว */
+const LINK_MAX = 400;
+
 export function FileDrop({
   files,
   onChange,
@@ -79,6 +82,10 @@ export function FileDrop({
     const v = link.trim();
     if (!v) return setLinkErr("พิมพ์ลิงก์ในช่องก่อนกดแนบ");
     if (!/^https?:\/\//i.test(v)) return setLinkErr("ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://");
+    /* ลิงก์ยาวผิดปกติมักเป็นการวางผิด และทำให้รายการไฟล์ล้นกรอบ (ไล่หาบั๊ก 12 ต.ค. 2569) */
+    if (v.length > LINK_MAX) return setLinkErr(`ลิงก์ยาวเกิน ${LINK_MAX} ตัวอักษร ตรวจดูว่าวางมาเกินหรือเปล่า`);
+    /* แนบเส้นเดิมซ้ำไม่มีประโยชน์ และคนอ่านจะงงว่าทำไมมีสองบรรทัดเหมือนกัน */
+    if (files.some((f) => f.url === v)) return setLinkErr("แนบลิงก์นี้ไว้แล้ว");
     setLinkErr("");
     onChange([...files, { id: newId(), name: v, size: 0, url: v }]);
     setLink("");
