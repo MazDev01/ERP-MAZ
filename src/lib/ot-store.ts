@@ -98,7 +98,8 @@ export function undoOtDecision(role: Role, id: string, why: string) {
         approvedHours: null,
         decidedAt: undefined,
         comment: `ยกเลิกการอนุมัติ: ${reason}`,
-        editedAt: bkkStamp(),
+        undoneAt: bkkStamp(),
+        undoneWhy: reason,
       };
     }),
   );

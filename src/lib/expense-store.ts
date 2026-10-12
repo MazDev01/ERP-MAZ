@@ -230,6 +230,8 @@ export function undoClaimDecision(role: Role, month: string, why: string) {
             status: "รออนุมัติ" as const,
             comment: `ยกเลิกการอนุมัติ: ${reason}`,
             decidedAt: undefined,
+            undoneAt: stampNow(),
+            undoneWhy: reason,
           }
         : c,
     ),

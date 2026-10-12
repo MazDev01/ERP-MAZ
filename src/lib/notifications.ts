@@ -938,6 +938,48 @@ export function buildNotices(input: {
 
   }
 
+  /* ── ใบของเราที่ผู้อนุมัติดึงกลับมารออนุมัติใหม่ (ผู้ใช้สั่ง 12 ต.ค. 2569) ──
+     กระดิ่งทั้งหน้านี้อ่านจากสถานะปัจจุบัน ถ้าไม่มีบรรทัดนี้ ข้อความ "อนุมัติแล้ว"
+     ที่ผู้ยื่นเคยเห็นจะหายไปเฉย ๆ เหลือแค่ "รอหัวหน้าอนุมัติ" โดยไม่มีอะไรบอกว่าเกิดอะไรขึ้น
+     นับจากเวลาที่ย้อน ใบที่ย้อนนานแล้วจึงไม่ค้างอยู่ในกระดิ่ง */
+  for (const l of leaves) {
+    if (!l.undoneAt || daysBetween(l.undoneAt.slice(0, 10), today) > DECIDED_DAYS) continue;
+    const range = l.date === l.toDate ? thaiDate(l.date) : `${thaiDate(l.date)} – ${thaiDate(l.toDate)}`;
+    out.push({
+      id: `leave-undo-${l.id}`,
+      level: "late",
+      group: "ถูกดึงกลับมารออนุมัติ",
+      title: `ใบลา${l.type} ${l.id}`,
+      detail: `${range} · ผู้อนุมัติยกเลิกการอนุมัติ — ${l.undoneWhy || "ไม่ได้ระบุเหตุผล"}`,
+      href: "/leave",
+      date: l.undoneAt.slice(0, 10),
+    });
+  }
+  for (const o of ot) {
+    if (!o.undoneAt || daysBetween(o.undoneAt.slice(0, 10), today) > DECIDED_DAYS) continue;
+    out.push({
+      id: `ot-undo-${o.id}`,
+      level: "late",
+      group: "ถูกดึงกลับมารออนุมัติ",
+      title: `คำขอโอที ${o.id}`,
+      detail: `${thaiDate(o.date)} · ${o.hours.toFixed(2)} ชม. · ผู้อนุมัติยกเลิกการอนุมัติ — ${o.undoneWhy || "ไม่ได้ระบุเหตุผล"}`,
+      href: "/ot",
+      date: o.undoneAt.slice(0, 10),
+    });
+  }
+  for (const c of claims) {
+    if (!c.undoneAt || daysBetween(c.undoneAt.slice(0, 10), today) > DECIDED_DAYS) continue;
+    out.push({
+      id: `claim-undo-${c.month}`,
+      level: "late",
+      group: "ถูกดึงกลับมารออนุมัติ",
+      title: `ใบเบิกค่าใช้จ่าย ${thaiMonth(c.month)}`,
+      detail: `${baht(claimTotal(c))} บาท · ผู้อนุมัติยกเลิกการอนุมัติ — ${c.undoneWhy || "ไม่ได้ระบุเหตุผล"}`,
+      href: "/expense",
+      date: c.undoneAt.slice(0, 10),
+    });
+  }
+
   // ── ใบเบิกค่าใช้จ่ายที่ยังค้าง ──
   for (const c of claims) {
     const total = claimTotal(c);

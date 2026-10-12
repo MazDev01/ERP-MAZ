@@ -58,6 +58,10 @@ export type EmpRequest = {
   status: "pending" | "approved" | "rejected";
   decidedAt?: string;
   reason?: string;
+  /** "yyyy-mm-dd hh:mm" เวลาที่ผู้อนุมัติยกเลิกการอนุมัติ — ว่างคือไม่เคยถูกย้อน */
+  undoneAt?: string;
+  /** เหตุผลที่ย้อน — บังคับกรอก */
+  undoneWhy?: string;
 };
 
 const SEED: EmpRequest[] = [
@@ -144,6 +148,8 @@ export function undoEmpDecision(id: string, why: string) {
         reason: `ยกเลิกการอนุมัติ: ${reason}`,
         decidedAt: undefined,
         approvedHours: undefined,
+        undoneAt: bkkStamp(),
+        undoneWhy: reason,
       };
     }),
   );

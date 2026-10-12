@@ -148,7 +148,8 @@ export function undoLeaveDecision(role: Role, id: string, why: string) {
         status: "รอการอนุมัติ" as const,
         decidedAt: undefined,
         comment: `ยกเลิกการอนุมัติ: ${reason}`,
-        editedAt: bkkStamp(),
+        undoneAt: bkkStamp(),
+        undoneWhy: reason,
       };
     }),
   );

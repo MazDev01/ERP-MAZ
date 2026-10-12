@@ -189,6 +189,10 @@ export type LeaveRecord = {
   cancelledAt?: string;
   /** "yyyy-mm-dd hh:mm" เวลาที่แก้ไขล่าสุด — แก้ได้เฉพาะตอนยังรออนุมัติ เลขที่ใบเดิมไม่เปลี่ยน */
   editedAt?: string;
+  /** "yyyy-mm-dd hh:mm" เวลาที่ผู้อนุมัติยกเลิกการอนุมัติ — ว่างคือไม่เคยถูกย้อน */
+  undoneAt?: string;
+  /** เหตุผลที่ย้อน — บังคับกรอก ใช้บอกผู้ยื่นว่าทำไมใบถึงกลับมารออนุมัติ */
+  undoneWhy?: string;
 };
 
 const SALES_LEAVE: LeaveRecord[] = [
