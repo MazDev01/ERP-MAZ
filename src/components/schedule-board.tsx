@@ -173,15 +173,6 @@ function minOf(t: string) {
   return h * 60 + (m || 0);
 }
 
-/** ไอคอนเมนูสามขีด (ปุ่มเลือกมุมมองบนมือถือ) */
-function MenuGlyph() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true">
-      <path d="M4 7h16M4 12h16M4 17h16" />
-    </svg>
-  );
-}
-
 /** หนึ่งรายการในรายการนัดของวัน (มือถือ) — ไอคอนกลมสีของประเภท ชื่อ และช่วงเวลา */
 function PhoneRow<T>({
   e,
@@ -268,8 +259,6 @@ export function ScheduleBoard<T>({
    * จอกว้างไม่เปิดป็อปอัพ เพราะรายการอยู่คอลัมน์ซ้ายให้เห็นอยู่แล้ว
    */
   const [daySheet, setDaySheet] = useState(false);
-  /* เมนูเลือกมุมมองบนมือถือ (รายเดือน / รายสัปดาห์) */
-  const [vmenu, setVmenu] = useState(false);
   const phone = () => window.matchMedia("(max-width: 1099.98px)").matches;
   /* นัดที่ยกเลิกแล้วไม่ลงปฏิทิน แต่ยังอยู่ในรายการของวันที่เลือก */
   const liveRows = rows.filter((e) => !e.cancelled);
@@ -563,42 +552,24 @@ export function ScheduleBoard<T>({
           <button type="button" className="iconbtn glass-thin size-9 rounded-full" aria-label="ถัดไป" onClick={() => nav.step(1)}>
             <ChevronRightIcon className="size-4" strokeWidth={2.4} />
           </button>
-          <span className="relative flex-none">
+        </div>
+
+        {/* มือถือ: ปุ่มสลับมุมมองโชว์ทั้งสองปุ่มตามต้นแบบ pm-schedule.html (เทียบต้นแบบ 12 ต.ค. 2569)
+            เดิมซ่อนไว้หลังปุ่มสามขีด ต้องกดสองครั้งกว่าจะเปลี่ยนมุมมอง */}
+        <div className="mb-3 flex justify-end gap-1.5 sm:hidden" role="group" aria-label="มุมมองปฏิทิน">
+          {VIEWS.map((v) => (
             <button
+              key={v.key}
               type="button"
-              className="iconbtn glass-thin size-9 rounded-full"
-              aria-label="เลือกมุมมองปฏิทิน"
-              aria-haspopup="true"
-              aria-expanded={vmenu}
-              onClick={() => setVmenu((v) => !v)}
+              aria-pressed={view === v.key}
+              onClick={() => nav.setView(v.key)}
+              className={`h-9 rounded-full px-3.5 text-[12.5px] font-semibold ${
+                view === v.key ? "bg-primary text-primary-foreground" : "glass-thin text-muted-foreground"
+              }`}
             >
-              <MenuGlyph />
+              {v.key === "month" ? "รายเดือน" : "รายสัปดาห์"}
             </button>
-            {vmenu && (
-              <span
-                role="menu"
-                className="absolute top-11 right-0 z-30 flex min-w-[150px] flex-col rounded-[16px] border border-border bg-card p-1.5 shadow-[0_16px_30px_-14px_rgb(90_20_35/0.35)]"
-              >
-                {VIEWS.map((v) => (
-                  <button
-                    key={v.key}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={view === v.key}
-                    onClick={() => {
-                      nav.setView(v.key);
-                      setVmenu(false);
-                    }}
-                    className={`h-[42px] rounded-[10px] px-3 text-left text-[14px] font-semibold ${
-                      view === v.key ? "bg-accent text-primary" : ""
-                    }`}
-                  >
-                    {v.key === "month" ? "รายเดือน" : "รายสัปดาห์"}
-                  </button>
-                ))}
-              </span>
-            )}
-          </span>
+          ))}
         </div>
 
         <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5 max-sm:hidden">

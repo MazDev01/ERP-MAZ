@@ -54,7 +54,7 @@ import {
   type EventDraft,
 } from "@/lib/pm-schedule-store";
 import { AppointmentSheet } from "./appointment-sheet";
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, MenuIcon, PlusIcon } from "./icons";
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 import { ScheduleBoard, boardOn, useBoardNav, type BoardEvent, type BoardKind, type BoardNav } from "./schedule-board";
@@ -265,7 +265,6 @@ function PmMobileCalendar({
   /* นัดของฝ่ายขาย ผู้เข้าร่วมคือผู้สนใจ */
   const people = sales ? customers.map((c) => ({ id: c.code, name: c.name })) : team;
   const { view, cursor, sel, todayKey } = nav;
-  const [menu, setMenu] = useState(false);
   const touch = useRef<{ x: number; y: number } | null>(null);
 
   const selD = dateOf(sel);
@@ -334,50 +333,29 @@ function PmMobileCalendar({
         <button type="button" className={M_CIRCLE} aria-label="ถัดไป" onClick={() => step(1)}>
           <ChevronRightIcon className="size-4" strokeWidth={2.4} />
         </button>
-        <div className="relative">
+      </div>
+
+      {/* ปุ่มสลับมุมมองโชว์ทั้งสองปุ่มตามต้นแบบ mobile/pm-schedule.html (เทียบต้นแบบ 12 ต.ค. 2569)
+          เดิมซ่อนอยู่หลังปุ่มสามขีด ต้องกดสองครั้งกว่าจะเปลี่ยนมุมมอง */}
+      <div className="mb-3.5 flex justify-end gap-1.5" role="group" aria-label="มุมมองปฏิทิน">
+        {(
+          [
+            ["month", "รายเดือน"],
+            ["week", "รายสัปดาห์"],
+          ] as const
+        ).map(([k, label]) => (
           <button
+            key={k}
             type="button"
-            className={M_CIRCLE}
-            aria-label="เลือกมุมมอง"
-            aria-haspopup="menu"
-            aria-expanded={menu}
-            onClick={() => setMenu((v) => !v)}
+            aria-pressed={view === k}
+            onClick={() => nav.setView(k)}
+            className={`h-9 rounded-full px-3.5 text-[12.5px] font-semibold ${
+              view === k ? "bg-[#C8102E] text-white" : "bg-white text-[#8A7E81] shadow-[0_1px_2px_rgba(120,20,35,.06)]"
+            }`}
           >
-            <MenuIcon className="size-4" strokeWidth={2.2} />
+            {label}
           </button>
-          {menu && (
-            <>
-              <div className="fixed inset-0 z-40" aria-hidden="true" onClick={() => setMenu(false)} />
-              <div
-                role="menu"
-                className="absolute top-[calc(100%+8px)] right-0 z-50 min-w-[150px] rounded-[16px] bg-white p-1.5 shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-12px_rgba(120,20,35,.35)]"
-              >
-                {(
-                  [
-                    ["month", "รายเดือน"],
-                    ["week", "รายสัปดาห์"],
-                  ] as const
-                ).map(([k, label]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={view === k}
-                    className={`flex h-[42px] w-full items-center rounded-[12px] px-3 text-left text-[14px] font-semibold ${
-                      view === k ? "bg-[#FDECEE] text-[#C8102E]" : "text-[#2A1F22]"
-                    }`}
-                    onClick={() => {
-                      nav.setView(k);
-                      setMenu(false);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        ))}
       </div>
 
       {view === "month" ? (

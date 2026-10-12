@@ -207,13 +207,23 @@ function useHomeStats(role: Role): { k: string; v: string; u?: string; href: str
       { k: "ได้ดีล", v: String(wonDeals.length), u: "ดีล", href: "/presales-dash" },
     ];
   }
-  if (role === "pm" || role === "gm")
+  if (role === "pm" || role === "gm") {
+    /* ช่องที่สี่เป็น "ใกล้ครบกำหนด" ตามต้นแบบ home-pm.html (เทียบต้นแบบ 12 ต.ค. 2569)
+       นับงานย่อยที่ยังไม่เสร็จ ยังไม่ได้ส่งให้ตรวจ และถึงกำหนดภายในเจ็ดวัน — กติกาเดียวกับการ์ดบนแดชบอร์ด */
+    const soon = running
+      .flatMap((p) => p.tasks)
+      .filter((t) => t.status !== "done" && t.status !== "sent" && t.status !== "wait" && t.due)
+      .filter((t) => {
+        const left = daysBetween(todayIso(), t.due);
+        return left >= 0 && left <= 7;
+      }).length;
     return [
       { k: "โปรเจคที่ทำอยู่", v: String(running.length), u: "งาน", href: "/pm/projects" },
       { k: "งานเข้าใหม่", v: String(pm.inbox.length), u: "งาน", href: "/pm/inbox" },
       { k: "งานรอตรวจ", v: String(running.flatMap((p) => p.tasks).filter((t) => t.status === "sent").length), u: "งาน", href: "/pm/reviews" },
-      mine,
+      { k: "ใกล้ครบกำหนด", v: String(soon), u: "งาน", href: "/pm/projects" },
     ];
+  }
   /*
    * แม่บ้าน — ไม่มีงานย่อยจาก PM จึงไม่ขึ้นสถิติงานและไม่ลิงก์ไปหน้างานที่ได้รับ
    * (หน้านั้นไม่อยู่ในเมนูของแม่บ้าน กดแล้วจะเจอหน้ากันสิทธิ์) · ผู้ใช้สั่ง 7 ต.ค. 2569
