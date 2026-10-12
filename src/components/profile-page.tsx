@@ -628,6 +628,13 @@ function PersonalPane({ onSaved }: { onSaved: (m: string) => void }) {
             </tr>
           </thead>
           <tbody>
+            {optionsOf("eduLevel").length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                  ยังไม่ได้ตั้งระดับการศึกษาในหน้าตั้งค่า
+                </td>
+              </tr>
+            )}
             {optionsOf("eduLevel").map((lv) => (
               <tr key={lv}>
                 <td className="text-[12.5px] font-medium whitespace-nowrap text-muted-foreground">

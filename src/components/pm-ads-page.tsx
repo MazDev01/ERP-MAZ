@@ -237,6 +237,13 @@ function PlanTab({ plan }: { plan: (typeof AD_PLANS)[string] | undefined }) {
             </tr>
           </thead>
           <tbody>
+            {plan.rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                  ยังไม่มีช่องทางในแผนสื่อนี้
+                </td>
+              </tr>
+            )}
             {plan.rows.map((r) => (
               <tr key={`${r.channel}-${r.objective}-${r.tool}`}>
                 <td data-label="ช่องทาง">{r.channel}</td>

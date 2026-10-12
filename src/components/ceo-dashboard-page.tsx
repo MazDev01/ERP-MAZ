@@ -350,6 +350,9 @@ export function CeoDashboardPage() {
       <div className="grid items-stretch gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Panel title="ยอดขายแยกบริการ (บาท · ช่วงที่เลือก)">
           <ul className="space-y-2.5">
+            {svc.length === 0 && (
+              <li className="py-6 text-center text-[13px] text-muted-foreground">ยังไม่มียอดขายในช่วงที่เลือก</li>
+            )}
             {svc.map((s) => (
               <li
                 key={s.label}

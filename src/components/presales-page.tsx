@@ -672,6 +672,13 @@ function RoundTable({ rounds, onOpen }: { rounds: PresalesRound[]; onOpen: (r: P
           </tr>
         </thead>
         <tbody>
+          {rounds.length === 0 && (
+            <tr>
+              <td colSpan={6} className="py-6 text-center text-muted-foreground">
+                ยังไม่มีรอบการจัดทำ
+              </td>
+            </tr>
+          )}
           {rounds.map((x, i) => (
             <tr key={x.id} className={i === 0 ? "bg-[#fef7f8]" : ""}>
               <td>

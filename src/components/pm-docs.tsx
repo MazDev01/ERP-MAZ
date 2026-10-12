@@ -199,6 +199,13 @@ export function ProposalPreview({ job, variant = "plan" }: { job: InboxJob; vari
           </tr>
         </thead>
         <tbody>
+          {job.phases.length === 0 && (
+            <tr>
+              <td colSpan={4} className="px-1.5 py-6 text-center text-[12.5px] text-muted-foreground">
+                ยังไม่ได้แบ่งช่วงงาน
+              </td>
+            </tr>
+          )}
           {job.phases.map((ph) => (
             <tr key={ph.name}>
               <td className="px-1.5 py-2.5 align-top text-[12.5px]">{ph.name}</td>

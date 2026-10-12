@@ -182,9 +182,15 @@ export function HrReportPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((a) => (
-                <ReportRow key={a.name} a={a} head={HEAD[by]} />
-              ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={COLS.length + 1} className="py-10 text-center text-muted-foreground">
+                    ไม่มีข้อมูลในช่วงที่เลือก
+                  </td>
+                </tr>
+              ) : (
+                rows.map((a) => <ReportRow key={a.name} a={a} head={HEAD[by]} />)
+              )}
             </tbody>
             <tfoot>
               <ReportRow a={tot} head={HEAD[by]} total />

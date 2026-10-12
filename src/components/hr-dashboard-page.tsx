@@ -277,6 +277,9 @@ function RecentStarters({ active }: { active: Employee[] }) {
         </Link>
       </div>
       <ul className="mt-2 flex-1 divide-y divide-border overflow-y-auto">
+        {list.length === 0 && (
+          <li className="py-6 text-center text-[13px] text-muted-foreground">ไม่มีรายชื่อในหมวดนี้</li>
+        )}
         {list.map((e) => (
           <li key={e.id} className="flex items-center gap-3 py-2.5">
             <span className="grid size-9 flex-none place-items-center rounded-[11px] bg-[var(--accent)] text-[12px] font-bold text-primary">

@@ -488,6 +488,13 @@ function History({ emp }: { emp: Employee }) {
           </tr>
         </thead>
         <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                ยังไม่มีประวัติการปรับเงินเดือน
+              </td>
+            </tr>
+          )}
           {rows.map((r) => (
             <tr key={`${r.at}-${r.salary}-${r.note}`}>
               <td className="num muted">{thaiDate(r.at)}</td>
