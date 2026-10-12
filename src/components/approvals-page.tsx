@@ -28,11 +28,13 @@
  */
 
 import { useMemo, useRef, useState } from "react";
-import { decideEmpRequest, empFuelKm, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
+import { decideEmpRequest, empFuelKm, undoEmpDecision, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
 import { claimParts, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
 import { hrPos } from "@/lib/hr-data";
-import { useHr } from "@/lib/hr-store";
-import { approveClaim, rejectClaim, useAllClaims } from "@/lib/expense-store";
+import { lockedUntil, useHr } from "@/lib/hr-store";
+import { logChange } from "@/lib/admin-log";
+import { ConfirmDialog } from "./confirm-dialog";
+import { approveClaim, rejectClaim, undoClaimDecision, useAllClaims } from "@/lib/expense-store";
 import { baht, daysBetween, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
 import { type LeaveRecord } from "@/lib/leave-data";
 import {
@@ -42,12 +44,13 @@ import {
   quotaAfterLeave,
   quotaAfterUsed,
   rejectLeave,
+  undoLeaveDecision,
   useAllLeave,
   type AwaySpan,
 } from "@/lib/leave-store";
 import { USERS } from "@/lib/mock-data";
 import { type OtRecord } from "@/lib/ot-data";
-import { approveOt, rejectOt, useAllOt } from "@/lib/ot-store";
+import { approveOt, rejectOt, undoOtDecision, useAllOt } from "@/lib/ot-store";
 import { approvesFor, roleLabel, useApprovalRoute, type Role } from "@/lib/role";
 import { useMyRoles } from "@/lib/hr-link";
 import { useSearchParams } from "next/navigation";
@@ -104,6 +107,10 @@ type Request = {
   note?: string;
   /** คนอื่นที่ไม่อยู่ช่วงวันเดียวกัน — เฉพาะใบลา */
   away?: { name: string; text: string }[];
+  /** วันสุดท้ายที่ใบนี้ไปตกในรอบเวลา — ใช้ดูว่าอยู่ในรอบที่ปิดไปแล้วหรือยัง (ยกเลิกการอนุมัติ) */
+  when?: string;
+  /** ใบเบิกที่จ่ายคืนไปแล้วในรอบเงินเดือน — ย้อนไม่ได้ เงินออกไปกับสลิปแล้ว */
+  paid?: boolean;
 };
 
 /** โอทีที่อนุมัติไม่เท่าที่ขอ — คืนชั่วโมงที่อนุมัติ · เท่ากันหรือยังไม่อนุมัติคืน null */
@@ -275,6 +282,42 @@ export function ApprovalsBoard({
   /* กล่องรายละเอียดเปิดมาเพื่ออะไร — ดูอย่างเดียว · ใส่เหตุผลไม่อนุมัติ · ยืนยันชั่วโมงโอทีก่อนอนุมัติ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
   const [mode, setMode] = useState<"view" | "reject" | "approve">("view");
   const today = todayIso();
+
+  /*
+   * ยกเลิกการอนุมัติ (ผู้ใช้สั่ง 12 ต.ค. 2569) — เดิมกดอนุมัติผิดคนแล้วแก้ไม่ได้เลย
+   * ย้อนได้เฉพาะใบที่ยังไม่ไหลไปถึงเงิน: ไม่อยู่ในรอบเวลาที่ปิดแล้ว และใบเบิกต้องยังไม่จ่ายคืน
+   * ทำตามแบบเดียวกับการเปิดรอบเงินเดือน (reopenPayrunWithReason) คือบังคับกรอกเหตุผทุกครั้ง
+   */
+  const hr = useHr();
+  const lock = lockedUntil(hr);
+  const [undoing, setUndoing] = useState<Request | null>(null);
+  const [undoWhy, setUndoWhy] = useState("");
+  const [undoErr, setUndoErr] = useState(false);
+
+  /** เหตุผลที่ย้อนไม่ได้ — ว่างคือย้อนได้ */
+  const frozen = (item: Request) => {
+    if (item.paid) return "ใบนี้จ่ายคืนไปแล้วในรอบเงินเดือน ต้องเปิดรอบก่อน";
+    if (lock && item.when && item.when <= lock)
+      return `อยู่ในรอบเวลาที่ปิดแล้วถึง ${thaiDate(lock)} ต้องเปิดรอบก่อน`;
+    return "";
+  };
+
+  function applyUndo(item: Request, why: string) {
+    const ok =
+      item.src === "emp"
+        ? undoEmpDecision(item.key, why)
+        : item.kind === "leave"
+          ? undoLeaveDecision(item.role!, item.key, why)
+          : item.kind === "ot"
+            ? undoOtDecision(item.role!, item.key, why)
+            : undoClaimDecision(item.role!, item.key, why);
+    if (!ok) return false;
+    logChange(
+      "คำขออนุมัติ",
+      `ยกเลิกการอนุมัติ ${KIND[item.kind]} ${item.no} ของ ${item.name} — ${why.trim()}`,
+    );
+    return true;
+  }
 
   /* ?req= เปิดรายละเอียดของใบนั้นครั้งเดียว — คิวอ่านจาก localStorage จึงรอจนเจอใบก่อน
      ปรับสถานะระหว่างเรนเดอร์ ไม่ใช่ใน effect (กฎ react-hooks ของโปรเจคนี้ห้าม setState ใน effect) */
@@ -453,6 +496,21 @@ export function ApprovalsBoard({
                   {item.status === "pending" && (
                     <div className="grid grid-cols-2 gap-2.5 px-4 pb-3">{decide(item, true)}</div>
                   )}
+                  {/* ใบที่ตัดสินแล้วบนมือถือ — ปุ่มย้อนเต็มความกว้างเหมือนปุ่มตัดสิน */}
+                  {item.status !== "pending" && (
+                    <div className="px-4 pb-3">
+                      <UndoButton
+                        item={item}
+                        why={frozen(item)}
+                        wide
+                        onPick={() => {
+                          setUndoWhy("");
+                          setUndoErr(false);
+                          setUndoing(item);
+                        }}
+                      />
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -540,10 +598,17 @@ export function ApprovalsBoard({
                           {item.status === "pending" ? (
                             decide(item, false)
                           ) : (
-                            <span className={`tag ${item.status === "approved" ? "t-ok" : "t-late"}`}>
-                              <i />
-                              {item.status === "approved" ? "อนุมัติแล้ว" : "ไม่อนุมัติ"}
-                            </span>
+                            <>
+                              <span className={`tag ${item.status === "approved" ? "t-ok" : "t-late"}`}>
+                                <i />
+                                {item.status === "approved" ? "อนุมัติแล้ว" : "ไม่อนุมัติ"}
+                              </span>
+                              <UndoButton item={item} why={frozen(item)} onPick={() => {
+                                setUndoWhy("");
+                                setUndoErr(false);
+                                setUndoing(item);
+                              }} />
+                            </>
                           )}
                         </div>
                       </td>
@@ -559,7 +624,86 @@ export function ApprovalsBoard({
       {viewing && (
         <RequestDialog item={viewing} mode={mode} fixedOt={fixedOt} onClose={() => setViewing(null)} />
       )}
+
+      <ConfirmDialog
+        open={Boolean(undoing)}
+        tone="destructive"
+        title="ยกเลิกการอนุมัติ"
+        description={
+          undoing
+            ? `${KIND[undoing.kind]} ${undoing.no} ของ ${undoing.name} จะกลับไปรออนุมัติใหม่ ผู้ยื่นจะเห็นว่าใบถูกดึงกลับ`
+            : ""
+        }
+        detail={
+          <div className="text-left">
+            <label className="block text-[12.5px] font-semibold" htmlFor="undo-why">
+              เหตุผลที่ย้อน (ต้องกรอก)
+            </label>
+            <textarea
+              id="undo-why"
+              value={undoWhy}
+              onChange={(e) => {
+                setUndoWhy(e.target.value);
+                setUndoErr(false);
+              }}
+              placeholder="เช่น กดอนุมัติผิดใบ หรือผู้ยื่นแจ้งแก้ไขวันลา"
+              className="field-control mt-1.5 h-[72px] resize-y py-2.5 leading-relaxed"
+            />
+            {undoErr && (
+              <p role="alert" className="mt-1.5 text-[12.5px] text-destructive">
+                กรอกเหตุผลก่อนยืนยัน
+              </p>
+            )}
+          </div>
+        }
+        confirmLabel="ยกเลิกการอนุมัติ"
+        onConfirm={() => {
+          if (!undoing) return;
+          if (!undoWhy.trim()) return setUndoErr(true);
+          if (!applyUndo(undoing, undoWhy)) return setUndoErr(true);
+          setUndoing(null);
+          setUndoWhy("");
+        }}
+        onCancel={() => setUndoing(null)}
+      />
     </>
+  );
+}
+
+/*
+ * ปุ่มยกเลิกการอนุมัติในแถวที่ตัดสินไปแล้ว
+ * ย้อนไม่ได้ก็ยังเห็นปุ่ม แต่กดไม่ลงและบอกเหตุผลไว้ในคำบรรยาย — ซ่อนไปเฉย ๆ คนจะหาไม่เจอ
+ * แล้วเข้าใจว่าระบบย้อนไม่ได้เลย
+ */
+function UndoButton({
+  item,
+  why,
+  wide,
+  onPick,
+}: {
+  item: Request;
+  why: string;
+  /** เต็มความกว้าง — รายการบนมือถือ */
+  wide?: boolean;
+  onPick: () => void;
+}) {
+  const label = `ยกเลิกการอนุมัติ ${item.no}`;
+  return (
+    <button
+      type="button"
+      disabled={Boolean(why)}
+      title={why || label}
+      aria-label={why ? `${label} — ${why}` : label}
+      className={`rounded-[8px] border border-border text-[12.5px] font-medium text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 ${
+        wide ? "h-10 w-full" : "h-[30px] flex-none px-2.5"
+      }`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick();
+      }}
+    >
+      ยกเลิกการอนุมัติ
+    </button>
   );
 }
 
@@ -839,7 +983,11 @@ function awayList(spans: AwaySpan[], me: { id: string; who: string; date: string
 }
 
 function fromEmp(r: EmpRequest, name: string, sub: string, as: Role, spans: AwaySpan[]): Request {
-  const base = { src: "emp" as const, as, name, sub, key: r.id, no: r.id, status: r.status, at: r.at, why: r.reason ?? "" };
+  const base = {
+    src: "emp" as const, as, name, sub, key: r.id, no: r.id, status: r.status, at: r.at, why: r.reason ?? "",
+    /* ใบลาใช้วันสุดท้าย โอทีใช้วันที่ทำ ใบเบิกใช้ต้นเดือนที่เบิก — ไว้เทียบกับรอบที่ปิดแล้ว */
+    when: r.kind === "leave" ? (r.toDate ?? r.from ?? "") : r.kind === "ot" ? (r.date ?? "") : `${(r.month ?? "")}-01`,
+  };
   if (r.kind === "ot") {
     const lines = [`${thaiDate(r.date ?? "")} เวลา ${r.start}–${r.end}`, `รวม ${(r.hours ?? 0).toFixed(2)} ชม.`];
     const ot: OtReq | undefined =
@@ -910,6 +1058,7 @@ function fromLeave(
     lines,
     /* ไม่อนุมัติแล้ว comment ของใบลาถูกแทนด้วยเหตุผลของผู้อนุมัติ */
     why: status === "rejected" ? v.comment : "",
+    when: v.toDate || v.date,
   };
 }
 
@@ -933,6 +1082,7 @@ function fromOt(role: Role, v: OtRecord, as: Role): Request {
     approvedHours: v.approvedHours,
     ot: { date: v.date, startMin: v.startMin, endMin: v.endMin, hours: v.hours, role },
     why: v.comment,
+    when: v.date,
   };
 }
 
@@ -959,5 +1109,6 @@ function fromClaim(role: Role, v: ExpenseClaim, as: Role): Request {
     line: `${v.no ?? ""} ${lines.join(" ")}`,
     lines,
     why: v.comment,
+    paid: Boolean(v.paidIn),
   };
 }

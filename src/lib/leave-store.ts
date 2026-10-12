@@ -127,6 +127,34 @@ export function rejectLeave(role: Role, id: string, reason: string) {
   );
 }
 
+/*
+ * ยกเลิกการอนุมัติ — ดึงใบที่ตัดสินไปแล้วกลับมารออนุมัติใหม่ (ผู้ใช้สั่ง 12 ต.ค. 2569)
+ * เดิมกดอนุมัติผิดคนแล้วแก้ไม่ได้เลย ต้องไปรื้อข้อมูลในเครื่อง
+ * หน้าจอเป็นคนกันว่ารอบเวลาปิดแล้วหรือยัง (lockedUntil) ที่นี่กันซ้ำอีกชั้นว่า
+ * ต้องเป็นใบที่ตัดสินแล้วจริง ๆ และต้องมีเหตุผลเสมอ เพราะวันลาที่อนุมัติไปแล้ว
+ * ไปโผล่ในรอบเวลาและการหักเงิน ย้อนเงียบ ๆ ไม่ได้
+ */
+export function undoLeaveDecision(role: Role, id: string, why: string) {
+  const reason = why.trim();
+  if (!reason) return false;
+  let done = false;
+  store.updateRole(role, (records) =>
+    records.map((r) => {
+      if (r.id !== id) return r;
+      if (r.status !== "อนุมัติแล้ว" && r.status !== "ไม่อนุมัติ") return r;
+      done = true;
+      return {
+        ...r,
+        status: "รอการอนุมัติ" as const,
+        decidedAt: undefined,
+        comment: `ยกเลิกการอนุมัติ: ${reason}`,
+        editedAt: bkkStamp(),
+      };
+    }),
+  );
+  return done;
+}
+
 export function resetLeaveRecords() {
   store.reset();
 }

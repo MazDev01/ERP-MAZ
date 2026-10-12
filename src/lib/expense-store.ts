@@ -212,6 +212,31 @@ export function markReimbursed(items: { role: Role; month: string }[], payMonth:
   }
 }
 
+/*
+ * ยกเลิกการอนุมัติใบเบิก — ใบที่จ่ายคืนไปแล้ว (มี paidIn) ย้อนไม่ได้
+ * เพราะเงินออกไปกับสลิปของรอบนั้นแล้ว ต้องไปเปิดรอบเงินเดือนก่อน
+ */
+export function undoClaimDecision(role: Role, month: string, why: string) {
+  const reason = why.trim();
+  if (!reason) return false;
+  const claim = store.ofRole(role).find((c) => c.month === month);
+  if (!claim || claim.paidIn) return false;
+  if (claim.status !== "อนุมัติแล้ว" && claim.status !== "ไม่อนุมัติ") return false;
+  store.updateRole(role, (claims) =>
+    claims.map((c) =>
+      c.month === month
+        ? {
+            ...c,
+            status: "รออนุมัติ" as const,
+            comment: `ยกเลิกการอนุมัติ: ${reason}`,
+            decidedAt: undefined,
+          }
+        : c,
+    ),
+  );
+  return true;
+}
+
 export function resetExpenseClaims() {
   store.reset();
 }

@@ -79,6 +79,32 @@ export function rejectOt(role: Role, id: string, comment: string) {
   );
 }
 
+/*
+ * ยกเลิกการอนุมัติโอที — กลับมารออนุมัติใหม่ และล้างชั่วโมงที่อนุมัติไว้
+ * ชั่วโมงที่อนุมัติคือเงิน (paidHours) ย้อนได้เฉพาะรอบที่ยังไม่ปิด — หน้าจอกันให้
+ */
+export function undoOtDecision(role: Role, id: string, why: string) {
+  const reason = why.trim();
+  if (!reason) return false;
+  let done = false;
+  store.updateRole(role, (rs) =>
+    rs.map((r) => {
+      if (r.id !== id) return r;
+      if (r.status !== "อนุมัติแล้ว" && r.status !== "ไม่อนุมัติ") return r;
+      done = true;
+      return {
+        ...r,
+        status: "รออนุมัติ" as const,
+        approvedHours: null,
+        decidedAt: undefined,
+        comment: `ยกเลิกการอนุมัติ: ${reason}`,
+        editedAt: bkkStamp(),
+      };
+    }),
+  );
+  return done;
+}
+
 export function resetOtRecords() {
   store.reset();
 }

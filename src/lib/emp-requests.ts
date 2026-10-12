@@ -128,6 +128,28 @@ export function empFuelKm(r: EmpRequest) {
   return (r.fuel ?? []).reduce((a, x) => a + (Number(x.km) || 0), 0);
 }
 
+/* ยกเลิกการอนุมัติ — ดึงคำขอของพนักงานที่ไม่มีบัญชีกลับมารอตัดสินใหม่
+   ชั่วโมงโอทีที่อนุมัติไว้ถูกล้างด้วย ไม่งั้นค้างอยู่ในรอบทั้งที่ยังไม่อนุมัติ */
+export function undoEmpDecision(id: string, why: string) {
+  const reason = why.trim();
+  if (!reason) return false;
+  let done = false;
+  store.update((list) =>
+    list.map((r) => {
+      if (r.id !== id || r.status === "pending") return r;
+      done = true;
+      return {
+        ...r,
+        status: "pending" as const,
+        reason: `ยกเลิกการอนุมัติ: ${reason}`,
+        decidedAt: undefined,
+        approvedHours: undefined,
+      };
+    }),
+  );
+  return done;
+}
+
 /**
  * ตัดสินคำขอ — อนุมัติทันที · ไม่อนุมัติต้องมีเหตุผล (CEO-BR-03)
  * โอทีส่ง approvedHours มาได้เมื่อผู้อนุมัติปรับชั่วโมงตามเวลาตอกบัตรจริง
