@@ -382,6 +382,21 @@ export function lockedUntil(s: HrState) {
     .pop();
 }
 
+/*
+ * วันสุดท้ายของรอบ "เวลาทำงาน" ล่าสุดที่ปิดแล้ว — คนละอย่างกับ lockedUntil ที่ดูรอบเงินเดือน
+ * (พบตอนไล่หาบั๊ก 12 ต.ค. 2569) ฝ่ายบุคคลปิดตารางเวลาก่อน แล้วค่อยคำนวณและปิดเงินเดือน
+ * ช่วงคั่นกลางนั้นรอบเงินเดือนยังไม่ปิด lockedUntil จึงยังว่าง ถ้าผู้อนุมัติย้อนใบในช่วงนี้
+ * ยอดที่ฝ่ายบุคคลปิดไปแล้วจะเปลี่ยนเงียบ ๆ ทั้งที่กติกาบอกว่าปิดแล้วต้องเปิดรอบก่อนถึงแก้ได้
+ * ดูทั้งสองกลุ่ม รายเดือนและทดลองงานจ่ายรายวัน เพราะปิดแยกกัน
+ */
+export function timesheetLockedUntil(s: HrState) {
+  return s.periods
+    .filter((p) => p.closed || p.dayClosed)
+    .map((p) => hrCycle(p.month).to)
+    .sort()
+    .pop();
+}
+
 /** ปรับตำแหน่งหรือเงินเดือน — ต่อแถวประวัติใหม่ ไม่แก้แถวเดิม ด้วยเหตุผลเดียวกับ changeEmpType */
 export function changePosition(id: string, at: string, pos: PosKey, salary: number, note: string) {
   store.update((s) => {

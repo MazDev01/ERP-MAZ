@@ -31,7 +31,7 @@ import { useMemo, useRef, useState } from "react";
 import { decideEmpRequest, empFuelKm, undoEmpDecision, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
 import { claimParts, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
 import { hrPos } from "@/lib/hr-data";
-import { lockedUntil, useHr } from "@/lib/hr-store";
+import { lockedUntil, timesheetLockedUntil, useHr } from "@/lib/hr-store";
 import { logChange } from "@/lib/admin-log";
 import { ConfirmDialog } from "./confirm-dialog";
 import { approveClaim, rejectClaim, undoClaimDecision, useAllClaims } from "@/lib/expense-store";
@@ -289,7 +289,9 @@ export function ApprovalsBoard({
    * ทำตามแบบเดียวกับการเปิดรอบเงินเดือน (reopenPayrunWithReason) คือบังคับกรอกเหตุผทุกครั้ง
    */
   const hr = useHr();
-  const lock = lockedUntil(hr);
+  /* ล็อกถึงวันหลังสุดของสองเส้น — รอบเงินเดือนที่ปิดแล้ว และรอบเวลาทำงานที่ปิดแล้ว
+     ฝ่ายบุคคลปิดตารางเวลาก่อนปิดเงินเดือนเสมอ ถ้าดูแค่เส้นเงินเดือนจะมีช่องให้ย้อนของที่ปิดไปแล้ว */
+  const lock = [lockedUntil(hr), timesheetLockedUntil(hr)].filter(Boolean).sort().pop();
   const [undoing, setUndoing] = useState<Request | null>(null);
   const [undoWhy, setUndoWhy] = useState("");
   const [undoErr, setUndoErr] = useState(false);
