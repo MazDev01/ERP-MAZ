@@ -219,11 +219,29 @@ export async function setBadge(n: number) {
 
 export type SenderInfo = { publicKey: string } | null;
 
+/*
+ * ถามตัวส่งไปแล้วและไม่มี — จำไว้ทั้งแท็บ ไม่ต้องถามซ้ำ
+ * เปิดระบบด้วย next start ธรรมดา /__push/key จะ 404 เสมอ ทุกครั้งที่เปิดแท็บ
+ * "การแจ้งเตือน" ในหน้าโปรไฟล์จึงมีบรรทัดแดงใน console หนึ่งบรรทัด (ไล่กดทุกปุ่ม 12 ต.ค. 2569)
+ * ตัวระบบรับมือกับ 404 ได้อยู่แล้ว แต่เสียงรบกวนทำให้หา error จริงยาก
+ */
+const NO_SENDER = "maz-erp.no-push-sender";
+
 /** ตัวส่งรันอยู่ไหม — ได้กุญแจกลับมาแปลว่าเปิดผ่านตัวส่ง */
 export async function senderInfo(): Promise<SenderInfo> {
   try {
+    if (sessionStorage.getItem(NO_SENDER)) return null;
+  } catch {
+    /* โหมดส่วนตัวอ่าน sessionStorage ไม่ได้ — ถามตัวส่งตามปกติ */
+  }
+  try {
     const res = await fetch("/__push/key", { cache: "no-store" });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      try {
+        sessionStorage.setItem(NO_SENDER, "1");
+      } catch {}
+      return null;
+    }
     const d = (await res.json()) as { publicKey?: string };
     return d.publicKey ? { publicKey: d.publicKey } : null;
   } catch {
