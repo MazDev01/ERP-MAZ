@@ -285,12 +285,12 @@ function ClaimForm({
       setErr(problem.reasons[0] ?? "กรอกข้อมูลยังไม่ครบ");
       return;
     }
-    if (!submitClaim(month)) {
-      setErr("ยื่นไม่สำเร็จ ลองตรวจข้อมูลอีกครั้ง");
-      return;
-    }
-    onSent(k.name);
-    onClose();
+    /* ต่อฐานข้อมูลแล้วต้องรอให้ฐานข้อมูลรับก่อน ปิดกล่องทันทีจะดูเหมือนยื่นสำเร็จทั้งที่ไม่ */
+    void submitClaim(month).then((res) => {
+      if (!res.ok) return setErr(res.message);
+      onSent(k.name);
+      onClose();
+    });
   }
 
   return (

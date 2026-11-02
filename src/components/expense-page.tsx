@@ -63,6 +63,8 @@ export function ExpensePage() {
   const [view, setView] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   /** โชว์ที่กรอกไม่ครบหลังกดยื่นครั้งแรก ไม่ขึ้นเตือนตั้งแต่ยังไม่ได้กรอก */
   const [tried, setTried] = useState(false);
+  /* เหตุที่ฐานข้อมูลไม่รับ — ขึ้นในกล่องเดียวกับที่กรอกไม่ครบ ผู้ใช้มองที่เดียว */
+  const [failed, setFailed] = useState("");
 
   const month = monthKey(view);
   const claim = useMemo(() => claimOf(claims, month), [claims, month]);
@@ -80,6 +82,7 @@ export function ExpensePage() {
   const reasons = noApprover
     ? [...check.reasons, "ใบนี้ยังไม่มีผู้อนุมัติ — ให้ผู้ดูแลระบบแก้สายอนุมัติก่อน"]
     : check.reasons;
+  const shown = failed ? [...reasons, failed] : reasons;
   const fuelSum = fuelTotal(claim.fuel);
   const otherSum = otherTotal(claim.other);
   /* ค่าเดินทางเป็นคนละก้อนกับค่าน้ำมัน — ท้ายใบต้องบอกทีละก้อน (เจ้าของระบบสั่ง 8 ต.ค. 2569) */
@@ -102,8 +105,21 @@ export function ExpensePage() {
       });
       return;
     }
-    submitClaim(month);
-    setTried(false);
+    /* ต่อฐานข้อมูลแล้วต้องรอคำตอบก่อน — ยื่นไม่ผ่านแล้วล้างคำเตือนทิ้งจะดูเหมือนยื่นสำเร็จ */
+    setFailed("");
+    void submitClaim(month).then((res) => {
+      if (!res.ok) return setFailed(res.message);
+      setTried(false);
+    });
+  }
+
+  /* ดึงใบกลับมาแก้ — ฐานข้อมูลอาจไม่ให้ (หัวหน้าตัดสินไปแล้ว) ต้องบอกเหตุ */
+  function tryWithdraw() {
+    void withdrawClaim(month).then((res) => {
+      if (res.ok) return setFailed("");
+      setFailed(res.message);
+      setTried(true);
+    });
   }
 
   function switchMonth(step: number) {
@@ -152,7 +168,7 @@ export function ExpensePage() {
             <button
               type="button"
               className="btn glass-thin"
-              onClick={() => withdrawClaim(month)}
+              onClick={tryWithdraw}
             >
               <RotateIcon className="size-[15px]" strokeWidth={2.2} />
               ขอแก้ไข
@@ -185,15 +201,15 @@ export function ExpensePage() {
         </p>
       )}
 
-      {tried && reasons.length > 0 && (
+      {tried && shown.length > 0 && (
         <div
           ref={alertRef}
           className="no-print max-md:hidden rounded-xl border border-destructive/20 bg-[var(--destructive-soft)] px-4 py-3 text-sm text-destructive"
           role="alert"
         >
-          <b className="font-semibold">ยังยื่นไม่ได้ — ต้องแก้ {reasons.length} จุด</b>
+          <b className="font-semibold">ยังยื่นไม่ได้ — ต้องแก้ {shown.length} จุด</b>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-[13px]">
-            {reasons.map((r) => (
+            {shown.map((r) => (
               <li key={r}>{r}</li>
             ))}
           </ul>

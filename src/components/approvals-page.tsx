@@ -315,7 +315,7 @@ export function ApprovalsBoard({
           ? await undoLeaveDecision(item.role!, item.key, why)
           : item.kind === "ot"
             ? await undoOtDecision(item.role!, item.key, why)
-            : undoClaimDecision(item.role!, item.key, why);
+            : await undoClaimDecision(item.role!, item.key, why);
     if (!ok) return false;
     logChange(
       "คำขออนุมัติ",
@@ -981,7 +981,7 @@ async function applyDecision(
   }
   if (!item.role) return { ok: true };
 
-  /* ใบลากับใบโอทีต่อฐานข้อมูลแล้ว จึงต้องรอคำตอบ — ใบเบิกยังเขียนลงเครื่อง */
+  /* ใบลา ใบโอที และใบเบิกต่อฐานข้อมูลแล้ว จึงต้องรอคำตอบของฐานข้อมูลก่อนปิดกล่อง */
   if (item.kind === "leave") {
     return approve
       ? await approveLeave(item.role, item.key)
@@ -992,9 +992,9 @@ async function applyDecision(
       ? await approveOt(item.role, item.key, hours ?? item.hours ?? 0, why)
       : await rejectOt(item.role, item.key, why);
   }
-  if (approve) approveClaim(item.role, item.key, why);
-  else rejectClaim(item.role, item.key, why);
-  return { ok: true };
+  return approve
+    ? await approveClaim(item.role, item.key, why)
+    : await rejectClaim(item.role, item.key, why);
 }
 
 function Kv({ label, value }: { label: string; value: React.ReactNode }) {
