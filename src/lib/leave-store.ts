@@ -21,6 +21,14 @@ import { hrSnapshot } from "./hr-store";
 import { staffEmployeeId } from "./staff-identity";
 import { USERS } from "./mock-data";
 import { empRequestIds } from "./emp-requests";
+import {
+  LEAVE_REASON,
+  cancelLeave as sbCancel,
+  decideLeave as sbDecide,
+  fetchLeave,
+  fileLeave,
+  undoLeave as sbUndo,
+} from "./supabase/leave";
 
 /*
  * ใบลาของผู้ที่ล็อกอินอยู่ — แยกเก็บตามบทบาท เพราะหนึ่งบทบาทคือหนึ่งคน
@@ -31,13 +39,29 @@ const store = createRoleStore<LeaveRecord[]>(
   LEAVE_RECORDS,
   (v): v is LeaveRecord[] => Array.isArray(v),
   fixLeaveStatuses,
+  { fetch: fetchLeave, empty: [] },
 );
+
+/*
+ * ผลของการเขียน — ต่อฐานข้อมูลแล้วการเขียนพลาดได้จริง (สิทธิ์ไม่ถึง รอบปิด ลาเกินสิทธิ์)
+ * หน้าจอต้องได้รู้ว่าพลาดเพราะอะไร ไม่ใช่กดแล้วเงียบเหมือนตอนเขียนลงเครื่อง
+ */
+export type LeaveWriteResult = { ok: true } | { ok: false; message: string };
+
+/** แปลงเหตุจากฐานข้อมูลเป็นข้อความที่คนอ่านรู้เรื่อง */
+function say(reason: string, extra?: { asked?: number; left?: number }) {
+  const base = LEAVE_REASON[reason] ?? "บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง";
+  if (reason === "over_quota" && extra?.left !== undefined) {
+    return `${base} — ขอ ${extra.asked} วัน เหลือ ${extra.left} วัน`;
+  }
+  return base;
+}
 
 export function useLeaveRecords() {
   return store.use();
 }
 
-export function addLeaveRequest(input: {
+export async function addLeaveRequest(input: {
   type: LeaveType;
   from: string;
   to: string;
@@ -50,7 +74,25 @@ export function addLeaveRequest(input: {
   reason: string;
   employee: string;
   files?: string[];
-}) {
+}): Promise<LeaveRecord | null> {
+  /* ต่อฐานข้อมูลแล้ว — เลขที่ใบและเวลาที่ยื่นออกจากฐานข้อมูล ไม่ใช่จากเบราว์เซอร์
+     เลขที่ใบต้องไม่ซ้ำทั้งบริษัท สองคนกดยื่นพร้อมกันจากสองเครื่องจึงนับที่เดียวได้เท่านั้น */
+  if (store.live) {
+    const res = await fileLeave({
+      type: input.type,
+      from: input.from,
+      to: input.to,
+      days: input.days,
+      half: input.half,
+      startMin: input.startMin,
+      endMin: input.endMin,
+      hours: input.hours,
+      reason: input.reason,
+    });
+    store.refresh();
+    return res.ok ? res.record : null;
+  }
+
   const record: LeaveRecord = {
     /* เลขที่ใบลาตาม ERD: LV-ปี พ.ศ.-ลำดับ เดินต่อกันทั้งบริษัท รวมใบลาของนักศึกษาฝึกงาน */
     /* รวมเลขที่ของใบลาที่ยื่นผ่านคำขอของทีมงาน (emp-requests) ด้วย ไม่งั้นเลขซ้ำกับคิวของ GM */
@@ -84,7 +126,13 @@ export function addLeaveRequest(input: {
  * วันที่ยกเลิกไม่ถูกนับเป็นวันลา เพราะสิทธิ์ถูกตัดตอนอนุมัติเท่านั้น (leaveUsage)
  * ใบที่ตัดสินแล้วถอนไม่ได้
  */
-export function cancelLeaveRequest(id: string, reason: string) {
+export async function cancelLeaveRequest(id: string, reason: string): Promise<LeaveWriteResult> {
+  if (store.live) {
+    const res = await sbCancel(id, reason);
+    store.refresh();
+    return res.ok ? { ok: true } : { ok: false, message: say(res.reason) };
+  }
+
   const by = USERS[currentRole()]?.name ?? "";
   store.update((records) =>
     records.map((r) =>
@@ -99,6 +147,7 @@ export function cancelLeaveRequest(id: string, reason: string) {
         : r,
     ),
   );
+  return { ok: true };
 }
 
 /** ใบลาของทุกบทบาท — หน้าอนุมัติเท่านั้น */
@@ -106,8 +155,17 @@ export function useAllLeave() {
   return store.useAll();
 }
 
-/** หัวหน้าอนุมัติใบลา */
-export function approveLeave(role: Role, id: string) {
+/**
+ * หัวหน้าอนุมัติใบลา
+ * ต่อฐานข้อมูลแล้วฐานข้อมูลตรวจเองว่าคนกดเป็นผู้อนุมัติของใบนี้จริง ไม่ได้อนุมัติใบตัวเอง
+ * และวันลาไม่เกินสิทธิ์ที่เหลือ — หน้าจอซ่อนปุ่มให้แล้วก็จริง แต่เชื่อหน้าจอไม่ได้
+ */
+export async function approveLeave(role: Role, id: string): Promise<LeaveWriteResult> {
+  if (store.live) {
+    const res = await sbDecide(id, true, "");
+    store.refresh();
+    return res.ok ? { ok: true } : { ok: false, message: say(res.reason, res) };
+  }
   store.updateRole(role, (records) =>
     records.map((r) =>
       r.id === id && r.status === "รอการอนุมัติ"
@@ -115,9 +173,19 @@ export function approveLeave(role: Role, id: string) {
         : r,
     ),
   );
+  return { ok: true };
 }
 
-export function rejectLeave(role: Role, id: string, reason: string) {
+export async function rejectLeave(
+  role: Role,
+  id: string,
+  reason: string,
+): Promise<LeaveWriteResult> {
+  if (store.live) {
+    const res = await sbDecide(id, false, reason);
+    store.refresh();
+    return res.ok ? { ok: true } : { ok: false, message: say(res.reason, res) };
+  }
   store.updateRole(role, (records) =>
     records.map((r) =>
       r.id === id && r.status === "รอการอนุมัติ"
@@ -125,6 +193,7 @@ export function rejectLeave(role: Role, id: string, reason: string) {
         : r,
     ),
   );
+  return { ok: true };
 }
 
 /*
@@ -134,9 +203,18 @@ export function rejectLeave(role: Role, id: string, reason: string) {
  * ต้องเป็นใบที่ตัดสินแล้วจริง ๆ และต้องมีเหตุผลเสมอ เพราะวันลาที่อนุมัติไปแล้ว
  * ไปโผล่ในรอบเวลาและการหักเงิน ย้อนเงียบ ๆ ไม่ได้
  */
-export function undoLeaveDecision(role: Role, id: string, why: string) {
+export async function undoLeaveDecision(role: Role, id: string, why: string): Promise<boolean> {
   const reason = why.trim();
   if (!reason) return false;
+
+  /* ฐานข้อมูลกันไว้อีกชั้นว่ารอบเงินเดือนที่ครอบคลุมวันลานี้ปิดแล้วห้ามย้อน
+     เพราะวันลาที่อนุมัติไปแล้วไปโผล่ในรอบเวลาและการหักเงินเรียบร้อยแล้ว */
+  if (store.live) {
+    const res = await sbUndo(id, reason);
+    store.refresh();
+    return res.ok;
+  }
+
   let done = false;
   store.updateRole(role, (records) =>
     records.map((r) => {

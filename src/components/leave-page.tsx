@@ -641,11 +641,15 @@ function MobileLeaveCard({ row, hit, onCancel }: { row: LeaveRecord; hit?: boole
 function CancelLeaveDialog({ row, onClose }: { row: LeaveRecord; onClose: () => void }) {
   const [why, setWhy] = useState("");
   const [warn, setWarn] = useState(false);
+  /* เหตุที่ฐานข้อมูลไม่รับการยกเลิก — เช่นใบถูกอนุมัติไปแล้วระหว่างที่กล่องเปิดอยู่ */
+  const [fail, setFail] = useState("");
 
   function send() {
     if (!why.trim()) return setWarn(true);
-    cancelLeaveRequest(row.id, why.trim());
-    onClose();
+    /* ปิดกล่องเมื่อยกเลิกผ่านแล้วเท่านั้น ไม่ปิดทิ้งให้เข้าใจผิดว่าถอนใบสำเร็จ */
+    void cancelLeaveRequest(row.id, why.trim()).then((r) =>
+      r.ok ? onClose() : setFail(r.message),
+    );
   }
 
   return (
@@ -692,6 +696,11 @@ function CancelLeaveDialog({ row, onClose }: { row: LeaveRecord; onClose: () => 
       {warn && (
         <p className="mt-[9px] rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-[13px] py-2.5 text-[12.5px] leading-[1.55] text-destructive">
           ยกเลิกใบลาต้องระบุเหตุผล เพราะใบลายังเก็บไว้เป็นประวัติ
+        </p>
+      )}
+      {fail && (
+        <p role="alert" className="mt-[9px] rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-[13px] py-2.5 text-[12.5px] leading-[1.55] text-destructive">
+          {fail}
         </p>
       )}
       </div>

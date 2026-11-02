@@ -61,6 +61,8 @@ export function LeaveDialog({
   const [type, setType] = useState<LeaveType>(types[0]);
   /* กดส่งแล้วยังไม่ครบ — ค่อยขึ้นข้อความว่าขาดอะไร ไม่ทักตั้งแต่ยังไม่ได้กรอก */
   const [tried, setTried] = useState(false);
+  /* เหตุที่ยื่นไม่ผ่าน — ขึ้นในกล่องเดิม ไม่ปิดกล่องทิ้ง */
+  const [failed, setFailed] = useState("");
   /* เปิดมาให้เริ่มที่วันนี้ก่อน — ลาย้อนหลังหรือล่วงหน้าค่อยเลื่อนเอง
      ถ้าถูกส่งวันที่มาจากหน้าบันทึกเวลา ให้ใช้วันนั้นแทน */
   const [from, setFrom] = useState(presetDate || TODAY);
@@ -215,7 +217,9 @@ export function LeaveDialog({
       setTried(true);
       return;
     }
-    addLeaveRequest({
+    /* เลขที่ใบและเวลาที่ยื่นออกจากฐานข้อมูลเมื่อต่อแล้ว จึงต้องรอคำตอบก่อนปิดกล่อง
+       ยื่นไม่ผ่านแล้วปิดกล่องไปเลยจะเข้าใจว่ายื่นสำเร็จ แล้วไม่มีใบในระบบ */
+    void addLeaveRequest({
       type,
       from,
       to,
@@ -227,9 +231,11 @@ export function LeaveDialog({
       reason: reason.trim(),
       employee: currentProfile().name,
       files,
+    }).then((rec) => {
+      if (!rec) return setFailed("ยื่นใบลาไม่สำเร็จ ลองใหม่อีกครั้ง");
+      onSubmitted(days);
+      onClose();
     });
-    onSubmitted(days);
-    onClose();
   }
 
   if (!hydrated) return null;
@@ -444,12 +450,12 @@ export function LeaveDialog({
             </p>
           )}
 
-          {[...problems, ...(tried ? missing : [])].length > 0 && (
+          {[...problems, ...(tried ? missing : []), ...(failed ? [failed] : [])].length > 0 && (
             <p
               className="mt-[9px] rounded-[11px] border border-destructive/20 bg-[var(--destructive-soft)] px-[13px] py-2.5 text-[12.5px] leading-relaxed text-destructive"
               role="alert"
             >
-              {[...problems, ...(tried ? missing : [])].map((m, i) => (
+              {[...problems, ...(tried ? missing : []), ...(failed ? [failed] : [])].map((m, i) => (
                 <span key={m} className="block">
                   {i > 0 && <br />}
                   {m}

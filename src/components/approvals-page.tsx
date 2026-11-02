@@ -295,6 +295,9 @@ export function ApprovalsBoard({
   const [undoing, setUndoing] = useState<Request | null>(null);
   const [undoWhy, setUndoWhy] = useState("");
   const [undoErr, setUndoErr] = useState(false);
+  /* เหตุที่ฐานข้อมูลไม่รับการตัดสิน — เช่นใบถูกตัดสินไปแล้วจากอีกเครื่อง หรือลาเกินสิทธิ์
+     เดิมกดแล้วเงียบได้ เพราะเขียนลงเครื่องไม่เคยพลาด */
+  const [failed, setFailed] = useState("");
 
   /** เหตุผลที่ย้อนไม่ได้ — ว่างคือย้อนได้ */
   const frozen = (item: Request) => {
@@ -304,12 +307,12 @@ export function ApprovalsBoard({
     return "";
   };
 
-  function applyUndo(item: Request, why: string) {
+  async function applyUndo(item: Request, why: string) {
     const ok =
       item.src === "emp"
         ? undoEmpDecision(item.key, why)
         : item.kind === "leave"
-          ? undoLeaveDecision(item.role!, item.key, why)
+          ? await undoLeaveDecision(item.role!, item.key, why)
           : item.kind === "ot"
             ? undoOtDecision(item.role!, item.key, why)
             : undoClaimDecision(item.role!, item.key, why);
@@ -367,10 +370,14 @@ export function ApprovalsBoard({
   };
   const quickApprove = (item: Request) => {
     if (tooSoon()) return;
+    const run = (hours?: number) =>
+      void applyDecision(item, true, "", hours).then((r) => {
+        if (!r.ok && r.message) setFailed(r.message);
+      });
     /* CEO แก้ชั่วโมงโอทีไม่ได้ — อนุมัติเท่าที่ขอทันที ไม่ผ่านขั้นยืนยันชั่วโมง (ผู้ใช้สั่ง 5 ต.ค. 2569) */
-    if (item.kind === "ot" && fixedOt) return applyDecision(item, true, "", item.hours ?? 0);
+    if (item.kind === "ot" && fixedOt) return run(item.hours ?? 0);
     if (item.kind === "ot" && item.ot) return open(item, "approve");
-    applyDecision(item, true, "");
+    run();
   };
   /* ชั่วโมงที่ขอต่ำกว่าขั้นต่ำ — อนุมัติเท่าที่ขอไม่ได้ ต้องไม่อนุมัติ (กติกาเดิมของหน้า CEO) */
   const cannotApprove = (item: Request) => fixedOt && item.kind === "ot" && (item.hours ?? 0) < OT_MIN_HOURS;
@@ -662,11 +669,27 @@ export function ApprovalsBoard({
         onConfirm={() => {
           if (!undoing) return;
           if (!undoWhy.trim()) return setUndoErr(true);
-          if (!applyUndo(undoing, undoWhy)) return setUndoErr(true);
-          setUndoing(null);
-          setUndoWhy("");
+          const item = undoing;
+          /* ต่อฐานข้อมูลแล้วการย้อนต้องรอคำตอบจากฐานข้อมูลก่อน
+             ไม่ปิดกล่องทิ้งไว้เฉย ๆ ทั้งที่อาจย้อนไม่สำเร็จ */
+          void applyUndo(item, undoWhy).then((ok) => {
+            if (!ok) return setUndoErr(true);
+            setUndoing(null);
+            setUndoWhy("");
+          });
         }}
         onCancel={() => setUndoing(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(failed)}
+        tone="destructive"
+        title="ทำรายการไม่สำเร็จ"
+        description={failed}
+        confirmLabel="เข้าใจแล้ว"
+        cancelLabel="ปิด"
+        onConfirm={() => setFailed("")}
+        onCancel={() => setFailed("")}
       />
     </>
   );
@@ -748,27 +771,32 @@ function RequestDialog({
   const [rejecting, setRejecting] = useState(mode === "reject");
   const [why, setWhy] = useState("");
   const [warn, setWarn] = useState(false);
+  /* เหตุที่บันทึกไม่ผ่าน — ขึ้นในกล่องเดิม ไม่ปิดกล่องทิ้ง */
+  const [fail, setFail] = useState("");
   /* โอทีที่รอตัดสิน — เทียบเวลาตอกบัตรจริง ให้แก้ชั่วโมงก่อนอนุมัติ */
   const ot = useOtDecision(!done && item.ot ? item.ot : null);
   const cut = cutHours(item);
 
+  /* ปิดกล่องเมื่อบันทึกผ่านเท่านั้น พลาดแล้วค้างกล่องไว้พร้อมเหตุผล
+     ไม่ปิดทิ้งไปเฉย ๆ ให้คนเข้าใจผิดว่าอนุมัติไปแล้ว */
+  const run = (job: Promise<{ ok: boolean; message?: string }>) =>
+    void job.then((r) => (r.ok ? onClose() : setFail(r.message ?? "บันทึกไม่สำเร็จ")));
+
   function reject() {
     if (!rejecting) return setRejecting(true);
     if (!why.trim()) return setWarn(true);
-    applyDecision(item, false, why.trim());
-    onClose();
+    run(applyDecision(item, false, why.trim()));
   }
 
   function approve() {
     if (item.kind === "ot" && item.ot && fixedOt) {
       if (ot.tooSmall) return;
-      applyDecision(item, true, ot.comment.trim(), item.hours ?? ot.asked);
+      run(applyDecision(item, true, ot.comment.trim(), item.hours ?? ot.asked));
     } else if (item.kind === "ot" && item.ot) {
       /* ต่ำกว่า 0.5 ชม. หรือยังไม่ยืนยันชั่วโมงเมื่อบัตรตอกไม่ครอบคลุม — อนุมัติไม่ได้ */
       if (!ot.ready) return;
-      applyDecision(item, true, ot.finalComment(), ot.hours);
-    } else applyDecision(item, true, "");
-    onClose();
+      run(applyDecision(item, true, ot.finalComment(), ot.hours));
+    } else run(applyDecision(item, true, ""));
   }
 
   return (
@@ -908,6 +936,15 @@ function RequestDialog({
           )}
         </div>
       )}
+
+      {fail && (
+        <p
+          role="alert"
+          className="mt-4 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-[13px] py-2.5 text-[12.5px] leading-[1.55] text-destructive"
+        >
+          {fail}
+        </p>
+      )}
     </Sheet>
   );
 }
@@ -932,19 +969,32 @@ function NumBold({ text }: { text: string }) {
 
 /** บันทึกผลลงสโตร์ของคำขอแต่ละชนิด — ที่เดียว */
 /* hours = ชั่วโมงโอทีที่อนุมัติ (ปรับตามเวลาตอกบัตรจริงแล้ว) — ไม่ส่งมาใช้เท่าที่ขอ */
-function applyDecision(item: Request, approve: boolean, why: string, hours?: number) {
-  if (item.src === "emp")
-    return decideEmpRequest(item.key, approve, why, item.kind === "ot" ? hours : undefined);
-  if (!item.role) return;
+async function applyDecision(
+  item: Request,
+  approve: boolean,
+  why: string,
+  hours?: number,
+): Promise<{ ok: boolean; message?: string }> {
+  if (item.src === "emp") {
+    decideEmpRequest(item.key, approve, why, item.kind === "ot" ? hours : undefined);
+    return { ok: true };
+  }
+  if (!item.role) return { ok: true };
+
+  /* ใบลาต่อฐานข้อมูลแล้ว จึงต้องรอคำตอบ — ที่เหลือยังเขียนลงเครื่องและไม่เคยพลาด */
+  if (item.kind === "leave") {
+    return approve
+      ? await approveLeave(item.role, item.key)
+      : await rejectLeave(item.role, item.key, why);
+  }
   if (approve) {
-    if (item.kind === "leave") approveLeave(item.role, item.key);
     if (item.kind === "ot") approveOt(item.role, item.key, hours ?? item.hours ?? 0, why);
     if (item.kind === "expense") approveClaim(item.role, item.key, why);
   } else {
-    if (item.kind === "leave") rejectLeave(item.role, item.key, why);
     if (item.kind === "ot") rejectOt(item.role, item.key, why);
     if (item.kind === "expense") rejectClaim(item.role, item.key, why);
   }
+  return { ok: true };
 }
 
 function Kv({ label, value }: { label: string; value: React.ReactNode }) {
