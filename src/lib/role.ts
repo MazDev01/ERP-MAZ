@@ -15,42 +15,37 @@ import { useSyncExternalStore } from "react";
 import { createPersistedStore } from "./persisted-store";
 import { settings } from "./system-settings";
 import { HR_EMP, ROLE_EMPLOYEE } from "./hr-data";
-import { setShiftRole } from "./work-schedule";
 
 /*
  * บริษัทไม่มีผู้ดูแลระบบแยก ฝ่ายบุคคลดูแลการตั้งค่าทั้งหมด (Full Proposal · M5)
  * บทบาท admin จึงถูกถอดออกเมื่อ 28 ก.ย. 2569 — หน้าตั้งค่าย้ายไปอยู่ในเมนูของฝ่ายบุคคล
  */
-/* intern = นักศึกษาฝึกงาน · maid = แม่บ้าน (ยกมาจากระบบต้นฉบับ 6 ต.ค. 2569)
-   สองบทบาทนี้มีบัญชีเข้าระบบ แต่ใช้ได้เฉพาะเมนูของตัวเอง และคำขอขึ้นฝ่ายบุคคล/GM */
+/* intern = นักศึกษาฝึกงาน (ผู้ใช้สั่ง 2 ต.ค. 2569) — มีบัญชีเข้าระบบ ใช้ได้แค่ลงเวลาและการลา */
 export type Role = "sales" | "ps" | "pm" | "acc" | "hr" | "staff" | "gm" | "ceo" | "intern" | "maid";
 
-/*
- * en ใช้เฉพาะการ์ดเลือกบทบาทในหน้าเข้าสู่ระบบ — ที่อื่นในระบบยังใช้ชื่อภาษาไทย (label)
- * short = ชื่อฝ่ายสั้น ๆ ใช้ตอนคนเดียวทำสองฝ่าย จะได้เขียนรวบเป็น "บัญชีและบุคคล"
- */
-export const ROLES: { key: Role; label: string; short: string; note: string; en: string }[] = [
-  { key: "sales", label: "พนักงานขาย", short: "ขาย", note: "ดูแลผู้สนใจ ใบเสนอราคา และดีล",
+/* en ใช้เฉพาะการ์ดเลือกบทบาทในหน้าเข้าสู่ระบบ — ที่อื่นในระบบยังใช้ชื่อภาษาไทย (label) */
+export const ROLES: { key: Role; label: string; note: string; en: string }[] = [
+  { key: "sales", label: "พนักงานขาย", note: "ดูแลผู้สนใจ ใบเสนอราคา และดีล",
     en: "Sales" },
   /* ทีมก่อนการขาย (SA/BD) — รับคำขอก่อนการขายจากฝ่ายขาย ทำข้อเสนอแล้วส่งกลับ (ต้นแบบ presales-work.html) */
-  { key: "ps", label: "ทีมก่อนการขาย", short: "ก่อนการขาย", note: "รับคำขอจากฝ่ายขาย จัดทำข้อเสนอแล้วส่งกลับ",
+  { key: "ps", label: "ทีมก่อนการขาย", note: "รับคำขอจากฝ่ายขาย จัดทำข้อเสนอแล้วส่งกลับ",
     en: "Presales (SA/BD)" },
-  { key: "pm", label: "ผู้จัดการโครงการ", short: "โปรเจค", note: "รับใบงานแล้วมอบหมายให้ทีม",
+  { key: "pm", label: "ผู้จัดการโครงการ", note: "รับใบงานแล้วมอบหมายให้ทีม",
     en: "Project Manager" },
-  { key: "acc", label: "พนักงานบัญชี", short: "บัญชี", note: "วางบิล ติดตามหนี้ ออกใบเสร็จ และยื่นภาษี",
+  { key: "acc", label: "พนักงานบัญชี", note: "วางบิล ติดตามหนี้ ออกใบเสร็จ และยื่นภาษี",
     en: "Accountant" },
-  { key: "hr", label: "ฝ่ายบุคคล", short: "บุคคล", note: "ดูแลข้อมูลพนักงาน เวลาทำงาน และเงินเดือน",
+  { key: "hr", label: "ฝ่ายบุคคล", note: "ดูแลข้อมูลพนักงาน เวลาทำงาน และเงินเดือน",
     en: "Human Resources" },
-  { key: "staff", label: "ทีมงาน", short: "ทีมงาน", note: "รับงานจาก PM ลงมือทำ แล้วส่งผลงานให้ตรวจ",
+  { key: "staff", label: "ทีมงาน", note: "รับงานจาก PM ลงมือทำ แล้วส่งผลงานให้ตรวจ",
     en: "Team Member" },
-  { key: "gm", label: "ผู้จัดการทั่วไป (GM)", short: "ผู้จัดการทั่วไป", note: "อนุมัติใบลาของพนักงานทั่วไป",
+  { key: "gm", label: "ผู้จัดการทั่วไป (GM)", note: "อนุมัติใบลาของพนักงานทั่วไป",
     en: "General Manager" },
-  { key: "ceo", label: "ผู้บริหาร", short: "ผู้บริหาร", note: "อนุมัติคำขอที่ขึ้นถึงผู้บริหาร และอนุมัติยอดเงินเดือน",
+  { key: "ceo", label: "ผู้บริหาร", note: "อนุมัติคำขอที่ขึ้นถึงผู้บริหาร และอนุมัติยอดเงินเดือน",
     en: "CEO" },
-  { key: "intern", label: "นักศึกษาฝึกงาน", short: "ฝึกงาน", note: "ลงเวลาเข้า-ออกงาน และยื่นใบลา",
+  { key: "intern", label: "นักศึกษาฝึกงาน", note: "ลงเวลาเข้า-ออกงาน และยื่นใบลา",
     en: "Intern" },
-  /* แม่บ้าน — ลงเวลา เบิกค่าใช้จ่าย ลา และดูสลิปเงินเดือน (ระบบต้นฉบับ 2 ต.ค. 2569) */
-  { key: "maid", label: "แม่บ้าน", short: "แม่บ้าน", note: "ลงเวลา ยื่นใบลา เบิกค่าใช้จ่าย และดูสลิปเงินเดือน",
+  /* แม่บ้าน (ผู้ใช้สั่ง 2 ต.ค. 2569) — ลงเวลา เบิกค่าใช้จ่าย ลา และดูสลิปเงินเดือน */
+  { key: "maid", label: "แม่บ้าน", note: "ลงเวลา ยื่นใบลา เบิกค่าใช้จ่าย และดูสลิปเงินเดือน",
     en: "Housekeeper" },
 ];
 
@@ -66,9 +61,9 @@ function isRole(value: unknown): value is Role {
 }
 
 /*
- * บทบาทแยกตามแท็บ (ยกจากระบบต้นฉบับ) — เปิดหลายแท็บเป็นคนละบทบาทได้ ไม่ต้องออกแล้วเข้าใหม่
- * เดิมเก็บใน localStorage ที่เดียวทั้งเบราว์เซอร์ พอเข้าบทบาทใหม่ในอีกแท็บ แท็บเดิมก็เปลี่ยนตามตอนโหลดหน้า
- * ตอนนี้: อ่านจาก sessionStorage ของแท็บก่อน (อยู่รอดตอนรีเฟรช) · แท็บใหม่ที่ยังไม่มีค่าใช้บทบาทล่าสุดที่เข้าระบบ
+ * บทบาทแยกตามแท็บ (ผู้ใช้สั่ง 5 ต.ค. 2569) — เปิดหลายแท็บเป็นคนละบทบาทได้ ไม่ต้องออกจากระบบแล้วเข้าใหม่
+ * เดิมเก็บใน localStorage ที่เดียวทั้งเบราว์เซอร์ เข้าบทบาทใหม่ในอีกแท็บ แท็บเดิมก็กลายเป็นบทบาทใหม่ตามเมื่อโหลดหน้า
+ * ตอนนี้: อ่านจาก sessionStorage ของแท็บก่อน (อยู่รอดตอนรีเฟรช) · แท็บใหม่ที่ยังไม่มีค่าใช้บทบาทล่าสุดที่เข้าระบบ (localStorage)
  */
 const KEY = "maz-erp.role.v1";
 const shared = createPersistedStore<Role>(KEY, "sales", isRole);
@@ -88,16 +83,15 @@ const store = {
       const parsed: unknown = raw ? JSON.parse(raw) : null;
       if (isRole(parsed)) return (tabRole = parsed);
     } catch {
-      // ฝั่งเซิร์ฟเวอร์หรือโหมดส่วนตัว — ใช้ค่าล่าสุดของเบราว์เซอร์แทน
+      // ใช้ค่าล่าสุดของเบราว์เซอร์แทน
     }
-    const next = shared.get();
+    tabRole = shared.get();
     try {
-      window.sessionStorage.setItem(KEY, JSON.stringify(next));
-      tabRole = next;
+      window.sessionStorage.setItem(KEY, JSON.stringify(tabRole));
     } catch {
-      // ยังใช้ค่าในหน่วยความจำได้ แต่อย่าจำไว้ตอนวาดฝั่งเซิร์ฟเวอร์
+      // โหมดส่วนตัว — ยังใช้ค่าในหน่วยความจำได้
     }
-    return next;
+    return tabRole;
   },
   getServer: shared.getServer,
   set(next: Role) {
@@ -105,7 +99,7 @@ const store = {
     try {
       window.sessionStorage.setItem(KEY, JSON.stringify(next));
     } catch {
-      // โหมดส่วนตัว
+      // ไม่เป็นไร
     }
     /* จำเป็นค่าเริ่มของแท็บที่เปิดใหม่ด้วย */
     shared.set(next);
@@ -118,11 +112,6 @@ export function useRole() {
 }
 
 /** อ่านนอก React เช่นตอนบันทึกใบงาน */
-/* เวลาทำงานของบางบทบาทไม่เท่ากัน (แม่บ้าน) — ส่งบทบาทปัจจุบันให้ work-schedule รู้
-   ส่งทางเดียวแบบนี้เพราะ work-schedule import ไฟล์นี้ไม่ได้ (hr-data อ่าน work-schedule ตอนโหลดโมดูล) */
-setShiftRole(store.get());
-store.subscribe(() => setShiftRole(store.get()));
-
 export function currentRole() {
   return store.get();
 }
@@ -131,35 +120,11 @@ export function setRole(role: Role) {
   store.set(role);
 }
 
-/*
- * ลืมบทบาทของแท็บนี้ตอนออกจากระบบ (แก้บั๊กที่พบตอนทดสอบ 8 ต.ค. 2569)
- * บทบาทที่ใช้จริงอยู่ใน sessionStorage กับตัวแปรในหน่วยความจำ
- * clearSession ลบแต่ของใน localStorage แท็บเดิมจึงยังจำได้ว่าเป็นใคร กดย้อนกลับก็เข้าระบบต่อได้เลย
- */
-export function forgetRole() {
-  tabRole = undefined;
-  try {
-    window.sessionStorage.removeItem(KEY);
-  } catch {
-    // โหมดส่วนตัว — ไม่มีอะไรให้ลบ
-  }
-  for (const l of tabListeners) l();
-}
-
 /** ให้สโตร์อื่นเกาะไปด้วยได้ เช่นโปรไฟล์ที่ต้องเปลี่ยนตามบทบาท */
 export const subscribeRole = store.subscribe;
 
 export function roleLabel(role: Role) {
   return ROLES.find((r) => r.key === role)!.label;
-}
-
-/**
- * ชื่อฝ่ายของคนคนหนึ่ง — ทำฝ่ายเดียวใช้ชื่อตำแหน่งเต็ม ทำสองฝ่ายเขียนรวบด้วย "และ"
- * เช่น "บัญชีและบุคคล" (เจ้าของสั่ง 5 ต.ค. 2569 — เดิมเขียนว่า "ควบ 2 ตำแหน่ง · …" ยาวและอ่านยาก)
- */
-export function rolesLabel(roles: Role[]) {
-  if (roles.length < 2) return roleLabel(roles[0]);
-  return roles.map((r) => ROLES.find((x) => x.key === r)!.short).join("และ");
 }
 
 /**
@@ -205,12 +170,12 @@ const APPROVER_ROLE: Record<ApproverKey, Role | null> = {
 };
 
 /**
- * ผู้อนุมัติที่เลือกได้ในหน้าตั้งค่าบทบาทของผู้ดูแลระบบ (/admin/roles)
+ * ผู้อนุมัติที่เลือกได้ในหน้าตั้งค่าบทบาทของผู้ดูแลระบบ (/admin/settings?s=staff&t=positions)
  * เก็บเป็นคีย์ ไม่ได้เก็บชื่อคน — ชื่อและตำแหน่งดึงจากตรงนี้เสมอ
  */
 export type ApproverKey = "pm" | "acc" | "hr" | "gm" | "exec";
 
-/** ผู้อนุมัติทั้งหมด — ชื่อ/ตำแหน่งอ่านจากการตั้งค่าทุกครั้ง (ผู้ดูแลระบบแก้ได้ที่ /admin/roles) */
+/** ผู้อนุมัติทั้งหมด — ชื่อ/ตำแหน่งอ่านจากการตั้งค่าทุกครั้ง (ผู้ดูแลระบบแก้ได้ที่ /admin/settings?s=staff&t=positions) */
 export function approvers(): Record<ApproverKey, Approver> {
   const n = settings().approvers;
   return {
@@ -233,7 +198,7 @@ export type ApprovalRoute = Record<RequestKind, Record<Role, ApproverKey>>;
  *        ทีมก่อนการขาย (ps) เป็นตำแหน่ง SA จึงขึ้น CEO
  *        PM อนุมัติของตัวเองไม่ได้ จึงขึ้นหัวหน้าตามสาย (GM) · GM ขึ้น CEO ตามสายบังคับบัญชา
  * ใบเบิก: ⚠️ เปลี่ยน 22 ก.ย. 2569 ตามต้นแบบ pm-approvals.html ชุดใหม่ — PM เป็นผู้อนุมัติใบเบิกค่าน้ำมันของทีม
- *        ขาย · ทีมก่อนการขาย · พนักงาน → PM · ใบของ PM เอง → CEO (ต้นแบบ gm-approvals ไม่ให้ GM อนุมัติใบเบิก)
+ *        ขาย · ทีมก่อนการขาย · ทีมงาน → PM · ใบของ PM เอง → CEO (ต้นแบบ gm-approvals ไม่ให้ GM อนุมัติใบเบิก)
  *        เดิมทุกบทบาทขึ้นฝ่ายบัญชี (ผู้ใช้ยืนยัน 21 ก.ย.) ต้นแบบชุดใหม่ทับค่านั้น
  *        ⚠️ เครื่องที่ผู้ดูแลระบบเคยแก้สายอนุมัติไว้ — เปลี่ยนคีย์สโตร์เป็น v4 เมื่อ 22 ก.ย. 2569 ค่าที่เคยแก้ไว้จึงกลับเป็นค่าตั้งต้น
  * ⚠️ สายอนุมัติผูกกับบทบาท ไม่ใช่ตำแหน่ง — หนึ่งบทบาทคือหนึ่งคนในตอนนี้ จึงแทนกันได้

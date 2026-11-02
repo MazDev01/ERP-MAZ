@@ -25,14 +25,15 @@ import {
   subscribeClock,
   subscribeRecords,
 } from "@/lib/attendance-store";
-import { bkkOf, toIsoDate, thaiDate, TH_MONTHS_FULL } from "@/lib/format";
+import { bkkOf, parseIsoDate, pad2, toIsoDate, thaiMonth, TH_MONTHS_FULL } from "@/lib/format";
 import { leavesOnDate, useLeaveRecords } from "@/lib/leave-store";
 import { useRole } from "@/lib/role";
-import { canVisit } from "@/lib/nav";
-import { expectedInMinutes, expectedOutMinutes, formatMinutes, formatMinutesOfDay, leaveWindowOf, looksForgotten, minutesOfTime, requiredMinutes } from "@/lib/work-schedule";
-import { popupOn, useNotifySettings } from "@/lib/notify-settings";
-import { areaSettings, freshFix, judge, locate, meters, useLiveGeo, type LiveGeo, type PunchGeo } from "@/lib/work-area";
-import { ChevronLeftIcon, ChevronRightIcon, ClockIcon, LeaveIcon, LoginIcon, PinIcon, PlusIcon, PowerIcon } from "./icons";
+import { useMySchedule } from "@/lib/hr-link";
+import { expectedInMinutes, expectedOutMinutes, formatMinutes, formatMinutesOfDay, leaveWindowOf, minutesOfTime, requiredMinutes } from "@/lib/work-schedule";
+import { areaSettings, freshFix, judge, locate, meters, setGeoDemo, useGeoDemo, useLiveGeo, type GeoDemo, type LiveGeo, type PunchGeo } from "@/lib/work-area";
+import { clearClockDemo, demoNow, setClockDemo, useClockDemo } from "@/lib/clock-demo";
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, LoginIcon, LogoutIcon, PinIcon, PlusIcon, PowerIcon } from "./icons";
+import "@/styles/mobile/checkin.css";
 
 const DOW_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
@@ -42,7 +43,9 @@ const DOW_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 type Check =
   | { phase: "locating" }
   /* อยู่นอกพื้นที่ หรือหาพิกัดไม่ได้ — error มีค่าเมื่อหาพิกัดไม่ได้ */
-  | { phase: "outside"; geo: PunchGeo; error?: string };
+  | { phase: "outside"; geo: PunchGeo; error?: string }
+  /* อยู่ในพื้นที่แล้ว รอกดยืนยันเข้างาน (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+  | { phase: "confirm"; geo: PunchGeo };
 
 export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {}) {
   const records = useSyncExternalStore(
@@ -57,14 +60,30 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   );
   const leaveRecords = useLeaveRecords();
   const role = useRole();
-  /* บางบทบาทไม่มีหน้าโอทีและหน้าบันทึกเวลาทั้งเดือน (แม่บ้าน · นักศึกษาฝึกงาน)
-     ปุ่มที่พาไปหน้าที่เขาเปิดไม่ได้ต้องไม่ขึ้นเลย (พบตอนไล่กดลิงก์ 7 ต.ค. 2569) */
-  const canOt = canVisit("/ot", role);
-  const canRecords = canVisit("/records", role);
-  const now = useMemo(() => (tick ? new Date(tick) : null), [tick]);
+  /* ฝึกงานกับแม่บ้านไม่มีเมนูโอทีและบันทึกเวลาทั้งเดือน (ผู้ใช้สั่ง 2 ต.ค. 2569) จึงไม่มีลิงก์ไปสองหน้านั้น */
+  const punchOnly = role === "intern" || role === "maid";
+  /* นาฬิกาจำลองของโหมดทดสอบ — อ่านแทน new Date() เฉพาะหน้านี้ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  const clockDemo = useClockDemo();
+  const simTick = tick ? tick + clockDemo.offset : tick;
+  const now = useMemo(() => (simTick ? new Date(simTick) : null), [simTick]);
+
+  /* ขอสิทธิ์ตำแหน่งทันทีที่เข้าหน้า (มือถือ) ไม่ต้องรอแตะ — ไม่มีข้อความเพิ่ม (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 767.98px)").matches) return;
+    if (!window.isSecureContext || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      () => {},
+      () => {},
+      { maximumAge: 60_000, timeout: 20_000 },
+    );
+  }, []);
 
   const [popOpen, setPopOpen] = useState(false);
-  const notify = useNotifySettings();
+  /*
+   * ป๊อปอัพจากปุ่มจำลอง — บังคับโหมดเข้า/ออกตามแบบ (ผู้ใช้สั่ง 13 ต.ค. 2569)
+   * preview = สถานะจริงไม่ตรงกับที่จำลอง (เช่นจำลองมาสายทั้งที่เข้างานอยู่แล้ว) → กดแล้วโชว์ผลแต่ไม่บันทึก
+   */
+  const [demoPop, setDemoPop] = useState<{ mode: "in" | "out"; preview: boolean } | null>(null);
   const [done, setDone] = useState<{ title: string; note: string } | null>(null);
   const [check, setCheck] = useState<Check | null>(null);
   /* ปิดกล่องระหว่างรอพิกัดแล้วผลมาทีหลัง ต้องไม่บันทึกเข้างานเอง — นับรอบไว้เทียบ */
@@ -82,20 +101,24 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   const rounds = toSessions(todayRecords).length;
 
   const leave = today ? leavesOnDate(leaveRecords, today)[0] : undefined;
-  const leaveWindow = leaveWindowOf(leave);
-  const expectIn = expectedInMinutes(leaveWindow);
-  const expectOut = expectedOutMinutes(leaveWindow);
-  const requiredMin = requiredMinutes(leaveWindow);
+  /* ใบลาจำลอง (ลาครึ่งวันเช้า) มาก่อนใบลาจริง — มีผลเฉพาะหน้านี้ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  /* เวลาทำงานของคนที่ล็อกอิน — แม่บ้าน 08:00–17:00 คนอื่นตามบริษัท (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  const sch = useMySchedule();
+  const leaveWindow = clockDemo.leave ?? leaveWindowOf(leave, sch);
+  const expectIn = expectedInMinutes(leaveWindow, sch);
+  const expectOut = expectedOutMinutes(leaveWindow, sch);
+  const requiredMin = requiredMinutes(leaveWindow, sch);
 
   const mode: "in" | "out" = isWorking ? "out" : "in";
 
   /*
    * ตัวเลขของหน้าจอมือถือ (ตามแบบ checkin.html) — ใช้สูตรชุดเดียวกับจอคอม ไม่ได้คิดใหม่
+   * workedMin  เวลาที่ทำไปแล้ววันนี้ (หักพักกลางวันตามกติกาเดิม)
    * weekDays   เจ็ดวันของสัปดาห์นี้ วันไหนตอกครบเข้า-ออกแล้วติดดาว
    */
-  /* ชื่อที่ทำงานกับรัศมี อ่านจากที่ผู้ดูแลตั้งไว้ ไม่ใช่ข้อความตายตัวในหน้านี้ */
-  /* อ่านผ่านฮุก ไม่ใช่ areaSettings() ตรง ๆ — ค่าที่ผู้ดูแลแก้ไว้อยู่ใน localStorage
-     ถ้าอ่านตอนเรนเดอร์ ฝั่งเซิร์ฟเวอร์จะได้ค่าตั้งต้น คนละค่ากับฝั่งเครื่อง (hydration ไม่ตรง) */
+  const workedMin = today
+    ? Math.round(workedMsOfDay(todayRecords, simTick ?? 0, leaveWindow, sch) / 60000)
+    : 0;
   /*
    * วันที่กำลังดูอยู่ในแถบสัปดาห์ (เจ้าของสั่ง 25 ก.ย. 2569 ให้กดย้อนดูวันก่อนหน้าได้)
    * ว่าง = วันนี้ · เลือกวันย้อนหลังแล้วสามช่องเวลาเปลี่ยนตามวันนั้น
@@ -106,20 +129,25 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   const viewIsToday = viewDay === today;
   const viewRecords = viewDay ? recordsOfDay(records, viewDay) : [];
   const viewLeave =
-    viewIsToday || !viewDay ? leaveWindow : leaveWindowOf(leavesOnDate(leaveRecords, viewDay)[0]);
+    viewIsToday || !viewDay ? leaveWindow : leaveWindowOf(leavesOnDate(leaveRecords, viewDay)[0], sch);
   const viewIn = [...viewRecords].reverse().find((r) => r.type === "in") ?? null;
   const viewOut = [...viewRecords].reverse().find((r) => r.type === "out") ?? null;
   const viewWorked = viewDay
-    ? Math.round(workedMsOfDay(viewRecords, viewIsToday ? (tick ?? 0) : 0, viewLeave) / 60000)
+    ? Math.round(workedMsOfDay(viewRecords, viewIsToday ? (simTick ?? 0) : 0, viewLeave, sch) / 60000)
     : 0;
+  const viewRequired = requiredMinutes(viewLeave, sch);
+  const viewPct =
+    viewRequired > 0 ? Math.min(100, Math.round((viewWorked * 100) / viewRequired)) : 0;
 
-  /* เลื่อนดูสัปดาห์ก่อนหน้า/ถัดไปได้ (ต้นแบบมือถือชุดใหม่ 30 ก.ย. 2569) */
-  const [weekOffset, setWeekOffset] = useState(0);
+  /* เลื่อนดูสัปดาห์ก่อน ๆ ได้ (0 = สัปดาห์นี้ · ติดลบ = ย้อนหลัง) ไปข้างหน้าเกินสัปดาห์นี้ไม่ได้ */
+  const [weekOff, setWeekOff] = useState(0);
+  const swipeX = useRef<number | null>(null);
+
   const weekDays = (() => {
     if (!now) return [];
     const base = bkkOf(now);
     const start = new Date(base);
-    start.setDate(base.getDate() - base.getDay() + weekOffset * 7);
+    start.setDate(base.getDate() - base.getDay() + weekOff * 7);
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
@@ -137,137 +165,194 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
     });
   })();
 
-  /*
-   * สรุปสัปดาห์นี้และลงเวลาล่าสุด — เติมพื้นที่ว่างใต้การ์ดตอกบัตรบนจอคอม (ผู้ใช้สั่ง 12 ต.ค. 2569)
-   * ใช้บันทึกชุดเดียวกับหน้าบันทึกเวลา ไม่ได้นับใหม่ · นับเฉพาะวันที่ผ่านมาแล้วถึงวันนี้
-   */
-  const weekSum = (() => {
-    if (!now || !today) return null;
-    const base = bkkOf(now);
-    const start = new Date(base);
-    start.setDate(base.getDate() - base.getDay());
-    let minutes = 0, days = 0, late = 0;
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      const iso = toIsoDate(d);
-      if (iso > today) break;
-      const rows = recordsOfDay(records, iso);
-      if (!rows.length) continue;
-      days += 1;
-      const lv = leaveWindowOf(leavesOnDate(leaveRecords, iso)[0]);
-      minutes += Math.round(workedMsOfDay(rows, iso === today ? (tick ?? 0) : 0, lv) / 60000);
-      const first = rows.find((r) => r.type === "in");
-      if (first) {
-        const at = bkkOf(new Date(first.at));
-        const over = at.getHours() * 60 + at.getMinutes() - expectedInMinutes(lv);
-        if (over > 0) late += over;
-      }
-    }
-    return { from: toIsoDate(start), to: toIsoDate(end), minutes, days, late };
-  })();
-
-  /* ห้าวันล่าสุดที่มีการลงเวลา ใหม่สุดขึ้นก่อน */
-  const recent = (() => {
-    if (!today) return [];
-    const out: { iso: string; in: string | null; out: string | null; minutes: number }[] = [];
-    const base = bkkOf(new Date(`${today}T00:00:00`));
-    for (let i = 0; i < 30 && out.length < 5; i++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() - i);
-      const iso = toIsoDate(d);
-      const rows = recordsOfDay(records, iso);
-      if (!rows.length) continue;
-      const inAt = rows.find((r) => r.type === "in");
-      const outAt = [...rows].reverse().find((r) => r.type === "out");
-      out.push({
-        iso,
-        in: inAt ? formatClock(new Date(inAt.at)) : null,
-        out: outAt ? formatClock(new Date(outAt.at)) : null,
-        minutes: Math.round(
-          workedMsOfDay(rows, iso === today ? (tick ?? 0) : 0, leaveWindowOf(leavesOnDate(leaveRecords, iso)[0])) / 60000,
-        ),
-      });
-    }
-    return out;
-  })();
+  /* ชื่อเดือนตามสัปดาห์ที่ดูอยู่ — ใช้วันพุธเป็นตัวแทน สัปดาห์คร่อมเดือนจะได้เดือนที่กินวันมากกว่า */
+  const monthTitle = weekDays[3] ? thaiMonth(weekDays[3].iso.slice(0, 7)) : "";
 
   /*
-   * ลืมตอกบัตรออก — เลยเวลาเลิกงานเกินที่ผู้ดูแลตั้งไว้แต่ยังไม่ตอกออก แจ้งเข้า LINE ให้เจ้าตัว
-   * ส่งจากหน้าจอที่เปิดอยู่เท่านั้น (ยังไม่มีตัวตั้งเวลาฝั่งเซิร์ฟเวอร์) และส่งได้วันละครั้ง
+   * สถานะหน้าปัดมือถือ
+   * searching ยังไม่เข้างานและยังไม่อยู่ในพื้นที่ (กดไม่ได้) · found อยู่ในพื้นที่ กดเข้างานได้
+   * working กำลังทำงาน · done ออกงานแล้ววันนี้ · past ดูวันย้อนหลัง
+   * หาพิกัดไม่ได้ (error) ยังให้กดได้ — กล่องที่ขึ้นจะบอกสาเหตุและให้ตรวจใหม่
    */
-  const forgot =
-    isWorking && now != null && lastIn != null && looksForgotten(new Date(lastIn.at), now);
-  useEffect(() => {
-  }, [forgot, today, role]);
+  const inZone = live.phase === "ready" && live.geo.status === "inside";
+  const dial: "searching" | "found" | "working" | "done" | "past" = !viewIsToday
+    ? "past"
+    : isWorking
+      ? "working"
+      : checkedOut
+        ? "done"
+        : inZone || live.phase === "error"
+          ? "found"
+          : "searching";
+  const workedSec = today
+    ? Math.floor(workedMsOfDay(todayRecords, simTick ?? 0, leaveWindow, sch) / 1000)
+    : 0;
+  /* ก่อนเวลาเลิกงานกี่นาที — มากกว่า 0 ปุ่มเช็คเอาท์กลายเป็น "ก่อนเวลา" */
+  const beforeEnd = isWorking && now ? Math.max(0, expectOut - minutesOfTime(now)) : 0;
+
+  /* สถานะของวันย้อนหลังที่เลือก */
+  const viewLeaveRec = viewDay && !viewIsToday ? leavesOnDate(leaveRecords, viewDay)[0] : undefined;
+  const pastStatus: { label: string; tone: keyof typeof PAST_TONE } = (() => {
+    const firstIn = viewRecords.find((r) => r.type === "in");
+    if (!firstIn) return viewLeaveRec ? { label: "ลา", tone: "info" } : { label: "ไม่มีบันทึก", tone: "neutral" };
+    if (viewRecords[viewRecords.length - 1]?.type === "in") return { label: "ไม่ได้เช็คเอาท์", tone: "warning" };
+    if (minutesOfTime(new Date(firstIn.at)) > expectedInMinutes(viewLeave, sch)) return { label: "มาสาย", tone: "danger" };
+    return { label: "ปกติ", tone: "success" };
+  })();
+
+  /* สามช่องนี้เปลี่ยนตามวันที่เลือกในแถบสัปดาห์ ไม่ได้ผูกกับวันนี้อย่างเดียว */
+  const stats = (
+    <>
+      <MobStat tone="peach" label="เวลาเข้างาน" value={viewIn ? formatClock(new Date(viewIn.at)) : null} />
+      <MobStat tone="rose" label="เวลาออกงาน" value={viewOut ? formatClock(new Date(viewOut.at)) : null} />
+      <MobStat tone="lilac" label="รวมชั่วโมง" value={viewWorked ? hhmm(viewWorked) : null} />
+    </>
+  );
+
+  /* ไม่มีการเตือนลืมตอกบัตรออกแล้ว (ผู้ใช้สั่ง 16 ต.ค. 2569) */
 
   const leaveText = leaveWindow
     ? `ลา ${formatMinutesOfDay(leaveWindow.from)}–${formatMinutesOfDay(leaveWindow.to)} น.`
     : "";
 
   const popAt = now;
-  const popMode = mode;
+  const popMode = demoPop?.mode ?? mode;
   const popLeave = leaveWindow;
-  const popExpectOut = expectedOutMinutes(popLeave);
+  const popExpectOut = expectedOutMinutes(popLeave, sch);
   const popMin = popAt ? minutesOfTime(popAt) : 0;
   const popEarly = popMode === "out" ? Math.max(0, popExpectOut - popMin) : 0;
+  /* มาสาย → มือถือขึ้นหน้าบึ้งตามแบบ (ผู้ใช้สั่ง 13 ต.ค. 2569) · จอคอมเหมือนเดิม */
+  const popLate = popMode === "in" ? Math.max(0, popMin - expectIn) : 0;
+  const popLeaveAtStart = Boolean(
+    popLeave && popLeave.from <= expectedInMinutes(null, sch) && popLeave.to > expectedInMinutes(null, sch),
+  );
 
   function closePop() {
     attempt.current += 1;
     setPopOpen(false);
     setDone(null);
     setCheck(null);
+    setDemoPop(null);
   }
 
+  /*
+   * ปุ่มโหมดทดสอบบนมือถือ 7 ปุ่ม ตามแบบ checkin.html (ผู้ใช้สั่ง 13 ต.ค. 2569)
+   * เวลากะไม่มีใบลา = ค่าในตั้งค่า (ปกติ 09:00–18:00)
+   */
+  function openDemo(m: "in" | "out") {
+    attempt.current += 1;
+    setDone(null);
+    setCheck(null);
+    setDemoPop({ mode: m, preview: m === "in" ? isWorking : !isWorking });
+    setPopOpen(true);
+    if (m === "in") void checkIn(false);
+  }
+  const shiftIn = expectedInMinutes(null, sch);
+  const shiftOut = expectedOutMinutes(null, sch);
+  const demoActions: { label: string; run: () => void }[] = [
+    {
+      label: "จำลอง: เข้าพื้นที่",
+      run: () => {
+        /* กลับเวลาจริง · เข้าพื้นที่แล้วเด้งป๊อปอัพเองถ้าถึงเวลา (เข้างานเผื่อ 10 นาที · ออกงานตรงเวลา) */
+        const entering = !inZone;
+        clearClockDemo();
+        setGeoDemo("inside");
+        if (!entering || checkedOut) return;
+        const realLeave = leaveWindowOf(leave, sch);
+        const m = minutesOfTime(new Date());
+        const due = isWorking ? m >= expectedOutMinutes(realLeave, sch) : m >= expectedInMinutes(realLeave, sch) - 10;
+        if (!due) return;
+        attempt.current += 1;
+        setDone(null);
+        setCheck(null);
+        setDemoPop(null);
+        setPopOpen(true);
+        if (!isWorking) void checkIn(false);
+      },
+    },
+    {
+      label: "จำลอง: ออกนอกพื้นที่",
+      run: () => {
+        clearClockDemo();
+        setGeoDemo("outside");
+        closePop();
+      },
+    },
+    {
+      /* ก่อนเวลาเข้างาน 18 นาที (แบบ: 08:42) → หน้ายิ้ม "เช็คอินเข้างาน" */
+      label: "จำลอง: มาเช้า",
+      run: () => {
+        setClockDemo(shiftIn - 18);
+        setGeoDemo("inside");
+        openDemo("in");
+      },
+    },
+    {
+      /* หลังเวลาเข้างาน 30 นาที (แบบ: 09:30) → หน้าบึ้ง "คุณมาสายวันนี้" */
+      label: "จำลอง: มาสาย",
+      run: () => {
+        setClockDemo(shiftIn + 30);
+        setGeoDemo("inside");
+        openDemo("in");
+      },
+    },
+    {
+      /* ตรงเวลาเลิกงาน (แบบ: 18:00) → "เลิกงานแล้ว" */
+      label: "จำลอง: เลิกงาน",
+      run: () => {
+        setClockDemo(shiftOut);
+        setGeoDemo("inside");
+        openDemo("out");
+      },
+    },
+    {
+      /* ลาครึ่งวันเช้า → เริ่มงานหลังพัก · เด้ง 10 นาทีก่อนเริ่มงาน (แบบ: 12:50) */
+      label: "จำลอง: ลาครึ่งวันเช้า",
+      run: () => {
+        const half = leaveWindowOf({ days: 0.5, half: "morning" }, sch);
+        setClockDemo(expectedInMinutes(half, sch) - 10, half);
+        setGeoDemo("inside");
+        openDemo("in");
+      },
+    },
+    {
+      /* ก่อนเวลาเลิกงาน 2 ชั่วโมง (แบบ: 16:00) → "ออกก่อนเวลา" */
+      label: "จำลอง: ออกก่อนเวลา",
+      run: () => {
+        setClockDemo(shiftOut - 120);
+        setGeoDemo("inside");
+        openDemo("out");
+      },
+    },
+  ];
+
+  /*
+   * ข้อความใต้ป้ายตำแหน่ง — บอกเฉพาะเรื่องของผู้ใช้เอง (ลา เลิกงานกี่โมง ออกงานแล้ว)
+   * ไม่บอกเวลาที่ระบบจะเด้งเตือน (ผู้ใช้สั่ง 2 ต.ค. 2569 ว่าเป็นการทำงานของระบบ ไม่ต้องให้ผู้ใช้รู้)
+   * ไม่มีอะไรต้องบอกคืนค่าว่าง แล้วไม่แสดงกล่องข้อความเลย
+   */
   function homeNote() {
     if (requiredMin === 0 && leaveWindow)
-      return "วันนี้คุณลาทั้งวัน ไม่ต้องตอกบัตร — ถ้าเข้ามาทำงานก็ตอกได้ตามปกติ";
-    if (checkedOut)
-      return "ออกงานแล้ววันนี้ — ถ้ากลับเข้ามาทำงานต่อ กดเข้างานได้อีก";
-    if (isWorking) {
-      if (!popupOn(notify, "checkout"))
-        return `เลิกงานเวลา ${formatMinutesOfDay(expectOut)} น. · ปิดการเตือนเช็คเอาท์ไว้`;
-      const outAt = formatMinutesOfDay(Math.max(0, expectOut - notify.leadOut));
-      return `ระบบจะเตือนให้เช็คเอาท์เวลา ${outAt} น.`;
-    }
-    const head = leaveWindow
-      ? `${leaveText} · เริ่มงาน ${formatMinutesOfDay(expectIn)} น. · `
-      : "";
-    if (!popupOn(notify, "checkin"))
-      return `${head}ปิดการเตือนเช็คอินไว้ — กดเข้างานเองได้ตลอด`;
-    const lead = formatMinutesOfDay(Math.max(0, expectIn - notify.leadIn));
-    return `${head}ระบบจะเตือนเวลา ${lead} น.`;
+      /* ลาทั้งวัน — ไม่มีข้อความ ปุ่มตอกบัตรกดไม่ได้แทน (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+      return "";
+    /* ป้ายด้านบนบอก "ออกงานแล้ว" อยู่แล้ว ไม่ต้องซ้ำ (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+    if (checkedOut) return "";
+    if (isWorking) return `เลิกงานเวลา ${formatMinutesOfDay(expectOut)} น.`;
+    return leaveWindow ? `${leaveText} · เริ่มงาน ${formatMinutesOfDay(expectIn)} น.` : "";
   }
-
-  /* ข้อความใต้ปุ่มวงกลม — ตรรกะเดียวกับป้ายพื้นที่ของจอคอม (AreaBadge) */
-  const areaText = (() => {
-    if (isWorking) return lastIn?.geo?.status === "inside" ? "เข้างานในพื้นที่ทำงาน" : "กำลังทำงานอยู่";
-    if (checkedOut && live.phase !== "ready") return "ออกงานแล้ววันนี้";
-    if (live.phase === "locating") return "กำลังค้นหาพื้นที่ทำงาน…";
-    if (live.phase === "error") return "เปิดตำแหน่งเพื่อเข้างาน";
-    if (live.geo.status === "inside") return "อยู่ในพื้นที่ทำงาน";
-    if (live.geo.status === "weak") return "สัญญาณ GPS ไม่แม่น";
-    return `อยู่นอกพื้นที่ · ห่าง ${meters(live.geo.dist ?? 0)}`;
-  })();
-
-  /* ชื่อเดือนของสัปดาห์ที่กำลังดู — ใช้วันกลางสัปดาห์กันเดือนคาบเกี่ยว */
-  const weekTitle = weekDays.length
-    ? `${TH_MONTHS_FULL[Number(weekDays[3].iso.slice(5, 7)) - 1]} ${Number(weekDays[3].iso.slice(0, 4)) + 543}`
-    : "";
 
   /*
    * กดเข้างาน — ขอพิกัดก่อนทุกครั้ง อยู่ในรัศมีของที่ทำงานก็บันทึกเลยเหมือนเดิม
    * อยู่นอกรัศมีเข้างานไม่ได้ (ผู้ใช้สั่ง) — ขึ้นกล่องบอกระยะ ให้ลองตรวจใหม่เมื่อถึงที่ทำงาน
    * อ่านที่ทำงานสด ๆ ตอนกด ไม่ใช่จากตอนเปิดหน้า เผื่อผู้ดูแลเพิ่งแก้
    */
-  async function checkIn() {
+  async function checkIn(useLive = true) {
     const rules = areaSettings();
     const mine = ++attempt.current;
     setCheck({ phase: "locating" });
-    /* มีพิกัดสดจากป้ายสถานะอยู่แล้ว ใช้ต่อได้เลย ไม่ต้องรอเครื่องหาใหม่ */
-    const recent = freshFix(live);
+    /* มีพิกัดสดจากป้ายสถานะอยู่แล้ว ใช้ต่อได้เลย ไม่ต้องรอเครื่องหาใหม่
+       ปุ่มจำลองเพิ่งเปลี่ยนตำแหน่งจำลอง พิกัดสดในรอบนี้ยังเป็นของเก่า จึงไม่ใช้ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+    const recent = useLive ? freshFix(live) : null;
     const got = recent ? { fix: recent } : await locate();
     if (mine !== attempt.current) return;
     if ("error" in got) {
@@ -276,8 +361,8 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
     }
     const geo = judge(got.fix, rules);
     if (geo.status === "inside") {
-      setCheck(null);
-      confirm(geo);
+      /* ถามยืนยันก่อนเหมือนตอนออกงาน (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+      setCheck({ phase: "confirm", geo });
       return;
     }
     setCheck({ phase: "outside", geo });
@@ -285,8 +370,10 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
 
   function confirm(geo?: PunchGeo) {
     /* ตอนรอพิกัดนาฬิกาเดินไปแล้ว — ใช้เวลาตอนที่บันทึกจริง ไม่ใช่ตอนกดปุ่ม */
-    const at = geo ? new Date() : popAt;
+    /* นาฬิกาจำลองของโหมดทดสอบ — ไม่ได้จำลองก็คือเวลาจริง (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+    const at = geo ? demoNow() : popAt;
     if (!at) return;
+    const preview = Boolean(demoPop?.preview);
 
     const record: PunchRecord = {
       id: newId(),
@@ -295,16 +382,21 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
       note: geo?.why ?? "",
       ...(geo ? { geo } : {}),
     };
-    addRecord(record);
+    /* ป๊อปอัพจำลองที่ไม่ตรงกับสถานะจริง — โชว์ผลอย่างเดียว ไม่บันทึก */
+    if (!preview) addRecord(record);
     setCheck(null);
 
     const t = `${formatClock(at)} น.`;
     if (popMode === "out") {
-      const dayList = [...todayRecords, { id: "preview", type: "out" as const, at: at.toISOString(), note: "" }];
+      /* จำลองเลิกงานทั้งที่ยังไม่ได้เข้างาน — สมมติเข้างานตรงเวลาแบบ checkin.html (inAt 09:00) */
+      const base: PunchRecord[] = preview
+        ? [{ id: "preview-in", type: "in", at: new Date(at.getTime() - (popMin - expectIn) * 60_000).toISOString(), note: "" }]
+        : todayRecords;
+      const dayList = [...base, { id: "preview", type: "out" as const, at: at.toISOString(), note: "" }];
       /* แสดงชั่วโมงจริง · ที่ขาดคิดจากชั่วโมงในกะเหมือนตอนคิดเงิน */
-      const worked = Math.round(actualMsOfDay(dayList, at.getTime()) / 60_000);
-      const paid = Math.round(workedMsOfDay(dayList, at.getTime(), popLeave) / 60_000);
-      const missing = Math.max(0, requiredMinutes(popLeave) - paid);
+      const worked = Math.round(actualMsOfDay(dayList, at.getTime(), sch) / 60_000);
+      const paid = Math.round(workedMsOfDay(dayList, at.getTime(), popLeave, sch) / 60_000);
+      const missing = Math.max(0, requiredMinutes(popLeave, sch) - paid);
       setDone(
         popEarly > 0
           ? {
@@ -326,98 +418,121 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
       });
     }
 
-    setTimeout(closePop, 1900);
+    /* ป็อปอัพสำเร็จค้างไว้ 4 วินาที (เดิม 1.9) ให้อ่านเวลาที่บันทึกทัน — ผู้ใช้สั่ง 2 ต.ค. 2569 */
+    setTimeout(closePop, 4000);
   }
 
   return (
     <div
       className={
         embedded
-          ? ""
+          ? /* จอกว้าง: กล่องอยู่กลางหน้าแนวตั้ง ไม่ชิดบน (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+            "md:flex md:min-h-[calc(100dvh-210px)] md:items-center md:justify-center"
           : "flex min-h-dvh items-center justify-center p-0 sm:p-8"
       }
     >
       {/*
         ── โหมดมือถือ (ทำตามแบบ checkin.html · เจ้าของสั่ง 25 ก.ย. 2569) ──
-        แถบสัปดาห์ติดดาว · การ์ดพื้นที่ทำงาน · หน้าปัดวงกลมใหญ่ · สามช่องเวลา
+        หัวเดือน+เลื่อนสัปดาห์ · แถบสัปดาห์ติดดาว · หน้าปัดเรดาร์/นาฬิกาดิจิทัล · สามช่องเวลา · ปุ่มเช็คเอาท์
         ตัวเลขและกติกาใช้ชุดเดียวกับจอคอมทั้งหมด เปลี่ยนแค่วิธีแสดงผล
       */}
-      <div className="w-full space-y-3.5 md:hidden">
-        {/* หัวหน้าจอ: เดือนของสัปดาห์ที่ดูอยู่ + ปุ่มขอโอที (ต้นแบบ checkin ชุดใหม่ 30 ก.ย. 2569) */}
-        <div className="flex items-start justify-between gap-3">
+      {/* พื้นขาว · ขอบ 18px · เว้นล่างให้แถบล่าง ตามแบบ checkin.html (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+      <div className="ck-m mx-auto flex w-full max-w-[520px] flex-col gap-4 bg-white px-[18px] pt-[18px] pb-[calc(130px+env(safe-area-inset-bottom))] text-[#2A1F22] md:hidden">
+        {/* หัวหน้า — เดือนของสัปดาห์ที่ดูอยู่ · ปุ่มเลื่อนสัปดาห์ · วันนี้กับนาฬิกา · ปุ่มขอโอที */}
+        <header className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <LeaveIcon className="size-[19px] flex-none text-primary" strokeWidth={2.2} />
-              <b className="truncate text-[19px] font-bold">{weekTitle}</b>
-              <button
-                type="button"
-                aria-label="สัปดาห์ก่อน"
-                onClick={() => setWeekOffset((v) => v - 1)}
-                className="glass-thin grid size-10 flex-none place-items-center rounded-full"
-              >
-                <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
-              </button>
-              <button
-                type="button"
-                aria-label="สัปดาห์ถัดไป"
-                disabled={weekOffset >= 0}
-                onClick={() => setWeekOffset((v) => v + 1)}
-                className="glass-thin grid size-10 flex-none place-items-center rounded-full disabled:opacity-40"
-              >
-                <ChevronRightIcon className="size-4" strokeWidth={2.4} />
-              </button>
+            <div className="flex items-center gap-2">
+              <p className="flex min-w-0 items-center gap-2.5 text-[22px] leading-tight font-bold">
+                <CalendarIcon className="size-[22px] flex-none text-[#D0021B]" strokeWidth={2.2} />
+                <span className="truncate">{monthTitle || "—"}</span>
+              </p>
+              <span className="flex flex-none gap-1">
+                <button
+                  type="button"
+                  aria-label="สัปดาห์ก่อน"
+                  onClick={() => setWeekOff((w) => w - 1)}
+                  className={WEEK_NAV}
+                >
+                  <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="สัปดาห์ถัดไป"
+                  disabled={weekOff >= 0}
+                  onClick={() => setWeekOff((w) => Math.min(0, w + 1))}
+                  className={WEEK_NAV}
+                >
+                  <ChevronRightIcon className="size-4" strokeWidth={2.4} />
+                </button>
+              </span>
             </div>
-            <p className="mt-1 text-[12.5px] text-muted-foreground">
-              {now ? formatThaiDate(now) : "—"}
-              {now && <span className="num"> · {formatClock(now)} น.</span>}
+            <p className="mt-0.5 text-[12.5px] text-[#6E6164]">
+              {today ? thaiDayLong(today) : "—"} ·{" "}
+              <b className="num font-bold">{now ? formatClock(now) : "--:--"}</b> น.
             </p>
           </div>
-          {canOt && <Link
-            href="/ot?new=1"
-            className="glass-thin flex h-9 flex-none items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold"
+          {/* เปิดหน้าโอที — ดูสถานะคำขอ ชั่วโมงที่อนุมัติ และกดขอโอทีได้ในหน้านั้น */}
+          {!punchOnly && (
+          <Link
+            href="/ot"
+            className="flex h-11 flex-none items-center gap-1.5 rounded-full border border-[#EFE3E5] bg-[rgba(255,255,255,.72)] px-3.5 text-[13.5px] font-semibold whitespace-nowrap text-[#2A1F22] shadow-[0_6px_14px_-6px_rgba(90,20,35,.22)] backdrop-blur-[18px]"
           >
             ขอโอที
-            <PlusIcon className="size-3.5" strokeWidth={2.4} />
-          </Link>}
-        </div>
+            <PlusIcon className="size-4" strokeWidth={2.4} />
+          </Link>
+          )}
+        </header>
 
-        <nav className="grid grid-cols-7 gap-1.5" aria-label="สัปดาห์นี้">
+        {/* แถบสัปดาห์ — ปัดซ้ายขวาเปลี่ยนสัปดาห์ · กดวันย้อนหลังเพื่อดูเวลาวันนั้น */}
+        <nav
+          className="grid touch-pan-y grid-cols-7 gap-1.5"
+          aria-label="สัปดาห์"
+          onTouchStart={(e) => {
+            swipeX.current = e.touches[0].clientX;
+          }}
+          onTouchEnd={(e) => {
+            const x0 = swipeX.current;
+            swipeX.current = null;
+            if (x0 == null) return;
+            const dx = e.changedTouches[0].clientX - x0;
+            if (dx > 50) setWeekOff((w) => w - 1);
+            else if (dx < -50) setWeekOff((w) => Math.min(0, w + 1));
+          }}
+        >
           {weekDays.map((d) => (
-            /* กดวันย้อนหลังเพื่อดูเวลาของวันนั้น — วันข้างหน้ายังไม่มีอะไรให้ดู จึงกดไม่ได้ */
+            /* วันข้างหน้ายังไม่มีอะไรให้ดู จึงกดไม่ได้ */
             <button
               key={d.iso}
               type="button"
               disabled={!today || d.iso > today}
               onClick={() => setSeeDay(d.iso === today ? "" : d.iso)}
-              aria-current={d.iso === viewDay ? "date" : undefined}
+              aria-current={d.today ? "date" : undefined}
+              aria-pressed={d.iso === viewDay}
               aria-label={`ดูเวลาของวันที่ ${d.day}`}
-              className={`relative flex flex-col items-center gap-0.5 rounded-2xl border-[1.5px] py-2 text-[15px] font-semibold disabled:opacity-45 ${
+              className={`relative flex flex-col items-center gap-px rounded-[18px] py-2 text-[15px] font-semibold disabled:opacity-45 ${
                 d.iso === viewDay
-                  ? "border-primary bg-card shadow-[0_8px_16px_-10px_rgba(208,2,27,.7)]"
-                  : d.weekend
-                    ? "border-transparent bg-transparent text-muted-foreground"
-                    : "border-border bg-card"
+                  ? "border-[1.5px] border-[#C8102E] bg-white shadow-[0_8px_16px_-8px_rgba(200,16,46,.45)]"
+                  : `border border-[#EFE3E5] shadow-[0_6px_14px_-6px_rgba(90,20,35,.22)] backdrop-blur-[18px] ${
+                      d.weekend ? "bg-white/45 text-[#A3979A]" : "bg-[rgba(255,255,255,.72)]"
+                    }`
               }`}
             >
               {d.day}
-              <em
-                className={`text-[10.5px] font-medium not-italic ${
-                  d.iso === viewDay ? "text-primary" : "text-muted-foreground"
-                }`}
-              >
+              {/* วันนี้ที่ไม่ได้เลือกหน้าตาเหมือนวันปกติ (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+              <small className="text-[10.5px] font-medium text-[#A3979A]">
                 {d.dow}
-              </em>
+              </small>
               {d.done && (
-                /* ดาวบอกว่าวันนั้นลงเวลาครบทั้งเข้าและออก เห็นทั้งสัปดาห์ว่ามีวันไหนค้าง */
+                /* ดาวบอกว่าวันนั้นลงเวลาครบทั้งเข้าและออก */
                 <svg
                   viewBox="0 0 24 24"
-                  className="absolute -top-[7px] -right-[5px] size-5"
+                  className="ck-m-star absolute -top-[7px] -right-[5px] size-5"
                   role="img"
                   aria-label="ลงเวลาครบ"
                 >
                   <path
                     d="M12 2.6l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"
-                    fill="#f5b21b"
+                    fill="#F5B21B"
                     stroke="#ffffff"
                     strokeWidth="1.6"
                     strokeLinejoin="round"
@@ -428,113 +543,187 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
           ))}
         </nav>
 
-
-        {/*
-          ปุ่มตอกบัตรเป็นวงกลมใหญ่กลางจอ (ต้นแบบมือถือชุดใหม่ 30 ก.ย. 2569)
-          ข้อความใต้ปุ่มบอกสถานะพื้นที่ทำงาน ไม่ต้องมีการ์ดแยกอีกใบ
-        */}
-        {viewIsToday ? (
-          <div className="relative flex justify-center py-3">
-            {/* วงแหวนกระเพื่อมรอบปุ่ม — ต้นแบบมือถือ (30 ก.ย. 2569) พร้อมแสงฟุ้งด้านหลัง
-               กระเพื่อมเฉพาะตอนที่ยังกดได้ ไม่งั้นจะกวนสายตาตอนทำงานอยู่ */}
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 left-1/2 size-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-              style={{ background: "radial-gradient(circle, rgba(208,2,27,.18) 0%, rgba(208,2,27,0) 62%)" }}
-            />
-            {!isWorking && now && (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="animate-punch-ping pointer-events-none absolute top-1/2 left-1/2 size-[236px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/25"
-                />
-                <span
-                  aria-hidden="true"
-                  className="animate-punch-ping pointer-events-none absolute top-1/2 left-1/2 size-[236px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20"
-                  style={{ animationDelay: "1.1s" }}
-                />
-              </>
-            )}
+        {/* หน้าปัด — ค้นหาพื้นที่ (เรดาร์) · พบพื้นที่ (ปุ่มแดง) · กำลังทำงาน · ออกงานแล้ว · ดูวันย้อนหลัง */}
+        <section className="relative isolate mx-auto mt-1.5 aspect-square w-[min(290px,78vw)]">
+          {/* เรดาร์สามวงกระจายอยู่หลังปุ่ม ต้องเป็นลูกสามตัวแรกของ section (หน่วงเวลาตามลำดับ) */}
+          {dial === "searching" && [0, 1, 2].map((i) => <span key={i} className="ck-m-pulse" aria-hidden="true" />)}
+          {(dial === "working" || dial === "done" || dial === "past") && (
+            <svg viewBox="0 0 120 120" className="absolute inset-0 size-full -rotate-90" aria-hidden="true">
+              <circle
+                cx="60"
+                cy="60"
+                r="45.3"
+                fill="none"
+                stroke="#D0021B"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={RING}
+                strokeDashoffset={dial === "done" ? 0 : RING * (1 - viewPct / 100)}
+                style={{ transition: "stroke-dashoffset .6s ease" }}
+              />
+            </svg>
+          )}
+          {dial === "past" || dial === "working" ? (
+            /* ระหว่างทำงานและวันย้อนหลังเป็นแค่การแสดงผล — ออกงานใช้ปุ่มเช็คเอาท์ด้านล่าง */
+            <div className={`${DIAL_FACE} bg-white ${DIAL_RING_SHADOW}`}>
+              {dial === "working" ? (
+                <>
+                  <span className="mb-3 text-[12.5px] text-[#6E6164]">เวลาทำงาน</span>
+                  <Digital text={hhmmss(workedSec)} />
+                </>
+              ) : (
+                <>
+                  <span className="text-[12.5px] text-[#6E6164]">ชั่วโมงทำงาน</span>
+                  {viewWorked ? (
+                    <Digital text={hhmm(viewWorked)} />
+                  ) : (
+                    <b className="text-center text-[28px] leading-tight font-bold text-[#6E6164]">
+                      {viewLeaveRec ? "วันลา" : "ไม่มีชั่วโมงทำงาน"}
+                    </b>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            /* ออกงานแล้ววันนี้ยังกดได้ — กลับเข้ามาทำงานต่อ เข้างานได้อีกรอบตามกติกาเดิม */
             <button
               type="button"
-              disabled={!now}
+              disabled={!now || dial === "searching"}
               onClick={() => {
                 setPopOpen(true);
-                if (!isWorking) void checkIn();
+                void checkIn();
               }}
-              className={`relative grid size-[230px] place-items-center rounded-full text-center transition-transform active:scale-[0.98] disabled:opacity-50 ${
-                isWorking
-                  ? "bg-[var(--brand-700)] text-white shadow-[0_18px_40px_-16px_rgb(120_20_35/0.75)]"
-                  : "bg-card text-foreground shadow-[0_18px_40px_-16px_rgb(208_2_27/0.55)]"
+              className={`${DIAL_FACE} transition-[background,box-shadow,transform] duration-[450ms,450ms,150ms] active:scale-[0.97] disabled:active:scale-100 ${
+                dial === "found"
+                  ? "bg-[#C8102E] shadow-[0_0_0_12px_rgba(200,16,46,.14),0_0_0_26px_rgba(200,16,46,.07),0_26px_44px_-18px_rgba(200,16,46,.85)]"
+                  : dial === "done"
+                    ? `bg-white ${DIAL_RING_SHADOW}`
+                    : "bg-white shadow-[0_6px_12px_-8px_rgba(142,0,18,.35)]"
               }`}
             >
-              <span className="px-6">
-                <b className="block text-[30px] leading-tight font-bold">
-                  {isWorking ? "ออกงาน" : "เข้างาน"}
-                </b>
-                <em className="mt-1.5 block text-[12.5px] leading-snug font-medium not-italic opacity-80">
-                  {areaText}
-                </em>
-              </span>
+              {dial === "done" ? (
+                <>
+                  <span className="text-[12.5px] text-[#6E6164]">วันนี้ทำงาน</span>
+                  <Digital text={hhmm(workedMin)} />
+                  <span
+                    className={`mt-1.5 rounded-full px-[11px] py-[5px] text-[12px] font-semibold ${
+                      workedMin >= requiredMin
+                        ? "bg-[#DDF2E6] text-[#14875A]"
+                        : "bg-[#FDEDD6] text-[#B4630B]"
+                    }`}
+                  >
+                    {workedMin >= requiredMin
+                      ? "ครบเวลาแล้ว"
+                      : `ขาด ${formatMinutes(Math.max(0, requiredMin - workedMin))}`}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <b
+                    className={`text-[34px] leading-tight font-bold transition-colors duration-[450ms] ${
+                      dial === "found" ? "text-white" : "text-[#D0021B]"
+                    }`}
+                  >
+                    เข้างาน
+                  </b>
+                  <span
+                    className={`px-6 text-center text-[12.5px] leading-snug transition-colors duration-[450ms] ${
+                      dial === "found" ? "text-white/90" : "text-[#6E6164]"
+                    }`}
+                  >
+                    {/* ไม่มีข้อความ "เปิดตำแหน่งเพื่อเข้างาน" แล้ว — ขอสิทธิ์ตอนเข้าหน้าแทน (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+                    {dial === "found" ? "แตะเพื่อบันทึกเวลาเข้างาน" : "กำลังค้นหาพื้นที่ทำงาน…"}
+                  </span>
+                </>
+              )}
             </button>
-          </div>
+          )}
+        </section>
+
+        {/* สามช่องเวลา — วันย้อนหลังมีหัวบอกวันและสถานะของวันนั้นเพิ่ม */}
+        {viewIsToday ? (
+          <div className="grid grid-cols-3 gap-2.5">{stats}</div>
         ) : (
-          /* วันย้อนหลังตอกบัตรไม่ได้ — สรุปของวันนั้นแทนปุ่ม */
-          <section className="glass rounded-[22px] px-5 py-5 text-center">
-            <p className="text-[12.5px] text-muted-foreground">{viewDay ? thaiDate(viewDay) : ""}</p>
-            <b className="num mt-1 block text-[26px] leading-none font-bold">
-              {viewWorked ? formatMinutes(viewWorked) : "ไม่มีบันทึก"}
-            </b>
-            <button
-              type="button"
-              onClick={() => setSeeDay("")}
-              className="mt-3 rounded-full bg-[var(--accent)] px-3.5 py-1.5 text-[12.5px] font-semibold text-primary"
-            >
-              กลับไปวันนี้
-            </button>
+          <section className="flex flex-col gap-2.5" aria-live="polite">
+            <div className="flex items-center justify-between gap-2.5">
+              <span className="flex flex-wrap items-center gap-2 text-[14px]">
+                <b>{viewDay ? thaiDayLong(viewDay) : ""}</b>
+                <span className={`rounded-full px-[9px] py-[3px] text-[12px] font-bold ${PAST_TONE[pastStatus.tone]}`}>
+                  {pastStatus.label}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSeeDay("");
+                  setWeekOff(0);
+                }}
+                className="h-[34px] flex-none rounded-full border border-[#EFE3E5] bg-white px-3.5 text-[13px] font-semibold text-[#B0101F] shadow-[0_3px_8px_-4px_rgba(90,20,35,.25)]"
+              >
+                กลับวันนี้
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2.5">{stats}</div>
           </section>
         )}
 
-        {/* สามช่องนี้เปลี่ยนตามวันที่เลือกในแถบสัปดาห์ ไม่ได้ผูกกับวันนี้อย่างเดียว */}
-        <div className="grid grid-cols-3 gap-2.5">
-          <MobStat tone="peach" icon="in" label="เวลาเข้างาน" value={viewIn ? formatClock(new Date(viewIn.at)) : null} />
-          <MobStat tone="rose" icon="out" label="เวลาออกงาน" value={viewOut ? formatClock(new Date(viewOut.at)) : null} />
-          <MobStat tone="lilac" icon="clock" label="รวมชั่วโมง" value={viewWorked ? formatMinutes(viewWorked) : null} />
-        </div>
+        {/* ส่วนปุ่ม — วันย้อนหลังไม่มี · กำลังทำงานมีปุ่มเช็คเอาท์ · อื่น ๆ เป็นข้อความแนะนำ (ซ่อนตอนยังค้นหาพื้นที่) */}
+        {viewIsToday &&
+          (isWorking ? (
+            <section className="relative">
+              {beforeEnd > 0 && (
+                <span className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 rounded-[9px] bg-[#2A1F22] px-[11px] py-1.5 text-[12px] whitespace-nowrap text-white after:absolute after:top-full after:left-1/2 after:-ml-[5px] after:border-[5px] after:border-transparent after:border-t-[#2A1F22] after:content-['']">
+                  เวลาเลิกงาน {formatMinutesOfDay(expectOut)} น. อีก {formatMinutes(beforeEnd)}
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={!now || (requiredMin === 0 && Boolean(leaveWindow) && !isWorking)}
+                onClick={() => setPopOpen(true)}
+                className={`h-[52px] w-full rounded-[16px] text-[15px] font-bold transition-transform active:scale-[0.98] disabled:opacity-50 ${
+                  beforeEnd > 0
+                    ? "bg-white text-[#D0021B] shadow-[inset_0_0_0_1.5px_#D0021B]"
+                    : "bg-[#D0021B] text-white shadow-[0_12px_22px_-12px_rgba(208,2,27,.9)]"
+                }`}
+              >
+                {beforeEnd > 0 ? "เช็คเอาท์ก่อนเวลา" : "เช็คเอาท์"}
+              </button>
+            </section>
+          ) : dial !== "searching" && homeNote() ? (
+            <p className="rounded-[22px] border border-white/95 bg-white/70 px-3.5 py-3 text-center text-[13px] leading-normal text-[#6E6164] shadow-[0_12px_30px_-22px_rgba(140,20,40,.45)] backdrop-blur-[18px]">
+              {homeNote()}
+            </p>
+          ) : null)}
 
+        {/* โหมดทดสอบแบบพับได้ตามแบบ — แทนสวิตช์ "ทดสอบตำแหน่ง" ของจอคอม (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+        {viewIsToday && <GeoDemoDetails actions={demoActions} />}
 
-        {/* ปุ่มเข้าหน้าบันทึกเวลาทั้งเดือน — เห็นทุกขนาดจอ (ผู้ใช้สั่ง 7 ต.ค. 2569)
-           เดิมซ่อนบนจอกว้างเพราะมีชิป "บันทึกเวลาของฉัน" อยู่แล้ว แต่หาไม่เจอ */}
-        {canRecords && <Link
-          href="/records"
-          className="btn glass-thin btn-mini w-full justify-center"
-        >
-          ดูตารางเวลาทำงานทั้งเดือน
-          <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
-        </Link>}
+        {!embedded && !punchOnly && (
+          <Link href="/records" className="btn glass-thin btn-mini w-full justify-center">
+            ดูตารางเวลาทำงานทั้งเดือน
+            <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
+          </Link>
+        )}
       </div>
 
-      {/* การ์ดตอกบัตรของจอกว้าง — เป็น section ไม่ใช่ main เพราะหน้านี้อยู่ใน <main> ของเปลือกแอปอยู่แล้ว
-          <main> ซ้อน <main> ผิดมาตรฐาน HTML และโปรแกรมอ่านหน้าจอจะเจอจุดหลักสองจุดในหน้าเดียว */}
-      <section
-        aria-label="ตอกบัตรเข้า-ออกงาน"
+      <main
         className={`glass w-full overflow-hidden max-md:hidden lg:grid lg:grid-cols-2 ${
           embedded
-            ? "rounded-2xl"
+            ? /* สูงเต็มพื้นที่ที่เหลือใต้แถบบนและแท็บ ไม่เหลือที่ว่างด้านล่าง (ผู้ใช้สั่ง 2 ต.ค. 2569)
+                 224px = แถบบน 72 + แท็บ ตอกบัตร/บันทึกเวลา และระยะห่างบนล่างของหน้า */
+              "rounded-2xl lg:min-h-[calc(100dvh-224px)]"
             : "max-w-[460px] rounded-none sm:rounded-[28px] lg:max-w-[920px]"
         }`}
       >
 
         {/* ── ฝั่งแดง: นาฬิกา ── */}
-        <section className="checkin-top relative px-7 pt-[26px] pb-[74px] text-center text-white lg:flex lg:flex-col lg:justify-center lg:px-10 lg:py-14 lg:pb-14">
+        <section className="checkin-top relative px-7 pt-[26px] pb-[74px] text-center text-white lg:flex lg:flex-col lg:justify-center lg:py-14 lg:pr-[136px] lg:pb-14 lg:pl-6">
           <span
             className="pointer-events-none absolute bottom-0 left-1/2 z-0 h-[100px] w-[112%] -translate-x-1/2 translate-y-1/2 rounded-[50%] bg-white lg:top-0 lg:bottom-auto lg:left-full lg:h-full lg:w-[160px] lg:translate-y-0 lg:-translate-x-1/2"
             aria-hidden="true"
           />
-          <p className="relative z-10 text-[23px] font-bold tracking-widest opacity-90 lg:text-[26px]">
-            MAZ
-          </p>
-          <p className="relative z-10 mt-4 text-[15px] text-white/80 lg:mt-[26px] lg:text-base">
+          {/* ไม่มีคำว่า MAZ เหนือคำทักทายแล้ว (ผู้ใช้สั่ง 2 ต.ค. 2569) */}
+          <p className="relative z-10 text-[15px] text-white/80 lg:text-base">
             {greeting(now)}
           </p>
           <p className="num relative z-10 mt-0.5 text-[38px] leading-tight font-semibold sm:text-[44px] lg:text-[52px]">
@@ -546,7 +735,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         </section>
 
         {/* ── ฝั่งขาว: สถานะและปุ่ม ── */}
-        <section className="relative z-10 px-6 pt-16 pb-7 text-center sm:px-7 lg:flex lg:flex-col lg:justify-center lg:py-14 lg:pr-12 lg:pl-24">
+        <section className="relative z-10 px-6 pt-16 pb-7 text-center sm:px-7 lg:flex lg:flex-col lg:justify-center lg:py-14 lg:pr-20 lg:pl-12">
           <AreaBadge
             checkedOut={checkedOut}
             isWorking={isWorking}
@@ -554,13 +743,15 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
             live={live}
           />
 
-          <p className="mt-3.5 text-sm leading-relaxed text-muted-foreground lg:text-[14.5px]">
-            {homeNote()}
-          </p>
+          {homeNote() && (
+            <p className="mt-3.5 text-sm leading-relaxed text-muted-foreground lg:text-[14.5px]">
+              {homeNote()}
+            </p>
+          )}
 
           <button
               type="button"
-              disabled={!now}
+              disabled={!now || (requiredMin === 0 && Boolean(leaveWindow) && !isWorking)}
               onClick={() => {
                 /*
                  * เข้างาน = กดแล้วบันทึกเลย ไม่ต้องถามยืนยัน (ยกเว้นอยู่นอกพื้นที่)
@@ -584,7 +775,8 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
               {isWorking ? "ออกงาน" : "เข้างาน"}
             </button>
 
-          <div className="mt-6 grid grid-cols-2 gap-3 border-t border-border pt-[22px] lg:mt-7">
+          {/* ไม่มีเส้นคั่นเหนือกล่องเวลาแล้ว (ผู้ใช้สั่ง 2 ต.ค. 2569) */}
+          <div className="mt-6 grid grid-cols-2 gap-3 lg:mt-7">
             <Slot
               label={rounds > 1 ? `เข้างาน (รอบที่ ${rounds})` : "เวลาเข้างาน"}
               value={lastIn ? formatClock(new Date(lastIn.at)) : null}
@@ -595,73 +787,24 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
             />
           </div>
 
-          {/* จอคอมไม่มีปุ่มนี้แล้ว (เจ้าของสั่ง 8 ต.ค. 2569) — เข้าหน้าบันทึกเวลาจากเมนูย่อยทางซ้ายแทน
-             ปุ่มยังอยู่บนมือถือ เพราะที่นั่นไม่มีเมนูข้าง */}
+          <GeoDemoSwitch />
+
+          {!embedded && !punchOnly && (
+            <Link href="/records" className="btn glass-thin btn-mini mt-6">
+              ดูตารางเวลาทำงานทั้งเดือน
+              <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
+            </Link>
+          )}
 
         </section>
-      </section>
-
-      {/* สรุปสัปดาห์นี้ + ลงเวลาล่าสุด — เติมพื้นที่ว่างใต้การ์ดตอกบัตรบนจอคอม
-          (ผู้ใช้สั่งเติมหน้าที่โล่ง 12 ต.ค. 2569) ตัวเลขอ่านจากบันทึกเวลาชุดเดียวกับหน้าบันทึกเวลา */}
-      {weekSum && (
-        <section
-          aria-label="สรุปเวลาทำงานสัปดาห์นี้"
-          className="mt-4 w-full max-w-[920px] max-md:hidden"
-        >
-          <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-            <div className="glass rounded-[18px] px-5 py-[18px]">
-              <h2 className="text-[15px] font-bold">สัปดาห์นี้</h2>
-              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                {thaiDate(weekSum.from)} – {thaiDate(weekSum.to)}
-              </p>
-              <div className="mt-3.5 grid grid-cols-3 gap-2.5">
-                <WeekStat label="ชั่วโมงรวม" value={formatMinutes(weekSum.minutes)} />
-                <WeekStat label="วันที่ลงเวลา" value={`${weekSum.days} วัน`} />
-                <WeekStat
-                  label="มาสาย"
-                  value={weekSum.late ? formatMinutes(weekSum.late) : "ไม่มี"}
-                  bad={weekSum.late > 0}
-                />
-              </div>
-            </div>
-
-            <div className="glass rounded-[18px] px-5 py-[18px]">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-bold">ลงเวลาล่าสุด</h2>
-                {canRecords && (
-                  <Link href="/records" className="text-[12.5px] font-semibold text-primary">
-                    ดูทั้งเดือน
-                  </Link>
-                )}
-              </div>
-              {recent.length === 0 ? (
-                <p className="mt-4 text-[13px] text-muted-foreground">ยังไม่มีการลงเวลาในช่วงนี้</p>
-              ) : (
-                <ul className="mt-1.5 divide-y divide-border">
-                  {recent.map((r) => (
-                    <li key={r.iso} className="flex items-center gap-3 py-2.5">
-                      <span className="min-w-0 flex-1">
-                        <b className="block text-[13.5px] font-semibold">{thaiDate(r.iso)}</b>
-                        <em className="num block text-[11.5px] text-muted-foreground not-italic">
-                          {r.in ?? "—"} – {r.out ?? "ยังไม่ออกงาน"}
-                        </em>
-                      </span>
-                      <b className="num flex-none text-[13px] font-semibold">{formatMinutes(r.minutes)}</b>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
+      </main>
 
       {/* กล่องตอกบัตร — ยิงออกไปที่ body เพราะการ์ดตอกบัตรมี backdrop-filter
           ซึ่งกลายเป็นกรอบอ้างอิงของ position: fixed ทำให้ฉากหลังคลุมแค่การ์ด */}
       {popOpen && popAt && typeof document !== "undefined" &&
         createPortal(
         <div
-          className="veil-in fixed inset-0 z-50 flex items-center justify-center bg-[rgb(28_20_45/0.42)] p-5"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5"
           role="dialog"
           aria-modal="true"
           aria-labelledby="pop-title"
@@ -691,7 +834,9 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
                   </svg>
                 </div>
                 <h2 className="mt-3.5 text-2xl font-semibold">{done.title}</h2>
-                <p className="mt-2 text-[14.5px] text-muted-foreground">{done.note}</p>
+                <p className="mt-2 text-[14.5px] text-muted-foreground">
+                  <Lines text={done.note} />
+                </p>
               </div>
             ) : check?.phase === "locating" ? (
               <div className="flex flex-col items-center pt-7" aria-live="polite">
@@ -702,9 +847,6 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
                 <h2 id="pop-title" className="mt-4 text-xl font-semibold">
                   กำลังตรวจพื้นที่
                 </h2>
-                <p className="mt-2 text-[14px] text-muted-foreground">
-                  ขอตำแหน่งจากเครื่องเพื่อยืนยันว่าอยู่ในพื้นที่ทำงาน
-                </p>
                 <button
                   type="button"
                   onClick={closePop}
@@ -713,6 +855,55 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
                   ยกเลิก
                 </button>
               </div>
+            ) : check?.phase === "confirm" ? (
+              <>
+                {/* หน้าการ์ตูนชุดเดียวกับกล่องออกงาน (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+                {/* มือถือตามแบบ checkin.html: มาสายขึ้นหน้าบึ้ง + "คุณมาสายวันนี้" · จอคอมเหมือนเดิม (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+                <div className="-mt-14 flex justify-center">
+                  <div className={popLate > 0 ? "max-md:hidden" : undefined}>
+                    <FaceIn />
+                  </div>
+                  {popLate > 0 && (
+                    <div className="md:hidden">
+                      <FaceLate />
+                    </div>
+                  )}
+                </div>
+                <h2 id="pop-title" className="mt-1.5 text-2xl font-semibold">
+                  <span className="max-md:hidden">เข้างาน</span>
+                  <span className="md:hidden">{popLate > 0 ? "คุณมาสายวันนี้" : "เช็คอินเข้างาน"}</span>
+                </h2>
+                <p className="mt-2.5 text-[15px] leading-relaxed text-muted-foreground max-md:hidden">
+                  <Lines text={`เวลา ${popAt ? formatClock(popAt) : ""} น. · อยู่ในพื้นที่ทำงาน`} />
+                </p>
+                <p className="mt-2.5 text-[15px] leading-relaxed text-muted-foreground md:hidden">
+                  {popLate > 0
+                    ? `เลยเวลามา ${formatMinutes(popLate)}`
+                    : popLeaveAtStart
+                      ? `เริ่มงาน ${formatMinutesOfDay(expectIn)} น.`
+                      : "คุณอยู่ในพื้นที่ทำงานแล้ว"}
+                  <b className="num mt-1 block text-[19px] font-semibold text-foreground">
+                    {popAt ? formatClock(popAt) : "--:--"} น.
+                  </b>
+                </p>
+                <div className="mt-[26px] flex gap-3">
+                  {/* มือถือมีปุ่มหลักปุ่มเดียวตามแบบ (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+                  <button
+                    type="button"
+                    onClick={closePop}
+                    className="h-[54px] flex-1 rounded-[27px] bg-secondary text-base font-semibold text-muted-foreground transition-transform active:scale-95 max-md:hidden"
+                  >
+                    ยังไม่ใช่ตอนนี้
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => confirm(check.geo)}
+                    className="btn-solid h-[54px] flex-1 rounded-[27px] text-base font-semibold transition-transform active:scale-95"
+                  >
+                    เช็คอิน
+                  </button>
+                </div>
+              </>
             ) : check?.phase === "outside" ? (
               <OutsidePanel check={check} onRetry={() => void checkIn()} onCancel={closePop} />
             ) : popMode === "in" ? (
@@ -727,16 +918,21 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
                   {popEarly > 0 ? "ออกก่อนเวลา" : "เลิกงานแล้ว"}
                 </h2>
                 <p className="mt-2.5 text-[15px] leading-relaxed text-muted-foreground">
-                  {popEarly > 0
-                    ? `ออกเวลา ${formatClock(popAt)} น. · เร็วกว่ากำหนด ${formatMinutes(popEarly)}`
-                    : "ขอบคุณสำหรับวันนี้ พักผ่อนเยอะ ๆ นะ"}
+                  <Lines
+                    text={
+                      popEarly > 0
+                        ? `ออกเวลา ${formatClock(popAt)} น. · เร็วกว่ากำหนด ${formatMinutes(popEarly)}`
+                        : "ขอบคุณสำหรับวันนี้ พักผ่อนเยอะ ๆ นะ"
+                    }
+                  />
                 </p>
 
                 <div className="mt-[26px] flex gap-3">
+                  {/* มือถือมีปุ่มหลักปุ่มเดียวตามแบบ (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
                   <button
                     type="button"
                     onClick={closePop}
-                    className="h-[54px] flex-1 rounded-[27px] bg-secondary text-base font-semibold text-muted-foreground transition-transform active:scale-95"
+                    className="h-[54px] flex-1 rounded-[27px] bg-secondary text-base font-semibold text-muted-foreground transition-transform active:scale-95 max-md:hidden"
                   >
                     ยังไม่ใช่ตอนนี้
                   </button>
@@ -839,10 +1035,12 @@ function OutsidePanel({
       <h2 id="pop-title" className="mt-4 text-center text-xl font-semibold">
         {title}
       </h2>
-      <p className="mt-2 text-center text-[14px] leading-relaxed text-muted-foreground">{detail}</p>
+      <p className="mt-2 text-center text-[14px] leading-relaxed text-muted-foreground">
+        <Lines text={detail} />
+      </p>
 
       <p className="mt-4 rounded-[12px] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-center text-[13px] text-destructive">
-        ต้องอยู่ในพื้นที่ทำงานจึงจะเข้างานได้ · ติดต่อหัวหน้าหากทำงานนอกสถานที่
+        <Lines text="ต้องอยู่ในพื้นที่ทำงานจึงจะเข้างานได้ · ติดต่อหัวหน้าหากทำงานนอกสถานที่" />
       </p>
 
       <div className="mt-5 flex gap-2.5">
@@ -865,12 +1063,85 @@ function OutsidePanel({
   );
 }
 
+/** ข้อความหลัง · หรือ — ขึ้นบรรทัดใหม่ (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+function Lines({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/s*[·—]s*/).map((t, i) => (
+        <span key={i} className="block">
+          {t}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/*
+ * ตัวสลับตำแหน่งจำลอง — ไว้ทดสอบ/นำเสนอเข้างาน-ออกงาน ทั้งในและนอกพื้นที่ โดยไม่ต้องเดินไปที่จริง
+ * (ผู้ใช้สั่ง 8 ต.ค. 2569) · TODO: เอาออกก่อนใช้งานจริง
+ */
+const GEO_DEMO: { key: GeoDemo; label: string }[] = [
+  { key: "real", label: "ตำแหน่งจริง" },
+  { key: "inside", label: "ในพื้นที่" },
+  { key: "outside", label: "นอกพื้นที่" },
+];
+function GeoDemoSwitch() {
+  const mode = useGeoDemo();
+  return (
+    <div className="mt-5 flex flex-col items-center gap-1.5">
+      <span className="text-[11px] font-semibold text-muted-foreground">ทดสอบตำแหน่ง</span>
+      <div className="inline-flex rounded-full bg-secondary p-1" role="group" aria-label="ทดสอบตำแหน่ง">
+        {GEO_DEMO.map((o) => (
+          <button
+            key={o.key}
+            type="button"
+            aria-pressed={mode === o.key}
+            onClick={() => setGeoDemo(o.key)}
+            className={`h-8 rounded-full px-3.5 text-[12.5px] font-semibold transition-colors ${
+              mode === o.key ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/*
+ * โหมดทดสอบบนมือถือ — 7 ปุ่มตามแบบ checkin.html ลำดับและชื่อเดียวกัน (ผู้ใช้สั่ง 13 ต.ค. 2569)
+ * ไม่มีปุ่ม "ใช้ตำแหน่งจริง" แล้ว — ตำแหน่งจำลองค้างไว้ตามที่เจ้าของเลือก
+ */
+function GeoDemoDetails({ actions }: { actions: { label: string; run: () => void }[] }) {
+  return (
+    <details className="rounded-[22px] border border-white/95 bg-[rgba(255,255,255,.72)] px-3.5 py-1 shadow-[0_12px_30px_-22px_rgba(140,20,40,.45)] backdrop-blur-[18px]">
+      <summary className="cursor-pointer py-2.5 text-[12.5px] font-semibold text-[#6E6164]">
+        โหมดทดสอบ (จำลองสถานการณ์)
+      </summary>
+      <div className="flex flex-wrap gap-2 pb-3" role="group" aria-label="โหมดทดสอบ">
+        {actions.map((o) => (
+          <button
+            key={o.label}
+            type="button"
+            onClick={o.run}
+            className="rounded-[10px] bg-[#F7EFF1] px-2.5 py-[7px] text-[12px] font-semibold text-[#2A1F22]"
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function Slot({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="glass-thin rounded-[14px] px-2.5 py-3.5">
+    /* เตี้ยลงตามที่ผู้ใช้สั่ง 2 ต.ค. 2569 — ระยะบนล่าง 14 → 8px ตัวเลข 21 → 19px */
+    <div className="glass-thin rounded-[14px] px-2.5 py-2">
       <span className="block text-[12.5px] text-muted-foreground">{label}</span>
       <b
-        className={`num mt-[5px] block text-[21px] ${
+        className={`num mt-0.5 block text-[19px] ${
           value ? "font-semibold" : "font-normal text-muted-foreground"
         }`}
       >
@@ -902,6 +1173,26 @@ function Dots() {
   );
 }
 
+/** หน้ายิ้มสดใสตอนเข้างาน — คู่กับ FaceOut */
+function FaceIn() {
+  return (
+    <svg width="176" height="150" viewBox="0 0 176 150" role="img" aria-label="หน้ายิ้มสดใส">
+      <Dots />
+      <g className="bow">
+        <circle cx="88" cy="80" r="42" fill="#F5B21B" />
+        <circle cx="74" cy="72" r="4.6" fill="#3B3B4F" />
+        <circle cx="102" cy="72" r="4.6" fill="#3B3B4F" />
+        <circle cx="75.6" cy="70.4" r="1.4" fill="#fff" />
+        <circle cx="103.6" cy="70.4" r="1.4" fill="#fff" />
+        <ellipse cx="63" cy="88" rx="8" ry="5" fill="#E06A6A" opacity=".5" />
+        <ellipse cx="113" cy="88" rx="8" ry="5" fill="#E06A6A" opacity=".5" />
+        <path d="M72 90 Q88 108 104 90 Z" fill="#3B3B4F" />
+        <path d="M72 90 Q88 108 104 90" fill="none" stroke="#3B3B4F" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </svg>
+  );
+}
+
 function FaceOut() {
   return (
     <svg width="176" height="150" viewBox="0 0 176 150" role="img" aria-label="หน้าเหนื่อยแต่ยิ้ม">
@@ -925,47 +1216,153 @@ function FaceOut() {
   );
 }
 
+/** หน้าบึ้งส่ายหน้าตอนมาสาย — ยกมาจาก checkin.html (.face-late) ใช้เฉพาะมือถือ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+function FaceLate() {
+  return (
+    <svg width="176" height="150" viewBox="0 0 176 150" role="img" aria-label="หน้าบึ้ง มาสาย">
+      <Dots />
+      <g className="shake">
+        <circle cx="88" cy="80" r="42" fill="#E8253C" />
+        <g fill="none" stroke="#FFFFFF" strokeWidth="4.5" strokeLinecap="round" opacity=".92">
+          <path d="M64 58 L82 66" />
+          <path d="M112 58 L94 66" />
+        </g>
+        <ellipse cx="74" cy="78" rx="4.6" ry="5.8" fill="#FFFFFF" />
+        <ellipse cx="102" cy="78" rx="4.6" ry="5.8" fill="#FFFFFF" />
+        <path d="M72 104 Q88 90 104 104" fill="none" stroke="#FFFFFF" strokeWidth="4.5" strokeLinecap="round" />
+      </g>
+      <g fill="#C8CFD9">
+        <g className="steam" style={{ transformOrigin: "46px 44px" }}>
+          <circle cx="46" cy="44" r="6" />
+          <circle cx="38" cy="49" r="4.5" />
+          <circle cx="54" cy="49" r="4" />
+        </g>
+        <g className="steam s2" style={{ transformOrigin: "130px 40px" }}>
+          <circle cx="130" cy="40" r="6.5" />
+          <circle cx="139" cy="46" r="4.5" />
+          <circle cx="122" cy="46" r="4" />
+        </g>
+        <g className="steam s3" style={{ transformOrigin: "120px 24px" }}>
+          <circle cx="120" cy="24" r="4.5" />
+          <circle cx="112" cy="28" r="3.2" />
+        </g>
+      </g>
+    </svg>
+  );
+}
+
 /* ช่องเวลาเล็กสามช่องบนมือถือ (ตามแบบ .ck-stat) — ยังไม่มีค่าก็ยังเห็นหัวข้อ ไม่หายไปทั้งช่อง */
 function MobStat({
   tone,
   label,
   value,
-  icon,
 }: {
   tone: "peach" | "rose" | "lilac";
   label: string;
   value: string | null;
-  /* ไอคอนตามต้นแบบ checkin.html — เข้างานเป็นลูกศรเข้า ออกงานเป็นลูกศรออก รวมชั่วโมงเป็นนาฬิกา */
-  icon: "in" | "out" | "clock";
 }) {
-  const skin = {
-    peach: "bg-[var(--warning-soft)] text-[var(--warning)]",
-    rose: "bg-[var(--destructive-soft)] text-destructive",
-    lilac: "bg-[var(--info-soft)] text-[var(--info)]",
+  const [skin, Icon] = {
+    peach: ["bg-[#FDEDD6] text-[#B4630B]", LoginIcon],
+    rose: ["bg-[#FCE3E7] text-[#C0121F]", LogoutIcon],
+    lilac: ["bg-[#ECE6FA] text-[#5B3FBF]", ClockIcon],
   }[tone];
   return (
-    <div className="glass flex min-h-[98px] flex-col justify-between rounded-[18px] p-3">
-      <span className={`grid size-[30px] place-items-center rounded-[10px] ${skin}`}>
-        {icon === "clock" ? (
-          <ClockIcon className="size-4" strokeWidth={2.2} />
-        ) : (
-          <LoginIcon className={`size-4 ${icon === "out" ? "rotate-180" : ""}`} strokeWidth={2.2} />
-        )}
+    <div className="relative flex min-h-[98px] flex-col justify-between overflow-hidden rounded-[20px] border border-white/95 bg-white/70 p-3 shadow-[0_12px_30px_-22px_rgba(140,20,40,.45)] backdrop-blur-[18px]">
+      {/* ลายจุดมุมขวาบน ตามแบบ */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-1.5 -right-1.5 size-[70px] opacity-50 [background-image:radial-gradient(rgba(208,2,27,.18)_1.2px,transparent_1.4px)] [background-size:9px_9px]"
+      />
+      <span className={`relative grid size-[30px] place-items-center rounded-[10px] ${skin}`}>
+        <Icon className="size-4" strokeWidth={2.4} />
       </span>
-      <b className={`num mt-2 text-[20px] leading-none font-bold ${value ? "" : "text-muted-foreground"}`}>
+      <b className={`num relative mt-2 text-[20px] font-bold ${value ? "" : "text-[#A3979A]"}`}>
         {value ?? "--:--"}
       </b>
-      <span className="text-[12px] text-muted-foreground">{label}</span>
+      <span className="relative text-[12px] text-[#6E6164]">{label}</span>
     </div>
   );
 }
 
-/** ช่องตัวเลขเล็กในการ์ดสรุปสัปดาห์ */
-function WeekStat({ label, value, bad }: { label: string; value: string; bad?: boolean }) {
+// ─── ชิ้นส่วนของหน้าจอมือถือ ───────────────────────────────────────
+const WEEK_NAV =
+  "grid size-[30px] place-items-center rounded-full border border-[#EFE3E5] bg-white text-[#2A1F22] shadow-[0_3px_8px_-4px_rgba(90,20,35,.25)] disabled:opacity-35";
+const DIAL_FACE =
+  /* สีพื้นใส่ตามสถานะ ไม่ใส่ที่นี่ — กันคลาส bg ชนกันตอนพบพื้นที่ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  "absolute inset-[14%] flex flex-col items-center justify-center gap-1 rounded-full disabled:cursor-default";
+/** เงาหน้าปัดตอนมีวงแหวนเวลา (กำลังทำงาน · ออกงานแล้ว · วันย้อนหลัง) */
+const DIAL_RING_SHADOW =
+  "shadow-[0_22px_40px_-16px_rgba(90,20,35,.38),0_6px_14px_-6px_rgba(90,20,35,.18)]";
+/** เส้นรอบวงของวงแหวน r = 45.3 */
+const RING = 2 * Math.PI * 45.3;
+const PAST_TONE = {
+  success: "bg-[#DDF2E6] text-[#0F7049]",
+  danger: "bg-[#FCE3E7] text-[#B0101F]",
+  warning: "bg-[#FDEDD6] text-[#94500A]",
+  info: "bg-[#E3EEFC] text-[#1A5DB5]",
+  neutral: "bg-[#EFEBEC] text-[#5E5255]",
+};
+const DOW_LONG = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+
+/** "2026-10-02" → "วันศุกร์ที่ 2 ตุลาคม 2569" */
+function thaiDayLong(iso: string) {
+  const d = parseIsoDate(iso);
+  return `วัน${DOW_LONG[d.getDay()]}ที่ ${d.getDate()} ${TH_MONTHS_FULL[d.getMonth()]} ${d.getFullYear() + 543}`;
+}
+const hhmm = (min: number) => `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
+const hhmmss = (sec: number) =>
+  `${pad2(Math.floor(sec / 3600))}:${pad2(Math.floor((sec % 3600) / 60))}:${pad2(sec % 60)}`;
+
+/*
+ * นาฬิกาดิจิทัลเจ็ดขีด (เรขาคณิตเดียวกับแบบ checkin.html) — ขีดที่ไม่ติดจาง 7% · เอียง -7°
+ * กว้าง 72% ของหน้าปัด สูงไม่เกิน 44px · สีตามหน้าปัด #5A4B4F
+ */
+const hbar = (x1: number, x2: number, y: number) =>
+  `${x1},${y + 3} ${x1 + 3},${y} ${x2 - 3},${y} ${x2},${y + 3} ${x2 - 3},${y + 6} ${x1 + 3},${y + 6}`;
+const vbar = (x: number, y1: number, y2: number) =>
+  `${x + 3},${y1} ${x + 6},${y1 + 3} ${x + 6},${y2 - 3} ${x + 3},${y2} ${x},${y2 - 3} ${x},${y1 + 3}`;
+const SEG_GEO: Record<string, string> = {
+  a: hbar(3, 27, 0), g: hbar(3, 27, 23), d: hbar(3, 27, 46),
+  f: vbar(0, 3, 26), b: vbar(24, 3, 26), e: vbar(0, 26, 49), c: vbar(24, 26, 49),
+};
+const DIGIT_ON: Record<string, string> = {
+  "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc",
+  "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg",
+};
+function Digital({ text }: { text: string }) {
+  let x = 0;
+  const parts = [...text].map((ch, i) => {
+    const at = x;
+    if (ch === ":") {
+      x += 12;
+      return (
+        <g key={i} transform={`translate(${at},0)`}>
+          <rect x="1" y="14" width="6" height="6" rx="1.2" />
+          <rect x="1" y="33" width="6" height="6" rx="1.2" />
+        </g>
+      );
+    }
+    x += 36;
+    const on = DIGIT_ON[ch] ?? "";
+    return (
+      <g key={i} transform={`translate(${at},0)`}>
+        {"abcdefg".split("").map((k) => (
+          <polygon key={k} points={SEG_GEO[k]} className={on.includes(k) ? undefined : "off"} />
+        ))}
+      </g>
+    );
+  });
   return (
-    <div className="min-w-0 rounded-[12px] border border-border bg-muted/50 px-3 py-2.5">
-      <span className="block text-[11.5px] text-muted-foreground">{label}</span>
-      <b className={`num mt-0.5 block text-[16px] font-bold ${bad ? "text-destructive" : ""}`}>{value}</b>
-    </div>
+    <span className="ck-m-digits block w-full leading-none text-[#5A4B4F]">
+      <svg
+        viewBox={`-9 -1 ${x + 10} 54`}
+        fill="currentColor"
+        role="img"
+        aria-label={text}
+        className="mx-auto block h-auto max-h-[44px] w-[72%]"
+      >
+        <g transform="skewX(-7)">{parts}</g>
+      </svg>
+    </span>
   );
 }

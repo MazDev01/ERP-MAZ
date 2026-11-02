@@ -11,6 +11,7 @@ import { issuerInfo } from "./quotation-paper";
 import { useCrm } from "@/lib/crm-store";
 import { baht, thaiDate } from "@/lib/format";
 import { roleLabel, type InboxJob } from "@/lib/pm-data";
+import { nameOf } from "@/lib/emp-name";
 
 
 export function QuotationPreview({ job }: { job: InboxJob }) {
@@ -156,11 +157,11 @@ export function ProposalPreview({ job, variant = "plan" }: { job: InboxJob; vari
         <div className="text-right">
           <h3 className="text-base font-extrabold tracking-[0.04em]">ข้อเสนอโครงการ / PROPOSAL</h3>
           <p className="num mt-0.5 text-[12.5px] font-bold text-primary">
-            {pr.no} · รอบที่ {pr.round}
+            รอบที่ {pr.round}
           </p>
           <p className="mt-1 text-[11.5px] text-muted-foreground">
             จัดทำเมื่อ {thaiDate(pr.at)}
-            {inbox && <em className="ml-2 not-italic">โดย {pr.by}</em>}
+            {inbox && <em className="ml-2 not-italic">โดย {nameOf(pr.by)}</em>}
           </p>
         </div>
       </header>
@@ -199,13 +200,6 @@ export function ProposalPreview({ job, variant = "plan" }: { job: InboxJob; vari
           </tr>
         </thead>
         <tbody>
-          {job.phases.length === 0 && (
-            <tr>
-              <td colSpan={4} className="px-1.5 py-6 text-center text-[12.5px] text-muted-foreground">
-                ยังไม่ได้แบ่งช่วงงาน
-              </td>
-            </tr>
-          )}
           {job.phases.map((ph) => (
             <tr key={ph.name}>
               <td className="px-1.5 py-2.5 align-top text-[12.5px]">{ph.name}</td>

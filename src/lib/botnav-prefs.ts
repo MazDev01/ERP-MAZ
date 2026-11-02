@@ -55,9 +55,10 @@ export function resetBotnav(role: Role) {
   });
 }
 
-/** หน้าหลักกับโปรไฟล์ไม่ได้อยู่ในเมนูข้าง แต่เลือกมาไว้ในแถบล่างได้ */
+/** หน้าหลักกับโปรไฟล์ไม่ได้อยู่ในเมนูข้าง แต่เลือกมาไว้ในแถบล่างได้
+ *  บทบาทที่หน้าหลักคือหน้าลงเวลาเอง (นักศึกษาฝึกงาน) ไม่มีช่องหน้าหลัก เพราะซ้ำกับปุ่มกลาง */
 export const BOTNAV_EXTRA = (role: Role) => [
-  { href: mobileHomeOf(role), label: "หน้าหลัก", icon: "home" as const },
+  ...(mobileHomeOf(role) === "/" ? [] : [{ href: mobileHomeOf(role), label: "หน้าหลัก", icon: "home" as const }]),
   { href: "/profile", label: "โปรไฟล์", icon: "user" as const },
 ];
 
@@ -78,21 +79,12 @@ export function botnavChoices(items: NavItem[], role: Role) {
  * บทบาทที่ไม่มีแดชบอร์ด (เช่นทีมงาน) ใช้หน้างานหน้าแรกของบทบาทแทน
  * เจ้าของสั่ง 25 ก.ย. 2569 ให้แถบของทีมงานเป็น หน้าหลัก · งานที่ได้รับ · ลงเวลา · การลา · โปรไฟล์
  * เดิมช่องที่สองว่างเปล่าเพราะไปหาแต่หน้าแดชบอร์ดที่บทบาทนั้นไม่มี
- *
- * แม่บ้านมีสี่หน้าพอดีกับสี่ช่อง จึงวางครบทุกหน้าของตัวเองเลย ไม่ต้องเหลือช่องโปรไฟล์
- * (โปรไฟล์ยังเข้าได้จากรูปมุมขวาบน) — ผู้ใช้สั่ง 7 ต.ค. 2569
  */
-const BOTNAV_FIXED: Partial<Record<Role, string[]>> = {
-  maid: ["/home", "/expense", "/leave", "/payslip"],
-};
-
 export function botnavDefault(items: NavItem[], role: Role) {
-  const fixed = BOTNAV_FIXED[role];
-  if (fixed) return fixed.map((href) => (href === mobileHomeOf(role) || items.some((i) => i.href === href) ? href : BOTNAV_EMPTY));
   const work = items.filter((i) => i.href !== "/" && i.href !== "/leave");
   const second =
     items.find((i) => i.href.endsWith("/dashboard") || i.href === "/presales-dash") ?? work[0];
   const leave = items.find((i) => i.href === "/leave");
-  const home = mobileHomeOf(role);
+  const home = mobileHomeOf(role) === "/" ? BOTNAV_EMPTY : mobileHomeOf(role);
   return [home, second?.href ?? BOTNAV_EMPTY, leave?.href ?? BOTNAV_EMPTY, "/profile"];
 }

@@ -7,10 +7,9 @@
 
 import { useState } from "react";
 import { unseenDeals, useAcc } from "@/lib/acc-store";
-import { TH_MONTHS_FULL, bkkNow, thaiDate, todayIso } from "@/lib/format";
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, SearchIcon } from "./icons";
+import { TH_MONTHS_FULL, bkkNow } from "@/lib/format";
+import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "./icons";
 import { DateField } from "./thai-date-picker";
-import { Sheet } from "./lead-dialogs";
 
 export function MonthNav({
   view,
@@ -55,15 +54,38 @@ export function MonthNav({
  */
 export type AccFilter = { q: string; from: string; to: string };
 
+/*
+ * ค้นหาด้วยยอดเงิน (ผู้ใช้สั่ง 13 ต.ค. 2569) — พิมพ์ "88400" "88,400" "88,400.00" "฿88,400" ได้ผลเดียวกัน
+ * ตัดจุลภาค/ช่องว่าง/฿/บาท และ .00 ท้าย · ไม่ใช่ตัวเลขคืน null · ตรงแบบขึ้นต้นด้วยตัวเลขที่พิมพ์ก็นับ
+ */
+export function amountQuery(q: string): string | null {
+  const s = q.replace(/[\s,฿]/g, "").replace(/บาท$/, "").replace(/\.0*$/, "");
+  return /^\d+(\.\d{1,2})?$/.test(s) ? s : null;
+}
+
+export function amountHit(aq: string, amounts: number[]) {
+  return amounts.some((n) => {
+    if (!Number.isFinite(n)) return false;
+    const fixed = Math.abs(n).toFixed(2);
+    const plain = fixed.endsWith(".00") ? fixed.slice(0, -3) : fixed;
+    return aq.includes(".") ? fixed.startsWith(aq) : plain.startsWith(aq);
+  });
+}
+
 export function useAccFilter(initialQuery = "") {
   const [f, setF] = useState<AccFilter>({ q: initialQuery, from: "", to: "" });
   const q = f.q.trim().toLowerCase();
+  const aq = amountQuery(q);
+  const hit = (...fields: string[]) => !q || fields.join(" ").toLowerCase().includes(q);
   return {
     f,
     setF,
     active: Boolean(q || f.from || f.to),
     /** คำค้นตรงกับข้อความใดข้อความหนึ่งไหม */
-    hit: (...fields: string[]) => !q || fields.join(" ").toLowerCase().includes(q),
+    hit,
+    /** คำค้นตรงกับข้อความ หรือยอดเงินใดยอดหนึ่ง (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+    match: (fields: string[], amounts: number[] = []) =>
+      !q || hit(...fields) || (aq !== null && amountHit(aq, amounts)),
     /** วันที่อยู่ในช่วงไหม — รายการที่ไม่มีวันที่แสดงเฉพาะตอนยังไม่ได้เลือกช่วง */
     inRange: (iso: string) => {
       if (!iso) return !f.from && !f.to;
@@ -77,13 +99,17 @@ export function useAccFilter(initialQuery = "") {
 
 export function AccFilters({
   filter,
+  search = true,
 }: {
   filter: ReturnType<typeof useAccFilter>;
+  /** false = ช่องค้นหาย้ายไปหัวหน้าแล้ว เหลือแต่ช่วงวันที่ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  search?: boolean;
 }) {
   const { f, setF, active, clear } = filter;
   return (
     <div className="flex w-full flex-wrap items-center gap-2.5 py-2 lg:ml-auto lg:w-auto">
       {/* มือถือ: ช่องค้นหาเต็มแถว วันที่สองช่องแบ่งครึ่งแถวถัดไป สูงพอให้นิ้วกด */}
+      {search && (
       <div className="search min-w-[160px] flex-1 max-sm:h-10! max-sm:basis-full lg:w-[250px] lg:flex-none">
         <SearchIcon className="size-[15px] shrink-0" strokeWidth={2} />
         <input
@@ -94,9 +120,8 @@ export function AccFilters({
           aria-label="ค้นหาเลขที่เอกสารหรือลูกค้า"
         />
       </div>
-      {/* มือถือเหลือแค่ช่องค้นหาตามต้นแบบใหม่ — ช่วงวันที่กรองได้บนจอคอม
-         บนมือถือเลือกวันจากปุ่มปฏิทิน (AccDayFilter) แล้วขึ้นเป็นชิปแทน ไม่ต้องมีสองช่องนี้ซ้ำ */}
-      <div className="w-[calc(50%-5px)] max-sm:hidden sm:w-[160px]">
+      )}
+      <div className="w-[calc(50%-5px)] sm:w-[160px]">
         <DateField
           value={f.from}
           onChange={(iso) => setF((x) => ({ ...x, from: iso }))}
@@ -106,7 +131,7 @@ export function AccFilters({
           className="h-9 rounded-[10px] text-[13.5px]"
         />
       </div>
-      <div className="w-[calc(50%-5px)] max-sm:hidden sm:w-[160px]">
+      <div className="w-[calc(50%-5px)] sm:w-[160px]">
         <DateField
           value={f.to}
           onChange={(iso) => setF((x) => ({ ...x, to: iso }))}
@@ -117,179 +142,11 @@ export function AccFilters({
         />
       </div>
       {active && (
-        <button
-          type="button"
-          /* มือถือ: ล้างวันที่กดที่ชิปได้อยู่แล้ว ปุ่มนี้จึงขึ้นเฉพาะตอนมีคำค้น */
-          className={`lnk px-2 text-[13px] font-semibold ${f.q ? "" : "max-sm:hidden"}`}
-          onClick={clear}
-        >
+        <button type="button" className="lnk px-2 text-[13px] font-semibold" onClick={clear}>
           ล้างตัวกรอง
         </button>
       )}
     </div>
-  );
-}
-
-// ─── มือถือ: เลือกวันจากปฏิทินแทนแถบเลือกเดือน ──────────────────
-/*
- * ต้นแบบ dose-erp-maz/billing.html (#bx-cal · 1 ต.ค. 2569)
- * แถบเลือกเดือนกินที่และกดยาก บนมือถือจึงเหลือปุ่มปฏิทินกลม กดแล้วเลื่อนแผ่นขึ้นมาเลือกวัน
- * วันที่มีรายการมีจุดแดงใต้ตัวเลข เลือกวันแล้วตั้งช่วงวันที่ของตัวกรองเป็นวันเดียว
- * "ดูทั้งหมด" = ล้างวันที่ กลับไปเห็นทุกใบ
- */
-export function AccDayFilter({
-  filter,
-  dates,
-}: {
-  filter: ReturnType<typeof useAccFilter>;
-  /** วันที่ (ISO) ที่มีรายการในแท็บที่เปิดอยู่ — ใช้ขึ้นจุดใต้ตัวเลขวัน */
-  dates: string[];
-}) {
-  const { f, setF } = filter;
-  const [open, setOpen] = useState(false);
-  /* เลือกวันเดียวอยู่หรือไม่ — ช่วงคนละวันถือว่ากรองจากจอคอม ไม่ขึ้นชิปวันเดียว */
-  const day = f.from && f.from === f.to ? f.from : "";
-
-  return (
-    <>
-      <div className="flex w-full items-center gap-2 sm:hidden">
-        {day && (
-          <span className="flex h-9 items-center gap-2 rounded-full bg-[var(--primary-soft,#FDECEE)] pr-1.5 pl-3.5 text-[13px] font-bold text-primary">
-            {thaiDate(day)}
-            <button
-              type="button"
-              className="grid size-[26px] place-items-center rounded-full bg-white text-primary"
-              onClick={() => setF((x) => ({ ...x, from: "", to: "" }))}
-              aria-label="ล้างวันที่ที่เลือก"
-            >
-              <CloseIcon className="size-3.5" strokeWidth={2.6} />
-            </button>
-          </span>
-        )}
-        <button
-          type="button"
-          className="ml-auto grid size-[42px] flex-none place-items-center rounded-full bg-white text-foreground shadow-[0_4px_10px_-6px_rgb(90_20_35/0.3)]"
-          onClick={() => setOpen(true)}
-          aria-label="เลือกวันที่"
-          aria-haspopup="dialog"
-        >
-          <CalendarIcon className="size-5" strokeWidth={2.2} />
-        </button>
-      </div>
-
-      {open && (
-        <DaySheet
-          day={day}
-          dates={dates}
-          onPick={(iso) => {
-            setF((x) => ({ ...x, from: iso, to: iso }));
-            setOpen(false);
-          }}
-          onAll={() => {
-            setF((x) => ({ ...x, from: "", to: "" }));
-            setOpen(false);
-          }}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </>
-  );
-}
-
-export function DaySheet({
-  day,
-  dates,
-  month,
-  onPick,
-  onAll,
-  onClose,
-}: {
-  day: string;
-  dates: string[];
-  /** เดือนที่หน้านั้นกำลังดูอยู่ (YYYY-MM) — เปิดปฏิทินมาที่เดือนนั้น ไม่ใช่เดือนปัจจุบันเสมอ */
-  month?: string;
-  onPick: (iso: string) => void;
-  onAll: () => void;
-  onClose: () => void;
-}) {
-  const start = day
-    ? new Date(`${day}T00:00:00`)
-    : month
-      ? new Date(`${month}-01T00:00:00`)
-      : bkkNow();
-  const [view, setView] = useState(new Date(start.getFullYear(), start.getMonth(), 1));
-  const has = new Set(dates);
-  const today = todayIso();
-  const y = view.getFullYear();
-  const m = view.getMonth();
-  const lead = new Date(y, m, 1).getDay();
-  const days = new Date(y, m + 1, 0).getDate();
-
-  return (
-    <Sheet
-      title="เลือกวันที่"
-      onClose={onClose}
-      footer={
-        <button
-          type="button"
-          className="btn glass-thin h-12 w-full justify-center rounded-[14px] text-[14px] font-bold"
-          onClick={onAll}
-        >
-          ดูทั้งหมด
-        </button>
-      }
-    >
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          className="iconbtn glass-thin size-[38px] rounded-full"
-          onClick={() => setView(new Date(y, m - 1, 1))}
-          aria-label="เดือนก่อนหน้า"
-        >
-          <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
-        </button>
-        <h3 className="text-[17px] font-bold">
-          {TH_MONTHS_FULL[m]} {y + 543}
-        </h3>
-        <button
-          type="button"
-          className="iconbtn glass-thin size-[38px] rounded-full"
-          onClick={() => setView(new Date(y, m + 1, 1))}
-          aria-label="เดือนถัดไป"
-        >
-          <ChevronRightIcon className="size-4" strokeWidth={2.4} />
-        </button>
-      </div>
-
-      <div className="mt-3 grid grid-cols-7 text-center text-[12px] text-muted-foreground" aria-hidden="true">
-        {["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"].map((d) => (
-          <span key={d} className="py-1">{d}</span>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 text-center">
-        {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} className="h-[46px]" />)}
-        {Array.from({ length: days }, (_, i) => {
-          const iso = `${y}-${String(m + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`;
-          return (
-            <button
-              key={iso}
-              type="button"
-              className="flex h-[46px] flex-col items-center gap-[3px] pt-1"
-              onClick={() => onPick(iso)}
-            >
-              <b
-                className={`grid size-[34px] place-items-center rounded-full text-[14px] font-semibold ${
-                  iso === day ? "bg-primary text-white" : iso === today ? "text-primary" : ""
-                }`}
-              >
-                {i + 1}
-              </b>
-              <i className={`size-[5px] rounded-full ${has.has(iso) ? "bg-primary" : "bg-transparent"}`} />
-            </button>
-          );
-        })}
-      </div>
-    </Sheet>
   );
 }
 

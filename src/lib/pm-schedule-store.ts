@@ -24,6 +24,8 @@ import {
   type PmEvent,
 } from "./pm-schedule-data";
 import { createPersistedStore } from "./persisted-store";
+import { isRef, legacyPj } from "./pm-data";
+import { pmSnapshot } from "./pm-store";
 
 export type ScheduleState = {
   events: PmEvent[];
@@ -39,8 +41,30 @@ function isState(value: unknown): value is ScheduleState {
   return Array.isArray(s.events) && typeof s.notes === "object";
 }
 
+/*
+ * นัดรุ่นก่อน 5 ต.ค. 2569 ผูกโปรเจคด้วยเลขที่ดีล (ช่อง deal) — ย้ายไปช่อง pj
+ * เลขดีลของชุดตั้งต้นแปลงเป็นเลข PJ · ที่ไม่รู้จักเก็บเลขเดิมไว้ หน้าจอหาโปรเจคจากเลขดีลได้ (isRef)
+ */
+function migrateSchedule(input: ScheduleState): ScheduleState {
+  /* นัดตัวอย่างที่เพิ่มเข้าชุดตั้งต้นทีหลัง (8 ต.ค. 2569) — เติมเฉพาะรหัสที่ยังไม่มี ไม่ทับนัดที่ผู้ใช้แก้หรือยกเลิกไว้
+     ระบบไม่มีการลบนัด (ยกเลิกแล้วยังเก็บไว้) รหัสที่หายไปจึงแปลว่ายังไม่เคยได้รับ */
+  const have = new Set(input.events.map((e) => e.id));
+  const missing = PM_EVENTS.filter((e) => !have.has(e.id));
+  const v = missing.length ? { ...input, events: [...input.events, ...missing] } : input;
+  if (!v.events.some((e) => "deal" in e)) return v;
+  return {
+    ...v,
+    events: v.events.map((e) => {
+      if (!("deal" in e)) return e;
+      const { deal, ...rest } = e as PmEvent & { deal?: string };
+      const pj = (deal && pmSnapshot().projects.find((p) => isRef(p, deal))?.pj) || legacyPj(deal);
+      return { ...rest, pj: rest.pj || pj || undefined };
+    }),
+  };
+}
+
 /* v5 — นัดหมายเก็บประวัติการแก้ (edits) เพิ่มจาก v4 ที่มีแค่ผู้สร้างกับการยกเลิก */
-const store = createPersistedStore<ScheduleState>("maz-erp.pm-schedule.v5", INITIAL, isState);
+const store = createPersistedStore<ScheduleState>("maz-erp.pm-schedule.v5", INITIAL, isState, migrateSchedule);
 
 export function useSchedule() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);
@@ -62,7 +86,7 @@ export type EventDraft = {
   from: string;
   to: string;
   place: string;
-  /** เลขที่โปรเจค (PJ-) ที่เกี่ยวข้อง — ว่างคือไม่ผูกกับโปรเจคไหน */
+  /** เลขที่โปรเจคที่เกี่ยวข้อง — ว่างคือไม่ผูกกับโปรเจคไหน (เดิมเลขที่ดีล — เปลี่ยน 5 ต.ค. 2569) */
   pj: string;
   who: string[];
   note: string;

@@ -11,28 +11,26 @@
  *    ของจริงต้องสร้างบัญชีที่ระบบยืนยันตัวตนแล้วส่งรหัสชั่วคราวให้พนักงาน
  */
 
-import { ConfirmDialog } from "./confirm-dialog";
 import { useMemo, useState } from "react";
-import { thaiDate } from "@/lib/format";
+import { thaiDate, todayIso } from "@/lib/format";
 import {
   HR_ACC_STATUS,
-  HR_EMPTYPE,
   accountRoles,
   hrPos,
-  posOf,
+  suggestUser,
   type EmpAccount,
   type Employee,
 } from "@/lib/hr-data";
-import { resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
-import { rolesOfEmployee } from "@/lib/hr-data";
-import { ROLES, roleLabel, type Role } from "@/lib/role";
+import { createAccount, resetAccount, setAccountRoles, setAccountStatus, useHr } from "@/lib/hr-store";
+import { JobTags, jobLabel, PassBox, RolePicker, tempPass } from "./account-parts";
+import { roleLabel, type Role } from "@/lib/role";
 import { Sheet } from "./lead-dialogs";
 import { Field, Input, Select } from "./ui";
 import { SearchBox } from "./sales-ui";
+import { Switch } from "./admin-ui";
 import { PhoneCard, PhoneList } from "./acchr-phone";
+import { stackNo } from "@/lib/stack-no";
 
-/* พนักงานหนึ่งคนมีบัญชีหนึ่งบัญชีเสมอ สร้างพร้อมข้อมูลพนักงาน (ต้นแบบ 6 ต.ค. 2569)
-   จึงไม่มีสถานะ "ยังไม่มีบัญชี" และไม่มีปุ่มสร้าง/ลบบัญชีในหน้านี้อีก */
 type Filter = "all" | "active" | "suspended";
 
 const FILTER_LABEL: Record<Filter, string> = {
@@ -41,47 +39,46 @@ const FILTER_LABEL: Record<Filter, string> = {
   suspended: "ถูกระงับ",
 };
 
-/** รหัสชั่วคราว — ตัดตัวอักษรที่อ่านสลับกันง่าย (O 0 I l 1) ออก จะได้อ่านทางโทรศัพท์ได้ */
-function tempPass() {
-  const up = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const low = "abcdefghijkmnpqrstuvwxyz";
-  const num = "23456789";
-  const sym = "#@!";
-  const pick = (s: string) => s.charAt(Math.floor(Math.random() * s.length));
-  return pick(up) + pick(low) + pick(low) + pick(low) + pick(num) + pick(num) + pick(sym);
-}
 
 export function HrAccountsPage() {
-  /* กล่องกำหนดบทบาทของบัญชี — เดิมอยู่หน้าบทบาทและสิทธิ์ที่ยุบทิ้งไปแล้ว (29 ก.ย. 2569) */
-  const [roling, setRoling] = useState<string | null>(null);
   const hr = useHr();
+  const today = todayIso();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  /** บัญชีที่กำลังตั้งรหัสใหม่ */
+  /* กล่องเดียวใช้ทั้งสร้างบัญชีและตั้งรหัสใหม่ — ต่างกันแค่ว่ามีบัญชีอยู่แล้วหรือยัง */
   const [editing, setEditing] = useState<{ id: string; reset: boolean } | null>(null);
-  /* ระงับบัญชีแล้วคนนั้นเข้าระบบไม่ได้ทันที — ต้องถามก่อน กดพลาดแล้วเพื่อนร่วมงานทำงานไม่ได้
-     (พบตอนทดสอบแบบสวมบทบาท 7 ต.ค. 2569) · คืนสิทธิ์ไม่ต้องถาม เพราะเป็นการเปิดให้ใช้งาน */
-  const [suspending, setSuspending] = useState<Employee | null>(null);
+  /** กล่องเมนูที่ใช้ได้ (บทบาทของบัญชี) — ต้นแบบ hr-accounts.html mVeil */
+  const [menuOf, setMenuOf] = useState<string | null>(null);
+
+  /* ลำดับแบบกองซ้อน — นับจากบัญชีทั้งหมดก่อนกรองสถานะ/ค้นหา ตามวันที่สร้างบัญชี บัญชีล่าสุดเลขมากสุดอยู่บน (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+  const noOf = useMemo(
+    () =>
+      stackNo(
+        hr.emp.filter((e) => e.status === "active" && e.account),
+        (e) => e.account?.createdAt ?? "",
+        (e) => e.id,
+      ),
+    [hr.emp],
+  );
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return hr.emp.filter((e) => {
+      /* พนักงาน 1 คนมีบัญชี 1 บัญชี สร้างพร้อมข้อมูลพนักงาน — ตารางนี้จึงมีแต่คนที่มีบัญชี */
       if (e.status !== "active" || !e.account) return false;
       if (filter !== "all" && e.account.status !== filter) return false;
-      if (q && !`${e.name} ${e.account?.user ?? ""}`.toLowerCase().includes(q)) return false;
+      if (q && !`${e.name} ${e.nick ?? ""} ${e.account?.user ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
-    });
-  }, [hr.emp, query, filter]);
+    }).sort((a, b) => (noOf.get(b.id) ?? 0) - (noOf.get(a.id) ?? 0));
+  }, [hr.emp, query, filter, noOf]);
 
   const target = editing ? hr.emp.find((e) => e.id === editing.id) : undefined;
 
   return (
     <div className="space-y-4">
       <div className="bar">
-        {/* มุมซ้ายเดิมว่างเปล่า — ใส่หัวเรื่องกับจำนวนคนที่กำลังแสดง (เจ้าของสั่ง 6 ต.ค. 2569) */}
-        <div className="max-md:hidden">
-          <h1 className="text-[19px] leading-tight font-bold">จัดการบัญชีผู้ใช้</h1>
-          <p className="num mt-1 text-[13px] text-muted-foreground">{rows.length} คน</p>
+        <div>
+          <h1>จัดการบัญชีผู้ใช้</h1>
         </div>
         <div className="tools w-full flex-wrap items-end sm:w-auto">
           <Field label="ค้นหา" className="max-sm:w-full">
@@ -106,21 +103,22 @@ export function HrAccountsPage() {
 
       <section className="panel glass flex flex-col">
         <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">
-          <table className="data-table cards-sm min-w-[1000px]">
+          <table className="data-table cards-sm min-w-[920px]">
             <thead>
               <tr>
+                <th className="c" style={{ width: 60 }}>ลำดับ</th>
                 <th>พนักงาน</th>
                 <th style={{ width: 150 }}>ชื่อผู้ใช้</th>
-                <th style={{ width: 160 }}>เมนูที่ใช้ได้</th>
-                <th style={{ width: 120 }}>สถานะบัญชี</th>
+                <th style={{ width: 170 }}>งานที่รับผิดชอบ</th>
+                {/* สวิตช์แทนปุ่มระงับ/คืนสิทธิ์ และแทนคอลัมน์สถานะบัญชี (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
                 <th style={{ width: 120 }}>สร้างเมื่อ</th>
-                <th style={{ width: 320 }} aria-label="จัดการ" />
+                <th className="c" style={{ width: 300 }} aria-label="จัดการ" />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-12 text-center text-muted-foreground">
                     ไม่พบรายการ
                   </td>
                 </tr>
@@ -128,13 +126,13 @@ export function HrAccountsPage() {
                 rows.map((e) => (
                   <AccountRow
                     key={e.id}
+                    no={noOf.get(e.id) ?? 0}
                     emp={e}
+                    onMenu={() => setMenuOf(e.id)}
                     onReset={() => setEditing({ id: e.id, reset: true })}
-                    onRoles={() => setRoling(e.id)}
-                    onToggle={() => {
-                      if (e.account?.status === "active") return setSuspending(e);
-                      setAccountStatus(e.id, "active");
-                    }}
+                    onToggle={() =>
+                      setAccountStatus(e.id, e.account?.status === "active" ? "suspended" : "active")
+                    }
                   />
                 ))
               )}
@@ -150,13 +148,23 @@ export function HrAccountsPage() {
             return (
               <PhoneCard
                 key={e.id}
-                title={e.name}
-                sub={e.pos ? hrPos(e.pos).label : "ยังไม่ได้กรอกข้อมูล"}
+                title={e.nick?.trim() || e.name}
+                sub={`#${noOf.get(e.id)} · ${e.pos ? hrPos(e.pos).label : "ยังไม่ได้กรอกข้อมูล"}`}
                 badge={
-                  st && (
-                    <span className={`tag ${st.cls}`}>
+                  a ? (
+                    /* มือถือก็ใช้สวิตช์ เปิด = ใช้งานอยู่ ปิด = ระงับ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+                    <Switch
+                      on={a.status === "active"}
+                      onToggle={() =>
+                        setAccountStatus(e.id, a.status === "active" ? "suspended" : "active")
+                      }
+                      label={`เปิดหรือปิดใช้บัญชี ${e.name}`}
+                      title={st?.label}
+                    />
+                  ) : (
+                    <span className="tag t-miss">
                       <i />
-                      {st.label}
+                      ยังไม่มีบัญชี
                     </span>
                   )
                 }
@@ -164,19 +172,16 @@ export function HrAccountsPage() {
                   a
                     ? [
                         { label: "ชื่อผู้ใช้", value: a.user },
+                        { label: "งานที่รับผิดชอบ", value: <JobTags roles={a.roles} /> },
                         { label: "สร้างเมื่อ", value: thaiDate(a.createdAt) },
                       ]
                     : undefined
                 }
                 actions={
-                  a && (
+                  a ? (
                     <>
-                      <button
-                        type="button"
-                        className="btn glass-thin"
-                        onClick={() => setRoling(e.id)}
-                      >
-                        เมนูที่ใช้ได้
+                      <button type="button" className="btn glass-thin" onClick={() => setMenuOf(e.id)}>
+                        งานที่รับผิดชอบ
                       </button>
                       <button
                         type="button"
@@ -185,17 +190,15 @@ export function HrAccountsPage() {
                       >
                         รีเซ็ตรหัสผ่าน
                       </button>
-                      <button
-                        type="button"
-                        className="btn glass-thin"
-                        onClick={() => {
-                          if (a.status === "active") return setSuspending(e);
-                          setAccountStatus(e.id, "active");
-                        }}
-                      >
-                        {a.status === "active" ? "ระงับบัญชี" : "คืนสิทธิ์"}
-                      </button>
                     </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn solid btn-solid"
+                      onClick={() => setEditing({ id: e.id, reset: false })}
+                    >
+                      สร้างบัญชี
+                    </button>
                   )
                 }
               />
@@ -204,121 +207,76 @@ export function HrAccountsPage() {
         </PhoneList>
       </section>
 
+      {menuOf && hr.emp.find((x) => x.id === menuOf) && (
+        <MenuDialog emp={hr.emp.find((x) => x.id === menuOf)!} onClose={() => setMenuOf(null)} />
+      )}
+
       {target && editing && (
         <AccountDialog
-          key={target.id}
+          key={`${target.id}-${editing.reset}`}
           emp={target}
+          reset={editing.reset}
           taken={hr.emp
             .filter((x) => x.id !== target.id && x.account)
             .map((x) => x.account!.user)}
+          today={today}
           onClose={() => setEditing(null)}
         />
       )}
-
-      {roling && hr.emp.find((e) => e.id === roling)?.account && (
-        <RolesDialog emp={hr.emp.find((e) => e.id === roling)!} onClose={() => setRoling(null)} />
-      )}
-
-      <ConfirmDialog
-        open={suspending !== null}
-        tone="destructive"
-        title="ระงับบัญชีนี้"
-        description={suspending ? `${suspending.name} จะเข้าระบบไม่ได้ทันที` : ""}
-        detail="งานที่ทำค้างไว้ยังอยู่ครบ · คืนสิทธิ์ให้ใหม่ได้ทุกเมื่อจากหน้านี้"
-        confirmLabel="ระงับบัญชี"
-        onConfirm={() => {
-          if (suspending) setAccountStatus(suspending.id, "suspended");
-          setSuspending(null);
-        }}
-        onCancel={() => setSuspending(null)}
-      />
 
     </div>
   );
 }
 
 function AccountRow({
+  no,
   emp,
+  onMenu,
   onReset,
-  onRoles,
   onToggle,
 }: {
+  no: number;
   emp: Employee;
+  onMenu: () => void;
   onReset: () => void;
-  onRoles: () => void;
   onToggle: () => void;
 }) {
   const a = emp.account;
   const st = a ? HR_ACC_STATUS[a.status] : null;
   return (
-    /* กดตรงไหนของแถวก็ได้เพื่อเปิด "เมนูที่ใช้ได้" ตามต้นแบบ (เจ้าของสั่ง 6 ต.ค. 2569)
-       กดปุ่มในแถวให้ทำงานของปุ่มเอง จึงเช็กก่อนว่าคลิกโดนปุ่มหรือเปล่า */
-    <tr
-      tabIndex={0}
-      className="cursor-pointer"
-      onClick={(ev) => {
-        if ((ev.target as HTMLElement).closest("button,a,input,select,textarea,label")) return;
-        onRoles();
-      }}
-      onKeyDown={(ev) => {
-        if (ev.target !== ev.currentTarget) return;
-        if (ev.key !== "Enter" && ev.key !== " ") return;
-        ev.preventDefault();
-        onRoles();
-      }}
-    >
+    <tr>
+      <td data-label="ลำดับ" className="c num muted">{no}</td>
       <td data-label="พนักงาน">
-        <b className="block text-[13.5px] font-semibold">{emp.name}</b>
-        {/* ใต้ชื่อบอกตำแหน่งอย่างเดียวตามต้นแบบ — ประเภทการจ้างดูที่หน้าข้อมูลพนักงาน */}
-        <span className="why">
-          {emp.pos ? posOf(emp).map((v) => hrPos(v).label).join(" · ") : "ยังไม่ได้กรอกข้อมูล"}
-        </span>
+        {/* ชื่อเล่นเป็นชื่อหลัก ไม่มีชื่อเล่นใช้ชื่อจริง (ผู้ใช้สั่ง 15 ต.ค. 2569) */}
+        <b className="block text-[13.5px] font-semibold">{emp.nick?.trim() || emp.name}</b>
+        {/* ยังไม่มีตำแหน่ง — ข้อความตาม mockup (posLabel) */}
+        <span className="why">{emp.pos ? hrPos(emp.pos).label : "ยังไม่ได้กรอกข้อมูล"}</span>
       </td>
-      <td data-label="ชื่อผู้ใช้" className="font-mono text-[13px]">
-        {a?.user ?? "—"}
+      <td data-label="ชื่อผู้ใช้" className="num">
+        {a ? a.user : <span className="muted">ยังไม่มีบัญชี</span>}
       </td>
-      <td data-label="เมนูที่ใช้ได้">
-        {a ? (
-          accountRoles(a).length ? (
-            <span className="block">
-              {accountRoles(a).map((r) => (
-                <em key={r} className="block leading-[1.6] whitespace-nowrap not-italic">
-                  {roleLabel(r)}
-                </em>
-              ))}
-            </span>
-          ) : (
-            <span className="muted">ยังไม่ได้กำหนด</span>
-          )
-        ) : (
-          <span className="muted">—</span>
-        )}
-      </td>
-      <td data-label="สถานะบัญชี">
-        {st ? (
-          <span className={`tag ${st.cls}`}>
-            <i />
-            {st.label}
-          </span>
-        ) : (
-          <span className="muted">—</span>
-        )}
+      <td data-label="งานที่รับผิดชอบ">
+        <JobTags roles={a?.roles} />
       </td>
       <td data-label="สร้างเมื่อ" className="num muted">
         {a ? thaiDate(a.createdAt) : "—"}
       </td>
-      <td data-label="จัดการ">
+      <td data-label="จัดการ" className="c">
         {a ? (
-          <span className="flex flex-wrap justify-end gap-2">
-            <button type="button" className="btn glass-thin btn-mini" onClick={onRoles}>
-              เมนูที่ใช้ได้
+          <span className="flex flex-wrap items-center justify-end gap-1.5">
+            <button type="button" className="btn glass-thin btn-mini" onClick={onMenu}>
+              งานที่รับผิดชอบ
             </button>
             <button type="button" className="btn glass-thin btn-mini" onClick={onReset}>
               รีเซ็ตรหัสผ่าน
             </button>
-            <button type="button" className="btn glass-thin btn-mini" onClick={onToggle}>
-              {a.status === "active" ? "ระงับบัญชี" : "คืนสิทธิ์"}
-            </button>
+            {/* สวิตช์เปิด/ปิดบัญชีอยู่ตำแหน่งเดิมของปุ่มระงับบัญชี (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+            <Switch
+              on={a.status === "active"}
+              onToggle={onToggle}
+              label={`เปิดหรือปิดใช้บัญชี ${emp.name}`}
+              title={st?.label}
+            />
           </span>
         ) : null}
       </td>
@@ -326,34 +284,42 @@ function AccountRow({
   );
 }
 
-/** ตั้งรหัสใหม่ให้บัญชีเดิม — บัญชีสร้างพร้อมพนักงานแล้ว จึงไม่มีการสร้างใหม่ที่นี่ */
+/** สร้างบัญชีใหม่ หรือตั้งรหัสใหม่ให้บัญชีเดิม */
 function AccountDialog({
   emp,
+  reset,
   taken,
+  today,
   onClose,
 }: {
   emp: Employee;
+  reset: boolean;
   taken: string[];
+  today: string;
   onClose: () => void;
 }) {
-  const [user, setUser] = useState(emp.account?.user ?? "");
+  const [user, setUser] = useState(
+    reset ? (emp.account?.user ?? "") : suggestUser(emp.name, taken),
+  );
   const [pass, setPass] = useState(tempPass);
-  /* เมนูที่ใช้ได้แก้ที่ปุ่ม "เมนูที่ใช้ได้" — ตั้งรหัสใหม่ไม่แตะของเดิม */
-  const roles = accountRoles(emp.account);
+  /* บัญชีใหม่: ฝ่ายบุคคลติกบทบาทเองตอนสร้าง (ผู้ใช้สั่ง 6 ต.ค. 2569)
+     ลำดับที่ติกคือลำดับเมนูที่ผู้ใช้เห็น — ติกก่อนขึ้นก่อน · รีเซ็ตรหัสคงบทบาทเดิมไว้ */
+  const [roles, setRoles] = useState<Role[]>(() => accountRoles(emp.account));
   const [warn, setWarn] = useState("");
 
   function save() {
     const name = user.trim();
     if (name.length < 4) return setWarn("ชื่อผู้ใช้ต้องยาวอย่างน้อย 4 ตัวอักษร");
     if (taken.includes(name)) return setWarn("ชื่อผู้ใช้นี้มีคนใช้แล้ว");
-    /* TODO: ต่อ backend แล้วต้องรีเซ็ตรหัสที่ระบบยืนยันตัวตนจริง แล้วบังคับตั้งรหัสใหม่ครั้งแรก */
-    resetAccount(emp.id, name, roles);
+    /* TODO: ต่อ backend แล้วต้องสร้าง/รีเซ็ตบัญชีที่ระบบยืนยันตัวตนจริง แล้วบังคับตั้งรหัสใหม่ครั้งแรก */
+    if (reset) resetAccount(emp.id, name, roles);
+    else createAccount(emp.id, name, today, roles);
     onClose();
   }
 
   return (
     <Sheet
-      title="รีเซ็ตรหัสผ่าน"
+      title={reset ? "รีเซ็ตรหัสผ่าน" : "สร้างบัญชีผู้ใช้"}
       onClose={onClose}
       footer={
         <>
@@ -361,7 +327,7 @@ function AccountDialog({
             ยกเลิก
           </button>
           <button type="button" className="btn solid btn-solid" onClick={save}>
-            ตั้งรหัสใหม่
+            {reset ? "ตั้งรหัสใหม่" : "สร้างบัญชี"}
           </button>
         </>
       }
@@ -370,12 +336,8 @@ function AccountDialog({
         <p className="text-[14px] font-semibold">
           {emp.name}
           <span className="ml-2 text-[12.5px] font-normal text-muted-foreground">
-            {posOf(emp).map((v) => hrPos(v).label).join(" · ")} · {HR_EMPTYPE[emp.type].label}
+            {hrPos(emp.pos).label}
           </span>
-        </p>
-        {/* บอกไปเลยว่าบัญชีนี้จะได้เมนูของตำแหน่งไหน จะได้ไม่ต้องเดาตอนสร้าง */}
-        <p className="mt-1 text-[12.5px] text-muted-foreground">
-          ได้เมนู {roles.map(roleLabel).join(" + ") || "—"}
         </p>
       </Field>
 
@@ -393,21 +355,20 @@ function AccountDialog({
           />
         </Field>
         <Field label="รหัสผ่านชั่วคราว">
-          <span className="flex items-center gap-2">
-            <span className="num flex h-9 flex-1 items-center rounded-[10px] border border-border bg-muted/60 px-3 text-[14px] font-bold tracking-wide">
-              {pass}
-            </span>
-            <button
-              type="button"
-              className="btn glass-thin btn-mini"
-              onClick={() => setPass(tempPass())}
-            >
-              สุ่มใหม่
-            </button>
-          </span>
+          <PassBox pass={pass} onNew={() => setPass(tempPass())} />
         </Field>
       </div>
 
+      {!reset && (
+        <fieldset className="mt-4">
+          <legend className="mb-2 text-[12.5px] font-semibold text-muted-foreground">
+            งานที่รับผิดชอบ
+          </legend>
+          <RolePicker roles={roles} onChange={setRoles} onWarn={setWarn} />
+        </fieldset>
+      )}
+
+      {/* ไม่มีข้อความอธิบายการทำงานของระบบในกล่องนี้ (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
 
       {warn && (
         <p className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] text-destructive">
@@ -420,29 +381,21 @@ function AccountDialog({
 
 export type { EmpAccount };
 
-/*
- * บทบาทของบัญชีผู้ใช้ — จอนี้ให้เลือก "บทบาท" อย่างเดียว (เจ้าของสั่ง 1 ต.ค. 2569)
- * บทบาทคือเมนูที่บัญชีนี้เปิดได้ ส่วนตำแหน่งงานแก้ที่หน้าข้อมูลพนักงาน
- * บัญชีใหม่ระบบตั้งบทบาทให้ตามตำแหน่งอยู่แล้ว จอนี้ไว้แก้เป็นรายคน
+/** บทบาทของบัญชีเป็นข้อความบรรทัดเดียว — การ์ดมือถือ */
+function roleLine(roles?: Role[]) {
+  return roles?.length ? roles.map(jobLabel).join(" · ") : "—";
+}
+
+/**
+ * เมนูที่ใช้ได้ของบัญชีหนึ่ง = บทบาทของบัญชี เรียงตามลำดับที่ติก (ต้นแบบ hr-accounts.html mVeil)
+ * เมนู "ของฉัน" ขึ้นตามประเภทพนักงานอยู่แล้ว ไม่อยู่ในรายการนี้
  */
-function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
-  /* เมนูที่มาจากตำแหน่ง ติ๊กไว้และล็อก เอาออกไม่ได้ (ต้นแบบ hr-accounts 6 ต.ค. 2569)
-     เปลี่ยนตำแหน่งเมื่อไหร่ เมนูชุดนี้เปลี่ยนตามเอง ที่เพิ่มเองคือสิทธิ์เพิ่มเติม */
-  const own = rolesOfEmployee(emp);
-  const [picked, setPicked] = useState<Role[]>(
-    accountRoles(emp.account).length ? accountRoles(emp.account) : own,
-  );
+function MenuDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
+  const [roles, setRoles] = useState<Role[]>(() => accountRoles(emp.account));
   const [warn, setWarn] = useState("");
-
-  function toggle(r: Role) {
-    if (own.includes(r)) return;
-    setWarn("");
-    setPicked((list) => (list.includes(r) ? list.filter((x) => x !== r) : [...list, r]));
-  }
-
   return (
     <Sheet
-      title="เมนูที่ใช้ได้"
+      title="งานที่รับผิดชอบ"
       onClose={onClose}
       footer={
         <>
@@ -453,8 +406,7 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
             type="button"
             className="btn solid btn-solid"
             onClick={() => {
-              if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งบทบาท");
-              setAccountRoles(emp.id, picked);
+              setAccountRoles(emp.id, roles);
               onClose();
             }}
           >
@@ -463,42 +415,16 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
         </>
       }
     >
-      <Field label="พนักงาน">
-        <p className="text-[14px] font-semibold">
-          {emp.name}
-          <span className="ml-2 text-[12.5px] font-normal text-muted-foreground">{emp.account?.user}</span>
+      <p className="mb-3.5">
+        <b className="block text-[14px] font-semibold">{emp.name}</b>
+        <em className="mt-0.5 block text-[12px] text-muted-foreground not-italic">{hrPos(emp.pos).label}</em>
+      </p>
+      <RolePicker roles={roles} onChange={setRoles} onWarn={setWarn} />
+      {warn && (
+        <p className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] text-destructive">
+          {warn}
         </p>
-      </Field>
-
-      {/* CEO ไม่อยู่ในรายการ — ไม่ใช่บัญชีพนักงานในทะเบียน */}
-      <div className="mt-4 grid gap-2">
-        {ROLES.filter((r) => r.key !== "ceo").map((r) => {
-          const lock = own.includes(r.key);
-          return (
-            <label
-              key={r.key}
-              className={`flex items-center gap-2.5 rounded-[12px] border px-3.5 py-2.5 ${
-                lock ? "cursor-default" : "cursor-pointer"
-              } ${picked.includes(r.key) ? "border-primary bg-primary/5" : "border-border bg-card"}`}
-            >
-              <input
-                type="checkbox"
-                checked={picked.includes(r.key)}
-                disabled={lock}
-                onChange={() => toggle(r.key)}
-                className="size-4 accent-[var(--primary)]"
-              />
-              <span className="min-w-0 text-[13.5px] font-semibold">{r.label}</span>
-              {lock && (
-                <em className="ml-auto text-[11.5px] font-semibold text-muted-foreground not-italic">
-                  มาจากตำแหน่ง
-                </em>
-              )}
-            </label>
-          );
-        })}
-      </div>
-      {warn && <p className="mt-3 text-[12.5px] font-semibold text-destructive">{warn}</p>}
+      )}
     </Sheet>
   );
 }

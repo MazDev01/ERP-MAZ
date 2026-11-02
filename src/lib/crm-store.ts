@@ -8,6 +8,14 @@ import {
   CHANGE_LOGS,
   CUSTOMERS,
   DEALS,
+  DEMO_OCT_ACTIVITIES,
+  DEMO_OCT_CHANGE_LOGS,
+  DEMO_OCT_CUSTOMERS,
+  DEMO_OCT_DEALS,
+  DEMO_OCT_JOB_ORDERS,
+  DEMO_OCT_PRESALES,
+  DEMO_OCT_QUOTATIONS,
+  DEMO_OCT_ROUNDS,
   SEED_CONTRACTS,
   JOB_ORDERS,
   PRESALES_REQUESTS,
@@ -15,8 +23,11 @@ import {
   QUOTATION_REVISIONS,
   QUOTATIONS,
   canBillQuotation,
+  canRejectQuotation,
   findParty,
+  parseRejectText,
   quotationTotals,
+  rejectText,
   type Activity,
   type BuyerType,
   type ChangeLog,
@@ -33,8 +44,7 @@ import {
   type ProposalPlanPhase,
   type Quotation,
   type QuotationRevision,
-  type Urgency,
-} from "./crm-data";
+  type Urgency, ACC_DEMO_QUOTATIONS } from "./crm-data";
 import { addDays, bkkNow, nextDocNo, todayIso } from "./format";
 import { firstLine } from "./rich-text";
 import { CURRENT_USER } from "./mock-data";
@@ -55,25 +65,101 @@ export type CrmState = {
   quotationRevisions: QuotationRevision[];
   deals: Deal[];
   jobOrders: JobOrder[];
+  /** ชุดตัวอย่างที่เคยเติมเข้าเครื่องนี้แล้ว — เติมครั้งเดียว ผู้ใช้ลบทิ้งแล้วจะไม่กลับมาอีก */
+  demo?: string[];
 };
 
+/** ป้ายของชุดตัวอย่างเดือน ต.ค. 2569 (crm-data DEMO_OCT_*) */
+const DEMO_OCT = "2569-10";
+
 const INITIAL: CrmState = {
-  customers: CUSTOMERS,
-  activities: ACTIVITIES,
-  changeLogs: CHANGE_LOGS,
-  presales: PRESALES_REQUESTS,
-  presalesRounds: PRESALES_ROUNDS,
-  quotations: QUOTATIONS,
+  customers: [...DEMO_OCT_CUSTOMERS, ...CUSTOMERS],
+  activities: [...DEMO_OCT_ACTIVITIES, ...ACTIVITIES],
+  changeLogs: [...DEMO_OCT_CHANGE_LOGS, ...CHANGE_LOGS],
+  presales: [...DEMO_OCT_PRESALES, ...PRESALES_REQUESTS],
+  presalesRounds: [...DEMO_OCT_ROUNDS, ...PRESALES_ROUNDS],
+  quotations: [...DEMO_OCT_QUOTATIONS, ...QUOTATIONS],
   quotationRevisions: QUOTATION_REVISIONS,
-  deals: DEALS,
-  jobOrders: JOB_ORDERS,
+  deals: [...DEMO_OCT_DEALS, ...DEALS],
+  jobOrders: [...DEMO_OCT_JOB_ORDERS, ...JOB_ORDERS],
+  demo: [DEMO_OCT],
 };
+
+/*
+ * เติมชุดตัวอย่างเดือน ต.ค. 2569 ให้เครื่องที่เก็บข้อมูลไว้ก่อน (เพิ่ม 8 ต.ค. 2569 สำหรับเดโม)
+ * เติมเฉพาะรายการที่ยังไม่มี ไม่ทับ ไม่ลบของผู้ใช้ และเติมครั้งเดียว (จำไว้ที่ demo)
+ * รหัส/เลขที่เอกสารชนกับของที่ผู้ใช้สร้างเอง = ข้ามรายการนั้น พร้อมรายการที่อ้างถึงมันทั้งสาย
+ * จะได้ไม่มีเลขที่ซ้ำ และไม่มีใบเสนอราคาของตัวอย่างไปผูกกับลูกค้าจริงของผู้ใช้
+ */
+function addDemoOct(v: CrmState): CrmState {
+  if (v.demo?.includes(DEMO_OCT)) return v;
+  const demoCodes = new Set(DEMO_OCT_CUSTOMERS.flatMap((c) => [c.code, c.leadCode ?? ""]).filter(Boolean));
+  const takenCodes = new Set(v.customers.flatMap((c) => [c.code, c.leadCode ?? ""]).filter(Boolean));
+  const customers = DEMO_OCT_CUSTOMERS.filter(
+    (c) => !takenCodes.has(c.code) && !(c.leadCode && takenCodes.has(c.leadCode)),
+  );
+  /* ลูกค้าที่อ้างได้ = ที่เพิ่งเติม + ของเดิมในเครื่องที่ไม่ใช่รหัสของชุดตัวอย่าง */
+  const okCus = new Set([
+    ...customers.map((c) => c.code),
+    ...v.customers.filter((c) => !demoCodes.has(c.code)).map((c) => c.code),
+  ]);
+
+  const takenPs = new Set(v.presales.flatMap((p) => [p.id, p.no]));
+  const presales = DEMO_OCT_PRESALES.filter(
+    (p) => okCus.has(p.customerCode) && !takenPs.has(p.id) && !takenPs.has(p.no),
+  );
+  const newPs = new Set(presales.map((p) => p.no));
+  const takenRound = new Set(v.presalesRounds.map((r) => r.id));
+  const rounds = DEMO_OCT_ROUNDS.filter((r) => newPs.has(r.requestNo) && !takenRound.has(r.id));
+
+  const demoPs = new Set(DEMO_OCT_PRESALES.map((p) => p.no));
+  const takenQ = new Set(v.quotations.flatMap((q) => [q.id, q.no]));
+  const quotations = DEMO_OCT_QUOTATIONS.filter(
+    (q) =>
+      okCus.has(q.customerCode) &&
+      !takenQ.has(q.id) &&
+      !takenQ.has(q.no) &&
+      (!q.ps || !demoPs.has(q.ps) || newPs.has(q.ps)),
+  );
+  const newQ = new Set(quotations.map((q) => q.no));
+  const takenDeal = new Set(v.deals.flatMap((d) => [d.id, d.no, d.quotationNo]));
+  const deals = DEMO_OCT_DEALS.filter(
+    (d) => newQ.has(d.quotationNo) && !takenDeal.has(d.id) && !takenDeal.has(d.no),
+  );
+  const newDeal = new Set(deals.map((d) => d.no));
+  const takenJob = new Set(v.jobOrders.flatMap((j) => [j.id, j.no]));
+  const jobOrders = DEMO_OCT_JOB_ORDERS.filter(
+    (j) => newDeal.has(j.dealNo) && !takenJob.has(j.id) && !takenJob.has(j.no),
+  );
+
+  const takenAc = new Set(v.activities.map((a) => a.id));
+  const takenCl = new Set(v.changeLogs.map((l) => l.id));
+  return {
+    ...v,
+    customers: [...customers, ...v.customers],
+    activities: [
+      ...DEMO_OCT_ACTIVITIES.filter((a) => okCus.has(a.customerCode) && !takenAc.has(a.id)),
+      ...v.activities,
+    ],
+    changeLogs: [
+      ...DEMO_OCT_CHANGE_LOGS.filter((l) => okCus.has(l.customerCode) && !takenCl.has(l.id)),
+      ...v.changeLogs,
+    ],
+    presales: [...presales, ...v.presales],
+    presalesRounds: [...rounds, ...v.presalesRounds],
+    quotations: [...quotations, ...v.quotations],
+    deals: [...deals, ...v.deals],
+    jobOrders: [...jobOrders, ...v.jobOrders],
+    demo: [...(v.demo ?? []), DEMO_OCT],
+  };
+}
 
 /*
  * เติมฟิลด์ที่เพิ่มเข้ามาทีหลังให้ข้อมูลเก่าที่ค้างอยู่ในเครื่องผู้ใช้
  * ไม่เปลี่ยนคีย์ เพราะจะทิ้งผู้สนใจและใบเสนอราคาที่เขาสร้างไว้เองไปด้วย
  */
-function migrateCrm(v: CrmState): CrmState {
+function migrateCrm(saved: CrmState): CrmState {
+  const v = addDemoOct(saved);
   const typeOf = new Map(CUSTOMERS.map((c) => [c.code, c.type]));
   const customers = v.customers.map((c) =>
     c.type ? c : { ...c, type: typeOf.get(c.code) ?? ("juristic" as BuyerType) },
@@ -87,12 +173,40 @@ function migrateCrm(v: CrmState): CrmState {
       : { ...c, leadCode: leadHead + c.code.replace(/^[A-Za-z]+-/, "") },
   );
   const buyerOf = new Map(withLead.map((c) => [c.code, c.type]));
+  /* เหตุผลปฏิเสธแบบเลือกจากรายการ (ผู้ใช้สั่ง 14 ต.ค. 2569) — รายเก่าที่พิมพ์เองถือเป็น "อื่นๆ"
+     วันที่ปฏิเสธเอาจากประวัติเปลี่ยนสถานะครั้งล่าสุด */
+  const rejectedOn = (code: string) =>
+    v.changeLogs
+      .filter((l) => l.customerCode === code && l.kind !== "owner" && l.to === "ปฏิเสธ")
+      .map((l) => l.at)
+      .sort()
+      .at(-1);
+  const withReject = withLead.map((c) => {
+    if (c.status !== "ปฏิเสธ" || c.rejectKind) return c;
+    /* รายตั้งต้นที่ข้อความเหตุผลยังตรงกับชุดตั้งต้น — ใช้หมวดที่กำหนดไว้ในชุดตั้งต้น */
+    const seed = [...CUSTOMERS, ...DEMO_OCT_CUSTOMERS].find((x) => x.code === c.code && x.rejectNote === c.closedReason);
+    const { kind, note } = seed?.rejectKind
+      ? { kind: seed.rejectKind, note: seed.rejectNote ?? "" }
+      : parseRejectText(c.closedReason);
+    const at = c.rejectedAt ?? rejectedOn(c.code);
+    return { ...c, rejectKind: kind, rejectNote: note, closedReason: rejectText(kind, note), ...(at ? { rejectedAt: at } : {}) };
+  });
   return {
     ...v,
-    customers: withLead,
-    quotations: v.quotations.map((q) =>
-      q.buyer ? q : { ...q, buyer: buyerOf.get(q.customerCode) ?? ("juristic" as BuyerType) },
-    ),
+    customers: withReject,
+    /* ใบเสนอราคาไม่มีร่างแล้ว (ผู้ใช้สั่ง 5 ต.ค. 2569: ไม่มีร่าง ออกแล้วแก้ไม่ได้ ต้องออกใบใหม่)
+       ร่างที่ค้างในเครื่องเก่า (สถานะ "ร่าง" และยังไม่มีเลขที่) ทิ้งไป ไม่ให้โผล่ในรายการโดยไม่มีทางจัดการ */
+    /* ตัวอย่างใบของลูกค้าเดิมที่ยังไม่วางบิล — เติมเฉพาะที่ยังไม่มีทั้งรหัสและเลขที่ (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+    quotations: [
+      ...v.quotations,
+      ...ACC_DEMO_QUOTATIONS.filter(
+        (s) => v.customers.some((c) => c.code === s.customerCode) && !v.quotations.some((q) => q.id === s.id || q.no === s.no),
+      ),
+    ]
+      .filter((q) => !(q.status === "ร่าง" && !q.no))
+      .map((q) =>
+        q.buyer ? q : { ...q, buyer: buyerOf.get(q.customerCode) ?? ("juristic" as BuyerType) },
+      ),
     presales: v.presales.map((p) => (p.attachments ? p : { ...p, attachments: [] })),
     /* รอบข้อเสนอตั้งต้นที่เพิ่มทีหลัง (PR7–PR9 · 22 ก.ย. 2569) — เติมเฉพาะที่ยังไม่มีทั้งรหัสและเลขรอบของคำขอนั้น
        ไม่ทับรอบที่ทีมก่อนการขายส่งเองในเครื่อง */
@@ -132,7 +246,8 @@ const store = createPersistedStore<CrmState>(
      v5 (28 ก.ย. 2569) — ลูกค้าตั้งต้นทั้ง 14 รายกรอกข้อมูลออกใบกำกับภาษีครบแล้ว (เจ้าของยืนยันว่าเป็นข้อมูลสมมติ)
      เครื่องที่ยังถือชุด v4 อยู่จะออกใบเสร็จของลูกค้าเก่าไม่ได้ จึงเปลี่ยนคีย์ให้เริ่มจากชุดใหม่ */
   "maz-erp.crm.v5",
-  INITIAL,
+  /* เครื่องใหม่ก็ต้องได้ตัวอย่างที่เติมทีหลังด้วย (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  migrateCrm(INITIAL),
   (v): v is CrmState =>
     typeof v === "object" && v !== null && Array.isArray((v as CrmState).customers),
   migrateCrm,
@@ -170,7 +285,7 @@ function today() {
 }
 
 /** เลขเอกสารเดินตามรอบปี พ.ศ. แยกตามชนิด — กันเลขซ้ำด้วยการดูของเดิมที่มากสุด */
-/* ตัวนำหน้าตั้งได้ที่ /admin/doc-numbers — เปลี่ยนแล้วเลขลำดับเริ่มนับใหม่ของตัวนำหน้าใหม่ */
+/* เปลี่ยนตัวนำหน้าแล้วเลขลำดับเริ่มนับใหม่ของตัวนำหน้าใหม่ */
 const nextNo = nextDocNo;
 
 /**
@@ -227,7 +342,10 @@ function moveCustomer(
     ...s,
     customers: s.customers.map((c) =>
       c.code === code
-        ? { ...c, status: to, closedReason: to === "ปฏิเสธ" ? reason : "" }
+        ? to === "ปฏิเสธ"
+          ? /* เก็บหมวด + หมายเหตุ + วันที่ปฏิเสธ แยกจากข้อความแสดงผล (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+            { ...c, status: to, closedReason: reason, rejectKind: parseRejectText(reason).kind, rejectNote: parseRejectText(reason).note, rejectedAt: today() }
+          : { ...c, status: to, closedReason: "", rejectKind: undefined, rejectNote: undefined, rejectedAt: undefined }
         : c,
     ),
     changeLogs: [log, ...s.changeLogs],
@@ -289,6 +407,7 @@ export function addLead(input: {
     code = nextLeadCode(s.customers);
     const customer: Customer = {
       code,
+      createdAt: bkkNow().toISOString(),
       name: input.name,
       contact: input.contact,
       phone: input.phone,
@@ -351,10 +470,18 @@ export function addPresalesRequest(input: {
   kind: "BD" | "SA";
   problem: string;
   due: string;
-  urgency: Urgency;
-  urgentReason: string;
+  /** ไม่ส่งมา = "ปกติ" — ฟอร์มเอาช่องความเร่งด่วนออกแล้ว (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+  urgency?: Urgency;
+  urgentReason?: string;
   budget: number;
   attachments: string[];
+  /** ผู้รับงานที่เลือกจากพนักงานในบริษัท (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+  assignee?: string;
+  /** ประเภทงานและตำแหน่งที่ได้จากประเภทงาน (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+  service?: string;
+  toPos?: string;
+  /** รหัสพนักงานที่รับคำขอ — เลือกตัวคน (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+  toEmp?: string;
 }) {
   let no = "";
   store.update((s) => {
@@ -366,10 +493,13 @@ export function addPresalesRequest(input: {
       kind: input.kind,
       problem: input.problem,
       /* ผู้รับผิดชอบตั้งต้นตามคิวของแต่ละประเภท (ต้นแบบ presales.html) — คนที่กดรับงานจะถูกบันทึกแทน */
-      assignee: input.kind === "SA" ? "ปิยะวัฒน์ (SA)" : "ธนดล (BD)",
+      assignee: input.assignee || (input.kind === "SA" ? "ปิยะวัฒน์ (SA)" : "ธนดล (BD)"),
+      ...(input.service ? { service: input.service } : {}),
+      ...(input.toPos ? { toPos: input.toPos } : {}),
+      ...(input.toEmp ? { toEmp: input.toEmp } : {}),
       due: input.due,
-      urgency: input.urgency,
-      urgentReason: input.urgentReason,
+      urgency: input.urgency ?? "ปกติ",
+      urgentReason: input.urgentReason ?? "",
       budget: input.budget,
       attachments: input.attachments,
       status: "รอรับงาน",
@@ -453,10 +583,13 @@ export function closePresales(no: string) {
 // ─── ใบเสนอราคา ───────────────────────────────────────────────────
 /*
  * วงจรตามต้นแบบ quotations.html — ใบเสนอราคาไม่มีช่องสถานะให้กดเปลี่ยน ระบบอนุมานจากข้อมูลเอง
- *   บันทึก = ออกเลขที่เอกสารทันทีและนับว่าส่งให้ลูกค้าแล้ว (ไม่มีขั้นร่าง · เจ้าของแจ้ง 5 ต.ค. 2569)
+ *   ออกเลขที่เอกสาร (ได้เลขทันทีตอนสร้าง) → ฝ่ายขายส่งไฟล์ให้ลูกค้าเอง
+ *   แล้วกด "บันทึกว่าส่งแล้ว" (วันมีผลเริ่มนับจากวันนี้)
  *   → ลูกค้าตกลง = "ส่งไปวางบิล" (เกิดดีล) · ลูกค้าไม่เอา = "ลูกค้าปฏิเสธ" พร้อมเหตุผล
- *   แก้ใบเดิมไม่ได้เลย ต้อง "ออกใบใหม่แทนใบนี้" เลขใหม่ ใบเดิมเป็น "แทนที่แล้ว" และจำว่าถูกแทนด้วยใบไหน (replacedBy)
- * ลำดับเลขเดินหน้าอย่างเดียว ไม่มีเลขข้ามและไม่นำกลับมาใช้ซ้ำ
+ * ไม่มีร่าง (ผู้ใช้สั่ง 5 ต.ค. 2569: ไม่มีร่าง ออกแล้วแก้ไม่ได้ ต้องออกใบใหม่)
+ *   ออกแล้วแก้ไม่ได้ ต้อง "ออกใบใหม่" เลขใหม่ ใบเดิมเก็บไว้เป็นประวัติและจำว่าถูกแทนด้วยใบไหน (replacedBy)
+ * เลขที่ลำดับเดินหน้าอย่างเดียว ไม่มีเลขข้ามและไม่นำกลับมาใช้ซ้ำ
+ * ช่อง status ยังเก็บไว้ให้หน้าของฝ่ายอื่นที่อ่านอยู่ (ส่งแล้ว/ตอบรับ/ปฏิเสธ/หมดอายุ · ค่า "ร่าง" ยังอยู่ในชนิดข้อมูลแต่ไม่มีใบใดใช้แล้ว)
  */
 export type QuotationInput = {
   customerCode: string;
@@ -475,10 +608,7 @@ export type QuotationInput = {
   replaces?: string;
 };
 
-/**
- * บันทึกใบเสนอราคาใหม่ — ออกเลขที่เอกสารทันทีและนับว่าส่งให้ลูกค้าแล้ว (วันยืนราคาเริ่มนับวันนี้)
- * ออกแทนใบเดิมได้ ใบเดิมจะกลายเป็น "แทนที่แล้ว" · คืนเลขที่ที่ออก
- */
+/** บันทึกใบเสนอราคาใหม่พร้อมออกเลขที่เอกสารทันที (ไม่มีร่าง) — คืนเลขที่ที่ออก */
 export function addQuotation(input: QuotationInput) {
   let no = "";
   store.update((s) => {
@@ -496,8 +626,6 @@ export function addQuotation(input: QuotationInput) {
       status: "ส่งแล้ว",
       revision: 1,
       createdAt: issued,
-      /* ออกเลขแล้วถือว่าส่งให้ลูกค้าเลย ไม่มีขั้น "บันทึกว่าส่งแล้ว" อีก */
-      sentAt: issued,
       ...(ps ? { ps } : {}),
       ...(old ? { replaces: old.no } : {}),
     };
@@ -506,12 +634,27 @@ export function addQuotation(input: QuotationInput) {
       quotations: [
         quotation,
         ...s.quotations.map((q) =>
-          old && q.id === old.id ? { ...q, replacedBy: no, status: "แทนที่แล้ว" as const } : q,
+          old && q.id === old.id ? { ...q, replacedBy: no, status: "หมดอายุ" as const } : q,
         ),
       ],
     };
   });
   return no;
+}
+
+/**
+ * บันทึกว่าส่งให้ลูกค้าแล้ว — ส่งกันนอกระบบ (อีเมลหรือไลน์) ฝ่ายขายจึงกดบันทึกเอง
+ * วันมีผลเริ่มนับจากวันนี้ ไม่ใช่วันที่ออกเอกสาร
+ */
+export function markQuotationSent(id: string) {
+  store.update((s) => ({
+    ...s,
+    quotations: s.quotations.map((q) =>
+      q.id === id && q.no && !q.sentAt && !q.replacedBy
+        ? { ...q, sentAt: today(), validUntil: addDays(today(), q.validDays) }
+        : q,
+    ),
+  }));
 }
 
 /** ผู้สนใจที่ปิดการขายได้กลายเป็นลูกค้า — รหัส LEAD- เปลี่ยนเป็น CUS- ทุกที่ที่อ้างถึงในสายงานขาย */
@@ -627,7 +770,7 @@ export function cancelDeal(no: string, c: DealCancel) {
     );
     return live
       ? next
-      : moveCustomer(next, deal.customerCode, "รอนัดหมาย", `ดีล ${no} ถูกยกเลิก · ${c.why}`);
+      : moveCustomer(next, deal.customerCode, "รอนัดหมาย", `ดีลของ ${next.customers.find((x) => x.code === deal.customerCode)?.name ?? "ลูกค้า"} ถูกยกเลิก · ${c.why}`);
   });
 }
 
@@ -651,7 +794,7 @@ export function markJobsDelivered(dealNo: string) {
 export function rejectQuotation(id: string, reason: string) {
   store.update((s) => {
     const q = s.quotations.find((x) => x.id === id);
-    if (!q || !canBillQuotation(q, s.deals.some((d) => d.quotationNo === q.no), today())) return s;
+    if (!q || !canRejectQuotation(q, s.deals.some((d) => d.quotationNo === q.no))) return s;
     return {
       ...s,
       quotations: s.quotations.map((x) =>

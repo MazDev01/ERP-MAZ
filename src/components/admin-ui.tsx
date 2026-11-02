@@ -7,34 +7,44 @@
  * ไม่บันทึกทุกครั้งที่พิมพ์ เพราะค่าพวกนี้มีผลกับทุกคนทันที พิมพ์ครึ่งทางแล้วหลุดไปใช้จะวุ่น
  */
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { ChevronDownIcon } from "./icons";
 import { saveSection, useSystemSettings, DEFAULT_SETTINGS, type SystemSettings } from "@/lib/system-settings";
 import { logChange, type LogArea } from "@/lib/admin-log";
 import { ConfirmDialog } from "./confirm-dialog";
 
 /*
- * หัวหัวข้อในหน้าตั้งค่า — ยกมาจากระบบต้นฉบับ (6 ต.ค. 2569)
- * หน้าย่อยของตั้งค่าระบบไม่มีหัวข้อหน้าแล้ว ชื่อหน้าอยู่ที่เมนูย่อยด้านซ้าย เหลือแค่ปุ่มเครื่องมือ
- * title/desc ยังรับไว้เป็นชื่อให้โปรแกรมอ่านหน้าจอ (ไม่แสดงบนจอ)
+ * หัวหน้าของหัวข้อที่อยู่ในแท็บของตั้งค่าระบบ (ผู้ใช้สั่ง 13 ต.ค. 2569)
+ *   title = ชื่อหมวดแทนชื่อหัวข้อ · tabs = แถบแท็บใต้แถวหัวข้อ
+ *   sub = หัวข้อที่สองในแท็บเดียวกัน — หัวข้อย่อยตัวเล็ก ปุ่มอยู่ขวาแถวเดียวกัน
  */
-export function AdminHead({
-  title,
-  desc,
-  children,
-}: {
-  title: string;
-  desc: string;
-  /** รหัสหน้าจอในเอกสารยูสเคส — ไม่แสดงแล้ว รับไว้ให้หน้าเดิมเรียกได้เหมือนเดิม */
-  code?: string;
-  children?: React.ReactNode;
-}) {
-  if (!children) return <h1 className="sr-only">{title}</h1>;
-  return (
-    <div className="flex items-center justify-end gap-2.5" title={desc}>
-      <h1 className="sr-only">{title}</h1>
-      {children}
+export const SettingsHeadContext = createContext<{ title?: string; tabs?: React.ReactNode; sub?: boolean } | null>(null);
+
+export function AdminHead({ title, desc, children }: { title: string; desc: string; children?: React.ReactNode }) {
+  const ctx = useContext(SettingsHeadContext);
+  if (ctx?.sub)
+    return (
+      <div className="flex items-center justify-between gap-2.5" title={desc}>
+        <h2 className="text-[15px] font-bold">{title}</h2>
+        {children && <div className="flex items-center gap-2.5">{children}</div>}
+      </div>
+    );
+  const name = ctx?.title ?? title;
+  /* ชื่อหน้ากลับมาเห็นที่มุมซ้ายบน (จอคอม) ปุ่มอยู่ขวาแถวเดียวกัน — แถบบนเป็นเส้นทางแล้ว (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+  const row = !children ? (
+    <h1 className="page-h1">{name}</h1>
+  ) : (
+    <div className="flex items-center justify-end gap-2.5 md:justify-between" title={desc}>
+      <h1 className="page-h1">{name}</h1>
+      <div className="flex items-center gap-2.5">{children}</div>
     </div>
+  );
+  if (!ctx?.tabs) return row;
+  return (
+    <>
+      {row}
+      <div className="border-b border-border">{ctx.tabs}</div>
+    </>
   );
 }
 
@@ -120,8 +130,7 @@ export function Switch({
       disabled={disabled}
       title={title}
       onClick={onToggle}
-      /* before = พื้นที่กดที่กว้างกว่าตัวสวิตช์ (สูง 41px) — หน้าตาเท่าเดิมแต่กดบนมือถือไม่พลาด */
-      className={`relative h-[25px] w-11 shrink-0 rounded-[14px] transition-colors before:absolute before:inset-x-0 before:-inset-y-2 before:content-[''] disabled:opacity-40 ${
+      className={`relative h-[25px] w-11 shrink-0 rounded-[14px] transition-colors disabled:opacity-40 ${
         on ? "bg-primary" : "bg-[#dde2e9]"
       }`}
     >
@@ -239,7 +248,7 @@ export function SaveBar({
   onSave,
   onCancel,
   onDefault,
-  note = "มีผลกับทุกบทบาททันทีที่บันทึก",
+  note = "",
 }: {
   dirty: boolean;
   isDefault: boolean;
@@ -264,7 +273,7 @@ export function SaveBar({
         <span
           className={`mr-auto text-[12.5px] max-sm:w-full ${invalid ? "text-destructive" : "text-muted-foreground"}`}
         >
-          {invalid || (dirty ? "มีการแก้ไขที่ยังไม่บันทึก · " + note : "บันทึกแล้ว")}
+          {invalid || (dirty ? (note ? `มีการแก้ไขที่ยังไม่บันทึก · ${note}` : "มีการแก้ไขที่ยังไม่บันทึก") : "บันทึกแล้ว")}
         </span>
         <button
           type="button"
@@ -301,5 +310,43 @@ export function SaveBar({
     </>
   );
 }
+
+/* ปุ่มไอคอนสี่เหลี่ยมเล็กของตารางตั้งค่า (ดินสอ/ถังขยะ) — ใช้ร่วมทุกตาราง (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+export function IconBtn({
+  label,
+  title,
+  disabled,
+  danger,
+  onClick,
+  children,
+}: {
+  label: string;
+  title?: string;
+  disabled?: boolean;
+  danger?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      /* มือถือ: ปุ่มโตขึ้นให้นิ้วกดถูก (inline style กว้าง 30 ต้องใช้ ! ถึงจะชนะ) */
+      className={`iconbtn glass-thin shrink-0 text-muted-foreground disabled:opacity-30 max-sm:!size-[38px] ${
+        danger ? "hover:text-destructive" : "hover:text-primary"
+      }`}
+      style={{ width: 30, height: 30 }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* หัวตาราง/แถวแบบเดียวกับตารางตัวเลือกในรายการ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+export const thCls = "items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground";
+export const trCls = "items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40";
 
 export const inputCls = "field-control h-10 w-full text-[14px]";

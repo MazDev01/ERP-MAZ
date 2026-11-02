@@ -6,17 +6,12 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccountLocked, type LockReason } from "./account-locked";
 import { LoginScene } from "./login-scene";
 import "@/styles/login.css";
-import { DownloadIcon } from "./icons";
-import { setStaffEmployee, staffEmployeeId, staffLabel, staffTeam } from "@/lib/staff-identity";
-import { HR_EMPTYPE } from "@/lib/hr-data";
-import { Select } from "./ui";
 import { homeOf, navItems } from "@/lib/nav";
-import { accountKey, accountOf, markLogin } from "@/lib/accounts";
+import { accountOf, markLogin } from "@/lib/accounts";
 import { useHr } from "@/lib/hr-store";
-import { accountRoles } from "@/lib/hr-data";
+import { ROLE_EMPLOYEE, accountRoles } from "@/lib/hr-data";
 import { bkkStamp } from "@/lib/format";
 import { ROLES, setRole, useRole, type Role } from "@/lib/role";
-import { signIn } from "@/lib/local-data";
 
 /** ผิดครบกี่ครั้งจึงระงับบัญชี — ยืนยันกับฝ่ายบุคคล (ต้นแบบ login.html MAX_TRIES) */
 const MAX_TRIES = 5;
@@ -101,19 +96,6 @@ export function LoginForm() {
   const savedRole = useRole();
   const hr = useHr();
   const [role, setPick] = useState<Role>(savedRole);
-  /* พนักงานมีหลายตำแหน่ง จึงต้องเลือกด้วยว่าจะเข้าเป็นใคร (เจ้าของสั่ง 29 ก.ย. 2569) */
-  const [who, setWho] = useState(() => staffEmployeeId());
-  /* ทางเข้าแบบทดลองงาน — หยิบคนแรกที่ยังทำงานอยู่จากทะเบียนจริง
-     ไม่ตั้งรหัสพนักงานตายตัว เพราะฝ่ายบุคคลเพิ่มหรือเปลี่ยนคนได้
-     ฝึกงานไม่อยู่ในนี้แล้ว เพราะมีบทบาท "นักศึกษาฝึกงาน" ของตัวเองตั้งแต่ 6 ต.ค. 2569 */
-  const demoTypes = (["probat"] as const)
-    .map((type) => {
-      const e = hr.emp.find((x) => x.type === type && x.status === "active" && staffTeam().some((t) => t.id === x.id));
-      return e
-        ? { id: e.id, name: e.name, label: HR_EMPTYPE[type].label, en: "Probation" }
-        : null;
-    })
-    .filter((x) => x !== null);
 
   function edit(which: "user" | "pass", v: string) {
     if (which === "user") {
@@ -133,15 +115,15 @@ export function LoginForm() {
     /* ไม่กรอกอะไรเลย = เข้าด้วยบทบาทที่เลือกทันที ไม่ต้องใช้รหัส (ผู้ใช้สั่ง 22 ก.ย. 2569 · ยังไม่มีหลังบ้าน)
        กรอกชื่อผู้ใช้เมื่อไร ตรวจรหัสผ่านและนับครั้งที่ผิดตามต้นแบบ login.html */
     if (!user && !password) {
-      /* บัญชีเก็บตามคน — พนักงานใช้รหัสของคนที่เลือกไว้ในดรอปดาวน์ */
-      const key = accountKey(role, who);
-      const account = accountOf(key);
-      if (account.suspended) return setLocked("admin");
-      if (role === "staff") setStaffEmployee(who);
+      /* สถานะบัญชียึดตามทะเบียนพนักงานที่ฝ่ายบุคคลเห็น (/hr/accounts) เหมือนการเข้าด้วยชื่อผู้ใช้
+         ค่าระงับรายบทบาทใช้เฉพาะบทบาทที่ไม่มีพนักงานผูกไว้ — กันสองที่เก็บไม่ตรงกัน (ผู้ใช้แจ้ง 9 ต.ค. 2569) */
+      const empId = ROLE_EMPLOYEE[role];
+      const emp = empId ? hr.emp.find((x) => x.id === empId) : undefined;
+      const blockedNow = emp?.account ? emp.account.status === "suspended" : accountOf(role).suspended;
+      if (blockedNow) return setLocked("admin");
       setRole(role);
-      signIn();
       keepDevice("");
-      markLogin(key, bkkStamp());
+      markLogin(role, bkkStamp());
       setBusy(true);
       /* ไม่ถามตั้งรหัสผ่านใหม่ เพราะทางนี้ไม่ได้ใช้รหัสผ่านเลย */
       router.replace(homeAfterLogin(role));
@@ -188,17 +170,13 @@ export function LoginForm() {
       if (person?.account?.status === "suspended") return setLocked("admin");
       const roles = accountRoles(person?.account);
       const r: Role = roles.length && !roles.includes(role) ? roles[0] : role;
-      const key = person?.id ?? accountKey(r, who);
-      const account = accountOf(key);
+      const account = accountOf(r);
       if (!person && account.suspended) return setLocked("admin");
       const mustReset = person ? Boolean(person.account?.mustChange) : account.mustResetPassword;
       setFails(0);
-      /* เข้าด้วยชื่อผู้ใช้จริง — คนในทะเบียนใช้รหัสพนักงานของเขา ไม่ใช่ตัวเลือกในดรอปดาวน์ */
-      if (r === "staff") setStaffEmployee(person?.id ?? who);
       setRole(r);
-      signIn();
       keepDevice(user);
-      markLogin(key, bkkStamp());
+      markLogin(r, bkkStamp());
       setBusy(true);
       router.replace(mustReset ? "/set-password" : homeAfterLogin(r));
     }, 1600);
@@ -236,23 +214,7 @@ export function LoginForm() {
               เดิมเป็นการ์ดเรียงเต็มฟอร์ม บทบาทเยอะจนดันช่องกรอกลงไปไกล
               ถูกระงับแล้วปิดแค่ปุ่มเข้าสู่ระบบตาม mockup (lockAccount) — บทบาทยังเลือกได้ */}
           <div className="mb-2 flex justify-end">
-            <RolePicker
-              value={role}
-              who={who}
-              demos={demoTypes}
-              onChange={(r) => {
-                setPick(r);
-                if (r === "staff" && demoTypes.some((d) => d.id === who)) {
-                  /* กลับไปเป็นพนักงานประจำคนแรก ไม่ค้างอยู่ที่คนทดลองงาน/ฝึกงานที่เพิ่งเลือก */
-                  const normal = staffTeam().find((e) => !demoTypes.some((d) => d.id === e.id));
-                  if (normal) setWho(normal.id);
-                }
-              }}
-              onDemo={(id) => {
-                setPick("staff");
-                setWho(id);
-              }}
-            />
+            <RolePicker value={role} onChange={setPick} />
           </div>
           {/* โลโก้กับฟอร์มกว้างไม่เกิน 360px และอยู่กลางแผ่นขาวในแนวตั้ง ตามไฟล์ตัวอย่าง (form width:min(360px,42%) · top:50%)
               ผู้ใช้สั่ง 2 ต.ค. 2569: ช่องยาวเกินไป และชิดโลโก้เกินไป */}
@@ -265,29 +227,8 @@ export function LoginForm() {
               <polyline points="1215,170 1565,170 1215,470 1565,470" />
             </g>
           </svg>
-          {/* หัวเรื่องของหน้า — โลโก้เป็นรูป โปรแกรมอ่านหน้าจอจึงต้องมีข้อความบอกว่าหน้านี้คือหน้าอะไร */}
-          <h1 className="mt-2.5 mb-9 text-center text-[13.5px] font-normal text-muted-foreground">
-            เข้าสู่ระบบเพื่อใช้งาน ERP MAZ
-          </h1>
-
-          {/*
-            บทบาท "พนักงาน" มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
-            เลือกได้ว่าเข้าเป็นใคร งานที่ได้รับกับตารางงานจะเป็นของคนนั้น (เจ้าของสั่ง 29 ก.ย. 2569)
-          */}
-          {role === "staff" && (
-            <div className="mb-5">
-              <label htmlFor="staff-who" className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
-                เข้าเป็นใครในทีม
-              </label>
-              <Select id="staff-who" value={who} onChange={(e) => setWho(e.target.value)} className="h-[46px] rounded-[12px]">
-                {staffTeam().map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {staffLabel(e)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
+          {/* ไม่มีข้อความใต้โลโก้ (ผู้ใช้สั่ง 9 ต.ค. 2569) */}
+          <div className="mb-9" />
 
           {/* ช่องกรอกและปุ่มตามไฟล์ตัวอย่างทุกค่า (ผู้ใช้สั่ง 2 ต.ค. 2569) — เส้นใต้อย่างเดียว ไม่มีกรอบ ไม่มีไอคอน · styles/login.css */}
           <form onSubmit={submit} noValidate className="lg-form">
@@ -379,15 +320,6 @@ export function LoginForm() {
               )}
             </button>
           </form>
-
-          {/* ทางติดตั้งลงหน้าจอโฮม (PWA ของเรา) — ไม่มีในต้นแบบ แต่เป็นทางเข้าเดียวของหน้า /install */}
-          <Link
-            href="/install"
-            className="mt-4 flex items-center justify-center gap-1.5 py-2 text-[12.5px] font-medium text-muted-foreground hover:text-primary"
-          >
-            <DownloadIcon className="size-4" />
-            ติดตั้งลงหน้าจอโฮม
-          </Link>
           </div>
 
             </>
@@ -400,25 +332,10 @@ export function LoginForm() {
 }
 
 /** ดรอปดาวน์เลือกบทบาท — ชื่ออังกฤษเป็นหลัก ไทยกำกับ ตามการ์ดเดิม */
-type DemoType = { id: string; name: string; label: string; en: string };
-
-function RolePicker({
-  value,
-  who,
-  demos,
-  onChange,
-  onDemo,
-}: {
-  value: Role;
-  who: string;
-  demos: DemoType[];
-  onChange: (r: Role) => void;
-  onDemo: (id: string) => void;
-}) {
+function RolePicker({ value, onChange }: { value: Role; onChange: (r: Role) => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  const demoOn = demos.find((d) => d.id === who && value === "staff");
-  const current = demoOn ?? ROLES.find((r) => r.key === value) ?? ROLES[0];
+  const current = ROLES.find((r) => r.key === value) ?? ROLES[0];
 
   /* แตะนอกกล่องหรือกด Esc แล้วปิด */
   useEffect(() => {
@@ -472,8 +389,7 @@ function RolePicker({
           className="absolute top-[calc(100%+6px)] right-0 z-20 max-h-[min(420px,60vh)] w-[240px] list-none overflow-y-auto rounded-[14px] border border-border bg-white p-1.5 shadow-[0_18px_40px_-16px_rgba(120,20,35,.35)]"
         >
           {ROLES.map((r) => {
-            /* รายการ "พนักงาน" ไม่ติดสว่างตอนเลือกทดลองงาน/ฝึกงานอยู่ ไม่งั้นดูเหมือนเลือกสองอัน */
-            const on = r.key === value && !(r.key === "staff" && demos.some((d) => d.id === who));
+            const on = r.key === value;
             return (
               <li key={r.key} role="option" aria-selected={on}>
                 <button
@@ -489,37 +405,6 @@ function RolePicker({
                   <span className="min-w-0">
                     <b className="block text-[13px] font-semibold">{r.en}</b>
                     <span className="block text-[11.5px] font-medium opacity-75">{r.label}</span>
-                  </span>
-                  {on && (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="m5 12.5 4.5 4.5L19 7.5" />
-                    </svg>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-          {/* ทดลองงานกับฝึกงานไม่ใช่บทบาทแยก แต่เป็นประเภทการจ้างของ "พนักงาน"
-             กติกาวันลาและสลิปต่างกัน จึงต้องมีทางเข้าไปดูหน้าจอของคนกลุ่มนี้ (เจ้าของสั่ง 1 ต.ค. 2569) */}
-          {demos.map((d) => {
-            const on = value === "staff" && who === d.id;
-            return (
-              <li key={d.id} role="option" aria-selected={on}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onDemo(d.id);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left transition-colors ${
-                    on ? "bg-accent text-primary" : "hover:bg-muted"
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <b className="block text-[13px] font-semibold">{d.en}</b>
-                    <span className="block text-[11.5px] font-medium opacity-75">
-                      {d.label} · {d.name}
-                    </span>
                   </span>
                   {on && (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

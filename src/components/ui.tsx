@@ -198,7 +198,7 @@ export function Input({
         /* ขอบสีเทาของธีม — ขอบขาวที่เหลือจากธีมกระจกกลืนไปกับพื้นกล่องขาวจนมองไม่เห็นช่อง */
         "h-9 w-full rounded-[10px] border border-border bg-white px-3 text-sm outline-none",
         "transition",
-        "hover:border-[#d4d4d4] focus:border-ring focus:ring-3 focus:ring-primary/15",
+        "hover:border-[#d4d4d4] focus:border-ring",
         "placeholder:text-muted-foreground",
         className,
       )}
@@ -207,36 +207,20 @@ export function Input({
   );
 }
 
-/*
- * ดรอปดาวน์ต้องมีลูกศรให้เห็นตั้งแต่ยังไม่กด ไม่งั้นดูเหมือนช่องกรอกธรรมดา (เจ้าของสั่ง 29 ก.ย. 2569)
- * ลูกศรใส่เป็น background แบบ inline ไม่ใช่คลาสยูทิลิตี้ เพราะ Tailwind แปลงค่า data URI ในคลาสไม่ออก
- * (ที่ผ่านมา appearance:none ตัดลูกศรของเบราว์เซอร์ทิ้ง แล้วไม่มีอะไรมาแทน)
- */
-const SELECT_ARROW =
-  "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236E6164' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")";
-
-export const selectArrowStyle = {
-  backgroundImage: SELECT_ARROW,
-  backgroundRepeat: "no-repeat",
-  backgroundPosition: "right 10px center",
-  backgroundSize: "16px 16px",
-} as const;
-
 export function Select({
   className,
   children,
-  style,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       className={cn(
-        "h-9 w-full appearance-none rounded-[10px] border border-border bg-white py-0 pr-9 pl-3 text-sm outline-none",
+        "h-9 w-full appearance-none rounded-[10px] border border-border bg-white py-0 pr-8 pl-3 text-sm outline-none",
         "transition",
-        "hover:border-[#d4d4d4] focus:border-ring focus:ring-3 focus:ring-primary/15",
+        "hover:border-[#d4d4d4] focus:border-ring",
+        "bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23999%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22m6 9 6 6 6-6%22/%3E%3C/svg%3E')] bg-[length:16px_16px] bg-[position:right_8px_center] bg-no-repeat",
         className,
       )}
-      style={{ ...selectArrowStyle, ...style }}
       {...props}
     >
       {children}
@@ -253,7 +237,7 @@ export function Textarea({
       className={cn(
         "w-full resize-y rounded-[10px] border border-border bg-white px-3 py-2 text-sm outline-none",
         "transition",
-        "hover:border-[#d4d4d4] focus:border-ring focus:ring-3 focus:ring-primary/15",
+        "hover:border-[#d4d4d4] focus:border-ring",
         "placeholder:text-muted-foreground",
         className,
       )}
@@ -288,11 +272,8 @@ export function Field({
    * ผูกเฉพาะตอนลูกเป็นช่องกรอกเดี่ยวที่ยังไม่มี id — ลูกที่เป็นกล่องห่อหลายชิ้นต้องใส่ aria-label เอง
    */
   const auto = useId();
-  const own = fieldControl(children) ? (children.props.id as string | undefined) : undefined;
-  /* ลูกที่ไม่ใช่ช่องกรอกเดี่ยว (เช่น ตัวเลือกวันที่ไทย) ไม่มี id ให้ผูก — ปล่อย htmlFor ว่างไว้
-     ไม่งั้นป้ายจะชี้ไปยัง id ที่ไม่มีอยู่จริง กดป้ายแล้วไม่เกิดอะไรขึ้น */
-  const id = htmlFor ?? own ?? (fieldControl(children) ? auto : undefined);
-  const kid = fieldControl(children) && !own ? cloneElement(children, { id }) : children;
+  const id = htmlFor ?? auto;
+  const kid = fieldControl(children) && !children.props.id ? cloneElement(children, { id }) : children;
 
   return (
     <div className={className}>
@@ -348,8 +329,7 @@ export function Avatar({
   return (
     <span
       className={cn(
-        /* ตัวย่อชื่อเป็นสี่เหลี่ยมมุมมน ตามต้นแบบที่เจ้าของส่งมา ไม่ใช่วงกลม (29 ก.ย. 2569) */
-        "grid shrink-0 place-items-center rounded-[30%] font-semibold",
+        "grid shrink-0 place-items-center rounded-full font-semibold",
         AVATAR_SIZES[size],
         tones[tone],
         className,

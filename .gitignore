@@ -44,5 +44,8 @@ next-env.d.ts
 # ใบรับรอง HTTPS ของ next dev --experimental-https
 certificates
 
-# กุญแจ VAPID และรายชื่อเครื่องของตัวส่งแจ้งเตือนทดสอบ — ห้ามขึ้น git
-/.data/
+# ตัวส่งแจ้งเตือนทดสอบ — กุญแจ VAPID และรายชื่อเครื่อง
+/.data
+
+# ไฟล์ต้นแบบ HTML — เก็บไว้ในเครื่อง ไม่ขึ้น repo
+/dose-erp-maz

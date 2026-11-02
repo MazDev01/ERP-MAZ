@@ -9,39 +9,53 @@
  */
 
 import { useState } from "react";
-import { HR_OT_DIVISOR } from "@/lib/hr-data";
+import { HR_OT_DIVISOR, hrPos } from "@/lib/hr-data";
 import { AdminHead, Card, Input2, inputCls } from "./admin-ui";
 import { AreaMap } from "./area-map";
 import { CrosshairIcon } from "./icons";
 import { DateField } from "./thai-date-picker";
 import { thaiDate, todayIso } from "@/lib/format";
-import { minutesOfDay, formatMinutes } from "@/lib/work-schedule";
+import { minutesOfDay, formatMinutes, formatMinutesOfDay } from "@/lib/work-schedule";
 import { logChange } from "@/lib/admin-log";
-import { saveAttFrom, saveRoleShift, useSystemSettings, type AttChange, type LateMode, type RateSettings, type ScheduleSettings } from "@/lib/system-settings";
+import { DEFAULT_POS_SCHEDULES, saveAttFrom, saveSection, useSystemSettings, type AttChange, type PosSchedule, type LateMode, type RateSettings, type ScheduleSettings } from "@/lib/system-settings";
 import { Card as UiCard, Input2 as UiInput2, SaveBar, useSectionDraft } from "./admin-ui";
 import { baht, thaiMonth } from "@/lib/format";
 import { RADIUS_MAX, RADIUS_MIN, locate, mapLink, saveWorkplace, useAreaSettings, workplaceOf } from "@/lib/work-area";
 import { lockedUntil, useHr } from "@/lib/hr-store";
-import { ROLES, type Role } from "@/lib/role";
+import { Time24Input } from "./time24-input"; // ช่องเวลา 24 ชม. แทน input[type=time] (ผู้ใช้สั่ง 13 ต.ค. 2569)
 
-/** รัศมีเป็นกิโลเมตรตามต้นแบบ — ระบบเก็บเป็นเมตร */
-const KM_MIN = RADIUS_MIN / 1000;
-const KM_MAX = RADIUS_MAX / 1000;
+/** รัศมีกรอกเป็นเมตร (ผู้ใช้สั่ง 20 ต.ค. 2569 — กิโลเมตรอ่านแล้วงง) */
+const M_MIN = RADIUS_MIN;
+const M_MAX = RADIUS_MAX;
 
 type Draft = { start: string; end: string; lunchStart: string; lunchEnd: string; lat: string; lng: string; km: string };
 
-function problemOf(d: Draft) {
+/* กติกาเวลาเดียวกันทั้งเวลาบริษัทและเวลาเฉพาะตำแหน่ง (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+function timesProblem(d: { start: string; end: string; lunchStart: string; lunchEnd: string }) {
   const t = (x: string) => minutesOfDay(x);
   if ([d.start, d.end, d.lunchStart, d.lunchEnd].some((x) => !/^\d{2}:\d{2}$/.test(x))) return "กรอกเวลาให้ครบทุกช่อง";
   if (t(d.end) <= t(d.start)) return "เวลาเลิกงานต้องหลังเวลาเข้างาน";
   if (t(d.lunchEnd) <= t(d.lunchStart)) return "เวลาสิ้นสุดพักเที่ยงต้องหลังเวลาเริ่มพัก";
   if (t(d.lunchStart) < t(d.start) || t(d.lunchEnd) > t(d.end)) return "ช่วงพักเที่ยงต้องอยู่ในเวลาทำงาน";
+  return "";
+}
+
+const POS_TIME_LABEL: [keyof Omit<PosSchedule, "pos">, string][] = [
+  ["start", "เข้างาน"],
+  ["end", "เลิกงาน"],
+  ["lunchStart", "เริ่มพักเที่ยง"],
+  ["lunchEnd", "สิ้นสุดพักเที่ยง"],
+];
+
+function problemOf(d: Draft) {
+  const bad = timesProblem(d);
+  if (bad) return bad;
   const lat = Number(d.lat);
   const lng = Number(d.lng);
   const km = Number(d.km);
   if (!(d.lat.trim() && Number.isFinite(lat) && Math.abs(lat) <= 90)) return "ละติจูดต้องอยู่ระหว่าง -90 ถึง 90";
   if (!(d.lng.trim() && Number.isFinite(lng) && Math.abs(lng) <= 180)) return "ลองจิจูดต้องอยู่ระหว่าง -180 ถึง 180";
-  if (!(Number.isFinite(km) && km >= KM_MIN && km <= KM_MAX)) return `รัศมีต้องอยู่ระหว่าง ${KM_MIN} ถึง ${KM_MAX} กิโลเมตร`;
+  if (!(Number.isFinite(km) && km >= M_MIN && km <= M_MAX)) return `รัศมีต้องอยู่ระหว่าง ${M_MIN.toLocaleString()} ถึง ${M_MAX.toLocaleString()} เมตร`;
   return "";
 }
 
@@ -70,9 +84,28 @@ export function AdminAttendancePage() {
     lunchEnd: s.schedule.lunchEnd,
     lat: String(place.lat),
     lng: String(place.lng),
-    km: String(place.radius / 1000),
+    km: String(place.radius),
   }));
   const [at, setAt] = useState(() => (minAt && minAt > todayIso() ? minAt : todayIso()));
+  /*
+   * เวลาทำงานเฉพาะตำแหน่ง — ตอนนี้มีแค่แม่บ้าน (ผู้ใช้สั่ง 16 ต.ค. 2569)
+   * บันทึกแล้วมีผลทันที ไม่มีวันเริ่มใช้แยก · ลงประวัติการตั้งค่าเหมือนช่องอื่น
+   */
+  const posSaved: PosSchedule =
+    s.positionSchedules.find((p) => p.pos === "maid") ?? DEFAULT_POS_SCHEDULES[0];
+  const [pd, setPd] = useState<PosSchedule>(posSaved);
+  const posBad = timesProblem(pd);
+  const posDirty = POS_TIME_LABEL.some(([k]) => pd[k] !== posSaved[k]);
+  const posLabel = hrPos(pd.pos).label;
+  /* เริ่มโอทีของตำแหน่ง = เลิกงานของตำแหน่ง + ช่วงพักเย็นยาวเท่าของบริษัท (ดู scheduleFor) */
+  const posOt = posBad
+    ? ""
+    : formatMinutesOfDay(
+        Math.min(
+          24 * 60 - 1,
+          minutesOfDay(pd.end) + Math.max(0, minutesOfDay(s.schedule.otStart) - minutesOfDay(s.schedule.end)),
+        ),
+      );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -83,16 +116,19 @@ export function AdminAttendancePage() {
   const km = Number(d.km);
   const workMin = bad ? 0 : minutesOfDay(d.end) - minutesOfDay(d.start) - (minutesOfDay(d.lunchEnd) - minutesOfDay(d.lunchStart));
   const lunchMin = bad ? 0 : minutesOfDay(d.lunchEnd) - minutesOfDay(d.lunchStart);
-  const dirty =
+  const mainDirty =
     d.start !== s.schedule.start ||
     d.end !== s.schedule.end ||
     d.lunchStart !== s.schedule.lunchStart ||
     d.lunchEnd !== s.schedule.lunchEnd ||
     lat !== place.lat ||
     lng !== place.lng ||
-    Math.round(km * 1000) !== place.radius;
+    Math.round(km) !== place.radius;
+  const dirty = mainDirty || posDirty;
+  const allBad = bad || (posBad ? `${posLabel}: ${posBad}` : "");
 
   function reset() {
+    setPd(posSaved);
     setD({
       start: s.schedule.start,
       end: s.schedule.end,
@@ -100,7 +136,7 @@ export function AdminAttendancePage() {
       lunchEnd: s.schedule.lunchEnd,
       lat: String(place.lat),
       lng: String(place.lng),
-      km: String(place.radius / 1000),
+      km: String(place.radius),
     });
     setErr("");
   }
@@ -118,9 +154,22 @@ export function AdminAttendancePage() {
   }
 
   function save() {
-    if (bad) {
-      setErr(bad);
+    if (allBad) {
+      setErr(allBad);
       return;
+    }
+    if (posDirty) {
+      const list = s.positionSchedules.some((p) => p.pos === pd.pos)
+        ? s.positionSchedules.map((p) => (p.pos === pd.pos ? pd : p))
+        : [...s.positionSchedules, pd];
+      saveSection("positionSchedules", list);
+      const diff = POS_TIME_LABEL.filter(([k]) => pd[k] !== posSaved[k]).map(
+        ([k, label]) => `${label} ${posSaved[k]} → ${pd[k]}`,
+      );
+      logChange("เวลาทำงาน", `เวลาทำงานเฉพาะตำแหน่ง ${posLabel} · ${diff.join(" · ")}`);
+      setErr("");
+      /* แก้แค่เวลาของตำแหน่ง ไม่ต้องสร้างชุดเวลาบริษัทใหม่ในประวัติ */
+      if (!mainDirty) return;
     }
     if (!at) {
       setErr("เลือกวันที่เริ่มใช้ค่าใหม่");
@@ -131,16 +180,14 @@ export function AdminAttendancePage() {
       return;
     }
     const times = { start: d.start, end: d.end, lunchStart: d.lunchStart, lunchEnd: d.lunchEnd };
-    const radius = Math.round(km * 1000);
-    const note = `เวลาทำงาน ${d.start}–${d.end} · พักเที่ยง ${d.lunchStart}–${d.lunchEnd} · รัศมี ${km} กม.`;
+    const radius = Math.round(km);
+    const note = `เวลาทำงาน ${d.start}–${d.end} · พักเที่ยง ${d.lunchStart}–${d.lunchEnd} · รัศมี ${radius.toLocaleString()} ม.`;
     saveAttFrom(at, times, { lat, lng, radius }, note);
     /* มีผลแล้ววันนี้ก็เขียนพิกัดลงที่เก็บของพื้นที่เข้างานด้วย (คนละที่เก็บกับค่าตั้งค่า) */
     if (at <= todayIso()) saveWorkplace({ ...place, lat, lng, radius });
     logChange("เวลาทำงาน", `เริ่มใช้ ${thaiDate(at)} · ${note}`);
     setErr("");
   }
-
-  const hist = [...s.attHistory].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <div className="space-y-4">
@@ -153,16 +200,16 @@ export function AdminAttendancePage() {
         <Card title="เวลาทำงาน">
           <div className="grid gap-4 sm:grid-cols-2">
             <Input2 label="เวลาเข้างาน">
-              <input type="time" value={d.start} onChange={(e) => set("start", e.target.value)} className={`${inputCls} num`} />
+              <Time24Input value={d.start} onChange={(e) => set("start", e.target.value)} className={`${inputCls} num`} />
             </Input2>
             <Input2 label="เวลาเลิกงาน">
-              <input type="time" value={d.end} onChange={(e) => set("end", e.target.value)} className={`${inputCls} num`} />
+              <Time24Input value={d.end} onChange={(e) => set("end", e.target.value)} className={`${inputCls} num`} />
             </Input2>
             <Input2 label="เริ่มพักเที่ยง">
-              <input type="time" value={d.lunchStart} onChange={(e) => set("lunchStart", e.target.value)} className={`${inputCls} num`} />
+              <Time24Input value={d.lunchStart} onChange={(e) => set("lunchStart", e.target.value)} className={`${inputCls} num`} />
             </Input2>
             <Input2 label="สิ้นสุดพักเที่ยง">
-              <input type="time" value={d.lunchEnd} onChange={(e) => set("lunchEnd", e.target.value)} className={`${inputCls} num`} />
+              <Time24Input value={d.lunchEnd} onChange={(e) => set("lunchEnd", e.target.value)} className={`${inputCls} num`} />
             </Input2>
           </div>
           <p className="mt-3 rounded-[11px] border border-border bg-card px-3 py-2.5 text-[12.5px] text-muted-foreground">
@@ -175,24 +222,50 @@ export function AdminAttendancePage() {
               </>
             )}
           </p>
+
+          {/* เวลาทำงานเฉพาะตำแหน่ง — ตอนนี้มีแค่แม่บ้าน (ผู้ใช้สั่ง 16 ต.ค. 2569) */}
+          <div className="mt-5 border-t border-border pt-4">
+            <h3 className="text-[13.5px] font-bold">เวลาทำงานเฉพาะตำแหน่ง</h3>
+            <div className="mt-3 rounded-[12px] border border-border px-3 py-3 sm:px-4">
+              <b className="text-[13.5px] font-semibold">{posLabel}</b>
+              <div className="mt-2 grid gap-4 sm:grid-cols-2">
+                {POS_TIME_LABEL.map(([k, label]) => (
+                  <Input2 key={k} label={k === "start" ? "เวลาเข้างาน" : k === "end" ? "เวลาเลิกงาน" : label}>
+                    <Time24Input
+                      value={pd[k]}
+                      onChange={(e) => setPd((x) => ({ ...x, [k]: e.target.value }))}
+                      className={`${inputCls} num`}
+                    />
+                  </Input2>
+                ))}
+              </div>
+              <p className="mt-3 text-[12.5px] text-muted-foreground">
+                {posBad ? (
+                  <b className="font-semibold text-destructive">{posBad}</b>
+                ) : (
+                  <>
+                    เวลาทำงานจริง{" "}
+                    <b className="font-semibold text-foreground">
+                      {formatMinutes(
+                        minutesOfDay(pd.end) - minutesOfDay(pd.start) - (minutesOfDay(pd.lunchEnd) - minutesOfDay(pd.lunchStart)),
+                      )}
+                      /วัน
+                    </b>{" "}
+                    · เริ่มนับโอทีวันธรรมดา <b className="num font-semibold text-foreground">{posOt} น.</b>
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
         </Card>
 
-        <Card title="กะเฉพาะบทบาท">
-          <RoleShifts />
-        </Card>
-      </div>
-
-      {/* จุดลงเวลาเต็มความกว้าง — แผนที่ซ้าย ช่องกรอกขวา ไม่ปล่อยพื้นที่ว่างข้างขวาเหมือนเดิม
-         (ผู้ใช้สั่งจัดใหม่ 8 ต.ค. 2569) */}
-      <Card title="จุดลงเวลา">
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <div>
+        <Card title="จุดลงเวลา">
           {Number.isFinite(lat) && Number.isFinite(lng) ? (
             <div className="overflow-hidden rounded-[12px] border border-border">
               <AreaMap
                 lat={lat}
                 lng={lng}
-                radius={Number.isFinite(km) && km > 0 ? km * 1000 : 150}
+                radius={Number.isFinite(km) && km > 0 ? km : 150}
                 onPick={(la, ln) => setD((x) => ({ ...x, lat: String(la), lng: String(ln) }))}
                 className="h-[300px] w-full"
               />
@@ -210,13 +283,8 @@ export function AdminAttendancePage() {
               กรอกพิกัดให้ถูกต้องก่อนจึงจะเห็นแผนที่
             </div>
           )}
-          <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-            กดบนแผนที่เพื่อย้ายหมุด วงกลมเส้นประคือรัศมีที่ลงเวลาได้
-          </p>
-          </div>
 
-          <div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
             <Input2 label="ละติจูด">
               <input value={d.lat} inputMode="decimal" onChange={(e) => set("lat", e.target.value)} className={`${inputCls} num`} />
             </Input2>
@@ -225,15 +293,15 @@ export function AdminAttendancePage() {
             </Input2>
           </div>
           <div className="mt-3">
-            <Input2 label="รัศมีที่ลงเวลาได้" hint={`ตั้งได้ ${KM_MIN} ถึง ${KM_MAX} กิโลเมตร · พนักงานต้องอยู่ในวงนี้จึงกดเข้างานได้`}>
+            <Input2 label="รัศมีที่ลงเวลาได้" hint={`ตั้งได้ ${M_MIN.toLocaleString()} ถึง ${M_MAX.toLocaleString()} เมตร`}>
               <div className="flex items-center gap-2">
                 <input
                   value={d.km}
-                  inputMode="decimal"
+                  inputMode="numeric"
                   onChange={(e) => set("km", e.target.value)}
                   className={`${inputCls} num w-[130px]`}
                 />
-                <span className="text-[12.5px] whitespace-nowrap text-muted-foreground">กิโลเมตร</span>
+                <span className="text-[12.5px] whitespace-nowrap text-muted-foreground">เมตร</span>
               </div>
             </Input2>
           </div>
@@ -244,9 +312,8 @@ export function AdminAttendancePage() {
             </button>
             <span className="text-[12px] text-muted-foreground">กดขณะอยู่ที่สำนักงาน</span>
           </div>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       <section className="glass rounded-[18px] px-4 py-4 sm:px-5">
         {err && (
@@ -255,93 +322,22 @@ export function AdminAttendancePage() {
           </p>
         )}
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-[240px]">
-            <Input2
-              label="วันที่เริ่มใช้ค่าใหม่"
-              hint={
-                at > todayIso()
-                  ? "ตั้งล่วงหน้า ระบบสลับให้เองเมื่อถึงวัน"
-                  : minAt
-                    ? `เลือกได้ตั้งแต่ ${thaiDate(minAt)} เป็นต้นไป`
-                    : "มีผลตั้งแต่วันที่เลือกเป็นต้นไป"
-              }
-            >
-              <DateField
-                value={at}
-                onChange={setAt}
-                min={minAt || undefined}
-                label="วันที่เริ่มใช้ค่าใหม่"
-                placeholder="เลือกวันที่"
-                className="h-10 rounded-[10px] text-[14px]"
-              />
-            </Input2>
-          </div>
+          {/* ไม่มีช่องวันที่เริ่มใช้ค่าใหม่ — มีผลตั้งแต่วันที่บันทึก (หรือวันแรกหลังรอบที่ปิดแล้ว) (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+          <span />
           <div className="flex gap-2">
             <button type="button" className="btn glass-thin disabled:opacity-45" disabled={!dirty} onClick={reset}>
               ยกเลิกการแก้
             </button>
-            <button type="button" className="btn solid btn-solid disabled:opacity-45" disabled={Boolean(bad)} onClick={save}>
+            <button type="button" className="btn solid btn-solid disabled:opacity-45" disabled={Boolean(allBad)} onClick={save}>
               บันทึก
             </button>
           </div>
         </div>
       </section>
 
-      <section className="glass overflow-hidden rounded-[18px]">
-        <div className="border-b border-border px-4 py-3.5 sm:px-5">
-          <h2 className="text-[14.5px] font-bold">ประวัติการตั้งค่า</h2>
-        </div>
-        {hist.length === 0 ? (
-          <p className="py-8 text-center text-[13px] text-muted-foreground">
-            ยังไม่เคยบันทึกค่าใหม่ — ค่าที่ใช้อยู่ตอนนี้คือเวลา {s.schedule.start}–{s.schedule.end} พักเที่ยง{" "}
-            {s.schedule.lunchStart}–{s.schedule.lunchEnd} รัศมี {place.radius / 1000} กม.
-          </p>
-        ) : (
-          <div className="px-4 pt-3 pb-4 sm:px-5">
-            <div className="grid grid-cols-[minmax(0,1fr)_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[130px_150px_150px_100px_84px]">
-              <span>เริ่มใช้</span>
-              <span className="max-sm:hidden">เวลาทำงาน</span>
-              <span className="max-sm:hidden">พักเที่ยง</span>
-              <span className="max-sm:hidden">รัศมี</span>
-              <span className="text-right">สถานะ</span>
-            </div>
-            {hist.map((h) => {
-              const st = statusOf(s.attHistory, h);
-              return (
-                <div
-                  key={h.at}
-                  className="grid grid-cols-[minmax(0,1fr)_84px] items-center gap-2 border-b border-border py-2.5 last:border-b-0 sm:grid-cols-[130px_150px_150px_100px_84px]"
-                >
-                  <span className="num text-[13.5px] font-semibold">
-                    {thaiDate(h.at)}
-                    <small className="block text-[11.5px] font-medium text-muted-foreground sm:hidden">
-                      {h.times.start}–{h.times.end} · พัก {h.times.lunchStart}–{h.times.lunchEnd} · {h.place.radius / 1000} กม.
-                    </small>
-                  </span>
-                  <span className="num text-[13px] max-sm:hidden">
-                    {h.times.start} – {h.times.end}
-                  </span>
-                  <span className="num text-[13px] max-sm:hidden">
-                    {h.times.lunchStart} – {h.times.lunchEnd}
-                  </span>
-                  <span className="num text-[13px] max-sm:hidden">{h.place.radius / 1000} กม.</span>
-                  <span className="text-right">
-                    <em className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold not-italic ${st.cls}`}>{st.label}</em>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {/* ประวัติการตั้งค่าย้ายไปเมนูย่อย "ประวัติการตั้งค่า" (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
 
-      {/* ค่าที่ไม่มีในต้นแบบแต่ระบบต้องใช้ — เดิมอยู่หน้าเวลาทำงานที่ถูกยุบมารวมที่นี่ */}
-      <PayAndLate />
-
-      <p className="text-[12px] leading-relaxed text-muted-foreground">
-        ตำแหน่งจากเบราว์เซอร์ใช้ได้เฉพาะเว็บที่เปิดผ่าน https และพนักงานต้องอนุญาตให้เข้าถึงตำแหน่ง ·
-        รอบเงินเดือนที่ปิดไปแล้วใช้ตัวเลขที่บันทึกไว้ตอนปิด ไม่คิดใหม่ตามค่าที่แก้
-      </p>
+      {/* รอบเงินเดือน เริ่มนับโอที การหักมาสาย ย้ายไปหน้าการคำนวณเงินเดือน (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
     </div>
   );
 }
@@ -362,6 +358,11 @@ function nextDay(iso: string) {
  */
 const SCHED_LABEL: Partial<Record<keyof ScheduleSettings, string>> = {
   otStart: "เริ่มนับโอทีวันทำงาน",
+  /* ช่วงพักโอทีวันหยุด — ลงประวัติการตั้งค่าเหมือนช่องอื่น (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  holLunchStart: "โอทีวันหยุด เริ่มพักเที่ยง",
+  holLunchEnd: "โอทีวันหยุด เลิกพักเที่ยง",
+  holDinnerStart: "โอทีวันหยุด เริ่มพักเย็น",
+  holDinnerEnd: "โอทีวันหยุด เลิกพักเย็น",
   forgotPunchOutAfterHours: "เตือนลืมตอกออก (ชม.หลังเลิกงาน)",
   payCutDay: "วันตัดรอบเงินเดือน",
 };
@@ -387,7 +388,7 @@ function describeLate(a: RateSettings, b: RateSettings) {
   return out;
 }
 
-function PayAndLate() {
+export function PayAndLate() {
   const d = useSectionDraft("schedule", "เวลาทำงาน", describeSched);
   const r = useSectionDraft("rates", "เวลาทำงาน", describeLate);
   const s = d.draft;
@@ -397,11 +398,13 @@ function PayAndLate() {
   const bad =
     !(Number.isInteger(s.payCutDay) && s.payCutDay >= 1 && s.payCutDay <= 28)
       ? "วันตัดรอบเงินเดือนต้องเป็นวันที่ 1–28"
-      : !(s.forgotPunchOutAfterHours >= 1 && s.forgotPunchOutAfterHours <= 12)
-        ? "เตือนลืมตอกออกได้ 1–12 ชั่วโมง"
-        : mode === "fixed" && !(late.latePerMinute > 0 && late.latePerMinute <= 100)
+      : mode === "fixed" && !(late.latePerMinute > 0 && late.latePerMinute <= 100)
           ? "หักมาสายนาทีละต้องมากกว่า 0 และไม่เกิน 100 บาท"
-          : "";
+          : !(minutesOfDay(s.holLunchEnd) > minutesOfDay(s.holLunchStart))
+            ? "พักเที่ยงโอทีวันหยุด เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม"
+            : !(minutesOfDay(s.holDinnerEnd) > minutesOfDay(s.holDinnerStart))
+              ? "พักเย็นโอทีวันหยุด เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม"
+              : "";
   const set = <K extends keyof ScheduleSettings>(k: K, v: ScheduleSettings[K]) => d.setDraft({ ...s, [k]: v });
   const [cy, cm] = SAMPLE_MONTH.split("-").map(Number);
   const cutText = `${thaiMonth(SAMPLE_MONTH)} = วันที่ ${s.payCutDay + 1} เดือนก่อน ถึงวันที่ ${s.payCutDay} ของเดือนนี้`;
@@ -410,9 +413,9 @@ function PayAndLate() {
 
   return (
     <>
-      <UiCard title="รอบเงินเดือน เริ่มนับโอที และการหักมาสาย" note={bad ? undefined : `รอบ${cutText}`}>
-        <div className={`grid gap-4 sm:grid-cols-2 ${mode === "fixed" ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
-          <UiInput2 label={SCHED_LABEL.payCutDay ?? ""} hint="รอบถัดไปเริ่มวันรุ่งขึ้น · ตั้งได้วันที่ 1–28">
+      <UiCard title="รอบเงินเดือน เริ่มนับโอที และการหักมาสาย">
+        <div className={`grid gap-4 sm:grid-cols-2 ${mode === "fixed" ? "lg:grid-cols-3" : ""}`}>
+          <UiInput2 label={SCHED_LABEL.payCutDay ?? ""}>
             <input
               type="number"
               min={1}
@@ -422,23 +425,8 @@ function PayAndLate() {
               className={`${inputCls} num`}
             />
           </UiInput2>
-          <UiInput2 label={SCHED_LABEL.otStart ?? ""} hint="ช่วงระหว่างเลิกงานถึงเวลานี้ถือเป็นพักเย็น ไม่นับโอที">
-            <input type="time" value={s.otStart} onChange={(e) => set("otStart", e.target.value)} className={`${inputCls} num`} />
-          </UiInput2>
-          <UiInput2 label={SCHED_LABEL.forgotPunchOutAfterHours ?? ""}>
-            <input
-              type="number"
-              min={1}
-              max={12}
-              value={s.forgotPunchOutAfterHours}
-              onChange={(e) => set("forgotPunchOutAfterHours", Number(e.target.value))}
-              className={`${inputCls} num`}
-            />
-          </UiInput2>
-          <UiInput2
-            label="หักเงินเมื่อมาสาย"
-            hint={mode === "wage" ? `เงินเดือน ${baht(SAMPLE_SALARY)} บาท → นาทีละ ${baht(wagePerMin)} บาท` : undefined}
-          >
+          {/* ไม่มีช่องเตือนลืมตอกออก และไม่มีข้อความอธิบายใต้ช่อง (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
+          <UiInput2 label="หักเงินเมื่อมาสาย">
             <select
               value={mode}
               onChange={(e) => r.setDraft({ ...late, lateMode: e.target.value as LateMode })}
@@ -472,11 +460,37 @@ function PayAndLate() {
             </UiInput2>
           )}
         </div>
+        {/* โอทีแยกวันธรรมดากับวันหยุด — วันหยุดหักช่วงพักเที่ยง/พักเย็นออกจากชั่วโมงโอที (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+        <div className="mt-5 grid gap-4 border-t border-border pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+          <div className="space-y-3">
+            <h3 className="text-[13.5px] font-bold">โอทีวันธรรมดา</h3>
+            <UiInput2 label={SCHED_LABEL.otStart ?? ""}>
+              <Time24Input value={s.otStart} onChange={(e) => set("otStart", e.target.value)} className={`${inputCls} num`} />
+            </UiInput2>
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-[13.5px] font-bold">
+              โอทีวันหยุด <small className="font-normal text-muted-foreground">ช่วงพักที่ไม่นับเป็นชั่วโมงโอที</small>
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(
+                [
+                  ["พักเที่ยง", "holLunchStart", "holLunchEnd"],
+                  ["พักเย็น", "holDinnerStart", "holDinnerEnd"],
+                ] as const
+              ).map(([label, from, to]) => (
+                <UiInput2 key={from} label={label}>
+                  <div className="flex items-center gap-2">
+                    <Time24Input value={s[from]} onChange={(e) => set(from, e.target.value)} className={`${inputCls} num`} wrapperClassName="min-w-0 flex-1" />
+                    <span className="text-muted-foreground">–</span>
+                    <Time24Input value={s[to]} onChange={(e) => set(to, e.target.value)} className={`${inputCls} num`} wrapperClassName="min-w-0 flex-1" />
+                  </div>
+                </UiInput2>
+              ))}
+            </div>
+          </div>
+        </div>
         {/* กติกาที่เจ้าของยืนยัน 29 ก.ย. 2569 — คิดตามเวลางานอย่างเดียว ไม่หักกลบกับการอยู่เลยเวลา */}
-        <p className="mt-3 rounded-[11px] border border-border bg-card px-3 py-2.5 text-[12.5px] text-muted-foreground">
-          มาสายนับจากเวลาเข้างานอย่างเดียว <b className="font-semibold text-foreground">อยู่เลยเวลาเลิกงานไม่นำมาหักกลบ</b>{" "}
-          เวลาที่อยู่ต่อจะเป็นโอทีก็ต่อเมื่อมีใบโอทีที่อนุมัติแล้ว
-        </p>
       </UiCard>
 
       <SaveBar
@@ -497,83 +511,54 @@ function PayAndLate() {
   );
 }
 
-/*
- * บทบาทที่เข้า-ออกไม่ตรงกับเวลาบริษัท (แม่บ้าน 08:00–17:00 · ผู้ใช้สั่ง 7 ต.ค. 2569)
- * เว้นว่างทั้งสองช่อง = ใช้เวลาบริษัทเหมือนคนอื่น · พักเที่ยงใช้ชุดเดียวกับบริษัท
- */
-function RoleShifts() {
+/** ประวัติค่าเวลาทำงานและจุดลงเวลา — แสดงที่หน้าประวัติการตั้งค่า (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+export function AttHistory() {
   const s = useSystemSettings();
-  const shifts = s.schedule.shifts ?? {};
-  /* บทบาทที่ตั้งกะไว้แล้ว ขึ้นก่อน แล้วค่อยให้เลือกเพิ่มจากบทบาทที่เหลือ */
-  const [adding, setAdding] = useState<Role | "">("");
-  const keys = Object.keys(shifts) as Role[];
-  const rest = ROLES.filter((r) => !keys.includes(r.key));
-
-  function set(role: string, start: string, end: string) {
-    if (start && end && minutesOfDay(end) <= minutesOfDay(start)) return;
-    saveRoleShift(role, start, end);
-    logChange("เวลาทำงาน", start && end ? `กะของ${roleName(role)} ${start}–${end}` : `${roleName(role)} กลับไปใช้เวลาบริษัท`);
-  }
-
+  const hist = [...s.attHistory].sort((a, b) => b.at.localeCompare(a.at));
+  if (hist.length === 0) return null;
   return (
-    <div className="space-y-3">
-      {keys.length === 0 && (
-        <p className="text-[12.5px] text-muted-foreground">ยังไม่มีบทบาทที่ใช้เวลาต่างจากบริษัท</p>
-      )}
-      {keys.map((role) => (
-        <div key={role} className="grid items-end gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
-          <b className="text-[13.5px] font-semibold">{roleName(role)}</b>
-          <Input2 label="เวลาเข้างาน">
-            <input
-              type="time"
-              value={shifts[role].start}
-              onChange={(e) => set(role, e.target.value, shifts[role].end)}
-              className={`${inputCls} num`}
-            />
-          </Input2>
-          <Input2 label="เวลาเลิกงาน">
-            <input
-              type="time"
-              value={shifts[role].end}
-              onChange={(e) => set(role, shifts[role].start, e.target.value)}
-              className={`${inputCls} num`}
-            />
-          </Input2>
-          <button type="button" className="btn glass-thin mb-0.5" onClick={() => set(role, "", "")}>
-            ใช้เวลาบริษัท
-          </button>
-        </div>
-      ))}
-      {rest.length > 0 && (
-        <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto]">
-          <Input2 label="เพิ่มกะของบทบาท">
-            <select value={adding} onChange={(e) => setAdding(e.target.value as Role | "")} className={inputCls}>
-              <option value="">เลือกบทบาท…</option>
-              {rest.map((r) => (
-                <option key={r.key} value={r.key}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </Input2>
-          <button
-            type="button"
-            className="btn glass-thin mb-0.5"
-            disabled={!adding}
-            onClick={() => {
-              if (!adding) return;
-              set(adding, s.schedule.start, s.schedule.end);
-              setAdding("");
-            }}
-          >
-            เพิ่ม
-          </button>
+    <section className="glass overflow-hidden rounded-[18px]">
+      <div className="border-b border-border px-4 py-3.5 sm:px-5">
+        <h2 className="text-[14.5px] font-bold">เวลาทำงานและจุดลงเวลา</h2>
+      </div>
+      {(
+        <div className="px-4 pt-3 pb-4 sm:px-5">
+          <div className="grid grid-cols-[minmax(0,1fr)_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[130px_150px_150px_100px_84px]">
+            <span>เริ่มใช้</span>
+            <span className="max-sm:hidden">เวลาทำงาน</span>
+            <span className="max-sm:hidden">พักเที่ยง</span>
+            <span className="max-sm:hidden">รัศมี</span>
+            <span className="text-right">สถานะ</span>
+          </div>
+          {hist.map((h) => {
+            const st = statusOf(s.attHistory, h);
+            return (
+              <div
+                key={h.at}
+                className="grid grid-cols-[minmax(0,1fr)_84px] items-center gap-2 border-b border-border py-2.5 last:border-b-0 sm:grid-cols-[130px_150px_150px_100px_84px]"
+              >
+                <span className="num text-[13.5px] font-semibold">
+                  {thaiDate(h.at)}
+                  <small className="block text-[11.5px] font-medium text-muted-foreground sm:hidden">
+                    {h.times.start}–{h.times.end} · พัก {h.times.lunchStart}–{h.times.lunchEnd} · {h.place.radius.toLocaleString()} ม.
+                  </small>
+                </span>
+                <span className="num text-[13px] max-sm:hidden">
+                  {h.times.start} – {h.times.end}
+                </span>
+                <span className="num text-[13px] max-sm:hidden">
+                  {h.times.lunchStart} – {h.times.lunchEnd}
+                </span>
+                <span className="num text-[13px] max-sm:hidden">{h.place.radius.toLocaleString()} ม.</span>
+                <span className="text-right">
+                  <em className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold not-italic ${st.cls}`}>{st.label}</em>
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
-    </div>
-  );
-}
+    </section>
 
-function roleName(role: string) {
-  return ROLES.find((r) => r.key === role)?.label ?? role;
+  );
 }

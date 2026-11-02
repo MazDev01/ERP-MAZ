@@ -5,8 +5,7 @@
  * (ผู้ใช้สั่ง 18 ก.ย. 2569: ดรอปดาวน์ที่เป็นรายการต้องเพิ่มได้จากหน้าของแต่ละบทบาท)
  * 22 ก.ย. 2569 เคยจำกัดให้เพิ่มได้เฉพาะผู้ดูแลระบบ
  * 28 ก.ย. 2569 เจ้าของสั่งใหม่ว่า "ดรอปดาวน์พวกนี้ต้องเพิ่มข้อมูลเข้าไปได้" — เปิดให้ทุกบทบาทเพิ่มได้จากหน้างาน
- * 29 ก.ย. 2569 เจ้าของสั่งเอาออกจากดรอปดาวน์ทั้งหมด — เพิ่มตัวเลือกได้ที่ตั้งค่าระบบของฝ่ายบุคคลที่เดียว
- *   (ADD_FROM_FORMS = false) รายการจึงไม่งอกจากหน้างานจนซ้ำซ้อน ฮุกยังอยู่ให้หน้าเดิมเรียกได้เหมือนเดิม
+ *   ทุกครั้งที่เพิ่มยังลงประวัติการตั้งค่าไว้ว่า "(จากหน้างาน)" ฝ่ายบุคคลจึงตามแก้/ลบทีหลังได้ที่ /admin/options
  * ที่เก็บเดียวกับหน้าผู้ดูแลระบบ /admin/options — ผู้ดูแลยังแก้ชื่อ เรียง หรือลบทีหลังได้
  *
  * ใช้คู่กับ select เดิมได้ทันที:
@@ -29,13 +28,11 @@ export const ADD_VALUE = "__add_option__";
 
 export type AddTarget = { list: OptionKey } | { catalog: AddCatalogKey; dept?: string };
 
-/** เพิ่มตัวเลือกจากหน้างานได้ไหม — ปิดไว้ เพิ่มได้ที่ตั้งค่าระบบของฝ่ายบุคคลเท่านั้น (29 ก.ย. 2569) */
-const ADD_FROM_FORMS = false;
-
 export function useAddOption(target: AddTarget, onAdded: (value: string) => void) {
   const [open, setOpen] = useState(false);
-  const role = useRole();
-  const canAdd = ADD_FROM_FORMS && Boolean(role);
+  /* ทุกบทบาทที่ล็อกอินอยู่เพิ่มตัวเลือกได้ — ฝ่ายบุคคลยังเป็นคนดูแลรายการรวมที่ /admin/options */
+  /* เพิ่มตัวเลือกจากดรอปดาวน์ไม่ได้แล้ว — เพิ่มได้ที่ข้อมูลหลัก (/admin/options) เท่านั้น (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+  const canAdd = false && Boolean(useRole());
   return {
     /** ผู้ดูแลระบบเท่านั้นที่เพิ่มตัวเลือกได้ — ใช้ซ่อนปุ่ม "+ เพิ่ม" ที่หน้าวาดเอง */
     canAdd,
@@ -153,13 +150,10 @@ function AddOptionDialog({
       {isCat && target.catalog === "docs" && (
         <label className="mt-3.5 flex cursor-pointer items-center gap-2.5 text-[13.5px]">
           <input type="checkbox" checked={req} onChange={(e) => setReq(e.target.checked)} className="size-4 accent-[var(--primary)]" />
-          ต้องมี — ขาดแล้วขึ้นเตือนว่าเอกสารไม่ครบ
+          ต้องมี
         </label>
       )}
       {err && <p className="mt-2 text-[12.5px] text-destructive">{err}</p>}
-      <p className="mt-3 rounded-[11px] bg-muted/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
-        ตัวเลือกนี้ใช้ได้ทุกคนทันที · ผู้ดูแลระบบแก้ชื่อ เรียงลำดับ หรือลบได้ที่หน้า “ตัวเลือกในรายการ”
-      </p>
     </Sheet>
   );
 }

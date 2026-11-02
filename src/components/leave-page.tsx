@@ -1,5 +1,6 @@
 "use client";
 
+import { nameOf } from "@/lib/emp-name";
 import Link from "next/link";
 
 import { useSearchParams } from "next/navigation";
@@ -10,6 +11,10 @@ import {
   leaveYearOf,
   periodRange,
   leaveTypes,
+  leaveLabel,
+  fmtLeave,
+  fmtLeaveHours,
+  leaveHoursOf,
   type LeaveRecord,
   type LeaveStatus,
 } from "@/lib/leave-data";
@@ -21,11 +26,13 @@ import {
   useLeaveRecords,
 } from "@/lib/leave-store";
 import { formatMinutesOfDay } from "@/lib/work-schedule";
+import { useNoLeaveQuota } from "@/lib/hr-link";
 import { ApproverNote } from "./approver-note";
 import { LeaveDialog } from "./leave-dialog";
 import { Sheet } from "./lead-dialogs";
 import { CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, LeaveIcon, PlusIcon } from "./icons";
 import "@/styles/mobile/leave.css";
+import { stackNo } from "@/lib/stack-no";
 
 const PER_PAGE = 10;
 
@@ -70,6 +77,7 @@ const QUOTA_TONE = [
 
 export function LeavePage() {
   const records = useLeaveRecords();
+  const noQuota = useNoLeaveQuota();
   const params = useSearchParams();
   /* ลิงก์จากแจ้งเตือน LINE — /leave?find=LV-2569-0123 เปิดรอบปีของใบนั้นแล้วไฮไลต์ให้ */
   const findId = useSearchParams().get("find") ?? "";
@@ -108,19 +116,25 @@ export function LeavePage() {
     [records, pFrom, pTo],
   );
 
+  /*
+   * เรียงตามลำดับที่ยื่น — ไม่แสดงเลขที่คำขอ ใช้เลขลำดับแทน (ผู้ใช้สั่ง 9 ต.ค. 2569)
+   * เลขแบบกองซ้อน — ใบแรกที่ยื่นเป็น 1 ใบล่าสุดเลขมากสุดอยู่บนสุด นับจากใบลาทั้งหมดทุกรอบปี เลขจึงไม่เปลี่ยนเมื่อยื่นใบใหม่ (ผู้ใช้สั่ง 12 ต.ค. 2569)
+   */
+  const noOf = useMemo(() => stackNo(records, (r) => r.submittedAt || r.date, (r) => r.id), [records]);
+
   const scoped = useMemo(() => {
     const list = tab === "all" ? inPeriod : inPeriod.filter((r) => r.status === tab);
-    return [...list].sort((a, b) => b.date.localeCompare(a.date));
-  }, [inPeriod, tab]);
+    return [...list].sort((a, b) => (noOf.get(b.id) ?? 0) - (noOf.get(a.id) ?? 0));
+  }, [inPeriod, tab, noOf]);
 
   const maxPage = Math.max(1, Math.ceil(scoped.length / PER_PAGE));
   const safePage = Math.min(page, maxPage);
   const from = (safePage - 1) * PER_PAGE;
   const list = scoped.slice(from, from + PER_PAGE);
 
-  const approvedDays = inPeriod
+  const approvedHours = inPeriod
     .filter((r) => r.status === "อนุมัติแล้ว")
-    .reduce((sum, r) => sum + r.days, 0);
+    .reduce((sum, r) => sum + leaveHoursOf(r), 0); /* รวมเป็นชั่วโมง (ผู้ใช้สั่ง 19 ต.ค. 2569) */
 
   return (
     <div className="space-y-4">
@@ -175,7 +189,7 @@ export function LeavePage() {
       {flash !== null && (
         <p className="flex items-center gap-2.5 rounded-xl border border-[var(--success)]/20 bg-[var(--success-soft)] px-4 py-3 text-sm font-medium text-[var(--success)]">
           <CheckIcon className="size-4 shrink-0" strokeWidth={2.4} />
-          ส่งใบลา {flash} วันเรียบร้อย — รอหัวหน้าอนุมัติ
+          ส่งใบลา {fmtLeave(flash)} เรียบร้อย — รอหัวหน้าอนุมัติ
         </p>
       )}
 
@@ -191,6 +205,7 @@ export function LeavePage() {
           setPage(1);
         }}
         findId={findId}
+        noQuota={noQuota}
         onCancel={setCancelling}
         onNew={() => setDialogOpen(true)}
         yearLabel={pFrom.endsWith("-01-01") ? `ปี ${year + 543}` : `${shortThai(pFrom)} – ${shortThai(pTo)}`}
@@ -206,7 +221,8 @@ export function LeavePage() {
         }}
       />
 
-      {/* ── สิทธิ์คงเหลือแต่ละประเภท (จอคอม) ── */}
+      {/* ── สิทธิ์คงเหลือแต่ละประเภท (จอคอม) · ทดลองงาน/ฝึกงานไม่มีโควต้า ── */}
+      {!noQuota && (
       <div className="max-md:hidden">
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
         {leaveTypes().filter((t) => entitlementDays(t, period) > 0).map((t, n) => {
@@ -218,7 +234,6 @@ export function LeavePage() {
           const q = leaveUsage(records, t, period);
           const total = q.entitled;
           const left = q.remaining;
-          const pct = total ? Math.min(100, Math.round((q.approved / total) * 100)) : 0;
           return (
             <div key={t} className="glass flex h-full flex-col rounded-2xl px-3.5 py-3 sm:px-[17px] sm:py-[15px]">
               {/* หัวการ์ดอยู่บรรทัดเดียวเสมอ — ชื่อยาวให้ตัดท้าย ไม่ดันให้การ์ดสูงไม่เท่ากัน */}
@@ -227,7 +242,7 @@ export function LeavePage() {
                   <i className={`grid size-[26px] flex-none place-items-center rounded-[9px] ${QUOTA_TONE[n % QUOTA_TONE.length]}`}>
                     <LeaveIcon className="size-3.5" strokeWidth={2.2} />
                   </i>
-                  <b className="min-w-0 text-[13.5px] leading-tight font-semibold">{t}</b>
+                  <b className="min-w-0 text-[13.5px] leading-tight font-semibold">{leaveLabel(t)}</b>
                 </span>
                 {/* จอแคบไม่ต้องมีป้ายสิทธิ์ต่อปี — บรรทัด "ใช้ไปแล้ว x จาก y วัน" บอกอยู่แล้ว
                     เอาออกแล้วชื่อประเภทการลาได้ความกว้างเต็ม ไม่ถูกตัดท้าย */}
@@ -235,37 +250,22 @@ export function LeavePage() {
                   {base} วัน/ปี
                 </em>
               </div>
-              <p className="num mt-2 text-[24px] leading-tight font-bold sm:text-[27px]">
-                {round1(left)}
-                <span className="ml-1.5 text-[12px] font-semibold text-muted-foreground sm:text-[13px]">
-                  วันคงเหลือ
-                </span>
-              </p>
-              <p className="num mt-0.5 text-xs text-muted-foreground">
-                ใช้ไปแล้ว {round1(q.approved)} จาก {round1(total)} วัน
-                {carried > 0 && ` (ยกมาจากปีก่อน ${round1(carried)} วัน)`}
-              </p>
-              <span className="grow" aria-hidden="true" />
-              {/* ยื่นแล้วแต่ยังไม่อนุมัติ — ยังไม่หักสิทธิ์ แต่ต้องเห็นว่าค้างอยู่เท่าไร */}
-              {q.pending > 0 && (
-                <p className="num mt-0.5 text-xs font-medium text-[var(--warning)]">
-                  รออนุมัติ {round1(q.pending)} วัน · อนุมัติครบจะเหลือ {round1(q.afterPending)} วัน
-                </p>
-              )}
+              {/* ตัวเลขวันคงเหลือ ใต้ตัวเลขเป็นแค่ลักษณนาม แบบแดชบอร์ด PM (ผู้ใช้สั่ง 9 ต.ค. 2569) */}
+              {/* ลาเกินโควต้า ตัวเลขเป็นสีแดง (ผู้ใช้สั่ง 19 ต.ค. 2569) */}
+              <p className={`num mt-2 text-[24px] leading-tight font-bold sm:text-[27px] ${q.over > 0 ? "text-destructive" : ""}`}><LeaveAmount days={left} /></p>
+              <p className="mt-0.5 text-xs text-muted-foreground">คงเหลือ</p>
               {/* ลาเกินสิทธิ์ไปแล้ว — ส่วนที่เกินเป็นลาไม่รับค่าจ้าง พูดให้ตรงกับกล่องยื่นใบลา */}
               {q.over > 0 && (
                 <p className="num mt-0.5 text-xs font-medium text-destructive">
-                  ลาเกินสิทธิ์ {round1(q.over)} วัน — ส่วนที่เกินถูกหักจากเงินเดือน
+                  ลาเกินสิทธิ์ {fmtLeave(q.over)} — ส่วนที่เกินถูกหักจากเงินเดือน
                 </p>
               )}
-              <span className="mt-auto block h-[5px] translate-y-0 overflow-hidden rounded bg-black/10">
-                <i className="block h-full rounded bg-primary" style={{ width: `${pct}%` }} />
-              </span>
             </div>
           );
         })}
       </div>
       </div>
+      )}
 
       {/* ── รายการใบลา (จอคอม) ── */}
       <div className="max-md:hidden">
@@ -304,10 +304,10 @@ export function LeavePage() {
           <table className="data-table min-w-[900px]">
             <thead>
               <tr>
-                <th style={{ width: 158 }}>เลขที่คำขอ</th>
+                <th className="c" style={{ width: 70 }}>ลำดับ</th>
                 <th style={{ width: 118 }}>ประเภท</th>
                 <th style={{ width: 196 }}>ช่วงวันลา</th>
-                <th className="c" style={{ width: 104 }}>จำนวนวัน</th>
+                <th className="c" style={{ width: 104 }}>จำนวน</th>
                 <th>เหตุผล</th>
                 <th style={{ width: 132 }}>สถานะ</th>
                 <th className="c" style={{ width: 96 }}>จัดการ</th>
@@ -322,7 +322,7 @@ export function LeavePage() {
                 </tr>
               ) : (
                 list.map((r) => (
-                  <LeaveRow key={r.id} row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} />
+                  <LeaveRow key={r.id} no={noOf.get(r.id) ?? 0} row={r} hit={r.id === findId} onCancel={() => setCancelling(r)} />
                 ))
               )}
             </tbody>
@@ -336,7 +336,7 @@ export function LeavePage() {
               : `แสดง ${from + 1}–${from + list.length} จาก ${scoped.length} รายการ`}
           </span>
           <span className="sum">
-            วันลาที่อนุมัติแล้วรวม<b>{round1(approvedDays)}</b> วัน
+            วันลาที่อนุมัติแล้วรวม<b>{fmtLeaveHours(approvedHours)}</b>
           </span>
           <div className="pages justify-center sm:justify-start">
             <button
@@ -395,24 +395,20 @@ export function LeavePage() {
   );
 }
 
-function LeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onCancel: () => void }) {
+function LeaveRow({ no, row, hit, onCancel }: { no: number; row: LeaveRecord; hit?: boolean; onCancel: () => void }) {
   const canCancel = row.status === "รอการอนุมัติ";
   const partial =
     row.startMin != null && row.endMin != null
       ? row.hours
         ? /* ลาด่วนรายชั่วโมง — บอกชั่วโมงที่ลา ไม่ใช่ครึ่งวันเช้า/บ่าย */
-          `ลาด่วน ${row.hours} ชม. ${formatMinutesOfDay(row.startMin)}–${formatMinutesOfDay(row.endMin)}`
+          `ลาด่วน ${fmtLeaveHours(row.hours)} ${formatMinutesOfDay(row.startMin)}–${formatMinutesOfDay(row.endMin)}`
         : `ครึ่งวัน${row.half === "afternoon" ? "บ่าย" : "เช้า"} ${formatMinutesOfDay(row.startMin)}–${formatMinutesOfDay(row.endMin)}`
       : null;
 
   return (
     <tr className={hit ? "ring-2 ring-primary ring-inset" : undefined}>
-      <td className="day">
-        <b>{shortId(row.id)}</b>
-        {/* วันที่ยื่นจริง — ใบเก่าที่ไม่ได้เก็บเวลายื่นไว้ ใช้วันแรกของช่วงลาแทน */}
-        <span>ยื่น {thaiDate(row.submittedAt ? row.submittedAt.slice(0, 10) : row.date)}</span>
-      </td>
-      <td>{row.type}</td>
+      <td className="c num">{no}</td>
+      <td>{leaveLabel(row.type)}</td>
       <td>
         {/* กดช่วงวันลาเพื่อไปดูเวลาทำงานของเดือนนั้น ว่าวันที่ลาถูกบันทึกไว้อย่างไร */}
         <Link
@@ -424,7 +420,7 @@ function LeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onC
         {partial && <span className="why">{partial}</span>}
       </td>
       <td className="c num">
-        <b className="font-semibold">{round1(row.days)}</b>
+        <b className="font-semibold">{fmtLeaveHours(leaveHoursOf(row))}</b>
       </td>
       <td>
         <span className="clip">{row.comment || "—"}</span>
@@ -432,7 +428,7 @@ function LeaveRow({ row, hit, onCancel }: { row: LeaveRecord; hit?: boolean; onC
         {row.status === "ยกเลิก" && (
           <span className="why">
             ยกเลิก: {row.cancelReason || "—"}
-            {row.cancelledBy ? ` · โดย ${row.cancelledBy}` : ""}
+            {row.cancelledBy ? ` · โดย ${nameOf(row.cancelledBy)}` : ""}
           </span>
         )}
       </td>
@@ -477,6 +473,7 @@ function MobileLeave({
   tab,
   onTab,
   findId,
+  noQuota,
   onCancel,
   onNew,
   yearLabel,
@@ -497,6 +494,7 @@ function MobileLeave({
   tab: "all" | LeaveStatus;
   onTab: (k: "all" | LeaveStatus) => void;
   findId: string;
+  noQuota: boolean;
   onCancel: (r: LeaveRecord) => void;
   onNew: () => void;
 }) {
@@ -523,19 +521,20 @@ function MobileLeave({
       </div>
 
       {/* วันลาคงเหลือ — กล่องเดียวแบ่งคอลัมน์ ตัวเลขมาจาก leaveUsage() ตัวเดียวกับจอคอม */}
+      {!noQuota && (
       <div className="m-lv-bal">
         {leaveTypes()
           .filter((t) => entitlementDays(t, period) > 0)
           .map((t) => (
             <div key={t}>
-              <b className="num">
-                {round1(leaveUsage(records, t, period).remaining)}
-                <small>วัน</small>
+              <b className={`num ${leaveUsage(records, t, period).over > 0 ? "text-destructive" : ""}`}>
+                <LeaveAmount days={leaveUsage(records, t, period).remaining} />
               </b>
-              <span>{t}คงเหลือ</span>
+              <span>{leaveLabel(t)}คงเหลือ</span>
             </div>
           ))}
       </div>
+      )}
 
       <div className="m-lv-chips">
         {TABS.map((t) => {
@@ -590,7 +589,7 @@ function MobileLeaveCard({ row, hit, onCancel }: { row: LeaveRecord; hit?: boole
     row.startMin != null && row.endMin != null
       ? row.hours
         ? /* ลาด่วนรายชั่วโมง — บอกชั่วโมงที่ลา ไม่ใช่ครึ่งวันเช้า/บ่าย */
-          `ลาด่วน ${row.hours} ชม. ${formatMinutesOfDay(row.startMin)}–${formatMinutesOfDay(row.endMin)}`
+          `ลาด่วน ${fmtLeaveHours(row.hours)} ${formatMinutesOfDay(row.startMin)}–${formatMinutesOfDay(row.endMin)}`
         : `ครึ่งวัน${row.half === "afternoon" ? "บ่าย" : "เช้า"} ${formatMinutesOfDay(row.startMin)}–${formatMinutesOfDay(row.endMin)}`
       : null;
 
@@ -599,15 +598,15 @@ function MobileLeaveCard({ row, hit, onCancel }: { row: LeaveRecord; hit?: boole
       <i className="ico" aria-hidden="true">
         <CalendarIcon strokeWidth={2} />
       </i>
-      <b className="ty">{row.type}</b>
-      <span className="dy num">{round1(row.days)} วัน</span>
+      <b className="ty">{leaveLabel(row.type)}</b>
+      <span className="dy num">{fmtLeaveHours(leaveHoursOf(row))}</span>
       <div className="rs">
         {row.comment || "—"}
         {/* ใบที่ยกเลิกแล้ว — เหตุผลและผู้ยกเลิกต้องตามรอยย้อนหลังได้ */}
         {row.status === "ยกเลิก" ? (
           <span className="why">
             ยกเลิก: {row.cancelReason || "—"}
-            {row.cancelledBy ? ` · โดย ${row.cancelledBy}` : ""}
+            {row.cancelledBy ? ` · โดย ${nameOf(row.cancelledBy)}` : ""}
           </span>
         ) : row.files && row.files.length > 0 ? (
           <span className="why">แนบ {row.files.length} ไฟล์</span>
@@ -624,7 +623,6 @@ function MobileLeaveCard({ row, hit, onCancel }: { row: LeaveRecord; hit?: boole
         <i />
         {row.status}
       </span>
-      <span className="no num">{shortId(row.id)}</span>
       {canCancel && (
         <button type="button" className="ac lnk" onClick={onCancel}>
           ยกเลิก
@@ -650,7 +648,7 @@ function CancelLeaveDialog({ row, onClose }: { row: LeaveRecord; onClose: () => 
 
   return (
     <Sheet
-      title={`ยกเลิกใบลา ${shortId(row.id)}`}
+      title={`ยกเลิกใบลา${row.type}`}
       onClose={onClose}
       footer={
         <>
@@ -670,9 +668,9 @@ function CancelLeaveDialog({ row, onClose }: { row: LeaveRecord; onClose: () => 
     >
       <div className="m-lv-cancel">
       <p className="text-[13.5px] leading-[1.7] text-muted-foreground">
-        {row.type} {thaiRange(row.date, row.toDate)} รวม {round1(row.days)} วัน
+        {leaveLabel(row.type)} {thaiRange(row.date, row.toDate)} รวม {fmtLeaveHours(leaveHoursOf(row))}
         <span className="mt-1 block">
-          ใบลานี้จะไม่ถูกลบ แต่เปลี่ยนเป็นสถานะ “ยกเลิก” และเลขที่ {shortId(row.id)} จะไม่ถูกนำไปใช้ซ้ำ
+          ใบลานี้จะไม่ถูกลบ แต่เปลี่ยนเป็นสถานะ “ยกเลิก”
         </span>
       </p>
       <label htmlFor="leave-cancel-why" className="mt-3.5 mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">
@@ -691,7 +689,7 @@ function CancelLeaveDialog({ row, onClose }: { row: LeaveRecord; onClose: () => 
       />
       {warn && (
         <p className="mt-[9px] rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-[13px] py-2.5 text-[12.5px] leading-[1.55] text-destructive">
-          ยกเลิกใบลาต้องระบุเหตุผล เพราะใบลายังเก็บไว้เป็นประวัติ
+          ยกเลิกใบลาต้องระบุเหตุผล
         </p>
       )}
       </div>
@@ -699,14 +697,23 @@ function CancelLeaveDialog({ row, onClose }: { row: LeaveRecord; onClose: () => 
   );
 }
 
-function round1(n: number) {
-  /* ลาด่วนรายชั่วโมงได้วันเป็นเศษสองตำแหน่ง (0.25 วัน) ปัดทศนิยมเดียวแล้วเลขจะเพี้ยน */
-  return Math.round(n * 100) / 100;
-}
-
-/** เลขที่คำขอ — รหัสใบลามี "LV-" นำหน้าอยู่แล้ว ห้ามเติมซ้ำ (เคยขึ้นเป็น LV-LV-2569-0041) */
-function shortId(id: string) {
-  return id.startsWith("LV-") ? id.toUpperCase() : `LV-${id.slice(-6).toUpperCase()}`;
+/**
+ * จำนวนการลาแบบตัวเลขใหญ่ หน่วยตัวเล็ก — "29 วัน 4 ชม." (ผู้ใช้สั่ง 19 ต.ค. 2569)
+ * ข้อความมาจาก fmtLeave() ตัวเดียวของระบบ แค่แยกตัวเลขกับหน่วยออกมาจัดขนาด
+ */
+function LeaveAmount({ days }: { days: number }) {
+  const parts = [...fmtLeave(days).matchAll(/(−?\d+)\s(\S+)/g)];
+  return (
+    <>
+      {parts.map((m, i) => (
+        <span key={i} className="whitespace-nowrap">
+          {i > 0 && " "}
+          {m[1]}
+          <small className="ml-0.5 text-[0.5em] font-semibold">{m[2]}</small>
+        </span>
+      ))}
+    </>
+  );
 }
 
 function thaiDate(iso: string) {

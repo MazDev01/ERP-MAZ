@@ -4,7 +4,7 @@
  * ประเภทการลา — สิทธิ์วันลาต่อปีของรอบปีปัจจุบัน (leave-data.ts อ่านผ่าน entitlements() / leaveTypes())
  *
  * ผู้ดูแลระบบเพิ่มประเภทใหม่ได้ (ผู้ใช้สั่ง 18 ก.ย. 2569) — กดปุ่ม "เพิ่มประเภทการลา" เปิดกล่อง
- * ชื่อ + จำนวนวันต่อปี + คำอธิบายสั้น · ประเภทที่เพิ่มเองกดดินสอแก้ได้ทุกช่อง
+ * ชื่อ + จำนวนวันต่อปี (ไม่มีช่องคำอธิบาย ผู้ใช้สั่ง 13 ต.ค. 2569) · ประเภทที่เพิ่มเองกดดินสอแก้ได้ทุกช่อง
  * เปลี่ยนชื่อแล้วใบลาที่ยื่นไปแล้วยังเก็บชื่อเดิม (กล่องเตือนให้เห็นก่อนบันทึก)
  * ประเภทตั้งต้นของระบบลบไม่ได้ · ประเภทที่เพิ่มเองลบได้ ใบลาเก่ายังเก็บชื่อเดิมไว้
  * ตั้ง 0 วัน = ไม่มีสิทธิ์ลาประเภทนี้ (ยังเห็นในรายการ แต่ยื่นแล้วจะเตือนว่าเกินสิทธิ์)
@@ -15,18 +15,13 @@
  */
 
 import { useState } from "react";
-import { LEAVE_TYPES, currentPeriod, isBuiltinLeave, leaveNote, leaveTypes } from "@/lib/leave-data";
+import { LEAVE_TYPES, currentPeriod, isBuiltinLeave, leaveLabel } from "@/lib/leave-data";
 import type { LeaveQuota, RateSettings } from "@/lib/system-settings";
 import { thaiDate } from "@/lib/format";
-import { AdminHead, Card, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
+import { AdminHead, Card, IconBtn, Input2, SaveBar, Switch, inputCls, thCls, trCls, useSectionDraft } from "./admin-ui";
 import { useAllLeave } from "@/lib/leave-store";
 import { PencilIcon, PlusIcon, TrashIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
-import { ConfirmDialog } from "./confirm-dialog";
-import { Select } from "./ui";
-import { hrPos, type Employee } from "@/lib/hr-data";
-import { setEmpLeaveDays, useHr } from "@/lib/hr-store";
-import { logChange } from "@/lib/admin-log";
 
 /** รายการครบทุกประเภท — ประเภทตั้งต้นที่หายไปจากค่าที่บันทึกไว้เติมให้เป็น 0 วัน */
 function withBuiltins(list: LeaveQuota[]): LeaveQuota[] {
@@ -113,29 +108,21 @@ export function AdminLeavePage() {
       <AdminHead
         title="ประเภทการลา"
         desc="สิทธิ์วันลาต่อปีของพนักงานทุกบทบาท — พนักงานเห็นวันคงเหลือจากตัวเลขนี้ และระบบเตือนเมื่อยื่นลาเกินสิทธิ์"
-      />
+      >
+        {/* ปุ่มเพิ่มอยู่หัวหน้าแบบเดียวกับตารางตัวเลือกในรายการ (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+        <button type="button" className="btn solid btn-solid" onClick={() => setEditing("")}>
+          <PlusIcon className="size-4" strokeWidth={2.4} />
+          เพิ่มประเภทการลา
+        </button>
+      </AdminHead>
 
       <section className="glass overflow-hidden rounded-[18px]">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5">
-          <div>
-            <h2 className="text-[14.5px] font-bold">สิทธิ์วันลา</h2>
-            <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-              รอบปี {thaiDate(from)} – {thaiDate(to)} · ตั้ง 0 วัน = ไม่มีสิทธิ์ลาประเภทนี้
-            </p>
-          </div>
-          <button type="button" className="btn solid btn-solid" onClick={() => setEditing("")}>
-            <PlusIcon className="size-4" strokeWidth={2.4} />
-            เพิ่มประเภทการลา
-          </button>
-        </div>
-
-        <div className="px-4 pt-3 pb-4 sm:px-5">
+        <div className="px-4 pt-3.5 pb-4 sm:px-5">
           {/* หัวตารางแบบเดียวกับหน้าข้อมูลหลัก (ต้นแบบ HR-12) */}
-          <div className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_58px_84px]">
+          <div className={`grid grid-cols-[minmax(0,1fr)_96px_58px_84px] sm:grid-cols-[28px_minmax(0,1fr)_150px_58px_84px] ${thCls}`}>
             <span className="text-center max-sm:hidden">#</span>
             <span>ชื่อ</span>
             <span className="text-right sm:text-left">สิทธิ์ต่อปี</span>
-            <span className="max-sm:hidden">การใช้งาน</span>
             <span className="text-center">เปิดใช้</span>
             <span />
           </div>
@@ -147,27 +134,22 @@ export function AdminLeavePage() {
             return (
               <div
                 key={q.type}
-                className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40 sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_58px_84px]"
+                className={`grid grid-cols-[minmax(0,1fr)_96px_58px_84px] sm:grid-cols-[28px_minmax(0,1fr)_150px_58px_84px] ${trCls} ${q.off ? "opacity-50" : ""}`}
               >
                 <span className="num text-center text-[12px] text-muted-foreground max-sm:hidden">{i + 1}</span>
                 <span className="min-w-0">
-                  <b className={`block text-[13.5px] ${q.off ? "font-medium text-muted-foreground" : "font-semibold"}`}>
-                    {q.type}
-                    {q.off && (
-                      <em className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground not-italic">
-                        ปิดใช้งาน
-                      </em>
-                    )}
+                  {/* ปิดใช้แล้วจางทั้งแถว ไม่มีป้าย · ไม่แสดงคำอธิบาย (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+                  <b className="block truncate text-[13.5px] font-semibold">
+                    {leaveLabel(q.type)}
                     {!builtin && !was && (
                       <em className="ml-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary not-italic">
                         ใหม่ · ยังไม่บันทึก
                       </em>
                     )}
                   </b>
-                  <small className="block text-[11.5px] text-muted-foreground">
-                    {q.note ?? leaveNote(q.type)}
-                    {was && q.days !== was.days && ` · เดิม ${was.days} วัน`}
-                  </small>
+                  {was && q.days !== was.days && (
+                    <small className="block text-[11.5px] text-muted-foreground">เดิม {was.days} วัน</small>
+                  )}
                 </span>
                 <span className="flex items-center justify-end gap-1.5 sm:justify-start">
                   <input
@@ -182,7 +164,6 @@ export function AdminLeavePage() {
                   />
                   <span className="text-[12px] whitespace-nowrap text-muted-foreground">วัน/ปี</span>
                 </span>
-                <span className="text-[12px] text-muted-foreground max-sm:hidden">{used || "ยังไม่ถูกใช้"}</span>
                 <span className="flex justify-center">
                   <Switch
                     on={!q.off}
@@ -191,24 +172,15 @@ export function AdminLeavePage() {
                   />
                 </span>
                 <span className="flex justify-end gap-1.5">
-                  <button
-                    type="button"
-                    aria-label={`แก้ไขประเภท ${q.type}`}
-                    onClick={() => setEditing(q.type)}
-                    className="btn glass-thin btn-mini"
-                  >
-                    <PencilIcon className="size-4" strokeWidth={1.9} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`ลบประเภท ${q.type}`}
-                    disabled={builtin || Boolean(used)}
-                    title={builtin ? "ประเภทตั้งต้นของระบบลบไม่ได้ — ปิดใช้งานแทน" : used ? `ลบไม่ได้ — ${used}` : undefined}
-                    onClick={() => remove(q.type)}
-                    className="btn glass-thin btn-mini disabled:opacity-40"
-                  >
-                    <TrashIcon className="size-4" strokeWidth={1.9} />
-                  </button>
+                  <IconBtn label={`แก้ไขประเภท ${q.type}`} title="แก้ไข" onClick={() => setEditing(q.type)}>
+                    <PencilIcon className="size-3.5" strokeWidth={1.9} />
+                  </IconBtn>
+                  {/* ลบไม่ได้ก็ไม่ต้องมีปุ่มลบ (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
+                  {!builtin && !used && (
+                    <IconBtn label={`ลบประเภท ${q.type}`} title="ลบ" danger onClick={() => remove(q.type)}>
+                      <TrashIcon className="size-3.5" strokeWidth={1.9} />
+                    </IconBtn>
+                  )}
                 </span>
               </div>
             );
@@ -216,10 +188,8 @@ export function AdminLeavePage() {
         </div>
       </section>
 
-      <Card
-        title="รอบปีการลา"
-        note="รอบปีขึ้นใหม่เองทุกปีในวันที่เลือก · วันลาที่ใช้ไปเริ่มนับใหม่ และได้สิทธิ์เต็มตามที่ตั้งไว้ด้านบน"
-      >
+      {/* ไม่มีข้อความอธิบายการทำงานของระบบ และไม่มีช่องยกยอดลาพักร้อน (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
+      <Card title="รอบปีการลา">
         <p className="mb-1.5 text-[12.5px] font-semibold text-muted-foreground">วันเริ่มรอบปีการลา</p>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[13px] text-muted-foreground">ทุกวันที่</span>
@@ -252,62 +222,8 @@ export function AdminLeavePage() {
             ))}
           </select>
         </div>
-        <p className="mt-2 mb-4 text-[12px] leading-relaxed text-muted-foreground">
-          {c.draft.leaveYearStart === c.saved.leaveYearStart
-            ? `รอบปัจจุบัน ${thaiDate(from)} – ${thaiDate(to)}`
-            : `บันทึกแล้วรอบปีจะเริ่มทุกวันที่ ${startText(c.draft.leaveYearStart)} · ใบลาที่ยื่นไว้แล้วนับเข้ารอบใหม่ตามวันที่ลา`}
-        </p>
-
-        <p className="mb-1.5 text-[12.5px] font-semibold text-muted-foreground">ยกยอดลาพักร้อนข้ามปี</p>
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={customCarry ? "custom" : String(carry)}
-            onChange={(e) => {
-              if (e.target.value === "custom") return setCustomCarry(true);
-              setCustomCarry(false);
-              c.setDraft({ ...c.draft, vacationCarryMax: Number(e.target.value) });
-            }}
-            className={`${inputCls} max-w-[260px] cursor-pointer`}
-            aria-label="เพดานยกยอดลาพักร้อน"
-          >
-            {CARRY_CHOICES.map((n) => (
-              <option key={n} value={n}>
-                {n > 0 ? `ยกได้ไม่เกิน ${n} วัน` : "ไม่ยกยอด — หมดสิ้นปี"}
-              </option>
-            ))}
-            <option value="custom">กำหนดเอง…</option>
-          </select>
-          {customCarry && (
-            <span className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                max={365}
-                step={1}
-                value={carry}
-                onChange={(e) => c.setDraft({ ...c.draft, vacationCarryMax: Number(e.target.value) })}
-                className={`${inputCls} num max-w-[100px] text-right`}
-                aria-label="จำนวนวันที่ยกได้สูงสุด"
-              />
-              <span className="text-[13px] text-muted-foreground">วัน</span>
-            </span>
-          )}
-        </div>
-        <p className="mt-2.5 text-[12px] leading-relaxed text-muted-foreground">
-          {badCarry
-            ? "จำนวนวันต้องเป็นจำนวนเต็ม 0 ถึง 365"
-            : carry > 0
-              ? `ตัวอย่าง: สิทธิ์ลาพักร้อนปีละ ${list.find((q) => q.type === "ลาพักร้อน")?.days ?? 0} วัน ใช้ไป 2 วัน เหลือ ${Math.max(0, (list.find((q) => q.type === "ลาพักร้อน")?.days ?? 0) - 2)} วัน → ปีหน้ายกไปได้ ${Math.min(carry, Math.max(0, (list.find((q) => q.type === "ลาพักร้อน")?.days ?? 0) - 2))} วัน · วันที่ยกมาแล้วไม่ยกต่ออีกปี`
-              : "วันลาพักร้อนที่ไม่ได้ใช้หมดไปเมื่อสิ้นปี ปีใหม่ได้สิทธิ์เต็มตามที่ตั้งไว้"}
-        </p>
       </Card>
 
-      <PersonQuota central={list} />
-
-      <p className="text-[12px] leading-relaxed text-muted-foreground">
-        ลดสิทธิ์ลงต่ำกว่าวันที่พนักงานใช้ไปแล้ว วันคงเหลือจะเป็นศูนย์ ไม่ติดลบ · สิทธิ์ของรอบปีก่อน ๆ ไม่เปลี่ยน ·
-        ลบประเภทที่เพิ่มเองแล้ว ใบลาที่ยื่นไปแล้วยังอยู่ครบ
-      </p>
 
       {editing !== null && (
         <TypeDialog
@@ -355,7 +271,7 @@ function TypeDialog({
   onSave,
 }: {
   initial?: LeaveQuota;
-  /** ประเภทตั้งต้นของระบบ — แก้ได้แค่วันและคำอธิบาย ชื่อผูกกับการสรุปของฝ่ายบุคคล */
+  /** ประเภทตั้งต้นของระบบ — แก้ได้แค่วัน ชื่อผูกกับการสรุปของฝ่ายบุคคล */
   lockName?: boolean;
   taken: string[];
   onClose: () => void;
@@ -363,7 +279,6 @@ function TypeDialog({
 }) {
   const [name, setName] = useState(initial?.type ?? "");
   const [days, setDays] = useState(initial ? String(initial.days) : "");
-  const [note, setNote] = useState(initial?.note ?? (initial ? leaveNote(initial.type) : ""));
   const clean = name.trim();
   const dup = Boolean(clean) && taken.includes(clean);
   const n = Number(days) || 0;
@@ -372,7 +287,7 @@ function TypeDialog({
 
   function save() {
     if (!clean || dup || badDays) return;
-    onSave({ type: clean, days: n, ...(note.trim() ? { note: note.trim() } : {}) });
+    onSave({ type: clean, days: n, /* ไม่มีช่องคำอธิบายแล้ว เก็บค่าเดิมไว้ (ผู้ใช้สั่ง 13 ต.ค. 2569) */ ...(initial?.note ? { note: initial.note } : {}) });
   }
 
   return (
@@ -418,191 +333,6 @@ function TypeDialog({
           />
         </Input2>
       </div>
-      <div className="mt-3.5">
-        <Input2 label="คำอธิบาย (ไม่บังคับ)">
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-            placeholder="เช่น ลาได้ครั้งเดียวตลอดการทำงาน"
-            className={inputCls}
-          />
-        </Input2>
-      </div>
-      <p className="mt-3.5 rounded-[11px] bg-muted/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
-        {renamed
-          ? "เปลี่ยนชื่อแล้ว ใบลาที่ยื่นไปแล้วยังใช้ชื่อเดิม และไม่ถูกนับเข้าสิทธิ์ของชื่อใหม่"
-          : "ประเภทใหม่ขึ้นให้พนักงานเลือกในใบลาทันทีที่กดบันทึกที่แถบล่าง"}
-      </p>
     </Sheet>
-  );
-}
-
-/*
- * สิทธิ์เฉพาะบุคคล — คนที่ตกลงกันไว้ไม่เท่าค่ากลางด้านบน (ผู้ใช้สั่ง 8 ต.ค. 2569)
- *
- * ค่ากลางคือสิทธิ์ที่ทุกคนได้เท่ากัน ส่วนตรงนี้เขียนทับเป็นรายคน เฉพาะประเภทที่กรอก
- * ประเภทที่เว้นว่างยังใช้ค่ากลางเหมือนเดิม — เก็บที่ emp.leaveDays ตัวเดียวกับแท็บในแฟ้มพนักงาน
- * บันทึกทันทีเมื่อกดในกล่อง ไม่ผ่านแถบบันทึกด้านล่างที่เป็นของค่ากลาง
- */
-function PersonQuota({ central }: { central: LeaveQuota[] }) {
-  const hr = useHr();
-  const types = leaveTypes();
-  const people = hr.emp.filter((e) => e.status === "active");
-
-  const [who, setWho] = useState("");
-  const [clearing, setClearing] = useState<{ emp: Employee; type: string } | null>(null);
-  /* ตัวเลขที่กำลังพิมพ์อยู่ — เก็บชั่วคราวจนออกจากช่องค่อยบันทึกจริง (คีย์ = รหัสคน|ประเภท) */
-  const [typing, setTyping] = useState<Record<string, string>>({});
-
-  const emp = people.find((e) => e.id === who);
-  const centralOf = (t: string) => central.find((q) => q.type === t)?.days ?? 0;
-  const mineCount = (e: Employee) => Object.keys(e.leaveDays ?? {}).length;
-
-  function write(target: Employee, type: string, days: number | null) {
-    const next = { ...(target.leaveDays ?? {}) };
-    if (days === null) delete next[type];
-    else next[type] = days;
-    setEmpLeaveDays(target.id, next);
-    logChange(
-      "การลา",
-      days === null
-        ? `สิทธิ์วันลาเฉพาะคน ${target.name}: ${type} กลับไปใช้ค่ากลาง ${centralOf(type)} วัน`
-        : `สิทธิ์วันลาเฉพาะคน ${target.name}: ${type} ${days} วัน (ค่ากลาง ${centralOf(type)})`,
-    );
-  }
-
-  return (
-    <section className="glass overflow-hidden rounded-[18px]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5">
-        <div className="min-w-0">
-          <h2 className="text-[14.5px] font-bold">สิทธิ์เฉพาะบุคคล</h2>
-          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-            เลือกพนักงานทีละคน แล้วกรอกเฉพาะประเภทที่ได้ไม่เท่าคนอื่น · เว้นว่าง = ใช้ค่ากลางด้านบน
-          </p>
-        </div>
-        <label className="flex items-center gap-2">
-          <span className="text-[12.5px] font-semibold text-muted-foreground">พนักงาน</span>
-          <Select
-            value={who}
-            onChange={(e) => setWho(e.target.value)}
-            aria-label="เลือกพนักงาน"
-            className="w-[260px] max-sm:w-full"
-          >
-            <option value="">เลือกพนักงาน…</option>
-            {people.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name} · {hrPos(e.pos).label}
-                {mineCount(e) ? ` (ตั้งเอง ${mineCount(e)})` : ""}
-              </option>
-            ))}
-          </Select>
-        </label>
-      </div>
-
-      <div className="px-4 pt-3 pb-4 sm:px-5">
-        {!emp ? (
-          <p className="py-6 text-center text-[12.5px] text-muted-foreground">
-            เลือกพนักงานที่ต้องการตั้งสิทธิ์เฉพาะตัวจากช่องด้านบน
-          </p>
-        ) : (
-          <>
-            {/* หัวตารางและความกว้างคอลัมน์ชุดเดียวกับตารางสิทธิ์วันลาด้านบน */}
-            <div className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_84px]">
-              <span className="text-center max-sm:hidden">#</span>
-              <span>ชื่อ</span>
-              <span className="text-right sm:text-left">สิทธิ์ต่อปี</span>
-              <span className="max-sm:hidden">ค่ากลาง</span>
-              <span />
-            </div>
-
-            {types.map((t, i) => {
-              const key = `${emp.id}|${t}`;
-              const own = emp.leaveDays?.[t];
-              const mid = centralOf(t);
-              return (
-                <div
-                  key={t}
-                  className="grid grid-cols-[minmax(0,1fr)_96px_58px_84px] items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40 sm:grid-cols-[26px_minmax(0,1fr)_150px_120px_84px]"
-                >
-                  <span className="num text-center text-[12px] text-muted-foreground max-sm:hidden">{i + 1}</span>
-                  <span className="min-w-0">
-                    <b className={`block text-[13.5px] ${own == null ? "font-medium text-muted-foreground" : "font-semibold"}`}>
-                      {t}
-                      {own != null && (
-                        <em className="ml-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary not-italic">
-                          ตั้งเอง
-                        </em>
-                      )}
-                    </b>
-                    <small className="block text-[11.5px] text-muted-foreground">{leaveNote(t)}</small>
-                  </span>
-                  <span className="flex items-center justify-end gap-1.5 sm:justify-start">
-                    <input
-                      type="number"
-                      min={0}
-                      max={365}
-                      step={0.5}
-                      value={typing[key] ?? (own != null ? String(own) : "")}
-                      placeholder={String(mid)}
-                      aria-label={`สิทธิ์${t}ของ ${emp.name} (วันต่อปี)`}
-                      onChange={(e) => setTyping({ ...typing, [key]: e.target.value })}
-                      onBlur={() => {
-                        const v = (typing[key] ?? "").trim();
-                        setTyping((old) => {
-                          const next = { ...old };
-                          delete next[key];
-                          return next;
-                        });
-                        if (typing[key] === undefined) return;
-                        if (v === "") {
-                          if (own != null) write(emp, t, null);
-                          return;
-                        }
-                        const n = Number(v);
-                        if (Number.isFinite(n) && n >= 0 && n <= 365 && n !== own) write(emp, t, n);
-                      }}
-                      className="field-control num h-9 w-[78px] text-right text-[13.5px]"
-                    />
-                    <span className="text-[12px] whitespace-nowrap text-muted-foreground">วัน/ปี</span>
-                  </span>
-                  <span className="text-[12px] text-muted-foreground max-sm:hidden">{mid} วัน</span>
-                  <span className="flex justify-end">
-                    <button
-                      type="button"
-                      aria-label={`คืนค่ากลาง ${t} ให้ ${emp.name}`}
-                      title={own == null ? "ใช้ค่ากลางอยู่แล้ว" : "คืนไปใช้ค่ากลาง"}
-                      disabled={own == null}
-                      onClick={() => setClearing({ emp, type: t })}
-                      className="btn glass-thin btn-mini disabled:opacity-40"
-                    >
-                      <TrashIcon className="size-4" strokeWidth={1.9} />
-                    </button>
-                  </span>
-                </div>
-              );
-            })}
-
-            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-              ช่องที่เว้นว่างใช้ค่ากลางของทั้งบริษัท · แก้ตัวเลขแล้วบันทึกทันทีที่ออกจากช่อง
-            </p>
-          </>
-        )}
-      </div>
-
-      <ConfirmDialog
-        open={Boolean(clearing)}
-        title="คืนไปใช้ค่ากลาง"
-        description={clearing ? `${clearing.emp.name} จะใช้สิทธิ์${clearing.type}เท่ากับคนอื่น (${centralOf(clearing.type)} วัน)` : ""}
-        detail="วันลาที่ใช้ไปแล้วยังอยู่ครบ เปลี่ยนเฉพาะจำนวนวันที่มีสิทธิ์"
-        confirmLabel="คืนค่ากลาง"
-        onConfirm={() => {
-          if (!clearing) return;
-          write(clearing.emp, clearing.type, null);
-          setClearing(null);
-        }}
-        onCancel={() => setClearing(null)}
-      />
-    </section>
   );
 }

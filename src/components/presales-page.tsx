@@ -12,19 +12,19 @@ import {
   type PresalesStatus,
 } from "@/lib/crm-data";
 import { closePresales, replyPresalesInfo, useCrm } from "@/lib/crm-store";
-import { useProfile } from "@/lib/profile-data";
 import { daysBetween, thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import { psEventsOf, type PmEvent } from "@/lib/pm-schedule-data";
 import { useSchedule } from "@/lib/pm-schedule-store";
-import { psFromOthers, psKindText, psLastAsk, psThreadKey, psThreadOf, usePsThreads, addPsReply } from "@/lib/presales-work";
-import { markReadKey, unreadByKey, useTalkRead } from "@/lib/talk-read";
-import { useHydrated } from "@/lib/pwa";
-import { ChevronDownIcon, ClockIcon, DownloadIcon, FileIcon, LinkIcon, PlusIcon, QuotationIcon } from "./icons";
+import { psKindText, psLastAsk, psThreadOf, usePsThreads, addPsReply } from "@/lib/presales-work";
+import { useNameOf } from "@/lib/emp-name";
+import { ChevronDownIcon, ClockIcon, DownloadIcon, FileIcon, EyeIcon, LinkIcon, PlusIcon } from "./icons";
 import { ConfirmDialog } from "./confirm-dialog";
+import { FileDrop, type PickedFile } from "./file-drop";
 import { Sheet } from "./lead-dialogs";
-import { PsChatBox, PsThread } from "./presales-work-page";
+import { PsThread } from "./presales-work-page";
 import { ProposalDialog, isCanva } from "./proposal-doc";
 import { Pager, SearchBox, TabStrip, Who, usePaged } from "./sales-ui";
+import { stackNo } from "@/lib/stack-no";
 
 const PER_PAGE = 7;
 
@@ -39,34 +39,18 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "ปิดคำขอ", label: "ปิดคำขอ" },
 ];
 
-/**
- * แถวที่กางอยู่ถือว่าอ่านสายสนทนาแล้ว — จุดแดงหายเองโดยไม่ต้องกดอะไรเพิ่ม
- * (ลิงก์ ?find= กางแถวให้เองโดยไม่มีการคลิก จึงดักที่ตอนแสดงผล ไม่ใช่ตอนคลิก)
- */
-function PsReadMark({ no, others }: { no: string; others: number }) {
-  useEffect(() => {
-    markReadKey("sales", psThreadKey(no), others);
-  }, [no, others]);
-  return null;
-}
-
 export function PresalesPage() {
   const crm = useCrm();
+  const empName = useNameOf();
   const threads = usePsThreads();
-  /* ชื่อคนที่พิมพ์ — ติดไปกับข้อความในสายสนทนา */
-  const me = useProfile();
-  /* ข้อความใหม่จากทีมก่อนการขายที่ยังไม่ได้อ่าน — รอ hydrate ก่อนค่อยขึ้นป้าย */
-  const marks = useTalkRead();
-  const hydrated = useHydrated();
-  /** ข้อความใหม่ของใบนี้ — ฝั่งเซิร์ฟเวอร์ยังไม่รู้ จึงให้เป็นศูนย์ไว้ก่อน */
-  const newFor = (no: string, others: number) =>
-    hydrated ? unreadByKey(marks, "sales", psThreadKey(no), others) : 0;
   /* นัดที่ทีมก่อนการขายตั้งไว้กับใบนี้ — ฝ่ายขายเจ้าของผู้สนใจต้องเห็น (เจ้าของตัดสิน 25 ก.ย. 2569) */
   const sc = useSchedule();
   const [tab, setTab] = useState<TabKey>("all");
   /* ลิงก์จากหน้าอื่นเจาะมาที่คำขอเดียวได้ด้วย ?find=<เลขที่> */
   const find = useFindParam();
-  const [query, setQuery] = useState(find);
+  /* เลขที่คำขอจากลิงก์ใช้กรองเงียบ ๆ ไม่ใส่ลงช่องค้นหา — ห้ามโชว์รหัสบนจอ (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+  const [pin, setPin] = useState(find);
+  const [query, setQuery] = useState("");
   const [lateOnly, setLateOnly] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
     find ? { [find]: true } : {},
@@ -96,16 +80,21 @@ export function PresalesPage() {
   const isLate = (r: PresalesRequest) =>
     PRESALES_OPEN.includes(r.status) && daysBetween(today, r.due) < 0;
 
+  /* ลำดับแบบกองซ้อน — นับจากคำขอทั้งหมดตามวันที่ส่ง ใหม่สุดเลขมากสุดอยู่บน (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+  const noOf = useMemo(() => stackNo(crm.presales, (r) => r.createdAt, (r) => r.id), [crm.presales]);
+
   const scoped = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return crm.presales.filter((r) => {
-      if (lateOnly && !isLate(r)) return false;
-      if (!q) return true;
-      const name = nameOf.get(r.customerCode) ?? "";
-      return `${r.no} ${name} ${r.customerCode} ${r.problem}`.toLowerCase().includes(q);
-    });
+    const q = (query.trim() || pin).toLowerCase();
+    return crm.presales
+      .filter((r) => {
+        if (lateOnly && !isLate(r)) return false;
+        if (!q) return true;
+        const name = nameOf.get(r.customerCode) ?? "";
+        return `${r.no} ${name} ${r.customerCode} ${r.problem}`.toLowerCase().includes(q);
+      })
+      .sort((a, b) => (noOf.get(b.id) ?? 0) - (noOf.get(a.id) ?? 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crm.presales, query, lateOnly, nameOf, today]);
+  }, [crm.presales, query, pin, lateOnly, nameOf, today, noOf]);
 
   const rows = tab === "all" ? scoped : scoped.filter((r) => r.status === tab);
   const paged = usePaged(rows, PER_PAGE);
@@ -138,7 +127,7 @@ export function PresalesPage() {
         open={closing !== null}
         title="ปิดคำขอก่อนการขาย"
         description={`ปิดคำขอ ${closing ?? ""} แล้วจะไม่อยู่ในคิวของทีมก่อนการขายอีก`}
-        detail="ใช้เมื่อสร้างใบเสนอราคาแล้ว หรือลูกค้าไม่ไปต่อ · ปิดแล้วเปิดใหม่ไม่ได้"
+        detail="ปิดแล้วเปิดใหม่ไม่ได้"
         confirmLabel="ปิดคำขอ"
         tone="destructive"
         onConfirm={() => {
@@ -154,7 +143,7 @@ export function PresalesPage() {
         <ProposalDialog
           request={doc.request}
           round={doc.round}
-          customerName={nameOf.get(doc.request.customerCode) ?? doc.request.customerCode}
+          customerName={nameOf.get(doc.request.customerCode) ?? "—"}
           onClose={() => setDoc(null)}
         />
       )}
@@ -162,20 +151,29 @@ export function PresalesPage() {
 
       <div className="bar">
         <div>
-          <p>พบ {rows.length} ใบงาน</p>
+          <h1>ขอทำข้อเสนอ</h1>
+          <p>
+            พบ {rows.length} ใบงาน
+            {pin && !query && (
+              <button type="button" className="ml-2 font-semibold text-primary hover:underline" onClick={() => setPin("")}>
+                ดูทั้งหมด
+              </button>
+            )}
+          </p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
           <SearchBox
             value={query}
             onChange={(v) => {
               setQuery(v);
+              setPin("");
               paged.setPage(1);
             }}
-            placeholder="ค้นหาเลขที่ใบงาน ผู้สนใจ หรือโจทย์"
+            placeholder="ค้นหาผู้สนใจ หรือโจทย์"
           />
-          <Link href="/presales/new" className="btn solid btn-solid btn-block-mobile fab-mobile shrink-0">
+          <Link href="/presales/new" className="btn solid btn-solid btn-block-mobile shrink-0">
             <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-            <span className="lbl">ส่งคำขอใหม่</span>
+            ส่งโจทย์ใหม่
           </Link>
         </div>
       </div>
@@ -198,8 +196,7 @@ export function PresalesPage() {
               paged.setPage(1);
             }}
             aria-pressed={lateOnly}
-            /* 38px บนมือถือ — ตัวกรองนี้เตี้ยกว่ามาตรฐานจนกดพลาด (7 ต.ค. 2569) */
-            className={`my-2 inline-flex h-[38px] items-center gap-2 rounded-[9px] border px-3 text-[12.5px] sm:h-[34px] ${
+            className={`my-2 inline-flex h-[34px] items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${
               lateOnly
                 ? "border-primary bg-accent font-semibold text-primary"
                 : "glass-thin border-border text-muted-foreground"
@@ -211,18 +208,18 @@ export function PresalesPage() {
         </div>
 
         <div className="scroll-stable hidden min-h-0 flex-1 overflow-auto md:block">
-          <table className="data-table min-w-[1040px]">
+          <table className="data-table min-w-[1100px]">
             <thead>
               <tr>
                 {/* ความกว้างตามต้นแบบ · คอลัมน์ท้ายกว้างกว่าเพราะมีปุ่มตอบข้อมูล/ปิดคำขอเพิ่มจากต้นแบบ */}
-                <th style={{ width: 164 }}>เลขที่ใบงาน</th>
+                <th className="c" style={{ width: 60 }}>ลำดับ</th>
                 <th>ผู้สนใจ</th>
                 <th style={{ width: "24%" }}>โจทย์จากลูกค้า</th>
                 <th style={{ width: 112 }}>ผู้รับผิดชอบ</th>
                 <th style={{ width: 124 }}>ต้องการวันที่</th>
                 <th style={{ width: 120 }}>สถานะ</th>
                 <th style={{ width: 130 }}>ข้อเสนอล่าสุด</th>
-                <th className="c" style={{ width: 140 }} aria-label="จัดการ" />
+                <th style={{ width: 196 }} aria-label="จัดการ" />
               </tr>
             </thead>
             <tbody>
@@ -247,39 +244,21 @@ export function PresalesPage() {
                         onClick={() => hasMore && setOpen((o) => ({ ...o, [r.no]: !o[r.no] }))}
                         style={{ cursor: hasMore ? "pointer" : "default" }}
                       >
-                        <td className="num muted whitespace-nowrap">
-                          {r.no}
-                          {/* ข้อความใหม่จากทีมก่อนการขายที่ยังไม่ได้อ่าน */}
-                          {newFor(r.no, psFromOthers(thread, "sales")) > 0 && (
-                            <i className="num ml-1.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground not-italic">
-                              {newFor(r.no, psFromOthers(thread, "sales"))}
-                            </i>
-                          )}
-                          {/* ประเภทเป็นเนื้องานของใบนี้ (SA/BD) ติดไว้ที่ใบงาน ไม่ใช่ที่คนรับ
-                              ใครรับไปทำอยู่คอลัมน์ผู้รับผิดชอบ */}
-                          <span className="why">{psKindText(r.kind)}</span>
-                          {rounds.length > 0 && (
-                            <span className="pill whitespace-nowrap">
-                              รอบ {rounds[0].round}
-                              <ChevronDownIcon className="size-2.5" strokeWidth={3} />
-                            </span>
-                          )}
-                        </td>
+                        {/* เลขที่ใบงานเก็บไว้ในข้อมูลอย่างเดียว ไม่ขึ้นในตาราง (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                        <td className="c num muted">{noOf.get(r.id)}</td>
                         <td>
                           <Link href={`/leads/${r.customerCode}`} onClick={(e) => e.stopPropagation()}>
-                            <Who name={nameOf.get(r.customerCode) ?? r.customerCode} sub={r.customerCode} />
+                            {/* ไม่แสดงรหัสผู้สนใจใต้ชื่อ — ค้นด้วยรหัสยังได้ (ผู้ใช้สั่ง 14 ต.ค. 2569) */}
+                            <Who name={nameOf.get(r.customerCode) ?? "—"} />
                           </Link>
                         </td>
                         <td className="muted">
-                          {/* ตัดบรรทัดตามต้นแบบ ไม่บังคับบรรทัดเดียว — ไม่งั้นคอลัมน์ยืดจนปุ่มท้ายแถวตกขอบ */}
-                          <span className="line-clamp-2">{r.problem}</span>
-                          {r.status === "รอข้อมูลเพิ่ม" && askOf(r) && (
-                            <span className="why text-[var(--warning)]">ทีมขอข้อมูล: {askOf(r)?.tx}</span>
-                          )}
+                          {/* ตารางแสดงแค่หัวข้อโจทย์ (ผู้ใช้สั่ง 5 ต.ค. 2569) — ข้อความที่ทีมขอข้อมูลดูได้ตอนกางแถว */}
+                          <span className="line-clamp-2" title={r.problem}>{r.problem}</span>
                           {/* ระดับความเร่งด่วนเป็นข้อมูลของฝั่ง SA/BD ฝั่งขายไม่ต้องเห็น (ต้นแบบ presales.html) */}
                         </td>
                         <td className="muted">
-                          <span className="clip">{r.assignee}</span>
+                          <span className="clip">{empName(r.assignee)}</span>
                         </td>
                         <td className="num muted">
                           <span className="whitespace-nowrap">{thaiDate(r.due)}</span>
@@ -302,16 +281,21 @@ export function PresalesPage() {
                             <span className="text-xs text-muted-foreground/70">ยังไม่มีข้อเสนอ</span>
                           )}
                         </td>
-                        <td className="c" onClick={(e) => e.stopPropagation()}>
-                          <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
-                            {r.status === "ส่งกลับแล้ว" && (
-                              <Link
-                                href={`/quotations/new?ps=${encodeURIComponent(r.no)}`}
+                        {/* ชิดขวาทุกแถว — ปุ่มปิดคำขออยู่ตำแหน่งเดียวกันทุกแถว (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            {/* ดูข้อเสนอล่าสุด (รายละเอียด + ดาวน์โหลดไฟล์ส่งให้ลูกค้าพิจารณา)
+                                ไม่มีทางลัดสร้างใบเสนอราคาจากคำขอ — ลูกค้าตกลงแล้วค่อยไปออกที่หน้าใบเสนอราคา (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+                            {rounds.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setDoc({ request: r, round: rounds[0] })}
                                 className="grid size-[30px] place-items-center rounded-lg border border-border bg-white text-muted-foreground transition-colors hover:border-primary hover:bg-accent hover:text-primary"
-                                aria-label={`สร้างใบเสนอราคาจาก ${r.no}`}
+                                aria-label="ดูรายละเอียดข้อเสนอ"
+                                title="ดูรายละเอียดข้อเสนอ"
                               >
-                                <QuotationIcon className="size-3.5" strokeWidth={2} />
-                              </Link>
+                                <EyeIcon className="size-3.5" strokeWidth={2} />
+                              </button>
                             )}
                             {r.status === "รอข้อมูลเพิ่ม" && (
                               <button type="button" className="lnk" onClick={() => setReplying(r)}>
@@ -339,10 +323,7 @@ export function PresalesPage() {
                               <RoundTable rounds={rounds} onOpen={(x) => setDoc({ request: r, round: x })} />
                             )}
                             {meets.length > 0 && <PsMeetings events={meets} />}
-                            {thread.length > 0 && <PsThread notes={thread} me="sales" />}
-                            <PsReadMark no={r.no} others={psFromOthers(thread, "sales")} />
-                            {/* คุยกับทีมก่อนการขายได้เลย ไม่ต้องรอปุ่มตอบข้อมูล (เจ้าของสั่ง 5 ต.ค. 2569) */}
-                            {r.status !== "ปิดคำขอ" && <PsChatBox no={r.no} side="sales" by={me.name} />}
+                            {thread.length > 0 && <PsThread notes={thread} />}
                           </td>
                         </tr>
                       )}
@@ -369,18 +350,11 @@ export function PresalesPage() {
                 <li key={r.id} className="px-5 py-4 max-sm:px-4">
                   <div className="flex items-start justify-between gap-3">
                     <Link href={`/leads/${r.customerCode}`} className="min-w-0">
-                      <Who name={nameOf.get(r.customerCode) ?? r.customerCode} sub={r.no} />
+                      <Who name={nameOf.get(r.customerCode) ?? "—"} sub={`#${noOf.get(r.id)}`} />
                     </Link>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      {newFor(r.no, psFromOthers(thread, "sales")) > 0 && (
-                        <i className="num inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground not-italic">
-                          {newFor(r.no, psFromOthers(thread, "sales"))}
-                        </i>
-                      )}
-                      <span className={`tag ${PRESALES_STATUS[r.status]}`}>
-                        <i />
-                        {r.status}
-                      </span>
+                    <span className={`tag shrink-0 ${PRESALES_STATUS[r.status]}`}>
+                      <i />
+                      {r.status}
                     </span>
                   </div>
                   <p className="mt-2 text-sm break-words">{r.problem}</p>
@@ -388,7 +362,7 @@ export function PresalesPage() {
                     <p className="mt-1 text-xs text-[var(--warning)]">ทีมขอข้อมูล: {askOf(r)?.tx}</p>
                   )}
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    {psKindText(r.kind)} · ผู้รับผิดชอบ {r.assignee} · กำหนดส่ง {thaiDate(r.due)}
+                    {psKindText(r.kind)} · ผู้รับผิดชอบ {empName(r.assignee)} · กำหนดส่ง {thaiDate(r.due)}
                     {isLate(r) && (
                       <span className="font-semibold text-destructive">
                         {" "}· เลย {Math.abs(daysBetween(today, r.due))} วัน
@@ -424,20 +398,19 @@ export function PresalesPage() {
                     <RoundCards rounds={rounds} onOpen={(x) => setDoc({ request: r, round: x })} />
                   )}
                   {open[r.no] && meets.length > 0 && <PsMeetings events={meets} />}
-                  {open[r.no] && thread.length > 0 && <PsThread notes={thread} me="sales" />}
-                  {open[r.no] && <PsReadMark no={r.no} others={psFromOthers(thread, "sales")} />}
-                  {open[r.no] && r.status !== "ปิดคำขอ" && <PsChatBox no={r.no} side="sales" by={me.name} />}
+                  {open[r.no] && thread.length > 0 && <PsThread notes={thread} />}
                   {/* มือถือ: ปุ่มสูง 40px งานหลักเป็นปุ่มทึบกว้างเต็มแถว */}
                   {r.status !== "ปิดคำขอ" && (
                     <div className="mt-3 flex flex-wrap gap-2 sm:hidden">
-                      {r.status === "ส่งกลับแล้ว" && (
-                        <Link
-                          href={`/quotations/new?ps=${encodeURIComponent(r.no)}`}
+                      {rounds.length > 0 && (
+                        <button
+                          type="button"
                           className="btn solid btn-solid h-10 w-full justify-center"
+                          onClick={() => setDoc({ request: r, round: rounds[0] })}
                         >
-                          <QuotationIcon className="size-4" strokeWidth={2} />
-                          สร้างใบเสนอราคาจากคำขอนี้
-                        </Link>
+                          <EyeIcon className="size-4" strokeWidth={2} />
+                          ดูข้อเสนอ
+                        </button>
                       )}
                       {r.status === "รอข้อมูลเพิ่ม" && (
                         <button
@@ -458,13 +431,10 @@ export function PresalesPage() {
                     </div>
                   )}
                   <span className="mt-2.5 flex flex-wrap gap-2 max-sm:hidden">
-                    {r.status === "ส่งกลับแล้ว" && (
-                      <Link
-                        href={`/quotations/new?ps=${encodeURIComponent(r.no)}`}
-                        className="lnk"
-                      >
-                        สร้างใบเสนอราคาจากคำขอนี้
-                      </Link>
+                    {rounds.length > 0 && (
+                      <button type="button" className="lnk" onClick={() => setDoc({ request: r, round: rounds[0] })}>
+                        ดูข้อเสนอ
+                      </button>
                     )}
                     {r.status === "รอข้อมูลเพิ่ม" && (
                       <button type="button" className="lnk" onClick={() => setReplying(r)}>
@@ -510,11 +480,15 @@ function ReplyDialog({ request, onClose }: { request: PresalesRequest; onClose: 
   const threads = usePsThreads();
   const thread = psThreadOf(threads, request);
   const ask = psLastAsk(threads, request);
+  const empName = useNameOf();
   const [reply, setReply] = useState("");
+  /* แนบไฟล์ประกอบคำตอบได้ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [warn, setWarn] = useState(false);
   return (
+    /* เลขที่ใบงานไม่ขึ้นที่หัวกล่อง — เก็บในข้อมูลอย่างเดียว (ผู้ใช้สั่ง 5 ต.ค. 2569) */
     <Sheet
-      title={`ตอบข้อมูลเพิ่ม · ${no}`}
+      title="ตอบข้อมูลเพิ่ม"
       onClose={onClose}
       footer={
         <>
@@ -525,9 +499,12 @@ function ReplyDialog({ request, onClose }: { request: PresalesRequest; onClose: 
             type="button"
             className="btn solid btn-solid"
             onClick={() => {
-              if (!reply.trim()) return setWarn(true);
-              replyPresalesInfo(no, reply.trim());
-              addPsReply(no, reply.trim());
+              /* ส่งได้เมื่อมีรายละเอียดหรือไฟล์อย่างใดอย่างหนึ่ง */
+              if (!reply.trim() && !files.length) return setWarn(true);
+              const sent = files.map((f) => ({ name: f.name, url: f.url?.startsWith("http") ? f.url : undefined }));
+              const tx = reply.trim();
+              replyPresalesInfo(no, tx || `แนบไฟล์ ${sent.map((f) => f.name).join(", ")}`);
+              addPsReply(no, tx, sent);
               onClose();
             }}
           >
@@ -540,7 +517,7 @@ function ReplyDialog({ request, onClose }: { request: PresalesRequest; onClose: 
       {ask ? (
         <div className="rounded-[11px] bg-[var(--warning-soft)] px-3.5 py-2.5">
           <p className="flex flex-wrap items-baseline gap-x-2 text-[11.5px] text-muted-foreground">
-            <b className="font-semibold text-foreground">{ask.by}</b>
+            <b className="font-semibold text-foreground">{empName(ask.by)}</b>
             <span>ขอข้อมูลเพิ่ม</span>
             {ask.at && <span className="num">{thaiStamp(ask.at)} น.</span>}
           </p>
@@ -555,8 +532,20 @@ function ReplyDialog({ request, onClose }: { request: PresalesRequest; onClose: 
       {/* คุยกันไปแล้วกี่รอบ — ตอบซ้ำของเดิมไม่ช่วยใคร */}
       {thread.length > 1 && <PsThread notes={thread} />}
 
+      <p className="mt-3.5 mb-1.5 text-[12.5px] font-semibold text-muted-foreground">แนบไฟล์</p>
+      <FileDrop
+        files={files}
+        onChange={(next) => {
+          setFiles(next);
+          if (next.length) setWarn(false);
+        }}
+        title="ลากไฟล์มาวาง หรือกดเพื่อเลือกไฟล์"
+        hint="PDF, รูปภาพ หรือไฟล์เอกสาร เลือกได้หลายไฟล์"
+        label="เลือกไฟล์แนบ"
+      />
+
       <label className="mt-3.5 block text-[12.5px] font-semibold text-muted-foreground" htmlFor="ps-reply">
-        ข้อมูลที่ส่งเพิ่ม <span className="text-destructive">*</span>
+        รายละเอียด
       </label>
       <textarea
         id="ps-reply"
@@ -568,7 +557,7 @@ function ReplyDialog({ request, onClose }: { request: PresalesRequest; onClose: 
         rows={3}
         className="field-control mt-1.5 w-full rounded-[11px] px-3 py-2.5 text-[13.5px]"
       />
-      {warn && <p className="mt-2 text-[12.5px] text-destructive">ใส่ข้อมูลก่อนส่ง</p>}
+      {warn && <p className="mt-2 text-[12.5px] text-destructive">แนบไฟล์หรือพิมพ์รายละเอียดก่อนส่ง</p>}
     </Sheet>
   );
 }
@@ -579,8 +568,7 @@ function ReplyDialog({ request, onClose }: { request: PresalesRequest; onClose: 
  */
 function LatestButton({ round, onOpen }: { round: PresalesRound; onOpen: () => void }) {
   const cls =
-    /* มือถือสูง 38px ให้นิ้วกดง่าย จอที่ใช้เมาส์คง 30px ตามต้นแบบ */
-    "inline-flex h-[30px] max-sm:h-[38px] items-center gap-[7px] rounded-[9px] border bg-white px-3 text-xs font-semibold whitespace-nowrap transition-colors";
+    "inline-flex h-[30px] items-center gap-[7px] rounded-[9px] border bg-white px-3 text-xs font-semibold whitespace-nowrap transition-colors";
   if (isCanva(round)) {
     return (
       <a
@@ -625,6 +613,7 @@ function FileButton({ round, onOpen }: { round: PresalesRound; onOpen: () => voi
 
 /** รอบการจัดทำบนมือถือ — ข้อมูลเดียวกับ RoundTable เรียงเป็นรายการ ไม่ต้องเลื่อนตารางด้านข้าง */
 function RoundCards({ rounds, onOpen }: { rounds: PresalesRound[]; onOpen: (r: PresalesRound) => void }) {
+  const empName = useNameOf();
   return (
     <ol className="mt-2 divide-y divide-border rounded-[10px] border border-border sm:hidden">
       {rounds.map((x, i) => (
@@ -646,7 +635,7 @@ function RoundCards({ rounds, onOpen }: { rounds: PresalesRound[]; onOpen: (r: P
             {i === 0 && <b className="font-semibold">รอบล่าสุด · </b>}
             {x.note}
           </p>
-          <p className="mt-0.5 text-muted-foreground">{x.by}</p>
+          <p className="mt-0.5 text-muted-foreground">{empName(x.by)}</p>
           <div className="mt-1.5 min-w-0">
             <FileButton round={x} onOpen={() => onOpen(x)} />
           </div>
@@ -657,6 +646,7 @@ function RoundCards({ rounds, onOpen }: { rounds: PresalesRound[]; onOpen: (r: P
 }
 
 function RoundTable({ rounds, onOpen }: { rounds: PresalesRound[]; onOpen: (r: PresalesRound) => void }) {
+  const empName = useNameOf();
   return (
     <div className="subwrap">
       <h4>รอบการจัดทำ {rounds.length} รอบ</h4>
@@ -672,13 +662,6 @@ function RoundTable({ rounds, onOpen }: { rounds: PresalesRound[]; onOpen: (r: P
           </tr>
         </thead>
         <tbody>
-          {rounds.length === 0 && (
-            <tr>
-              <td colSpan={6} className="py-6 text-center text-muted-foreground">
-                ยังไม่มีรอบการจัดทำ
-              </td>
-            </tr>
-          )}
           {rounds.map((x, i) => (
             <tr key={x.id} className={i === 0 ? "bg-[#fef7f8]" : ""}>
               <td>
@@ -695,7 +678,7 @@ function RoundTable({ rounds, onOpen }: { rounds: PresalesRound[]; onOpen: (r: P
                 {i === 0 && <b className="font-semibold">รอบล่าสุด · </b>}
                 {x.note}
               </td>
-              <td className="muted">{x.by}</td>
+              <td className="muted">{empName(x.by)}</td>
               <td className="r num">{x.hours} ชม.</td>
               <td>
                 <span className="clip">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { stackNo } from "@/lib/stack-no";
 import {
   PRESALES_STATUS,
   type PresalesRequest,
@@ -20,26 +21,22 @@ import { thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import { countTemplateUse, useTemplates } from "@/lib/presales-templates";
 import {
   addPsAsk,
-  usePsMe,
-  postPsMessage,
+  psActorName,
   psBucket as bucket,
-  psFromOthers,
   psKindText,
   psMine as mine,
   psOwner,
-  psThreadKey,
   psThreadOf,
   usePsThreads,
   type PsNote,
   type PsTab as Tab,
 } from "@/lib/presales-work";
-import { markReadKey, unreadByKey, useTalkRead } from "@/lib/talk-read";
-import { useHydrated } from "@/lib/pwa";
 import { FileDrop, type PickedFile } from "./file-drop";
+import { PaperclipIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
-import { useAddOption } from "./add-option";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 import { SearchBox } from "./sales-ui";
+import { useNameOf } from "@/lib/emp-name";
 
 /*
  * งานก่อนการขายของ SA และ BD — ตามต้นแบบ presales-work.html (บทบาท ps)
@@ -57,13 +54,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "wait", label: "รอข้อมูลเพิ่ม" },
   { key: "done", label: "ส่งแล้ว" },
 ];
-
-/** สีป้ายความเร่งด่วนบนการ์ดมือถือ ตามต้นแบบ presales-work.html (psw-card) */
-const URGENCY_PILL: Record<string, { box: string; dot: string }> = {
-  ปกติ: { box: "bg-[#F1ECEE] text-[#6E6164]", dot: "bg-[#9AA3AE]" },
-  ด่วน: { box: "bg-[#FDEDD6] text-[#94500A]", dot: "bg-[#E08A00]" },
-  ด่วนมาก: { box: "bg-[#FCE3E7] text-[#B0101F]", dot: "bg-[#C8102E]" },
-};
 
 /** ป้ายสถานะแบบเดียวกับหน้าคำขอก่อนการขายของฝ่ายขาย */
 function StatusTag({ status }: { status: PresalesStatus }) {
@@ -89,16 +79,7 @@ function KindTag({ kind, full }: { kind: PresalesRequest["kind"]; full?: boolean
 }
 
 export function PresalesWorkPage() {
-  /* SA หรือ BD — คนที่เลือกไว้ในเมนูบัญชีของฉัน */
-  const ME = usePsMe();
   const crm = useCrm();
-  /* สายสนทนาของทุกใบ + จุดแดงบอกว่ามีข้อความใหม่จากฝ่ายขาย (รอ hydrate ก่อนค่อยขึ้นป้าย) */
-  const threads = usePsThreads();
-  const marks = useTalkRead();
-  const hydrated = useHydrated();
-  /** ข้อความใหม่จากฝ่ายขายของใบนี้ — ฝั่งเซิร์ฟเวอร์ยังไม่รู้ จึงให้เป็นศูนย์ไว้ก่อน */
-  const newFor = (r: PresalesRequest) =>
-    hydrated ? unreadByKey(marks, "ps", psThreadKey(r.no), psFromOthers(psThreadOf(threads, r), "ps")) : 0;
   const today = todayIso();
   /* GM เปิดหน้านี้ได้แบบดูอย่างเดียว และเห็นคำขอทุกใบ ไม่ใช่เฉพาะของทีมก่อนการขาย */
   const ro = usePmReadOnly();
@@ -107,11 +88,43 @@ export function PresalesWorkPage() {
      ตรงกับคำขอของเราพอดี → ไปแท็บของงานนั้นแล้วเปิดหน้าต่างงานเลย (ต้นแบบ ?no=) */
   const find = useFindParam();
   const linked = find ? crm.presales.find((r) => r.no === find && inScope(r)) : undefined;
-  const [query, setQuery] = useState(find);
+  /* ไม่ใส่เลขที่ลงช่องค้นหา — เปิดหน้าต่างงานให้แทน (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+  const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>(() => (linked ? bucket(linked) : "todo"));
   const [open, setOpen] = useState<string | null>(() => linked?.no ?? null);
-  /* กด "ส่งงาน" บนการ์ดมือถือ = เปิดงานนั้นแล้วขึ้นฟอร์มส่งงานเลย ไม่ต้องกดซ้ำในแผ่น */
-  const [sendNow, setSendNow] = useState(false);
+  /* ปุ่มขอข้อมูลเพิ่ม / ส่งงานอยู่ในตาราง (ผู้ใช้สั่ง 5 ต.ค. 2569) — กดแล้วเปิดตรงฟอร์มนั้นเลย
+     กดแถวยังเปิดดูรายละเอียดได้เหมือนเดิม (null) */
+  const [startForm, setStartForm] = useState<"send" | "ask" | null>(null);
+  const openRow = (no: string, form: "send" | "ask" | null = null) => {
+    setStartForm(form);
+    setOpen(no);
+  };
+  /* ปุ่มของแถว — มีเฉพาะงานที่กำลังทำ/รอข้อมูลเพิ่ม และไม่ใช่ GM ที่ดูอย่างเดียว */
+  const rowActs = (r: PresalesRequest, phone = false) =>
+    !ro && (r.status === "กำลังทำ" || r.status === "รอข้อมูลเพิ่ม") ? (
+      <span className={`flex items-center justify-end gap-1.5 whitespace-nowrap ${phone ? "mt-2.5" : ""}`}>
+        <button
+          type="button"
+          className={phone ? "btn glass-thin h-10 flex-1 justify-center" : "lnk"}
+          onClick={(e) => {
+            e.stopPropagation();
+            openRow(r.no, "ask");
+          }}
+        >
+          ขอข้อมูลเพิ่ม
+        </button>
+        <button
+          type="button"
+          className={phone ? "btn solid btn-solid h-10 flex-1 justify-center" : "btn solid btn-solid btn-mini"}
+          onClick={(e) => {
+            e.stopPropagation();
+            openRow(r.no, "send");
+          }}
+        >
+          ส่งงาน
+        </button>
+      </span>
+    ) : null;
   /* คำขอที่เพิ่งสร้างอยู่ใน localStorage ตอนเรนเดอร์ครั้งแรกจึงยังหาไม่เจอ
      ค่าตั้งต้นด้านบนเลยเปิดให้ไม่ได้ ต้องรอสโตร์ hydrate แล้วค่อยเปิดให้ครั้งเดียว */
   const jumped = useRef(false);
@@ -123,6 +136,12 @@ export function PresalesWorkPage() {
   }, [linked]);
 
   const nameOf = useMemo(() => new Map(crm.customers.map((c) => [c.code, c.name])), [crm.customers]);
+
+  /*
+   * ลำดับแบบกองซ้อน — นับจากงานทั้งหมดของเราก่อนแยกแท็บ/ค้นหา ตามวันที่ส่งคำขอ (ผู้ใช้สั่ง 12 ต.ค. 2569)
+   * ตารางยังเรียงตามวันส่งงานเหมือนเดิม เลขจึงไม่ได้เรียงจากมากไปน้อยเสมอ
+   */
+  const noOf = stackNo(crm.presales.filter(inScope), (r) => r.createdAt, (r) => r.id);
 
   const listOf = (t: Tab) => {
     const q = query.trim().toLowerCase();
@@ -140,17 +159,17 @@ export function PresalesWorkPage() {
   return (
     <div className="space-y-4">
       <div className="bar">
-        {/* ต้นแบบมือถือไม่มีบรรทัดนับรายการ เพราะจำนวนอยู่บนชิปแท็บแล้ว */}
-        <div className="max-sm:hidden">
-          <p>คำขอ SA และ BD ที่แสดงอยู่ {rows.length} รายการ</p>
+        <div>
+          <h1>งานก่อนการขาย</h1>
+          <p>พบ {rows.length} รายการ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
-          <SearchBox value={query} onChange={setQuery} placeholder="ค้นหาเลขที่ใบงาน ผู้สนใจ หรือโจทย์" />
+          <SearchBox value={query} onChange={setQuery} placeholder="ค้นหาผู้สนใจ หรือโจทย์" />
         </div>
       </div>
       <ReadOnlyNote owner="ทีมก่อนการขาย" />
 
-      <section className="panel glass flex flex-col max-sm:border-0! max-sm:bg-transparent! max-sm:shadow-none!">
+      <section className="panel glass flex flex-col">
         <div className="strip">
           <div className="tabs">
             {TABS.map((t) => (
@@ -166,63 +185,39 @@ export function PresalesWorkPage() {
           </div>
         </div>
 
-        {/* มือถือ — การ์ดตามต้นแบบ presales-work.html (psw-card)
-            ชื่อผู้สนใจเป็นหัวใหญ่ โจทย์อยู่ใต้ ป้ายความเร่งด่วนมุมขวาบน
-            ไม่ต้องมีเลขที่ใบงานและป้ายสถานะ เพราะสถานะดูได้จากชิปด้านบนอยู่แล้ว */}
-        <ul className="flex flex-col gap-2.5 pt-2.5 sm:hidden">
+        {/* มือถือ — แสดงเป็นการ์ดทีละใบ กดทั้งใบเพื่อเปิดงาน ไม่ต้องเลื่อนตารางไปด้านข้าง */}
+        <ul className="divide-y divide-border sm:hidden">
           {rows.length === 0 ? (
-            <li className="rounded-[20px] bg-card px-5 py-10 text-center text-[13.5px] text-muted-foreground shadow-[0_1px_2px_rgb(40_20_25/0.04)]">
-              ไม่มีงานในแท็บนี้
-            </li>
+            <li className="py-7 text-center text-[13.5px] text-muted-foreground">ไม่มีงานในแท็บนี้</li>
           ) : (
             rows.map((r) => {
               const late = r.due < today && bucket(r) !== "done";
-              const urg = URGENCY_PILL[r.urgency] ?? URGENCY_PILL["ปกติ"];
-              /* ปุ่มบนการ์ด — รอรับงานกดรับได้ทันที กำลังทำกดแล้วขึ้นฟอร์มส่งงานเลย (ต้นแบบ psw-send) */
-              const act = ro ? "" : r.status === "รอรับงาน" ? "take" : bucket(r) === "doing" ? "send" : "";
               return (
-                <li
-                  key={r.id}
-                  className="relative rounded-[20px] bg-card p-3.5 shadow-[0_1px_2px_rgb(40_20_25/0.04)]"
-                >
-                  <span className={`absolute top-3.5 right-3.5 flex items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[12px] font-bold ${urg.box}`}>
-                    <i className={`size-[7px] rounded-full ${urg.dot}`} />
-                    {r.urgency}
-                  </span>
-                  <button type="button" onClick={() => setOpen(r.no)} className="block w-full text-left">
-                    <b className="block pr-[92px] text-[18px] leading-[1.3] font-bold">
-                      {nameOf.get(r.customerCode) ?? r.customerCode}
-                    </b>
-                    <span className="mt-1 block text-[13.5px] leading-[1.5] text-muted-foreground">{r.problem}</span>
-                    {/* คำขอต้องมีคนเห็นเสมอ — บอกประเภทงานและผู้รับผิดชอบไว้ทุกใบ */}
-                    <span className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                      <KindTag kind={r.kind} />
-                      ผู้รับผิดชอบ {psOwner(r)}
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => openRow(r.no)}
+                    className="block w-full px-4 py-3.5 text-left active:bg-black/[0.03]"
+                  >
+                    <span className="flex items-start justify-between gap-2.5">
+                      <b className="min-w-0 text-[14.5px] font-semibold">
+                        {nameOf.get(r.customerCode) ?? "—"}
+                      </b>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <KindTag kind={r.kind} />
+                        <StatusTag status={r.status} />
+                      </span>
                     </span>
-                    <span className="mt-3 flex items-center justify-between gap-2.5 border-t border-[#F2EAEC] pt-2.5 text-[14px]">
-                      <span className="text-[13px] text-muted-foreground">วันส่งงาน</span>
-                      <span className={`num ${late ? "font-semibold text-destructive" : ""}`}>{thaiDate(r.due)}</span>
+                    <span className="num mt-0.5 block text-[12px] text-muted-foreground">#{noOf.get(r.id)}</span>
+                    <span className="mt-1.5 line-clamp-2 block text-[13px] text-muted-foreground">{r.problem}</span>
+                    <span className="mt-2 flex items-center justify-between gap-2.5 text-[12.5px]">
+                      <span className="font-semibold text-muted-foreground">{r.urgency}</span>
+                      <span className={`num ${late ? "font-semibold text-destructive" : ""}`}>
+                        ส่งงาน {thaiDate(r.due)}
+                      </span>
                     </span>
                   </button>
-                  {act && (
-                    <div className="flex justify-end pt-2.5">
-                      <button
-                        type="button"
-                        className="h-[38px] rounded-xl bg-primary px-[18px] text-[13.5px] font-bold text-white"
-                        onClick={() => {
-                          if (act === "take") {
-                            acceptPresales(r.no, ME.name);
-                            setTab("doing");
-                            return;
-                          }
-                          setOpen(r.no);
-                          setSendNow(true);
-                        }}
-                      >
-                        {act === "take" ? "รับงาน" : "ส่งงาน"}
-                      </button>
-                    </div>
-                  )}
+                  {rowActs(r, true) && <div className="flex px-4 pb-3.5">{rowActs(r, true)}</div>}
                 </li>
               );
             })
@@ -233,7 +228,7 @@ export function PresalesWorkPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th style={{ width: 136 }}>เลขที่ใบงาน</th>
+                <th className="c" style={{ width: 60 }}>ลำดับ</th>
                 <th className="max-[1000px]:hidden" style={{ width: 78 }}>
                   ประเภท
                 </th>
@@ -245,12 +240,13 @@ export function PresalesWorkPage() {
                 <th className="max-[1000px]:hidden" style={{ width: 140 }}>
                   สถานะ
                 </th>
+                <th style={{ width: 190 }} aria-label="จัดการ" />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-7 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-7 text-center text-muted-foreground">
                     ไม่มีงานในแท็บนี้
                   </td>
                 </tr>
@@ -262,33 +258,23 @@ export function PresalesWorkPage() {
                       key={r.id}
                       tabIndex={0}
                       style={{ cursor: "pointer" }}
-                      onClick={() => setOpen(r.no)}
+                      onClick={() => openRow(r.no)}
                       onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return;
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          setOpen(r.no);
+                          openRow(r.no);
                         }
                       }}
                     >
-                      <td className="num">
-                        {r.no}
-                        {/* ข้อความใหม่จากฝ่ายขายที่ยังไม่ได้อ่าน */}
-                        {newFor(r) > 0 && (
-                          <i className="num ml-1.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground not-italic">
-                            {newFor(r)}
-                          </i>
-                        )}
-                      </td>
+                      <td className="c num muted">{noOf.get(r.id)}</td>
                       <td className="max-[1000px]:hidden">
                         <KindTag kind={r.kind} />
                       </td>
                       <td className="min-w-[220px]">
-                        <b className="font-semibold">{nameOf.get(r.customerCode) ?? r.customerCode}</b>
+                        <b className="font-semibold">{nameOf.get(r.customerCode) ?? "—"}</b>
                         <span className="why">{r.problem}</span>
-                        {/* คำขอต้องมีคนเห็นเสมอ — บอกไว้ทุกแถวว่าใครรับผิดชอบ ยังไม่มีก็ต้องบอก */}
-                        <span className="mt-1 block text-[12px] text-muted-foreground">
-                          ผู้รับผิดชอบ {psOwner(r)}
-                        </span>
+                        {/* ผู้รับผิดชอบดูได้ในหน้าต่างรายละเอียด — ตารางมีแค่ผู้สนใจกับโจทย์ (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
                         {/* จอแคบซ่อนคอลัมน์ความเร่งด่วนและสถานะ แล้วแสดงเป็นบรรทัดเล็กใต้ชื่อแทน ชื่อจะได้ไม่ถูกบีบ */}
                         <span className="mt-1.5 hidden items-center gap-1.5 text-[12px] font-semibold text-muted-foreground max-[1000px]:flex">
                           {r.urgency} <KindTag kind={r.kind} /> <StatusTag status={r.status} />
@@ -299,6 +285,7 @@ export function PresalesWorkPage() {
                       <td className="max-[1000px]:hidden">
                         <StatusTag status={r.status} />
                       </td>
+                      <td>{rowActs(r)}</td>
                     </tr>
                   );
                 })
@@ -310,14 +297,11 @@ export function PresalesWorkPage() {
 
       {current && (
         <WorkDialog
-          key={current.no}
+          key={`${current.no}-${startForm ?? "view"}`}
           request={current}
-          customerName={nameOf.get(current.customerCode) ?? current.customerCode}
-          initialForm={sendNow ? "send" : null}
-          onClose={() => {
-            setOpen(null);
-            setSendNow(false);
-          }}
+          start={startForm}
+          customerName={nameOf.get(current.customerCode) ?? "—"}
+          onClose={() => setOpen(null)}
           onMoved={(t, keepOpen) => {
             /* งานสำเร็จแล้วต้องไม่หายไปเฉย ๆ — สลับไปแท็บของขั้นใหม่เสมอ
                และถ้ายังมีงานให้ทำต่อ (เพิ่งรับงาน) ก็คาหน้าต่างเดิมไว้ตรงหน้าเลย */
@@ -338,35 +322,26 @@ export function PresalesWorkPage() {
  */
 function WorkDialog({
   request: r,
+  start = null,
   customerName,
-  initialForm,
   onClose,
   onMoved,
 }: {
   request: PresalesRequest;
+  /** เปิดจากปุ่มในตาราง — ขึ้นฟอร์มนั้นเลย · null = ดูรายละเอียด */
+  start?: "send" | "ask" | null;
   customerName: string;
-  /** เปิดแผ่นมาพร้อมฟอร์มนี้เลย — การ์ดมือถือกด "ส่งงาน" แล้วต้องได้ฟอร์มส่งงานทันที */
-  initialForm?: "send" | "ask" | null;
   onClose: () => void;
   /** งานย้ายขั้นแล้ว — ส่งแท็บที่ต้องสลับไปมาด้วย (ไม่ส่ง = อยู่แท็บเดิม) · keepOpen = ไม่ปิดหน้าต่าง */
   onMoved: (tab?: Tab, keepOpen?: boolean) => void;
 }) {
-  const ME = usePsMe();
   const crm = useCrm();
-  /* เทมเพลตที่เลิกใช้แล้วไม่ขึ้นให้เลือก แต่ยังอยู่ในคลัง (เจ้าของสั่ง 6 ต.ค. 2569) */
-  const templates = useTemplates().filter((t) => !t.off);
-  /* เลขนับของรายการที่หยิบจากคลัง — ใช้ทำรหัสไม่ซ้ำ แทนการอ่านเวลาปัจจุบันตอนวาดหน้า */
-  const pickSeqRef = useRef(0);
+  const templates = useTemplates();
   const rounds = crm.presalesRounds.filter((x) => x.requestNo === r.no).sort((a, b) => b.round - a.round);
-  const [form, setForm] = useState<"send" | "ask" | null>(initialForm ?? null);
+  const [form] = useState<"send" | "ask" | null>(start);
   const ro = usePmReadOnly();
   /* ถามตอบกับฝ่ายขายทั้งสายของคำขอใบนี้ */
   const thread = psThreadOf(usePsThreads(), r);
-  /* เปิดอ่านแล้ว — จุดแดงของใบนี้หายไป */
-  const otherCount = psFromOthers(thread, "ps");
-  useEffect(() => {
-    markReadKey("ps", psThreadKey(r.no), otherCount);
-  }, [r.no, otherCount]);
   /* ไฟล์และลิงก์ที่แนบในรอบนี้ — ต้องมีอย่างน้อยหนึ่งรายการ */
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [hours, setHours] = useState("");
@@ -381,10 +356,6 @@ function WorkDialog({
   const working = r.status === "กำลังทำ" || r.status === "รอข้อมูลเพิ่ม";
 
   function send() {
-    if (form !== "send") {
-      setForm("send");
-      return;
-    }
     if (!files.length) return setSendErr(true);
     if (uploading) return;
     const first = files[0];
@@ -393,7 +364,7 @@ function WorkDialog({
     /* รายการที่มาจากคลังเทมเพลตมี id ขึ้นต้น tpl: — นับการใช้ให้เทมเพลตนั้น */
     countTemplateUse(files.filter((f) => f.id.startsWith("tpl:")).map((f) => f.id.split(":")[1]));
     submitPresalesRound(r.no, {
-      by: ME.name,
+      by: psActorName(),
       hours: h > 0 ? h : 0,
       note: note.trim() || "—",
       /* รายการแรกเป็นตัวแทนของรอบ — ลิงก์ใช้ชนิด canva เพราะหน้าอื่นเปิดเป็นลิงก์ได้ */
@@ -406,10 +377,6 @@ function WorkDialog({
   }
 
   function askMore() {
-    if (form !== "ask") {
-      setForm("ask");
-      return;
-    }
     const t = ask.trim();
     if (!t) return setAskErr(true);
     askPresalesInfo(r.no, t);
@@ -418,18 +385,12 @@ function WorkDialog({
     onMoved("wait");
   }
 
-  /* แถวป้าย-ค่าในแผงสีเทาบนมือถือ (ต้นแบบ psw-detail) */
-  const kv =
-    "max-sm:[&>dt]:border-b max-sm:[&>dt]:border-[#F0E6E8] max-sm:[&>dt]:py-[11px] max-sm:[&>dt]:pr-3 max-sm:[&>dt]:text-[14px] max-sm:[&>dt]:font-medium max-sm:[&>dt]:whitespace-nowrap max-sm:[&>dd]:border-b max-sm:[&>dd]:border-[#F0E6E8] max-sm:[&>dd]:py-[11px] max-sm:[&>dd]:text-right max-sm:[&>dd]:text-[14px] max-sm:[&>dd]:font-semibold max-sm:[&>dt:last-of-type]:border-b-0 max-sm:[&>dd:last-of-type]:border-b-0";
-  /* หัวข้อของกล่องโจทย์ — เต็มแถว ตัวเล็ก ไม่มีเส้นใต้ */
-  const kvHead =
-    "max-sm:col-span-2 max-sm:border-b-0! max-sm:pt-3 max-sm:pb-0.5! max-sm:text-[12.5px]! max-sm:text-[#8A7E81]";
   const lb = "mb-1.5 block text-[12.5px] font-semibold text-muted-foreground";
   const dt = "text-[12.5px] font-semibold text-muted-foreground";
 
   return (
     <Sheet
-      title={`${r.no} · ${customerName}`}
+      title={form === "send" ? `ส่งงาน · ${customerName}` : form === "ask" ? `ขอข้อมูลเพิ่ม · ${customerName}` : customerName}
       onClose={onClose}
       footer={
         /* GM เปิดดูได้อย่างเดียว ปุ่มรับงาน/ขอข้อมูลเพิ่ม/ส่งงาน จึงไม่มี */
@@ -442,7 +403,7 @@ function WorkDialog({
             type="button"
             className="btn solid btn-solid flex-1 justify-center sm:flex-none"
             onClick={() => {
-              acceptPresales(r.no, ME.name);
+              acceptPresales(r.no, psActorName());
               setTook(true);
               /* รับแล้วงานหายจากแท็บที่ยืนอยู่ — พาไปแท็บ "กำลังทำ" พร้อมคาใบเดิมไว้ตรงหน้า
                  หน้าต่างนี้จะกลายเป็นชุดปุ่มของขั้นถัดไป (ขอข้อมูลเพิ่ม / ส่งงาน) ทันที */
@@ -453,15 +414,11 @@ function WorkDialog({
           </button>
         ) : working ? (
           <>
+            {/* ปุ่มขอข้อมูลเพิ่ม / ส่งงานย้ายไปอยู่ในตาราง (ผู้ใช้สั่ง 5 ต.ค. 2569) — หน้าต่างรายละเอียดมีแค่ปุ่มปิด */}
             {form ? (
               <>
-                {/* กลับไปอ่านโจทย์ได้โดยไม่ล้างสิ่งที่กรอกไว้ */}
-                <button
-                  type="button"
-                  className="btn glass-thin flex-1 justify-center sm:flex-none"
-                  onClick={() => setForm(null)}
-                >
-                  กลับไปดูรายละเอียด
+                <button type="button" className="btn glass-thin flex-1 justify-center sm:flex-none" onClick={onClose}>
+                  ยกเลิก
                 </button>
                 <button
                   type="button"
@@ -473,14 +430,9 @@ function WorkDialog({
                 </button>
               </>
             ) : (
-              <>
-                <button type="button" className="btn glass-thin flex-1 justify-center sm:flex-none" onClick={askMore}>
-                  ขอข้อมูลเพิ่ม
-                </button>
-                <button type="button" className="btn solid btn-solid flex-1 justify-center sm:flex-none" onClick={send}>
-                  ส่งงาน
-                </button>
-              </>
+              <button type="button" className="btn glass-thin flex-1 justify-center sm:flex-none" onClick={onClose}>
+                ปิด
+              </button>
             )}
           </>
         ) : null
@@ -491,31 +443,22 @@ function WorkDialog({
           role="status"
           className="mb-3.5 rounded-[11px] bg-[var(--success-soft)] px-3.5 py-3 text-[12.5px] leading-relaxed font-semibold text-[var(--success)]"
         >
-          รับงาน {r.no} แล้ว · ย้ายไปแท็บ “กำลังทำ” และบันทึกผู้รับผิดชอบเป็น {ME.name} แล้ว
-          <span className="mt-0.5 block font-normal">
-            ทำต่อได้เลยจากหน้าต่างนี้ — กด “ส่งงาน” เมื่อมีข้อเสนอ หรือ “ขอข้อมูลเพิ่ม” ถ้าโจทย์ยังไม่พอ
-          </span>
+          รับงานนี้แล้ว
         </p>
       )}
 
       {form === null && (
         <>
-          {/* มือถือ: โจทย์เป็นกล่องเด่นบนสุด ข้อมูลที่เหลือเป็นแถวในแผงสีเทา (ต้นแบบ psw-detail) */}
-          <dl
-            className={`grid grid-cols-[150px_minmax(0,1fr)] gap-x-3.5 gap-y-2 text-[13.5px] max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-0 max-sm:rounded-[14px] max-sm:bg-[#FAF6F7] max-sm:px-3.5 ${kv}`}
-          >
-            <dt className={`${dt} ${kvHead}`}>โจทย์จากลูกค้า</dt>
-            <dd className="break-words max-sm:col-span-2 max-sm:pt-0! max-sm:pb-3 max-sm:text-left! max-sm:text-[15.5px] max-sm:leading-[1.5] max-sm:font-bold">
-              {r.problem}
-            </dd>
+          <dl className="grid grid-cols-[150px_minmax(0,1fr)] gap-x-3.5 gap-y-2 text-[13.5px] max-sm:grid-cols-1">
             {/* ประเภทงานกับผู้รับผิดชอบเป็นคนละเรื่อง แยกบรรทัดกันไม่ให้อ่านปนกัน */}
             <dt className={dt}>ประเภทงาน</dt>
-            <dd className="flex flex-wrap items-center gap-2 max-sm:justify-end">
+            <dd className="flex flex-wrap items-center gap-2">
               <KindTag kind={r.kind} full />
-              <span className="text-[12px] text-muted-foreground max-sm:hidden">ประเภทติดกับตัวงาน ไม่เปลี่ยนตามคนที่รับ</span>
             </dd>
             <dt className={dt}>ผู้รับผิดชอบ</dt>
             <dd className="break-words">{psOwner(r)}</dd>
+            <dt className={dt}>โจทย์จากลูกค้า</dt>
+            <dd className="break-words">{r.problem}</dd>
             <dt className={dt}>ความเร่งด่วน</dt>
             <dd>
               {r.urgency}
@@ -528,7 +471,7 @@ function WorkDialog({
             {r.attachments.length > 0 && (
               <>
                 <dt className={dt}>ไฟล์แนบจากฝ่ายขาย</dt>
-                <dd className="flex flex-col gap-0.5 max-sm:items-end">
+                <dd className="flex flex-col gap-0.5">
                   {r.attachments.map((a) =>
                     /^https?:\/\//.test(a) ? (
                       <a key={a} href={a} target="_blank" rel="noreferrer" className="break-all underline">
@@ -552,31 +495,24 @@ function WorkDialog({
           {/* แผนงานของข้อเสนอ (Full Proposal · M2) — วางเป็นช่วงสัปดาห์ PM แปลงเป็นวันจริงตอนรับงาน */}
           <ProposalPlan request={r} readOnly={ro} />
 
-          {/* ถามตอบกับฝ่ายขายทั้งสาย — ทั้งสองฝั่งอ่านชุดเดียวกัน จะได้ไม่ต้องไปตามกันในไลน์
-              คุยต่อได้ในกล่องข้างล่างโดยไม่ต้องเปลี่ยนสถานะใบงาน */}
-          <PsThread notes={thread} me="ps" />
-          {!ro && <PsChatBox no={r.no} side="ps" by={ME.name} />}
+          {/* ถามตอบกับฝ่ายขายทั้งสาย — ทั้งสองฝั่งอ่านชุดเดียวกัน จะได้ไม่ต้องไปตามกันในไลน์ */}
+          <PsThread notes={thread} />
 
           {rounds.length > 0 && (
             <>
-              <p className="mt-[18px] mb-2 text-[13px] font-bold max-sm:text-[14px]">ข้อเสนอที่ส่งแล้ว</p>
-              <ul className="max-sm:flex max-sm:flex-col max-sm:gap-2">
+              <p className="mt-[18px] mb-2 text-[13px] font-bold">ข้อเสนอที่ส่งแล้ว</p>
+              <ul>
                 {rounds.map((x) => {
                   const meta = [thaiDate(x.at)];
                   if (x.files && x.files.length > 1) meta.push(`แนบ ${x.files.length} รายการ`);
                   if (x.hours > 0) meta.push(`${x.hours} ชม.`);
                   if (x.note && x.note !== "—") meta.push(x.note);
                   return (
-                    <li
-                      key={x.id}
-                      className="flex flex-col gap-0.5 border-t border-border py-[9px] max-sm:rounded-[14px] max-sm:border-0 max-sm:bg-[#FAF6F7] max-sm:p-3.5 max-sm:first:bg-[#FDF0F2]"
-                    >
-                      <b className="text-[13px] font-semibold break-all max-sm:text-[14px] max-sm:font-bold">
+                    <li key={x.id} className="flex flex-col gap-0.5 border-t border-border py-[9px]">
+                      <b className="text-[13px] font-semibold break-all">
                         รอบที่ {x.round} · {x.file}
                       </b>
-                      <span className="text-[12px] text-muted-foreground max-sm:text-[12.5px] max-sm:leading-[1.5]">
-                        {meta.join(" · ")}
-                      </span>
+                      <span className="text-[12px] text-muted-foreground">{meta.join(" · ")}</span>
                     </li>
                   );
                 })}
@@ -588,7 +524,6 @@ function WorkDialog({
 
       {form === "send" && (
         <div>
-          <BackToDetail onBack={() => setForm(null)} />
           <p className="mb-2 text-[13px] font-bold">ส่งข้อเสนอรอบที่ {rounds.length + 1}</p>
           <FileDrop
             files={files}
@@ -613,12 +548,7 @@ function WorkDialog({
                 if (!t) return;
                 setFiles([
                   ...files,
-                  {
-                    id: `tpl:${t.id}:${(pickSeqRef.current += 1)}`,
-                    name: t.url ?? t.file,
-                    size: t.url ? 0 : (t.size ?? 0),
-                    url: t.url,
-                  },
+                  { id: `tpl:${t.id}:${Date.now()}`, name: t.url ?? t.file, size: t.url ? 0 : (t.size ?? 0), url: t.url },
                 ]);
                 setSendErr(false);
               }}
@@ -660,9 +590,9 @@ function WorkDialog({
 
       {form === "ask" && (
         <div>
-          <BackToDetail onBack={() => setForm(null)} />
+          <p className="mb-3 text-[12.5px] text-muted-foreground">โจทย์: {r.problem}</p>
           <label htmlFor="w-ask" className={lb}>
-            ต้องการข้อมูลอะไรเพิ่มจากฝ่ายขาย
+            รายละเอียดที่ต้องการเพิ่มจากฝ่ายขาย
           </label>
           <textarea
             id="w-ask"
@@ -688,109 +618,53 @@ function WorkDialog({
  * คำถามของทีมอยู่ซ้าย คำตอบของฝ่ายขายอยู่ขวา พร้อมชื่อคนพิมพ์และเวลา
  * ไม่มีชื่อกับเวลาแล้วอ่านไม่ออกว่าใครถามและถามไว้นานแค่ไหน
  */
-/**
- * สายสนทนาของคำขอหนึ่งใบ — วางเป็นแชทเหมือนสายข้อความของงาน (เจ้าของสั่ง 5 ต.ค. 2569)
- * me = ฝั่งของคนที่กำลังดู ("ps" ทีมก่อนการขาย · "sales" ฝ่ายขาย) ข้อความของตัวเองชิดขวา
- */
-export function PsThread({ notes, me }: { notes: PsNote[]; me?: PsNote["side"] }) {
-  const end = useRef<HTMLDivElement>(null);
-  const count = notes.length;
-  useEffect(() => {
-    end.current?.scrollIntoView({ block: "nearest" });
-  }, [count]);
-
-  if (count === 0) return null;
+export function PsThread({ notes }: { notes: PsNote[] }) {
+  const empName = useNameOf();
+  if (notes.length === 0) return null;
   return (
     <section className="mt-[18px]">
       <p className="mb-2 text-[13px] font-bold">ถามตอบข้อมูลเพิ่ม</p>
-      <ul className="flex max-h-[42dvh] flex-col gap-2.5 overflow-y-auto pr-0.5">
-        {notes.map((n, i) => {
-          const mine = me !== undefined && n.side === me;
-          return (
-            <li key={`${n.at}-${i}`} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-              <span className="px-1 text-[11px] text-muted-foreground">
-                {mine ? "คุณ" : n.by}
-                <span className="ml-1.5">{n.side === "ps" ? "· ทีมก่อนการขาย" : "· ฝ่ายขาย"}</span>
-              </span>
-              <div
-                className={`max-w-[86%] rounded-[16px] px-3.5 py-2 ${
-                  mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                }`}
-              >
-                <p className="text-[13.5px] leading-relaxed break-words whitespace-pre-wrap">{n.tx}</p>
-              </div>
-              {n.at && (
-                <span className="num px-1 text-[10.5px] text-muted-foreground">{thaiStamp(n.at)} น.</span>
-              )}
-            </li>
-          );
-        })}
-        <div ref={end} />
+      <ul className="flex flex-col gap-2">
+        {notes.map((n, i) => (
+          <li
+            key={`${n.at}-${i}`}
+            className={`rounded-[12px] px-3.5 py-2.5 ${
+              n.side === "ps"
+                ? "bg-[var(--warning-soft)]"
+                : "bg-muted sm:ml-6"
+            }`}
+          >
+            <p className="flex flex-wrap items-baseline gap-x-2 text-[11.5px] text-muted-foreground">
+              <b className="font-semibold text-foreground">{empName(n.by)}</b>
+              <span>{n.side === "ps" ? "ขอข้อมูลเพิ่ม" : "ตอบข้อมูล"}</span>
+              {n.at && <span className="num">{thaiStamp(n.at)} น.</span>}
+            </p>
+            {n.tx && <p className="mt-1 text-[13px] leading-relaxed break-words">{n.tx}</p>}
+            {n.files && n.files.length > 0 && (
+              <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                {n.files.map((f) => (
+                  <li
+                    key={f.name}
+                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-white px-2.5 py-0.5 text-[12px]"
+                  >
+                    <PaperclipIcon className="size-3 shrink-0" strokeWidth={2} />
+                    {f.url ? (
+                      <a href={f.url} target="_blank" rel="noopener" className="truncate hover:underline">
+                        {f.name}
+                      </a>
+                    ) : (
+                      <span className="truncate">{f.name}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
       </ul>
     </section>
   );
 }
-
-/**
- * ช่องพิมพ์คุยกันในใบคำขอ — ใช้ได้ทั้งสองฝั่ง ส่งแล้วไม่ปิดหน้าต่าง
- * ข้อความนี้ไม่เปลี่ยนสถานะใบงาน (ขอข้อมูล/ตอบข้อมูล ยังเป็นปุ่มของมันเหมือนเดิม)
- */
-export function PsChatBox({ no, side, by }: { no: string; side: PsNote["side"]; by: string }) {
-  const [tx, setTx] = useState("");
-  const [err, setErr] = useState(false);
-
-  function send() {
-    const v = tx.trim();
-    if (!v) return setErr(true);
-    postPsMessage(no, side, v, by);
-    setTx("");
-  }
-
-  return (
-    <div className="mt-3">
-      <label htmlFor={`ps-chat-${no}`} className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">
-        {side === "ps" ? "ข้อความถึงฝ่ายขาย" : "ข้อความถึงทีมก่อนการขาย"}
-      </label>
-      <div className="flex items-end gap-2">
-        <textarea
-          id={`ps-chat-${no}`}
-          rows={2}
-          value={tx}
-          onChange={(e) => {
-            setTx(e.target.value);
-            setErr(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder="พิมพ์ข้อความแล้วกด Enter"
-          className="field-control min-w-0 flex-1 resize-y py-2.5 text-[13.5px] leading-relaxed"
-        />
-        <button type="button" className="btn solid btn-solid flex-none" onClick={send}>
-          ส่ง
-        </button>
-      </div>
-      {err && <p className="mt-2 text-[12.5px] text-destructive">เขียนข้อความก่อนส่ง</p>}
-    </div>
-  );
-}
-
-/** ปุ่มกลับไปอ่านโจทย์ระหว่างกรอกฟอร์ม — ไม่ปิดหน้าต่าง สิ่งที่กรอกไว้จึงยังอยู่ */
-function BackToDetail({ onBack }: { onBack: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onBack}
-      className="mb-3 flex items-center gap-1 text-[12.5px] font-semibold text-primary hover:underline"
-    >
-      ‹ กลับไปดูรายละเอียดคำขอ
-    </button>
-  );
-}
-
 
 /*
  * แผนงานของข้อเสนอ — BD/SA วางเป็นช่วงสัปดาห์ เพราะตอนทำข้อเสนอยังไม่รู้ว่าลูกค้าจะเริ่มวันไหน
@@ -802,11 +676,6 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
   const [editing, setEditing] = useState(false);
   const [rows, setRows] = useState<ProposalPlanPhase[]>(saved);
   const roles = teamRoles();
-  /* เพิ่มตำแหน่งในทีมใหม่ได้จากหน้างาน (ข้อมูลหลัก HR-10) — ตั้งให้เฟสที่กำลังแก้อยู่ */
-  const [roleRow, setRoleRow] = useState(-1);
-  const addRole = useAddOption({ catalog: "teamRoles" }, (v) => {
-    if (roleRow >= 0) set(roleRow, { role: v });
-  });
 
   function start() {
     setRows(saved.length ? saved : [{ name: "", role: roles[0]?.key ?? "", fromWeek: 1, toWeek: 1, tasks: [] }]);
@@ -818,7 +687,6 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
 
   return (
     <section className="mt-[18px]">
-      {addRole.dialog}
       <div className="mb-2 flex items-center gap-2">
         <p className="text-[13px] font-bold">แผนงานของข้อเสนอ</p>
         {!readOnly && !editing && (
@@ -830,7 +698,7 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
 
       {!editing && saved.length === 0 && (
         <p className="text-[12.5px] text-muted-foreground">
-          ยังไม่ได้วางแผนงาน — PM จะได้แม่แบบเฟสมาตรฐานไปจัดเองตอนรับงาน
+          ยังไม่ได้วางแผนงาน
         </p>
       )}
 
@@ -862,11 +730,7 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
               <select
                 value={x.role}
                 aria-label={`ตำแหน่งที่ทำเฟสที่ ${i + 1}`}
-                onChange={(e) => {
-                  setRoleRow(i);
-                  if (addRole.pick(e.target.value)) return;
-                  set(i, { role: e.target.value });
-                }}
+                onChange={(e) => set(i, { role: e.target.value })}
                 className="field-control cursor-pointer"
               >
                 {roles.map((r) => (
@@ -874,7 +738,6 @@ function ProposalPlan({ request, readOnly }: { request: PresalesRequest; readOnl
                     {r.label}
                   </option>
                 ))}
-                {addRole.option}
               </select>
               <input
                 type="number"

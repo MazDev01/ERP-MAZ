@@ -11,6 +11,7 @@
  * ทุกตัวเลขคำนวณสดจากข้อมูลจริงในระบบ ไม่มีตัวเลขที่กรอกซ้ำเข้ามาเอง
  */
 
+import { displayName, initialOf } from "@/lib/emp-name";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { TH_MONTHS_SHORT, bkkStamp, daysBetween, thaiDate, toIsoDate, todayIso } from "@/lib/format";
@@ -22,22 +23,27 @@ import {
   hrPos,
   HR_EMPTYPE,
   HR_LEAVE_LABEL,
+  defaultDailyRange,
+  dailyRoundId,
+  isDaily,
   probEnd,
+  rangeLabel,
   type EmpType,
   type Employee,
 } from "@/lib/hr-data";
 import { optionsOf } from "@/lib/options";
 import { decideInternLeave, useHr } from "@/lib/hr-store";
+import { approveLeave, rejectLeave, useAllLeave } from "@/lib/leave-store";
+import { fmtLeave } from "@/lib/leave-data"; // ลาแสดงเป็นชั่วโมง (ผู้ใช้สั่ง 19 ต.ค. 2569)
+import { ROLE_EMPLOYEE } from "@/lib/hr-data";
+import { payHref } from "./hr-steps";
 import { UsersIcon, UserIcon, ClockIcon, ChartIcon } from "./icons";
 
 /** ใกล้ครบกำหนดทดลองงานภายในกี่วันถึงจะเตือน */
-/* เตือนล่วงหน้า 14 วันก่อนครบทดลองงาน (เจ้าของตัดสิน 6 ต.ค. 2569) — ต้องตรงกับ notifications.ts */
-const PROBATION_WARN_DAYS = 14;
+const PROBATION_WARN_DAYS = 30;
 
 /** ช่วงเวลาของงานที่ต้องดำเนินการ */
 type Range = "m" | "q" | "y";
-
-import { DashWrap, DashHero, DashSection, DashWeek } from "./mobile-dash";
 
 const RANGE_LABEL: Record<Range, string> = { m: "เดือนนี้", q: "ไตรมาส", y: "ปีนี้" };
 
@@ -69,87 +75,18 @@ export function HrDashboardPage() {
   /* ช่วงวันจริงของรอบ — 26 ของเดือนก่อน ถึง 25 ของเดือนรอบ ไม่ใช่ 1–30 ของเดือนปฏิทิน */
   const payCycle = hrCycle(lastMonth);
   const span = rangeSpan(today, range);
-
-  /* ── มือถือ: แดชบอร์ดแบบแอป (ตัวเลขชุดเดียวกับจอคอม) ── */
-  const [pickDay, setPickDay] = useState(() => todayIso());
-  /* ปฏิทินของฝ่ายบุคคลดูวันครบกำหนดทดลองงาน กับวันที่นักศึกษาฝึกงานขอลา */
-  const dayItems = (iso: string) => [
-    ...probation
-      .filter((x) => toIsoDate(probEnd(x.e.startedAt)) === iso)
-      .map((x) => ({
-        key: `p-${x.e.id}`,
-        title: `ครบกำหนดทดลองงาน · ${x.e.name}`,
-        meta: x.left < 0 ? `เลยกำหนด ${Math.abs(x.left)} วัน` : `เหลือ ${x.left} วัน`,
-        metaTint: (x.left < 0 ? "rose" : "peach") as "rose" | "peach",
-        href: "/hr/employees",
-      })),
-    ...hr.internLeave
-      .filter((r) => r.status === "pending" && r.from <= iso && r.to >= iso)
-      .map((r) => ({
-        key: `l-${r.id}`,
-        title: `ใบลาฝึกงาน · ${hr.emp.find((e) => e.id === r.emp)?.name ?? r.emp}`,
-        meta: "รออนุมัติ",
-        metaTint: "sky" as const,
-        href: "/hr/employees",
-      })),
-  ];
-  const newbies = [...active].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 5);
+  /* แยกการ์ดเงินเดือนเป็นพนักงานประจำ (รอบเดือน) กับทดลองงาน (รอบรายวัน) (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  const monthStaff = active.filter((e) => !isDaily(e)).length;
+  const dayStaff = active.filter((e) => isDaily(e)).length;
+  const dayRange = defaultDailyRange(hr.dailyRounds, today, (r) => !r.payClosedAt);
+  const dayRound = hr.dailyRounds.find((r) => r.id === dailyRoundId(dayRange));
+  const dayPaid = Boolean(dayRound?.payClosedAt);
 
   return (
     <div className="space-y-4">
-      <DashWrap>
-        <DashHero
-          label="พนักงานทั้งหมด"
-          value={`${active.length} คน`}
-          foot={`ทดลองงาน ${byType("probat").length} · ฝึกงาน ${byType("intern").length} · ใกล้ครบทดลองงาน ${nearEnd}`}
-          ringPct={active.length ? (byType("full").length * 100) / active.length : 0}
-          ringLabel="พนักงานประจำ"
-        />
-
-        <DashWeek value={pickDay} onPick={setPickDay} has={(iso) => dayItems(iso).length > 0} />
-
-        <DashSection
-          title={pickDay === today ? "กำหนดของวันนี้" : `กำหนด ${thaiDate(pickDay)}`}
-          href="/hr/employees"
-          rows={dayItems(pickDay)}
-          empty="ไม่มีกำหนดในวันนี้"
-        />
-
-        <DashSection
-          title="เงินเดือนรอบนี้"
-          href="/hr/payroll"
-          linkLabel="จัดการ"
-          rows={[
-            {
-              key: "pay",
-              title: payClosed ? "ปิดรอบเงินเดือนแล้ว" : `รอดำเนินการ ${active.length} คน`,
-              meta: `รอบ ${thaiDate(payCycle.from)} – ${thaiDate(payCycle.to)}`,
-              metaTint: (payClosed ? "mint" : "peach") as "mint" | "peach",
-              href: "/hr/payroll",
-            },
-          ]}
-          empty=""
-        />
-
-        <DashSection
-          title="เริ่มงานล่าสุด"
-          href="/hr/employees"
-          rows={newbies.map((e) => ({
-            key: e.id,
-            title: `${e.name}${e.nick ? ` (${e.nick})` : ""}`,
-            meta: `${hrPos(e.pos).label} · เริ่ม ${thaiDate(e.startedAt)}`,
-            metaTint: (e.type === "intern" ? "sky" : e.type === "probat" ? "peach" : "mint") as
-              | "sky"
-              | "peach"
-              | "mint",
-            href: "/hr/employees",
-          }))}
-          empty="ยังไม่มีพนักงานใหม่"
-        />
-      </DashWrap>
-
-      <div className="bar max-md:hidden!">
+      <div className="bar">
         <div>
+          <h1>แดชบอร์ดฝ่ายบุคคล</h1>
           <p>ภาพรวมกำลังคนและงานที่ต้องดำเนินการ</p>
         </div>
         <div className="tools">
@@ -169,13 +106,13 @@ export function HrDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 max-md:hidden lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
         {/* ทุกการ์ดนับ "คนที่ยังอยู่วันนี้" — หน้ารายงานนับทั้งทะเบียนรวมผู้พ้นสภาพ จึงได้ตัวเลขมากกว่า
             แต่ละใบจึงต้องบอกฐานที่นับไว้ในการ์ดเอง ไม่ให้ดูเหมือนตัวเลขขัดกันเอง */}
         <Kpi
           icon={<UsersIcon className="size-[17px]" />}
           skin="info"
-          title="พนักงานที่ยังอยู่วันนี้"
+          title="พนักงานปัจจุบัน"
           value={`${active.length} คน`}
           note={`ในทะเบียนทั้งหมด ${hr.emp.length} คน · พ้นสภาพแล้ว ${hr.emp.length - active.length} คน`}
         />
@@ -214,50 +151,94 @@ export function HrDashboardPage() {
       */}
       {/* จอแคบตั้งคอลัมน์เป็น minmax(0,1fr) ไว้ชัด ๆ — ปล่อยเป็นคอลัมน์อัตโนมัติ ช่องจะกว้างตาม
           เนื้อหาที่ยาวที่สุด (ข้อความไทยตัดคำไม่ได้) แล้วดันทั้งแถวล้นออกนอกจอ */}
-      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 max-md:hidden md:grid-cols-6 xl:grid-cols-8">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
         <Panel title="ภาพรวมกำลังคน" className="md:col-span-4 xl:col-span-6">
           <PeopleDonut active={active} />
         </Panel>
 
         <Panel title="เงินเดือนรอบนี้" className="md:col-span-2">
-          <p className="num text-[34px] leading-none font-extrabold">
-            {payClosed ? 0 : active.length}
-          </p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            {payClosed ? "ดำเนินการครบแล้ว" : `คนที่รอดำเนินการ จากคนที่ยังอยู่ ${active.length} คน`}
-          </p>
-          {/* ต้นแบบเป็นรายการคั่นเส้น รอบใช้เดือนย่อ
-              รอบเงินเดือนตัดวันที่ 25 ไม่ใช่เดือนปฏิทิน — บอกช่วงวันจริงไว้ด้วย (ตรงกับหน้าสลิปและหน้าคำนวณ) */}
-          <ul className="mt-3.5 divide-y divide-border text-[13px]">
-            <li className="py-2.5">
-              รอบ {shortMonth(lastMonth)}
-              <em className="num mt-0.5 block text-[11.5px] text-muted-foreground not-italic">
-                {thaiDate(payCycle.from)} – {thaiDate(payCycle.to)}
-              </em>
-            </li>
-            <li className="py-2.5">ดำเนินการแล้ว {payClosed ? active.length : 0} คน</li>
-            <li className="py-2.5">รอดำเนินการ {payClosed ? 0 : active.length} คน</li>
-          </ul>
-          <Link href="/hr/payroll" className="btn solid btn-solid mt-4 w-full justify-center" data-ceo-hide>
-            จัดการเงินเดือน
-          </Link>
+          {/* สองส่วน: พนักงานประจำ (รอบเดือน) · ทดลองงาน (รอบจ่ายรายวัน) (ผู้ใช้สั่ง 13 ต.ค. 2569)
+              รอบเดือนตัดวันที่ 25 ไม่ใช่เดือนปฏิทิน — บอกช่วงวันจริงไว้ด้วย (ตรงกับหน้าสลิปและหน้าคำนวณ) */}
+          <PaySection
+            title="พนักงานประจำ"
+            total={monthStaff}
+            done={payClosed}
+            round={`รอบ ${shortMonth(lastMonth)}`}
+            dates={`${thaiDate(payCycle.from)} – ${thaiDate(payCycle.to)}`}
+            href="/hr/payroll?g=month"
+          />
+          <PaySection
+            title="ทดลองงาน (จ่ายรายสัปดาห์)"
+            total={dayStaff}
+            done={dayPaid}
+            round="รอบจ่าย"
+            dates={rangeLabel(dayRange)}
+            href={payHref("/hr/payroll", "daily", null, dayRange)}
+            last
+          />
         </Panel>
 
-        {/* การ์ดใบลาเต็มแถวซ้าย สูงเท่าคอลัมน์ขวา (ต้นแบบวางใบลาเต็มความกว้างเหมือนกัน) */}
-        <div className="h-full md:col-span-3 xl:col-span-6">
+        <div className="md:col-span-3 h-full">
+          <TodoTable
+            active={active}
+            probation={probation}
+            hr={hr}
+            lastMonth={lastMonth}
+            span={span}
+          />
+        </div>
+
+        <div className="md:col-span-3 h-full">
           <InternLeaveCard hr={hr} />
         </div>
 
-        <div className="flex h-full flex-col gap-3.5 md:col-span-3 xl:col-span-2">
+        <div className="flex h-full flex-col gap-3.5 md:col-span-6 xl:col-span-2">
           <RecentStarters active={active} />
           <TeamNote active={active} today={today} />
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* งานที่ต้องดำเนินการ — ตารางเต็มความกว้างท้ายหน้าตามต้นแบบ (เจ้าของสั่ง 8 ต.ค. 2569) */}
-      <div className="max-md:hidden">
-        <TodoTable active={active} probation={probation} hr={hr} lastMonth={lastMonth} span={span} />
+/** ส่วนย่อยของการ์ดเงินเดือนรอบนี้ — หนึ่งกลุ่มการจ่าย (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+function PaySection({
+  title,
+  total,
+  done,
+  round,
+  dates,
+  href,
+  last,
+}: {
+  title: string;
+  total: number;
+  done: boolean;
+  round: string;
+  dates: string;
+  href: string;
+  last?: boolean;
+}) {
+  return (
+    <div className={last ? "mt-4 border-t border-border pt-4" : ""}>
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-[13px] font-semibold">{title}</h3>
+        <span className="num text-[12px] text-muted-foreground">{total} คน</span>
       </div>
+      <p className="mt-1 text-[12px] text-muted-foreground">
+        {round} <span className="num">{dates}</span>
+      </p>
+      <ul className="mt-2 grid grid-cols-2 gap-2 text-[12.5px]">
+        <li className="rounded-[10px] bg-muted/50 px-2.5 py-1.5">
+          ดำเนินการแล้ว <b className="num block text-[15px]">{done ? total : 0}</b>
+        </li>
+        <li className="rounded-[10px] bg-muted/50 px-2.5 py-1.5">
+          รอดำเนินการ <b className="num block text-[15px]">{done ? 0 : total}</b>
+        </li>
+      </ul>
+      <Link href={href} className="btn glass-thin btn-mini mt-2.5 w-full justify-center" data-ceo-hide>
+        จัดการเงินเดือน
+      </Link>
     </div>
   );
 }
@@ -277,16 +258,13 @@ function RecentStarters({ active }: { active: Employee[] }) {
         </Link>
       </div>
       <ul className="mt-2 flex-1 divide-y divide-border overflow-y-auto">
-        {list.length === 0 && (
-          <li className="py-6 text-center text-[13px] text-muted-foreground">ไม่มีรายชื่อในหมวดนี้</li>
-        )}
         {list.map((e) => (
           <li key={e.id} className="flex items-center gap-3 py-2.5">
             <span className="grid size-9 flex-none place-items-center rounded-[11px] bg-[var(--accent)] text-[12px] font-bold text-primary">
-              {e.nick || e.name.slice(0, 2)}
+              {initialOf(e)}
             </span>
             <span className="min-w-0 flex-1">
-              <b className="block truncate text-[13px] font-semibold">{e.name}</b>
+              <b className="block truncate text-[13px] font-semibold">{displayName(e)}</b>
               <em className="block truncate text-[11.5px] text-muted-foreground not-italic">
                 {hrPos(e.pos).label} · {HR_EMPTYPE[e.type].label} · เริ่ม {thaiDate(e.startedAt)}
               </em>
@@ -312,7 +290,7 @@ function TeamNote({ active, today }: { active: Employee[]; today: string }) {
       </b>
       <p className="mt-1.5 text-[12.5px] leading-[1.55] text-white/80">
         {longest
-          ? `อยู่ด้วยกันนานที่สุดคือ ${longest.name} ${years} ปีแล้ว`
+          ? `อยู่ด้วยกันนานที่สุดคือ ${displayName(longest)} ${years} ปีแล้ว`
           : "ยังไม่มีพนักงานในทะเบียน"}
       </p>
     </section>
@@ -337,7 +315,7 @@ function rangeSpan(today: string, range: Range) {
 /** สัดส่วนพนักงานตามประเภท — ส่วนย่อยของก้อนเดียว จึงใช้โดนัทตามต้นแบบ */
 function PeopleDonut({ active }: { active: Employee[] }) {
   const all = active.length || 1;
-  const R = 54;
+  const R = 60;
   const C = 2 * Math.PI * R;
   /* คิดความยาวส่วนโค้งและจุดเริ่มของแต่ละชั้นไว้ก่อนวาด จะได้ไม่ต้องสะสมค่าระหว่างวาด */
   const slices = TYPE_ROWS.reduce<
@@ -376,10 +354,11 @@ function PeopleDonut({ active }: { active: Employee[] }) {
     <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
       {/* จอแคบ: วงกลมอยู่บน รายการอยู่ล่าง — ปล่อยให้ flex-wrap ตัดเองไม่ได้ผล
           เพราะความกว้างขั้นต่ำของรายการดันให้แผงทั้งใบกว้างเกินจอ */}
-      <div className="flex min-w-0 flex-col items-center gap-5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6">
+      {/* วงโดนัทอยู่กึ่งกลางคอลัมน์ รายการประเภทอยู่ใต้วง (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+      <div className="flex min-w-0 flex-col items-center gap-5">
       <span className="relative block size-[140px] flex-none">
         <svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="สัดส่วนพนักงานตามประเภท">
-          <circle cx="70" cy="70" r={R} fill="none" stroke="var(--muted)" strokeWidth="22" />
+          <circle cx="70" cy="70" r={R} fill="none" stroke="var(--muted)" strokeWidth="12" />
           {slices.map(({ key, alpha, n, len, start }) => (
             <circle
               key={key}
@@ -389,7 +368,7 @@ function PeopleDonut({ active }: { active: Employee[] }) {
               fill="none"
               stroke="var(--primary)"
               strokeOpacity={alpha}
-              strokeWidth="22"
+              strokeWidth="12"
               strokeDasharray={`${len.toFixed(2)} ${(C - len).toFixed(2)}`}
               strokeDashoffset={(-start).toFixed(2)}
               transform="rotate(-90 70 70)"
@@ -430,14 +409,15 @@ function PeopleDonut({ active }: { active: Employee[] }) {
       </div>
 
       <div className="min-w-0">
-        <h3 className="mb-2 text-[13px] font-semibold text-muted-foreground">จำนวนตามแผนก</h3>
+        {/* หัวข้อย่อยจางลงให้อ่านเป็นป้าย ไม่ใช่ข้อมูล (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+        <h3 className="mb-2 text-[12px] font-normal text-muted-foreground/70">จำนวนตามแผนก</h3>
         {depts.map((d) => (
           <div
             key={d.label}
             className="grid grid-cols-[110px_minmax(0,1fr)_30px] items-center gap-3 py-[7px] sm:grid-cols-[150px_minmax(0,1fr)_34px]"
           >
             <span className="truncate text-[13px]">{d.label}</span>
-            <span className="flex h-3.5 overflow-hidden rounded-[4px] bg-muted">
+            <span className="flex h-2 overflow-hidden rounded-full bg-muted">
               {d.parts.map((x) =>
                 x.n ? (
                   <i
@@ -453,14 +433,14 @@ function PeopleDonut({ active }: { active: Employee[] }) {
           </div>
         ))}
 
-        <h3 className="mt-4 mb-2 text-[13px] font-semibold text-muted-foreground">จำนวนตามเพศ</h3>
+        <h3 className="mt-4 mb-2 text-[12px] font-normal text-muted-foreground/70">จำนวนตามเพศ</h3>
         {sexes.map((g) => (
           <div
             key={g.label}
             className="grid grid-cols-[110px_minmax(0,1fr)_30px] items-center gap-3 py-[7px] sm:grid-cols-[150px_minmax(0,1fr)_34px]"
           >
             <span className="truncate text-[13px]">{g.label}</span>
-            <span className="flex h-3.5 overflow-hidden rounded-[4px] bg-muted">
+            <span className="flex h-2 overflow-hidden rounded-full bg-muted">
               {g.n > 0 && (
                 <i className="block h-full bg-primary" style={{ width: `${(g.n / mostSex) * 100}%`, opacity: 0.85 }} />
               )}
@@ -476,35 +456,75 @@ function PeopleDonut({ active }: { active: Employee[] }) {
 /*
  * การลาของนักศึกษาฝึกงาน — ฝ่ายบุคคลอนุมัติเอง (ต้นแบบ hr-dashboard.html)
  * แสดงเฉพาะใบที่รออนุมัติ กดแล้วตัดสินทันที ใบที่อนุมัติลงเวลาทำงานของคนนั้นเป็นวันลา
+ *
+ * 2 ต.ค. 2569 นักศึกษาฝึกงานมีบัญชีแล้ว ยื่นใบลาเองในแอปได้ (ใบขึ้นรายการรออนุมัติของฝ่ายบุคคล)
+ * ผู้ใช้สั่งให้การ์ดนี้ดึงใบจากแอปมาด้วย — สองแหล่งรวมเป็นรายการเดียว ตัดสินที่นี่หรือที่ /approvals ก็ได้
+ * ใบจากแอปลงเวลาทำงานผ่านสะพาน hr-link เหมือนใบของบทบาทอื่น
  */
+type InternWait = {
+  key: string;
+  emp: string;
+  type: string;
+  from: string;
+  to: string;
+  days: number;
+  note: string;
+  decide: (ok: boolean) => void;
+};
+
 function InternLeaveCard({ hr }: { hr: ReturnType<typeof useHr> }) {
-  const wait = hr.internLeave.filter((r) => r.status === "pending");
+  const allLeave = useAllLeave();
+  const fromHr: InternWait[] = hr.internLeave
+    .filter((r) => r.status === "pending")
+    .map((r) => ({
+      key: r.id,
+      emp: r.emp,
+      type: HR_LEAVE_LABEL[r.lt],
+      from: r.from,
+      to: r.to,
+      days: r.days,
+      note: r.note,
+      decide: (ok) => decideInternLeave(r.id, ok, bkkStamp()),
+    }));
+  const fromApp: InternWait[] = (allLeave.intern ?? [])
+    .filter((r) => r.status === "รอการอนุมัติ")
+    .map((r) => ({
+      key: `app-${r.id}`,
+      emp: ROLE_EMPLOYEE.intern ?? "",
+      type: r.type,
+      from: r.date,
+      to: r.toDate,
+      days: r.days,
+      note: r.comment,
+      /* ไม่อนุมัติจากการ์ดนี้ไม่มีช่องเหตุผล เหมือนใบชุดเดิม — ต้องการเหตุผลให้ตัดสินที่รายการรออนุมัติ */
+      decide: (ok) => (ok ? approveLeave("intern", r.id) : rejectLeave("intern", r.id, "")),
+    }));
+  const wait = [...fromApp, ...fromHr];
   return (
     <section className="glass flex h-full flex-col rounded-[14px]">
       <h2 className="px-5 pt-[15px] pb-2 text-[15px] font-bold">
         การลาของนักศึกษาฝึกงาน <b className="ml-1 text-primary">{wait.length}</b>
       </h2>
       {wait.length === 0 ? (
-        /* การ์ดนี้ยืนเดี่ยวเต็มแถวแล้ว ไม่ต้องกันความสูงให้เท่าการ์ดข้าง ๆ เหมือนตอนอยู่สามใบ */
-        <p className="grid min-h-[120px] flex-1 place-items-center px-5 pb-4 text-[13px] text-muted-foreground">
+        <p className="grid min-h-[240px] flex-1 place-items-center px-5 text-[13px] text-muted-foreground">
           ไม่มีคำขอลาของนักศึกษาฝึกงานที่รออนุมัติ
         </p>
       ) : (
-        <div className="flex-1 pb-1.5">
+        <div className="min-h-[240px] flex-1 overflow-y-auto">
         {wait.map((r) => (
           <div
-            key={r.id}
+            key={r.key}
             className="flex flex-wrap items-center gap-3.5 border-t border-border px-5 py-3 first-of-type:border-t-0"
           >
             <div className="flex min-w-[240px] flex-1 flex-col gap-0.5">
               <b className="text-[13.5px] font-semibold">
-                {empOf(hr.emp, r.emp)?.name ?? r.emp} · {HR_LEAVE_LABEL[r.lt]}
+                {displayName(empOf(hr.emp, r.emp)) || "—"} · {r.type}
               </b>
               <span className="text-[12.5px] text-muted-foreground">
                 {thaiDate(r.from)}
-                {r.from !== r.to && ` – ${thaiDate(r.to)}`} รวม {r.days} วัน
+                {r.from !== r.to && ` – ${thaiDate(r.to)}`} รวม {fmtLeave(r.days)}
               </span>
-              {r.note && <span className="text-[12.5px] text-muted-foreground/70">{r.note}</span>}
+              {/* การ์ดแดชบอร์ดแสดงแค่ชื่อ ประเภท และวันที่ขอ (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
             </div>
             {/* ฝ่ายบุคคลเป็นผู้อนุมัติ — มุมมอง CEO (ceo-hr.html) ก็เห็นปุ่มเหมือนกัน ตามต้นแบบ */}
             <div className="flex gap-2">
@@ -512,7 +532,7 @@ function InternLeaveCard({ hr }: { hr: ReturnType<typeof useHr> }) {
                 type="button"
                 className="btn glass-thin"
                 style={{ height: 34 }}
-                onClick={() => decideInternLeave(r.id, false, bkkStamp())}
+                onClick={() => r.decide(false)}
               >
                 ไม่อนุมัติ
               </button>
@@ -520,7 +540,7 @@ function InternLeaveCard({ hr }: { hr: ReturnType<typeof useHr> }) {
                 type="button"
                 className="btn solid btn-solid"
                 style={{ height: 34 }}
-                onClick={() => decideInternLeave(r.id, true, bkkStamp())}
+                onClick={() => r.decide(true)}
               >
                 อนุมัติ
               </button>
@@ -648,7 +668,7 @@ function TodoTable({
         out.push({
           key: `doc-${e.id}`,
           what: "เอกสารยังไม่ครบ",
-          who: e.name,
+          who: displayName(e),
           detail: `${missing.length} รายการ`,
           due: "",
           state: "รอเพิ่มข้อมูล",
@@ -663,7 +683,7 @@ function TodoTable({
       out.push({
         key: `prob-${e.id}`,
         what: "ครบกำหนดทดลองงาน",
-        who: e.name,
+        who: displayName(e),
         detail: `เริ่มงาน ${thaiDate(e.startedAt)}`,
         due: toIsoDate(probEnd(e.startedAt)),
         state: left < 0 ? `เลยกำหนด ${Math.abs(left)} วัน` : `เหลือ ${left} วัน`,
@@ -693,11 +713,11 @@ function TodoTable({
 
   return (
     /*
-     * ตารางเต็มความกว้างตามต้นแบบ hr-dashboard.html (เจ้าของสั่ง 8 ต.ค. 2569)
-     * เรื่อง · พนักงาน · รายละเอียด · กำหนด · สถานะ — คอลัมน์ชุดเดียวกับต้นแบบ
-     * เดิมเป็นการ์ดรายการแคบข้างการ์ดใบลา อ่านแล้วเทียบกำหนดของแต่ละเรื่องไม่ได้
+     * โครง mockup 24 ก.ย. 2569 — รายการแถวเดียวจบ ไม่ใช่ตารางกว้าง
+     * เพราะการ์ดนี้อยู่คอลัมน์แคบข้างการ์ดใบลา และแต่ละแถวอ่านแค่ "เรื่อง ใคร และด่วนแค่ไหน"
+     * สูงคงที่ แถวเกินเลื่อนในกล่อง การ์ดข้าง ๆ จะได้ไม่ถูกดันจนสูงตาม
      */
-    <section className="glass min-w-0 rounded-[14px] px-5 py-[18px]">
+    <section className="glass flex h-full min-w-0 flex-col rounded-[14px] px-5 py-[18px]">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[15px] font-bold">งานที่ต้องดำเนินการ</h2>
         {/* ช่วงนี้เป็นตัวกรอง "งานที่มีกำหนด" ตามปุ่มช่วงเวลา ไม่ใช่รอบเงินเดือน (รอบตัดวันที่ 25) */}
@@ -705,50 +725,32 @@ function TodoTable({
           กำหนดในช่วง {thaiDate(span.from)} – {thaiDate(span.to)}
         </span>
       </div>
-
-      <div className="scroll-stable mt-2.5 overflow-auto">
-        <table className="data-table cards-sm min-w-[760px]">
-          <thead>
-            <tr>
-              <th>เรื่อง</th>
-              <th style={{ width: 200 }}>พนักงาน</th>
-              <th style={{ width: 230 }}>รายละเอียด</th>
-              <th style={{ width: 150 }}>กำหนด</th>
-              <th style={{ width: 130 }}>สถานะ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                  ไม่มีงานที่ต้องดำเนินการ
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.key}>
-                  <td data-label="เรื่อง">
-                    <b className="font-semibold">{r.what}</b>
-                  </td>
-                  <td data-label="พนักงาน">{r.who}</td>
-                  <td data-label="รายละเอียด" className="muted">
-                    {r.detail}
-                  </td>
-                  <td data-label="กำหนด" className="num muted">
-                    {r.due ? thaiDate(r.due) : "ไม่มีกำหนด"}
-                  </td>
-                  <td data-label="สถานะ">
-                    <span className={`tag ${r.late ? "t-late" : "t-early"}`}>
-                      <i />
-                      {r.state}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* การ์ดสามใบในแถวนี้สูงเท่ากันทั้งแถว รายการกินที่ที่เหลือ แถวเกินเลื่อนในกล่อง
+         (ตั้งความสูงตายตัวไม่ได้ เพราะหัวการ์ดแต่ละใบสูงไม่เท่ากัน การ์ดจะเหลื่อมกัน) */}
+      {rows.length === 0 ? (
+        <p className="grid min-h-[240px] flex-1 place-items-center text-[13px] text-muted-foreground">
+          ไม่มีงานที่ต้องดำเนินการ
+        </p>
+      ) : (
+        <ul className="mt-1.5 min-h-[240px] flex-1 divide-y divide-border overflow-y-auto">
+          {rows.map((r) => (
+            <li key={r.key} className="flex items-center gap-3 py-[11px]">
+              <span className="min-w-0 flex-1">
+                <b className="block truncate text-[13.5px] font-medium">
+                  {r.what} · {r.who}
+                </b>
+                <em className="block truncate text-[11.5px] text-muted-foreground not-italic">
+                  {r.detail} · {r.due ? `กำหนด ${thaiDate(r.due)}` : "ไม่มีกำหนด"}
+                </em>
+              </span>
+              <span className={`tag flex-none ${r.late ? "t-late" : "t-early"}`}>
+                <i />
+                {r.state}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

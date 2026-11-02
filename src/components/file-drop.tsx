@@ -7,18 +7,14 @@
  * แถบความคืบหน้าเป็นการจำลองเวลาอัปโหลดตามดีไซน์ ไม่ใช่ความคืบหน้าจริง
  * (ดู UPLOAD_MS ข้างล่าง) พอต่อ backend แล้วให้แทนที่ด้วยเลขจริงจาก XHR/fetch
  *
- * ใช้ร่วมกันสามหน้า — คำขอก่อนการขาย · โปรไฟล์ · ส่งงานของพนักงาน
+ * ใช้ร่วมกันสามหน้า — คำขอก่อนการขาย · โปรไฟล์ · ส่งงานของทีมงาน
  */
 
 import { useEffect, useRef, useState } from "react";
-import { putFile, removeStoredFile } from "@/lib/file-store";
 import { CloseIcon, TrashIcon, UploadIcon } from "./icons";
 
-/**
- * ไฟล์ที่แนบไว้ — id ไว้จับคู่กับความคืบหน้า เพราะชื่อซ้ำกันได้ · url = แนบเป็นลิงก์ (ขนาด 0)
- * fileId = รหัสไฟล์จริงที่เก็บไว้ในเครื่อง (file-store.ts) มีไว้ให้เปิดไฟล์กลับมาดูได้
- */
-export type PickedFile = { id: string; name: string; size: number; url?: string; fileId?: string };
+/** ไฟล์ที่แนบไว้ — id ไว้จับคู่กับความคืบหน้า เพราะชื่อซ้ำกันได้ · url = แนบเป็นลิงก์ (ขนาด 0) */
+export type PickedFile = { id: string; name: string; size: number; url?: string };
 
 /** อัปโหลดจำลองนานเท่าไร และขยับทุกกี่มิลลิวินาที */
 const UPLOAD_MS = 1200;
@@ -42,9 +38,6 @@ function newId() {
   seq += 1;
   return `f${seq}-${Date.now()}`;
 }
-
-/** ความยาวลิงก์สูงสุดที่รับ — เผื่อลิงก์แชร์ของ Google Drive ที่ยาวอยู่แล้ว */
-const LINK_MAX = 400;
 
 export function FileDrop({
   files,
@@ -74,19 +67,13 @@ export function FileDrop({
 }) {
   const pickerRef = useRef<HTMLInputElement>(null);
   const [link, setLink] = useState("");
-  /* ข้อความเตือนใต้ช่องลิงก์ — ว่างคือไม่มีปัญหา
-     เดิมเป็น true/false แล้วกดทั้งที่ช่องว่างจะเงียบสนิท ผู้ใช้ไม่รู้ว่าต้องพิมพ์ก่อน */
-  const [linkErr, setLinkErr] = useState("");
+  const [linkErr, setLinkErr] = useState(false);
 
   function addLink() {
     const v = link.trim();
-    if (!v) return setLinkErr("พิมพ์ลิงก์ในช่องก่อนกดแนบ");
-    if (!/^https?:\/\//i.test(v)) return setLinkErr("ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://");
-    /* ลิงก์ยาวผิดปกติมักเป็นการวางผิด และทำให้รายการไฟล์ล้นกรอบ (ไล่หาบั๊ก 12 ต.ค. 2569) */
-    if (v.length > LINK_MAX) return setLinkErr(`ลิงก์ยาวเกิน ${LINK_MAX} ตัวอักษร ตรวจดูว่าวางมาเกินหรือเปล่า`);
-    /* แนบเส้นเดิมซ้ำไม่มีประโยชน์ และคนอ่านจะงงว่าทำไมมีสองบรรทัดเหมือนกัน */
-    if (files.some((f) => f.url === v)) return setLinkErr("แนบลิงก์นี้ไว้แล้ว");
-    setLinkErr("");
+    if (!v) return;
+    if (!/^https?:\/\//i.test(v)) return setLinkErr(true);
+    setLinkErr(false);
     onChange([...files, { id: newId(), name: v, size: 0, url: v }]);
     setLink("");
   }
@@ -130,12 +117,11 @@ export function FileDrop({
 
   function add(list: FileList | null) {
     if (!list) return;
-    const added = Array.from(list).map((f) => {
-      const id = newId();
-      /* เก็บตัวไฟล์ไว้ในเครื่องด้วย จะได้เปิดกลับมาดูได้ ไม่ใช่จำแค่ชื่อ (ตรวจระบบ 5 ต.ค. 2569) */
-      void putFile(id, f);
-      return { id, name: f.name, size: f.size, fileId: id };
-    });
+    const added = Array.from(list).map((f) => ({
+      id: newId(),
+      name: f.name,
+      size: f.size,
+    }));
     setDone((prev) => {
       const next = { ...prev };
       for (const f of added) next[f.id] = 0;
@@ -145,8 +131,6 @@ export function FileDrop({
   }
 
   function drop(id: string) {
-    const gone = files.find((f) => f.id === id);
-    if (gone?.fileId) void removeStoredFile(gone.fileId);
     onChange(files.filter((f) => f.id !== id));
   }
 
@@ -204,7 +188,7 @@ export function FileDrop({
               value={link}
               onChange={(e) => {
                 setLink(e.target.value);
-                setLinkErr("");
+                setLinkErr(false);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -221,7 +205,7 @@ export function FileDrop({
             </button>
           </div>
           {linkErr && (
-            <p role="alert" className="mt-1.5 text-[12.5px] text-destructive">{linkErr}</p>
+            <p className="mt-1.5 text-[12.5px] text-destructive">ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://</p>
           )}
         </>
       )}

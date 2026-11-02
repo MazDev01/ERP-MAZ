@@ -12,45 +12,55 @@
  * ไม่ใช่จากข้อมูลตั้งต้นของฝ่ายบุคคล เพราะใบที่พนักงานยื่นเองคือของจริงกว่า
  *
  * ทั้งห้าบทบาทผูกครบแล้ว — ฝ่ายขาย PM และบัญชีถูกเพิ่มเข้าทะเบียนเป็น E18–E20
- * ส่วนพนักงานใช้ E05 ที่มีอยู่ในทะเบียนจริงอยู่แล้ว ไม่ได้สร้างคนซ้ำ
+ * ส่วนทีมงานใช้ E05 ที่มีอยู่ในทะเบียนจริงอยู่แล้ว ไม่ได้สร้างคนซ้ำ
  * TODO: ⚠️ ข้อมูลส่วนตัวและเงินเดือนของสามคนแรกเป็นค่าสมมติ ดูหมายเหตุใน hr-data.ts
  */
 
 import { useCallback, useEffect, useMemo } from "react";
 import { dayKey, recordsOfDay, toSessions, type PunchRecord } from "./attendance";
 import { useAllPunches } from "./attendance-store";
-import { lateMinutes } from "./work-schedule";
+import { companySchedule, lateMinutes, minutesOfDay, scheduleFor, type DaySchedule } from "./work-schedule";
 import {
   ROLE_EMPLOYEE,
   HR_REIMB,
   DEMO_CHECKIN,
   DEMO_LEAVE_TODAY,
   accountRoles,
+  closedIn,
   hrCycle,
   linesOfGroup,
   payLines,
   sumOfGroup,
+  dailyPayLines,
+  dailyRoundRange,
+  dailySumOf,
+  isDailyRoundKey,
+  leaveDatesOf,
+  payDrifted,
+  payNamesOf,
+  paySnapOf,
   type ComSource,
   type Cycle,
   type LeaveKind,
   type PayGroup,
   type TimeRec,
 } from "./hr-data";
-import { useStaffEmployeeId } from "./staff-identity";
 import { useCrm } from "./crm-store";
 import { claimTotal, fuelTotal } from "./expense-data";
 import { useAllClaims } from "./expense-store";
 import { useAcc } from "./acc-store";
-import { useHr, voidPayApproval } from "./hr-store";
+import { resubmitPayApproval, useHr } from "./hr-store";
 import { usePm } from "./pm-store";
-import { entitlementDays, useAllLeave } from "./leave-store";
+import { useAllLeave } from "./leave-store";
 import { useEmpRequests, type EmpRequest } from "./emp-requests";
 import { otKindOf, paidHours } from "./ot-data";
 import { useAllOt } from "./ot-store";
-import { addDays, baht, bkkOf, pad2, thaiMonth, todayIso } from "./format";
+import { bkkOf, bkkStamp, pad2, thaiMonth, todayIso } from "./format";
 import { isWorkday } from "./holidays";
 import { useRole, type Role } from "./role";
-import { leavePeriodOf, leaveYearOf, type LeaveRecord } from "./leave-data";
+import { mineItems, PS_REQUEST_ITEM, type MineKind, type NavItem } from "./nav";
+import { psHasRequestFor } from "./presales-work";
+import { LEAVE_DAY_HOURS, leaveHoursOf, type LeaveRecord } from "./leave-data";
 
 /* บทบาทที่ล็อกอินได้ → รหัสในทะเบียนพนักงาน (ย้ายไปอยู่ hr-data เพื่อให้สโตร์ใช้ได้โดยไม่วนกัน) */
 export { ROLE_EMPLOYEE };
@@ -61,14 +71,11 @@ export const EMPLOYEE_ROLE: Record<string, Role> = Object.fromEntries(
 ) as Record<string, Role>;
 
 /*
- * ประเภทการลาในใบลามี 5 แบบ แต่ฝ่ายบุคคลสรุปเหลือ 3 กลุ่มในตารางเวลาทำงาน
- * ลาคลอดกับลาไม่รับค่าจ้างจึงอยู่กลุ่ม "ลากิจ" — ต่างกันที่เรื่องเงิน ไม่ใช่ชื่อกลุ่ม
+ * ประเภทการลาในใบลามี 5 แบบ แต่ฝ่ายบุคคลสรุปเหลือ 3 กลุ่ม
+ * ลาคลอดกับลาไม่รับค่าจ้างจัดเป็น "ลากิจ" ไปก่อน เพราะยังไม่มีช่องของตัวเอง
  *
- * เรื่องเงินแยกด้วยธง unpaid รายวัน (เจ้าของตัดสิน 6 ต.ค. 2569)
- *   ลาในสิทธิ์        ได้ค่าจ้างเต็ม
- *   ลาเกินสิทธิ์       ไม่ได้ค่าจ้าง หักตามจำนวนวันที่เกิน
- *   ลาคลอด           บริษัทจ่าย 45 วันแรก (ตั้งที่สิทธิ์วันลา) ส่วนที่เหลือประกันสังคมจ่าย
- *   ลาไม่รับค่าจ้าง    ไม่ได้ค่าจ้างทุกวัน
+ * TODO: ⚠️ ลาคลอดกับลาไม่รับค่าจ้างมีผลต่อการจ่ายเงินต่างจากลากิจ
+ * ต้องแยกกลุ่มออกมาเมื่อได้ข้อสรุปเรื่องเงื่อนไขการหักเงิน
  */
 const LEAVE_GROUP: Record<string, LeaveKind> = {
   ลาพักร้อน: "vacation",
@@ -85,7 +92,7 @@ const LEAVE_GROUP: Record<string, LeaveKind> = {
  * แต่ **ไม่ล้างวันอื่นทิ้ง** เพราะทะเบียนมีวันก่อนเริ่มใช้ระบบอยู่ด้วย
  * ถ้าใช้วิธีแทนที่ทั้งก้อนแบบใบลา ประวัติมาสายเก่าจะหายหมดทันทีที่ผูกบทบาท
  */
-function mergeLate(seed: TimeRec["late"], records: PunchRecord[]) {
+function mergeLate(seed: TimeRec["late"], records: PunchRecord[], sch: DaySchedule) {
   const byDay = new Map<string, PunchRecord[]>();
   for (const r of records) {
     const day = dayKey(new Date(r.at));
@@ -98,7 +105,8 @@ function mergeLate(seed: TimeRec["late"], records: PunchRecord[]) {
     if (!first) continue;
     /* มาทำงานวันหยุดหรือเสาร์-อาทิตย์ไม่ถือว่าสาย — วันนั้นไม่มีเวลาเข้างานที่ต้องมาให้ทัน */
     if (!isWorkday(new Date(`${day}T00:00:00`), day)) continue;
-    const min = lateMinutes(new Date(first.at));
+    /* สายเทียบเวลาเข้างานของคนนั้น — แม่บ้านเข้า 08:00 (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+    const min = lateMinutes(new Date(first.at), sch);
     /* ตอกบัตรทันเวลาก็ต้องบันทึกว่าวันนั้นไม่สาย ไม่ใช่ปล่อยให้ค่าของทะเบียนค้างอยู่ */
     real.set(day, min > 0 ? min : 0);
   }
@@ -115,57 +123,36 @@ function counted(r: LeaveRecord) {
   return r.status === "อนุมัติแล้ว";
 }
 
-/*
- * วันลาที่ไม่ได้ค่าจ้างของคนหนึ่ง — คืนชุดวันที่ที่ต้องหักเงิน
- * ไล่ใบที่อนุมัติแล้วของแต่ละประเภทตามลำดับวัน นับสะสมเทียบกับสิทธิ์ของรอบปีนั้น
- * วันที่เกินสิทธิ์ขึ้นไปถือว่าไม่ได้ค่าจ้าง — ลาคลอดใช้กติกาเดียวกัน เพราะวันที่บริษัทจ่ายตั้งไว้ที่สิทธิ์วันลา
- */
-function unpaidDaysOf(records: LeaveRecord[], empId: string) {
-  const out = new Set<string>();
-  const byType = new Map<string, LeaveRecord[]>();
-  for (const r of records.filter(counted)) byType.set(r.type, [...(byType.get(r.type) ?? []), r]);
-  for (const [type, list] of byType) {
-    /* ลาไม่รับค่าจ้างไม่ได้เงินทุกวันอยู่แล้ว ไม่ต้องเทียบสิทธิ์ */
-    const always = type === "ลาไม่รับค่าจ้าง";
-    const byPeriod = new Map<string, LeaveRecord[]>();
-    for (const r of list) {
-      const k = leavePeriodOf(leaveYearOf(r.date));
-      byPeriod.set(k, [...(byPeriod.get(k) ?? []), r]);
-    }
-    for (const [period, rows] of byPeriod) {
-      const quota = always ? 0 : entitlementDays(type, period, list, empId);
-      let used = 0;
-      for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
-        for (let d = r.date; d <= r.toDate; d = addDays(d, 1)) {
-          const step = r.half ? 0.5 : 1;
-          used += step;
-          if (used > quota + 1e-9) out.add(d);
-          if (out.size > 400) break;
-        }
-      }
-    }
+/** ใบลาหนึ่งใบกินหลายวันได้ กางออกเป็นรายวันเพื่อให้ตรงกับที่ฝ่ายบุคคลนับ */
+function spread(r: LeaveRecord) {
+  const out: { d: string; type: LeaveKind; span: "full" | "half"; half?: "am" | "pm"; no: string; h?: number }[] = [];
+  const type = LEAVE_GROUP[r.type] ?? "personal";
+  /* ลาไม่เต็มวัน (ครึ่งวัน/รายชั่วโมง) ติดชั่วโมงจริงไปด้วย — เดิมลารายชั่วโมงถูกนับเป็นเต็มวัน (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  const partial = r.date === r.toDate && (Boolean(r.half) || (r.hours != null && r.hours < LEAVE_DAY_HOURS));
+  const span = partial ? ("half" as const) : ("full" as const);
+  const h = partial ? leaveHoursOf(r) : undefined;
+  /* ช่วงเช้า/บ่ายติดไปด้วย — หน้าสรุปเวลาใช้ตรวจลาแล้วแต่มีเช็คอิน (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+  const half = r.half === "morning" ? ("am" as const) : r.half === "afternoon" ? ("pm" as const) : undefined;
+  /* กางเฉพาะวันทำงาน — เสาร์–อาทิตย์/วันหยุดกลางใบไม่ใช่วันลา (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  for (const d of leaveDatesOf(r.date, r.toDate)) {
+    /* ติดเลขที่ใบไปกับทุกวัน — ใบเดียวกันที่มาถึงอีกทางจะได้ไม่ถูกนับซ้ำ */
+    out.push({ d, type, span, half, no: r.id, h });
   }
   return out;
 }
 
-/** ใบลาหนึ่งใบกินหลายวันได้ กางออกเป็นรายวันเพื่อให้ตรงกับที่ฝ่ายบุคคลนับ */
-function spread(r: LeaveRecord, unpaid?: Set<string>) {
-  const out: { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no: string; unpaid?: boolean }[] = [];
-  const type = LEAVE_GROUP[r.type] ?? "personal";
-  const span = r.half ? ("half" as const) : ("full" as const);
-  /* ลาไม่เต็มวันส่งชั่วโมงจริงไปให้ฝ่ายบุคคลด้วย (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1)
-     ใบวันเดียวที่มีช่วงเวลา จึงหักค่าจ้างตามชั่วโมงที่ลาจริง ไม่ใช่เหมาเป็นครึ่งวัน */
-  const hours =
-    r.date === r.toDate && r.startMin != null && r.endMin != null
-      ? (r.hours ?? (r.endMin - r.startMin) / 60)
-      : undefined;
-  for (let d = r.date; d <= r.toDate; d = addDays(d, 1)) {
-    /* ติดเลขที่ใบไปกับทุกวัน — ใบเดียวกันที่มาถึงอีกทางจะได้ไม่ถูกนับซ้ำ */
-    out.push({ d, type, span, hours, no: r.id, unpaid: unpaid?.has(d) || undefined });
-    /* กันวนไม่รู้จบถ้าเจอใบที่วันสิ้นสุดมาก่อนวันเริ่ม */
-    if (out.length > 90) break;
-  }
-  return out;
+/**
+ * ชั่วโมงลาจริงของคำขอลาไม่เต็มวันในคิวรายรหัส — เวลาเริ่ม–สิ้นสุดหักพักเที่ยงที่คาบเกี่ยว (ผู้ใช้สั่ง 19 ต.ค. 2569)
+ * ไม่มีเวลา = ไม่รู้ (หน้าเวลาคิดจากช่วงเช้า/บ่ายแทน)
+ */
+export function reqLeaveHours(r: Pick<EmpRequest, "start" | "end">) {
+  if (!r.start || !r.end) return undefined;
+  const sch = companySchedule();
+  const a = minutesOfDay(r.start);
+  const b = minutesOfDay(r.end);
+  const lunch = Math.max(0, Math.min(b, minutesOfDay(sch.lunchEnd)) - Math.max(a, minutesOfDay(sch.lunchStart)));
+  const m = Math.max(0, b - a - lunch);
+  return m > 0 ? m / 60 : undefined;
 }
 
 /** ชั่วโมงที่ได้เงินของคำขอโอทีหนึ่งใบ — ผู้อนุมัติปรับชั่วโมงได้ ใช้ที่ปรับแล้วก่อน */
@@ -206,12 +193,11 @@ function addEmpRequests(out: Record<string, TimeRec>, reqs: EmpRequest[]) {
       const type = LEAVE_GROUP[r.leaveType ?? ""] ?? "personal";
       const span = r.span === "half" ? ("half" as const) : ("full" as const);
       const add: TimeRec["leave"] = [];
-      for (let d = r.from; d <= (r.toDate ?? r.from); d = addDays(d, 1)) {
+      /* กางเฉพาะวันทำงาน — เสาร์–อาทิตย์/วันหยุดกลางใบไม่ใช่วันลา (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+      for (const d of leaveDatesOf(r.from, r.toDate ?? r.from)) {
         /* วันหนึ่งลาได้ใบเดียว — วันที่มีอยู่แล้วคือใบเดียวกันที่มาอีกทาง */
         if (!base.leave.some((x) => x.d === d) && !add.some((x) => x.d === d))
-          add.push({ d, type, span, no: r.id });
-        /* กันวนไม่รู้จบถ้าเจอใบที่วันสิ้นสุดมาก่อนวันเริ่ม */
-        if (add.length > 90) break;
+          add.push({ d, type, span, half: span === "half" ? r.period : undefined, no: r.id, h: span === "half" ? reqLeaveHours(r) : undefined });
       }
       if (add.length) out[r.emp] = { ...base, leave: [...base.leave, ...add] };
     }
@@ -248,17 +234,15 @@ export function useHrTime(): Record<string, TimeRec> {
 
     for (const [id, roles] of rolesOf) {
       const base = out[id] ?? { late: [], leave: [], ot: [], issues: [] };
+      const sch = scheduleFor(hr.emp.find((e) => e.id === id));
       /* วันลาซ้ำวันเดียวกันจากสองบทบาทนับครั้งเดียว — วันหนึ่งลาได้ใบเดียว */
       const days = new Set<string>();
-      /* วันที่ไม่ได้ค่าจ้างคิดจากใบของทุกบทบาทรวมกัน สิทธิ์เป็นของ "คน" ไม่ใช่ของบทบาท */
-      const mineLeave = roles.flatMap((r) => leave[r]);
-      const unpaid = unpaidDaysOf(mineLeave, id);
       const lv = roles
-        .flatMap((r) => leave[r].filter(counted).flatMap((x) => spread(x, unpaid)))
+        .flatMap((r) => leave[r].filter(counted).flatMap(spread))
         .filter((x) => !days.has(x.d) && days.add(x.d));
       out[id] = {
         ...base,
-        late: roles.reduce((acc, r) => mergeLate(acc, punches[r]), base.late),
+        late: roles.reduce((acc, r) => mergeLate(acc, punches[r], sch), base.late),
         leave: lv,
         ot: roles.flatMap((r) =>
           ot[r]
@@ -275,7 +259,7 @@ export function useHrTime(): Record<string, TimeRec> {
     }
     addEmpRequests(out, reqs);
     return out;
-  }, [hr.time, leave, ot, punches, reqs]);
+  }, [hr.time, hr.emp, leave, ot, punches, reqs]);
 }
 
 /** ใบที่อนุมัติแล้วแต่ไม่โผล่ในรอบ — หนึ่งแถวคือหนึ่งใบที่จะไม่ได้เงินถ้าปิดรอบไปตอนนี้ */
@@ -330,11 +314,8 @@ export function useMissingApproved(c: Cycle): MissingReq[] {
     const wantLv: { emp: string; days: string[]; no: string }[] = [];
     for (const r of reqs)
       if (r.kind === "leave" && r.status === "approved" && r.from) {
-        const days: string[] = [];
-        for (let d = r.from; d <= (r.toDate ?? r.from); d = addDays(d, 1)) {
-          if (inCycle(d)) days.push(d);
-          if (days.length > 90) break;
-        }
+        /* วันชุดเดียวกับที่ลงเวลาทำงาน (เฉพาะวันทำงาน) — ไม่งั้นเสาร์–อาทิตย์ถูกนับว่าหายตลอด (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+        const days = leaveDatesOf(r.from, r.toDate ?? r.from).filter(inCycle);
         if (days.length) wantLv.push({ emp: r.emp, days, no: r.id });
       }
     for (const [role, id] of Object.entries(ROLE_EMPLOYEE))
@@ -389,8 +370,8 @@ export function useMissingApproved(c: Cycle): MissingReq[] {
 /*
  * ─── ผลการคำนวณของรอบ — หน้าที่เกี่ยวข้องอ่านจากที่นี่ที่เดียว ──────
  *
- * CEO ต้องอนุมัติ "ตัวเลขเดียวกับที่จ่าย" (ผู้ใช้กำหนด 23 ก.ย. 2569)
- * หน้า /ceo/approvals จึงห้ามคิดยอดเอง และห้ามเก็บยอดของตัวเอง — เรียกตัวนี้เหมือนหน้าคำนวณเงินเดือน
+ * ยอดของรอบต้องเป็น "ตัวเลขเดียวกับที่จ่าย" (ผู้ใช้กำหนด 23 ก.ย. 2569) — หน้าไหนอยากได้ยอดรอบเรียกตัวนี้ ห้ามคิดเอง
+ * (เดิมหน้า /ceo/approvals ใช้ตัวนี้ตอนอนุมัติยอด — เลิกขั้น CEO อนุมัติแล้ว ผู้ใช้สั่ง 13 ต.ค. 2569)
  */
 export function usePayrollSumFn() {
   const hr = useHr();
@@ -400,18 +381,25 @@ export function usePayrollSumFn() {
 
   return useCallback(
     (month: string, group: PayGroup) => {
+      /* รอบจ่ายรายวันของทดลองงาน — คีย์เป็นช่วงวัน "จาก~ถึง" (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+      if (isDailyRoundKey(month)) {
+        const range = dailyRoundRange(month);
+        const round = hr.dailyRounds.find((r) => r.id === month);
+        return dailySumOf(dailyPayLines(hr.emp, range, time, hr.extras, today, src, round), range, hr.extras);
+      }
       const range = hrCycle(month);
       const payrun = hr.payruns.find((p) => p.month === month);
       const lines = payLines(hr.emp, range, time, hr.extras, today, src, payrun, month);
-      return sumOfGroup(linesOfGroup(lines, group), group, range, hr.extras);
+      return sumOfGroup(linesOfGroup(lines, group, range), group, range, hr.extras);
     },
-    [hr.emp, hr.payruns, hr.extras, time, src, today],
+    [hr.emp, hr.payruns, hr.dailyRounds, hr.extras, time, src, today],
   );
 }
 
 /**
- * ยอดที่ส่งให้ CEO ไม่ตรงกับยอดที่คิดได้ตอนนี้ — การอนุมัติเดิมใช้ไม่ได้แล้ว
- * เทียบกับ "ยอดที่บันทึกไว้ตอนส่ง/ตอนอนุมัติ" ไม่ใช่ตอนไหนก็ได้ รอบเก่าที่ไม่ได้บันทึกยอดไว้จึงเทียบไม่ได้
+ * ยอดที่ส่งให้ CEO ไม่ตรงกับยอดที่คิดได้ตอนนี้ (ผู้ใช้สั่ง 19 ต.ค. 2569)
+ * เทียบยอดรายคนที่บันทึกไว้ตอนส่ง/ตอนอนุมัติ (รอบเก่าไม่มีรายคนเทียบยอดสุทธิรวม) · รอบที่ปิดเงินเดือนแล้วไม่เทียบ
+ * รวมรอบที่ไม่อนุมัติ (HR แก้แล้วส่งใหม่เอง) และร่างที่ถูกยกเลิกการอนุมัติแบบเก่า (มีเหตุผลค้าง)
  */
 export function usePayrollDrift() {
   const hr = useHr();
@@ -420,28 +408,37 @@ export function usePayrollDrift() {
   return useMemo(
     () =>
       Object.entries(hr.payApprove).flatMap(([key, a]) => {
-        if ((a.status !== "waiting" && a.status !== "approved") || a.net === undefined) return [];
+        const legacyVoid = a.status === "draft" && Boolean(a.reason);
+        if (a.status === "draft" && !legacyVoid) return [];
         const [month, group] = key.split("|") as [string, PayGroup];
-        const now = sumOf(month, group).net;
-        return Math.abs(now - a.net) > 0.005 ? [{ month, group, was: a.net, now }] : [];
+        /* รอบเดือนกลุ่มรายวันแบบเก่าไม่ใช้แล้ว */
+        if (!isDailyRoundKey(month) && group === "day") return [];
+        const closed = isDailyRoundKey(month)
+          ? Boolean(hr.dailyRounds.find((r) => r.id === month)?.payClosedAt)
+          : closedIn(hr.payruns.find((p) => p.month === month), group);
+        if (closed) return [];
+        const sum = sumOf(month, group);
+        if (!legacyVoid && !payDrifted(a, sum)) return [];
+        return [{ month, group, sum }];
       }),
-    [hr.payApprove, sumOf],
+    [hr.payApprove, hr.dailyRounds, hr.payruns, sumOf],
   );
 }
 
 /**
- * ตัวเลขขยับหลังส่ง = การอนุมัติเดิมเป็นโมฆะทันที (ผู้ใช้กำหนด 23 ก.ย. 2569)
- * ล้างให้เองทั้งสองหน้า ฝ่ายบุคคลจะได้เห็นว่าทำไมกลับไปเป็น "ส่งให้ CEO อนุมัติ"
- * และ CEO จะไม่เห็นยอดเก่าค้างอยู่ให้กดอนุมัติ
+ * แก้ยอดหลังส่ง = ส่งให้ CEO อนุมัติใหม่ทันที "แก้ไขแล้ว รออนุมัติใหม่" (ผู้ใช้สั่ง 19 ต.ค. 2569 · แทนการยกเลิกการอนุมัติ)
+ * แบบเดียวกับงานที่ PM ตรวจ — HR ไม่ต้องกดส่งซ้ำ · CEO เห็นป้าย "แก้ไขแล้วส่งใหม่ ครั้งที่ n" และรายการสิ่งที่เปลี่ยน
+ * ยังปิดรอบไม่ได้จนกว่า CEO จะอนุมัติยอดชุดใหม่
  */
-export function usePayrollVoidWatch() {
+export function usePayrollAutoResubmit() {
   const drift = usePayrollDrift();
   useEffect(() => {
     for (const d of drift)
-      voidPayApproval(
+      resubmitPayApproval(
         d.month,
         d.group,
-        `ยอดเปลี่ยนหลังส่งให้ CEO · จาก ${baht(d.was)} เป็น ${baht(d.now)} บาท ต้องส่งอนุมัติใหม่`,
+        { people: d.sum.n, net: d.sum.net, ss: d.sum.ss, lines: paySnapOf(d.sum), names: payNamesOf(d.sum) },
+        bkkStamp(),
       );
   }, [drift]);
 }
@@ -459,9 +456,6 @@ export function usePayrollVoidWatch() {
 export function useMyRoles(): Role[] {
   const role = useRole();
   const hr = useHr();
-  /* บทบาทพนักงานสลับคนได้ตอนเข้าระบบ — บัญชีที่ใช้คือของคนที่เลือกไว้ ไม่ใช่คนตั้งต้นของบทบาท */
-  const staffId = useStaffEmployeeId();
-  const myId = role === "staff" ? staffId : ROLE_EMPLOYEE[role];
   return useMemo(() => {
     /* ผู้ดูแลระบบเป็นบัญชีแยก (เจ้าของสั่ง 25 ก.ย. 2569) — ผู้บริหารไม่ได้ถือสิทธิ์นี้แล้ว
        เมนูตั้งค่าจึงไม่ติดไปอยู่ในเมนูของผู้บริหารอีก
@@ -469,13 +463,84 @@ export function useMyRoles(): Role[] {
        บทบาทนี้ไม่มีกลุ่ม "ของฉัน" (NO_MINE) ถ้าดึงบทบาทฝ่ายบุคคลมาต่อ ใบลา/โอที/ใบเบิกของอรอนงค์
        จะมีสองชุดแยกตามการ์ดที่ใช้เข้าระบบ เพราะสโตร์ส่วนตัวแยกตามบทบาท (ดู role-store.ts) */
     /* บทบาทเดียวกันอาจมีหลายคนถือ (เช่น ฝ่ายบุคคลสองคน) — ยึดบัญชีของคนที่ล็อกอินอยู่ก่อน */
-    const me = hr.emp.find((e) => e.id === myId);
+    const me = hr.emp.find((e) => e.id === ROLE_EMPLOYEE[role]);
     const acc = accountRoles(me?.account).includes(role)
       ? me?.account
       : hr.emp.find((e) => accountRoles(e.account).includes(role))?.account;
     const roles = accountRoles(acc);
-    return roles.length > 1 ? [role, ...roles.filter((r) => r !== role)] : [role];
-  }, [hr.emp, role, myId]);
+    /* เมนูเรียงตามลำดับที่ฝ่ายบุคคลติกตอนสร้างบัญชี ไม่ใช่บทบาทที่ใช้เข้าระบบมาก่อน (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+    return roles.length > 1 && roles.includes(role) ? roles : [role];
+  }, [hr.emp, role]);
+}
+
+/**
+ * เวลาทำงานของคนที่ล็อกอินอยู่ — ตามตำแหน่งในทะเบียน (ผู้ใช้สั่ง 16 ต.ค. 2569)
+ * ไม่พบในทะเบียน (บทบาทเดโม) แม่บ้านใช้เวลาของตำแหน่งแม่บ้าน คนอื่นใช้เวลาของบริษัท
+ */
+export function useMySchedule(): DaySchedule {
+  const role = useRole();
+  const hr = useHr();
+  /* ค่าตั้งค่าเปลี่ยน → เปลือกแอปวาดหน้าใหม่ทั้งหน้าอยู่แล้ว (settingsId) จึงจำตามคนกับบทบาทพอ */
+  return useMemo(() => {
+    const me =
+      hr.emp.find((e) => e.id === ROLE_EMPLOYEE[role]) ??
+      hr.emp.find((e) => accountRoles(e.account).includes(role));
+    return scheduleFor(me ?? (role === "maid" ? "maid" : null));
+  }, [hr.emp, role]);
+}
+
+/**
+ * ทดลองงานกับฝึกงานไม่มีโควต้าวันลา — ทดลองงานหยุดคือหักเงิน ฝึกงานหยุดคือหยุด
+ * จึงไม่แสดงการ์ดสิทธิ์คงเหลือและคำเตือนเกินสิทธิ์ (ผู้ใช้สั่ง 29 ต.ค. 2569)
+ */
+export function useNoLeaveQuota(): boolean {
+  const role = useRole();
+  const hr = useHr();
+  const me =
+    hr.emp.find((e) => e.id === ROLE_EMPLOYEE[role]) ??
+    hr.emp.find((e) => accountRoles(e.account).includes(role));
+  return me?.type === "probat" || me?.type === "intern";
+}
+
+/** เวลาทำงานของบทบาทที่ล็อกอินได้ (ใช้นอก React เช่นที่เก็บการแจ้งเตือน) */
+export function scheduleOfRole(emp: { id: string; pos?: string }[], role: Role): DaySchedule {
+  const me = emp.find((e) => e.id === ROLE_EMPLOYEE[role]);
+  return scheduleFor(me ?? (role === "maid" ? "maid" : null));
+}
+
+/**
+ * เมนู "ของฉัน" ของคนที่ล็อกอิน — ขึ้นตามประเภทพนักงานในทะเบียน ไม่ใช่ตามบทบาท (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ * ไม่พบในทะเบียน (บทบาทเดโม) ใช้ค่าตามบทบาทแทน
+ */
+export function useMyMine(): NavItem[] {
+  const role = useRole();
+  const roles = useMyRoles();
+  const hr = useHr();
+  const presales = useCrm().presales;
+  return useMemo(() => {
+    const me =
+      hr.emp.find((e) => e.id === ROLE_EMPLOYEE[role]) ??
+      hr.emp.find((e) => accountRoles(e.account).includes(role));
+    const kind: MineKind = me
+      ? me.type === "intern"
+        ? "intern"
+        : me.pos === "maid"
+          ? "maid"
+          : roles.every((r) => r === "ceo")
+            ? "none"
+            : "full"
+      : role === "intern"
+        ? "intern"
+        : role === "maid"
+          ? "maid"
+          : role === "ceo"
+            ? "none"
+            : "full";
+    /* มีคำขอทำข้อเสนอส่งถึงตัวเอง แต่ไม่ได้อยู่ทีมก่อนการขาย — เพิ่มเมนูคิวงานให้ (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+    const psItem =
+      !roles.includes("ps") && psHasRequestFor(presales, ROLE_EMPLOYEE[role]) ? [PS_REQUEST_ITEM] : [];
+    return [...mineItems(kind), ...psItem];
+  }, [hr.emp, role, roles, presales]);
 }
 
 export function usePendingRequests(c: Cycle) {
@@ -529,7 +594,7 @@ export function usePendingInMonth(month: string) {
 /*
  * งานฝั่งโปรเจคของพนักงานคนหนึ่ง
  *
- * ใช้ได้เพราะรหัส E01–E10 ในทะเบียนพนักงานคือคนเดียวกับพนักงานฝั่ง PM
+ * ใช้ได้เพราะรหัส E01–E10 ในทะเบียนพนักงานคือคนเดียวกับทีมงานฝั่ง PM
  * (ดูหมายเหตุหัวไฟล์ hr-data.ts) ระบบจึงอ้างถึงคนคนเดียวกันด้วยรหัสเดียวได้
  *
  * TODO: ⚠️ E11 เป็นคนละคนกันในสองชุด และ E12–E17 ไม่มีฝั่ง PM
@@ -546,7 +611,7 @@ export function useEmployeeWork(id: string) {
       open: rows.filter((x) => x.t.status !== "done"),
       done: rows.filter((x) => x.t.status === "done").length,
       /* โปรเจคที่คนนี้มีงานค้างอยู่ ไม่ซ้ำใบ */
-      projects: [...new Map(rows.map((x) => [x.p.deal, x.p])).values()],
+      projects: [...new Map(rows.map((x) => [x.p.pj, x.p])).values()],
     };
   }, [pm.projects, id]);
 }
@@ -580,7 +645,7 @@ export function useComSource(): ComSource {
       const emp = empOfPm(d.seller ?? ownerOf.get(d.customerCode) ?? "");
       return emp ? [{ emp, date: d.closedAt, total: d.total }] : [];
     });
-    /* ใบเสร็จอ้างรายการวางบิล (เลขดีลฝั่งบัญชี) — โปรเจคผูกกับใบแจ้งหนี้งวดแรก หารายการวางบิลผ่านใบนั้น */
+    /* ใบเสร็จอ้างรายการวางบิล (เลขดีลฝั่งบัญชี) — โปรเจคผูกกับใบแจ้งหนี้งวดแรก หารายการวางบิลผ่านใบนั้น (ผู้ใช้สั่ง 5 ต.ค. 2569) */
     const pmOfDeal = new Map<string, string>();
     for (const p of pm.projects) {
       const id = empOfPm(p.pm);
@@ -651,7 +716,7 @@ export function useComSource(): ComSource {
       });
     }
     return { sales, paid, reimb };
-  }, [hr.emp, hr.payruns, crm.deals, crm.customers, acc.receipts, acc.invoices, pm.projects, claims, reqs]);
+  }, [hr.emp, hr.payruns, crm.deals, crm.customers, acc.receipts, pm.projects, claims, reqs]);
 }
 
 export type AttState = "ontime" | "late" | "leave" | "none";
@@ -679,16 +744,55 @@ export function useTodayAttendance() {
           /* ยังไม่มีการตอกบัตรจริง — ใช้ข้อมูลตัวอย่างตามต้นแบบ (เข้างานหลัง 09:00 = สาย) */
           if (DEMO_LEAVE_TODAY[e.id]) return { e, state: "leave" as AttState, leave: DEMO_LEAVE_TODAY[e.id], time: "" };
           const demo = DEMO_CHECKIN[e.id];
-          if (demo) return { e, state: (demo > "09:00" ? "late" : "ontime") as AttState, time: demo };
+          if (demo) return { e, state: (demo > scheduleFor(e).start ? "late" : "ontime") as AttState, time: demo };
           return { e, state: "none" as AttState, time: "" };
         }
         const at = new Date(first.at);
         const wall = bkkOf(at);
         return {
           e,
-          state: (lateMinutes(at) > 0 ? "late" : "ontime") as AttState,
+          state: (lateMinutes(at, scheduleFor(e)) > 0 ? "late" : "ontime") as AttState,
           time: `${pad2(wall.getHours())}:${pad2(wall.getMinutes())}`,
         };
       });
   }, [hr.emp, time, punches]);
+}
+
+/** เวลาเข้า-ออกงานที่ตอกจริง รายคน รายวัน (เวลาไทย "HH:MM") — ว่าง = ไม่ได้ตอกฝั่งนั้น */
+export type PunchDay = { in: string; out: string };
+
+/**
+ * เวลาตอกบัตรจริงของคนที่ผูกบทบาทไว้ — หน้าสรุปเวลาใช้ตรวจ "ลาแล้วแต่มีเช็คอิน" (ผู้ใช้สั่ง 15 ต.ค. 2569)
+ * เข้า = ตอกเข้าครั้งแรกของวัน · ออก = ตอกออกครั้งสุดท้ายของวัน
+ * คนหนึ่งควบหลายบทบาท เอาเวลาเข้าที่เช้าสุดและเวลาออกที่ช้าสุด
+ */
+export function usePunchTimes(): Record<string, Record<string, PunchDay>> {
+  const punches = useAllPunches();
+  return useMemo(() => {
+    const hm = (iso: string) => {
+      const t = bkkOf(new Date(iso));
+      return `${pad2(t.getHours())}:${pad2(t.getMinutes())}`;
+    };
+    const out: Record<string, Record<string, PunchDay>> = {};
+    for (const [role, id] of Object.entries(ROLE_EMPLOYEE)) {
+      const list = punches[role as Role] ?? [];
+      const days = new Set(list.map((r) => dayKey(new Date(r.at))));
+      for (const day of days) {
+        const ss = toSessions(recordsOfDay(list, day));
+        if (!ss.length) continue;
+        const tin = hm(ss[0].in.at);
+        const last = [...ss].reverse().find((s) => s.out);
+        const tout = last?.out ? hm(last.out.at) : "";
+        const mine = (out[id] ??= {});
+        const had = mine[day];
+        mine[day] = had
+          ? {
+              in: !had.in || tin < had.in ? tin : had.in,
+              out: tout > had.out ? tout : had.out,
+            }
+          : { in: tin, out: tout };
+      }
+    }
+    return out;
+  }, [punches]);
 }

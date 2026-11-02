@@ -1,7 +1,7 @@
 "use client";
 
 /*
- * จัดคิวงาน (ตามต้นแบบ pm-plan.html) — PM วางแผนงานที่รับเข้ามาแล้วก่อนเปิดเป็นโปรเจค
+ * จัดคิวงาน (ตามต้นแบบ pm-plan.html) — PM วางแผนงานที่ GM มอบหมายให้ก่อนเปิดเป็นโปรเจค (ผู้ใช้สั่ง 27 ต.ค. 2569)
  *
  * งานที่มีข้อเสนอได้เฟสและงานย่อยมาเป็นโครงตั้งต้น งานที่ไม่มีเริ่มจากกระดานว่างแล้วสร้างเฟสเอง
  * PM ทำได้ — เพิ่ม/แก้เฟส · เพิ่มงานในเฟส · ลากจัดลำดับในเฟส · เลือกคนและวัน · มอบหมายหลายงานพร้อมกัน
@@ -13,22 +13,30 @@
  */
 
 import { ROLE_EMPLOYEE, useHrTime } from "@/lib/hr-link";
-import { useEmpRequests } from "@/lib/emp-requests";
-import { HR_LEAVE_LABEL } from "@/lib/hr-data";
+import { hrPos, type PosKey } from "@/lib/hr-data";
+import { useHr } from "@/lib/hr-store";
+import { empReqLeaveHours, useEmpRequests } from "@/lib/emp-requests";
+import { fmtLeaveHours, leaveHoursOf } from "@/lib/leave-data";
+import { HR_LEAVE_LABEL, leaveRowHours } from "@/lib/hr-data";
 import { useAllLeave } from "@/lib/leave-store";
-import type { Role } from "@/lib/role";
+import { useRole, type Role } from "@/lib/role";
+import { USERS } from "@/lib/mock-data";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addDays, daysBetween, initials, thaiDate, thaiStamp, todayIso } from "@/lib/format";
+import { addDays, daysBetween, thaiDate, thaiStamp, todayIso } from "@/lib/format";
+import { initialOf, useNameOf } from "@/lib/emp-name";
 import { useProfile } from "@/lib/profile-data";
 import {
   fileKind,
   fileKindLabel,
-  teamRoles,
-  roleLabel,
+  isInHouse,
+  isAssignedJob,
+  isJobOf,
   isRef,
   projectHref,
+  teamRoles,
+  roleLabel,
   type InboxJob,
   type Member,
   type Project,
@@ -38,12 +46,14 @@ import {
 } from "@/lib/pm-data";
 import {
   confirmPlan,
+  memberName,
   memberOf,
   replanProject,
   savePlanDraft,
   type DraftPhase,
   type DraftTask,
   type PlannedTask,
+  taskHomes,
   usePm,
   useTeam,
 } from "@/lib/pm-store";
@@ -53,22 +63,24 @@ import {
   FileIcon,
   ChevronDownIcon,
   CloseIcon,
+  LinkIcon,
   LockIcon,
   PencilIcon,
   PlusIcon,
   QuotationIcon,
-  TrashIcon,
   UserIcon,
+  TrashIcon,
 } from "./icons";
 import { fileSize } from "./file-drop";
-import { openStoredFile, putFile, removeStoredFile } from "@/lib/file-store";
 import { Field, Sheet } from "./lead-dialogs";
+import "../styles/mobile/pm-plan.css";
 import { ProposalPreview, QuotationPreview } from "./pm-docs";
 import { ThaiDatePicker } from "./thai-date-picker";
 import { AddDocButton, AddDocsDialog, DocChips, RenameButton, RenameDialog } from "./pm-project-tools";
-import { Select } from "./ui";
 import { useAddOption } from "./add-option";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
+import { useCrumb } from "@/lib/crumb";
+import { autoAfter, resolveAfter } from "@/lib/task-deps";
 
 /*
  * งานย่อยและเฟสระหว่างวางแผน — รูปเดียวกับร่างในสโตร์ (pm-store: DraftTask/DraftPhase)
@@ -84,13 +96,13 @@ type Board = { phases: PlanPhase[]; plan: Draft[][] };
  * docs = ข้อมูลสำหรับเปิดใบเสนอราคา/ข้อเสนอ (โปรเจคตั้งต้นไม่มี)
  */
 type Target = {
-  /** เลขที่โปรเจค (PJ-) — ลิงก์เก่าส่งเลขที่ดีลมาก็ยังหาเจอด้วย isRef */
+  /** เลขที่โปรเจค (ผู้ใช้สั่ง 5 ต.ค. 2569 — เดิมเลขที่ดีล) */
   pj: string;
   cus: string;
-  /** ชื่อโปรเจค — ว่าง = ยังไม่ได้ตั้ง ขึ้นชื่อลูกค้าแทน (ยกมาจากระบบต้นฉบับ) */
+  /** ชื่อโปรเจค — ว่าง = ยังไม่ได้ตั้ง ขึ้นชื่อลูกค้าแทน (ผู้ใช้สั่ง 5 ต.ค. 2569) */
   name?: string;
   scope: string;
-  /** เอกสารที่ PM/GM แนบเพิ่ม (ยกมาจากระบบต้นฉบับ) */
+  /** เอกสารที่ PM/GM แนบเพิ่ม (ผู้ใช้สั่ง 5 ต.ค. 2569) */
   extra: ProjectDoc[];
   docs?: InboxJob;
   /** ช่วงตามใบเสนอราคา — ว่าง = คิดจากเฟสที่วางเอง */
@@ -98,6 +110,8 @@ type Target = {
   planEnd: string;
   firstDay: string;
   project?: Project;
+  /** PM ที่ GM มอบหมายงานนี้ให้ (ชื่อเต็ม) — เป็นเจ้าของโปรเจคตอนยืนยันแผน (ผู้ใช้สั่ง 27 ต.ค. 2569) */
+  owner?: string;
   initial: () => Board;
 };
 
@@ -112,6 +126,7 @@ function targetOfJob(j: InboxJob): Target {
     planStart: j.planStart,
     planEnd: j.planEnd,
     firstDay: j.projectStart || j.planStart || todayIso(),
+    owner: j.takenBy,
     initial: () => blankBoard(j),
   };
 }
@@ -129,7 +144,8 @@ function targetOfProject(p: Project): Target {
     firstDay: p.start,
     project: p,
     initial: () => ({
-      phases: p.phases.map((ph) => ({ name: ph.name, role: ph.role, start: ph.start, end: ph.end })),
+      /* own ติดมาด้วย — เฟสที่ PM สร้างเองไม่มีงานต่อกันอัตโนมัติแม้แก้แผนรอบหลัง (ผู้ใช้สั่ง 21 ต.ค. 2569) */
+      phases: p.phases.map((ph) => ({ name: ph.name, role: ph.role, start: ph.start, end: ph.end, par: ph.par, own: ph.own })),
       plan: p.phases.map((ph, pi) =>
         p.tasks
           .map((t, i) => ({ t, i }))
@@ -144,6 +160,12 @@ function targetOfProject(p: Project): Target {
             brief: t.brief,
             files: t.files.map((f) => ({ ...f })),
             from: i,
+            /* งานที่เดินอยู่แล้วคงงานต่อกันเดิมไว้ ไม่มี = เริ่มได้ทันที
+               ห้ามปล่อยเป็น "ตามเฟส" ไม่งั้นแก้แผนครั้งเดียว งานที่กำลังทำอยู่จะถูกล็อกทั้งกระดาน */
+            after: t.after ? [...t.after] : [],
+            /* ผู้ตรวจไม่ติดมา — ผู้ตรวจ = ผู้สั่งเสมอ (ผู้ใช้สั่ง 27 ต.ค. 2569) */
+            noReview: t.noReview || undefined,
+            clientReview: t.clientReview || undefined,
           })),
       ),
     }),
@@ -167,46 +189,86 @@ export function PmPlanPage() {
 
   /* ทุกงานที่รับแล้วรอวางแผน — รวมงานที่ไม่มีข้อเสนอ ซึ่งต้องสร้างเฟสเอง
      ปุ่ม "วางแผนงาน" ในหน้าโปรเจคส่ง ?pj= ของโปรเจคที่ยืนยันแล้วมา — เปิดมาแก้แผนได้ด้วย
-     ลิงก์เก่าที่ส่ง ?deal= มายังเปิดได้ (isRef หาเจอทั้งเลขโปรเจคและเลขดีล) */
-  const fromRef = params.get("pj") ?? params.get("deal") ?? "";
-  /* ลิงก์เก่าส่งเลขที่ดีลมา — แปลงเป็นเลขที่โปรเจคก่อน แล้วที่เหลือในหน้านี้ใช้เลข PJ อย่างเดียว */
-  const fromParam = [...pm.projects, ...pm.inbox].find((x) => isRef(x, fromRef))?.pj ?? fromRef;
+     ลิงก์เก่า ?deal= ยังเปิดได้ — แปลงเลขดีลเป็นเลขที่โปรเจคครั้งเดียวตรงนี้ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  const rawParam = params.get("pj") ?? params.get("deal") ?? "";
+  const fromParam =
+    [...pm.projects, ...pm.inbox].find((x) => isRef(x, rawParam))?.pj ?? rawParam;
   /* โปรเจคที่ถูกยกเลิกแล้ววางแผนต่อไม่ได้ — ไม่เอาเข้ารายการให้เลือก */
-  const linked = pm.projects.find((p) => isRef(p, fromParam) && p.status !== "cancelled");
+  const linked = pm.projects.find((p) => p.pj === fromParam && p.status !== "cancelled");
+  /*
+   * GM มอบหมายงานให้ PM (ผู้ใช้สั่ง 27 ต.ค. 2569) — PM วางแผนได้เฉพาะงานในกล่องที่ GM มอบหมายให้ตัวเอง
+   * GM เปิดได้ทุกงานที่มี PM ดูแลแล้วเหมือนเดิม (usePmReadOnly ไม่ล็อก GM) · งานที่ยังรอมอบหมายยังวางแผนไม่ได้
+   */
+  const role = useRole();
+  const myName = USERS[role]?.name ?? "";
+  const canPlanJob = (j: InboxJob) => (role === "gm" ? isAssignedJob(j) : isJobOf(j, myName));
   const targets: Target[] = [
     ...(linked ? [targetOfProject(linked)] : []),
-    ...pm.inbox.filter((j) => j.stage === "plan").map(targetOfJob),
+    ...pm.inbox.filter(canPlanJob).map(targetOfJob),
   ];
-  const [pjNo, setPjNo] = useState(() => linked?.pj ?? fromParam);
-  const job = targets.find((t) => t.pj === pjNo) ?? targets[0];
+  /* ลิงก์ชี้มาที่งานในกล่องที่ไม่ได้มอบหมายให้คนนี้ — บอกตรง ๆ ไม่สลับไปงานอื่น */
+  const notMine = pm.inbox.find((j) => j.pj === fromParam && !canPlanJob(j));
+  /* ไม่มีตัวเลือกโปรเจคบนหน้านี้แล้ว — เลือกจากการเปิดโฟลเดอร์ใน /pm/projects (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  const job = targets.find((t) => t.pj === fromParam) ?? targets[0];
+  const [renaming, setRenaming] = useState(false);
+  const [addingDoc, setAddingDoc] = useState(false);
   /*
    * ลิงก์ชี้มาที่ดีลที่ไม่มีให้วางแผนแล้ว (ถูกยกเลิก หรือยืนยันแผนไปแล้ว)
    * ต้องบอกให้รู้ ไม่ใช่สลับไปงานอื่นเงียบ ๆ แล้วปล่อยให้แก้ผิดใบ (ผู้ใช้ทักท้วง 24 ก.ย. 2569)
    */
   const gone = Boolean(fromParam) && !targets.some((t) => t.pj === fromParam);
-  const cancelled = pm.projects.find((p) => isRef(p, fromParam) && p.status === "cancelled");
+  const cancelled = pm.projects.find((p) => p.pj === fromParam && p.status === "cancelled");
 
-  /* ร่างเก็บในสโตร์ คีย์ด้วยเลขที่ดีล — สลับงานไปมาหรือรีโหลดแล้วสิ่งที่กรอกไว้ไม่หาย */
+  /* ทีมจากทะเบียนเดียวกับฝ่ายบุคคล — คนที่พ้นสภาพแล้วมอบหมายงานใหม่ไม่ได้ */
+  const team = useMarketingTeam();
+  /*
+   * ระบบร่างแผนให้ PM แค่ตรวจแล้วยืนยัน (ผู้ใช้สั่ง 21 ต.ค. 2569)
+   * งานใหม่ที่ยังไม่มีร่าง — เติมผู้รับผิดชอบ วัน และรายละเอียดให้ตั้งแต่เปิดกระดาน ยืนยันแผนได้ทันที
+   * โปรเจคที่เดินอยู่แล้วไม่เติมเอง ใช้ปุ่ม "เติมช่องที่ว่างให้" แทน
+   */
+  const fillCtx: FillCtx = { team, projects: pm.projects, scope: job?.scope ?? "" };
+  /* ร่างเก็บในสโตร์ คีย์ด้วยเลขที่โปรเจค — สลับงานไปมาหรือรีโหลดแล้วสิ่งที่กรอกไว้ไม่หาย */
   const draft = job ? pm.drafts[job.pj] : undefined;
-  const board: Board = job ? (draft ?? job.initial()) : { phases: [], plan: [] };
+  const board: Board = job
+    ? (draft ?? (job.project ? job.initial() : fillEmpty(job.initial(), fillCtx, false).board))
+    : { phases: [], plan: [] };
   const { phases, plan } = board;
+  /* ช่องที่ยังว่างและระบบเติมให้ได้ — มีเมื่อไรขึ้นปุ่ม "เติมช่องที่ว่างให้" (แก้แผนโปรเจคเดิมเติมเฉพาะงานที่เพิ่มใหม่) */
+  const fillable = job ? fillEmpty(board, fillCtx, Boolean(job.project)).n : 0;
+  /* งานภายใน (ไม่มีลูกค้า) — ไม่มีตัวเลือกให้ลูกค้าตรวจ (ผู้ใช้สั่ง 21 ต.ค. 2569) */
+  const inHouse = job ? isInHouse(job.project ?? job.docs ?? { cus: job.cus }) : false;
 
   const [picked, setPicked] = useState<Record<string, boolean>>({});
-  /* ทีมจากทะเบียนเดียวกับฝ่ายบุคคล — คนที่พ้นสภาพแล้วมอบหมายงานใหม่ไม่ได้ */
-  const team = useTeam().filter((m) => !m.left);
+  const nameOfEmp = useNameOf();
+  /*
+   * บรรทัดเสริมบนการ์ด — ขึ้นเฉพาะข้อยกเว้น (ผู้ใช้สั่ง 21 ต.ค. 2569)
+   * ไม่ต้องตรวจ / ส่งลูกค้าตรวจ · "รอ …" เฉพาะงานเก่าที่ตั้งงานต่อกันไว้ต่างจากแม่แบบ
+   * ไม่มี "ตรวจโดย …" แล้ว ผู้ตรวจ = ผู้สั่งเสมอ (ผู้ใช้สั่ง 27 ต.ค. 2569)
+   */
+  const cardNotes = (t: Draft, pi: number): string[] => {
+    const review = t.noReview ? "ไม่ต้องตรวจ" : t.clientReview && !inHouse ? "ส่งลูกค้าตรวจ" : "";
+    let wait = "";
+    if (t.after !== undefined) {
+      const own = resolveAfter(phases, plan, pi, t.after);
+      const tpl = new Set(autoAfter(phases, plan, pi));
+      const same = own.length === tpl.size && own.every((n) => tpl.has(n));
+      if (own.length && !same) wait = `รอ ${own.length === 1 ? own[0] : `${own.length} งานก่อนหน้า`}`;
+    }
+    return [review, wait].filter(Boolean);
+  };
   const [bulkWho, setBulkWho] = useState(team[0]?.id ?? "");
   const [open, setOpen] = useState<Spot | null>(null);
   const [doc, setDoc] = useState<"quo" | "prop" | null>(null);
-  /* แก้ชื่อโปรเจคและแนบเอกสารเพิ่มได้จากหน้านี้ (ยกมาจากระบบต้นฉบับ) */
-  const [renaming, setRenaming] = useState(false);
-  const [addingDoc, setAddingDoc] = useState(false);
   /** เฟสที่กำลังแก้ — -1 = เพิ่มเฟสใหม่ */
   const [phaseEdit, setPhaseEdit] = useState<number | null>(null);
+  /* มือถือ: ชิปเลือกเฟส (เจ้าของขอคืน 25 ก.ย. 2569) — "all" = แสดงทุกเฟสเรียงลงมา · จอกว้างไม่ใช้ */
+  const [mPhase, setMPhase] = useState<number | "all">("all");
   const [adding, setAdding] = useState<number | null>(null);
-  /* เฟสที่กำลังดูอยู่บนมือถือ — จอกว้างเห็นทุกเฟสพร้อมกันอยู่แล้ว ค่านี้จึงไม่มีผล */
   /* ลากการ์ดเพื่อสลับลำดับ — ลากได้เฉพาะในเฟสเดียวกัน เพราะงานย่อยผูกกับเฟสของมัน */
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<number | null>(null);
+  /* ลบเฟส/งาน — ถามยืนยันก่อน (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+  const [asking, setAsking] = useState<{ phase: number; index?: number } | null>(null);
 
   /* แก้อะไรก็บันทึกร่างทันที ไม่มีปุ่มบันทึก (กติกาเดียวกับใบเสนอราคา) */
   function edit(fn: (b: Board) => void) {
@@ -250,6 +312,13 @@ export function PmPlanPage() {
   /* ปุ่มถอดออกกดได้เฉพาะตอนคนที่เลือกเป็นผู้รับผิดชอบอยู่จริงในงานที่ติ๊กไว้ */
   const removable = pickedKeys.filter((k) => at(plan, k)?.whos.includes(bulkWho)).length;
 
+  /* เส้นทางบนแถบบน "โปรเจค / ลูกค้า / วางแผนงาน" แทนทางเดินในหน้า (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+  useCrumb(
+    job && { label: "โปรเจค", href: "/pm/projects", root: true },
+    job && (job.project ? { label: job.cus, href: projectHref(job.pj) } : job.cus),
+    job && "วางแผนงาน",
+  );
+
   if (gone || !job) {
     return (
       <div className="space-y-4">
@@ -261,8 +330,12 @@ export function PmPlanPage() {
               <p className="mx-auto mt-2 max-w-[520px] text-[13px] leading-relaxed text-muted-foreground">
                 <span className="num">{fromParam}</span>{" "}
                 {cancelled
-                  ? `ถูกยกเลิกเมื่อ ${cancelled.cancelled ? thaiDate(cancelled.cancelled.at.slice(0, 10)) : "แล้ว"} โดย ${cancelled.cancelled?.by ?? "ฝ่ายที่เกี่ยวข้อง"} · แผนที่วางไว้เปิดดูย้อนหลังได้ที่หน้าโปรเจค`
-                  : "อาจยืนยันแผนไปแล้ว หรือถูกยกเลิก · ถ้ายืนยันแล้วให้แก้แผนจากหน้าโปรเจคของงานนั้น"}
+                  ? `ถูกยกเลิกเมื่อ ${cancelled.cancelled ? thaiDate(cancelled.cancelled.at.slice(0, 10)) : "แล้ว"} โดย ${cancelled.cancelled?.by ? nameOfEmp(cancelled.cancelled.by) : "ฝ่ายที่เกี่ยวข้อง"}`
+                  : notMine
+                    ? isAssignedJob(notMine)
+                      ? "งานนี้มอบหมายให้ PM คนอื่นแล้ว"
+                      : "งานนี้ยังรอ GM มอบหมาย PM"
+                    : ""}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2.5">
                 <Link
@@ -287,7 +360,8 @@ export function PmPlanPage() {
   }
 
   /* ช่วงเวลาบนแถบล็อก — มีข้อเสนอใช้ระยะตามใบเสนอราคา ไม่มีคิดจากเฟสที่ PM วางเอง */
-  const own = !job.planEnd;
+  /* PM กำหนดเฟสและวันเองทั้งหมด ไม่ยึดระยะจากข้อเสนอแล้ว (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+  const own = true;
   const docs = job.docs;
   const span = own
     ? phases.reduce(
@@ -310,6 +384,11 @@ export function PmPlanPage() {
           due: t.due,
           brief: t.brief,
           files: t.files,
+          /* ระบบเติมงานต่อกันจากแม่แบบตอนยืนยันแผน — เฟสที่สร้างเองไม่มี · ค่าเดิมของข้อมูลเก่าใช้ตามเดิม */
+          after: resolveAfter(phases, plan, pi, t.after),
+          /* ไม่ส่งผู้ตรวจ — ผู้ตรวจ = ผู้สั่งเสมอ (ผู้ใช้สั่ง 27 ต.ค. 2569) */
+          noReview: t.noReview,
+          clientReview: inHouse || t.noReview ? undefined : t.clientReview,
         }),
       ),
     );
@@ -319,6 +398,8 @@ export function PmPlanPage() {
       role: ph.role ?? plan[pi]?.find((t) => t.role)?.role ?? teamRoles()[0].key,
       start: ph.start,
       end: ph.end,
+      par: ph.par,
+      own: ph.own || undefined,
     }));
     if (job.project) {
       /* โปรเจคที่เดินงานอยู่ — บันทึกแผนใหม่แล้วกลับไปหน้าโปรเจคนั้น (ร่างถูกล้างในสโตร์แล้ว) */
@@ -326,56 +407,84 @@ export function PmPlanPage() {
       router.push(projectHref(job.pj));
       return;
     }
-    confirmPlan(job.pj, tasks, `${me.name} (PM)`, outPhases);
+    /* เจ้าของโปรเจค = PM ที่ GM มอบหมาย ไม่ใช่คนที่กดยืนยัน (GM วางแผนแทนได้) (ผู้ใช้สั่ง 27 ต.ค. 2569) */
+    confirmPlan(job.pj, tasks, `${job.owner || me.name} (PM)`, outPhases);
     /* ยืนยันแล้วกลับไปหน้ารายการโปรเจคตามต้นแบบ — โฟลเดอร์ของงานนี้โผล่ในรายการทันที */
     router.push("/pm/projects");
   }
 
+  /* ปุ่มยืนยันแผน — จอกว้างอยู่บนแถบบน · มือถืออยู่ท้ายหน้าต่อจากกระดาน (ตามต้นแบบ) ใช้ตัวจัดการเดียวกัน */
+  function confirmButton(where: string) {
+    if (!job) return null;
+    return (
+      <button
+        type="button"
+        disabled={problems.length > 0}
+        title={problems.length ? problems.join("\n") : "ส่งแผนงานให้ทีม"}
+        onClick={confirm}
+        /* ยังกดไม่ได้ก็ต้องดูเป็นปุ่ม — ใช้ปุ่มมีกรอบ (.btn ประกาศนอก @layer คลาส disabled: ของ Tailwind จึงแพ้) (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+        className={`btn shrink-0 whitespace-nowrap ${problems.length > 0 ? "glass-thin cursor-not-allowed !text-muted-foreground" : "solid btn-solid"} ${where}`}
+      >
+        <span>{job.project ? "บันทึกแผนงาน" : "ยืนยันแผนงาน"}</span>
+        {problems.length > 0 && left > 0 && (
+          <span className="text-[11px] font-medium">เหลืออีก {left} งาน</span>
+        )}
+      </button>
+    );
+  }
+
   return (
-    <div className="space-y-3.5">
-      <div className="bar">
+    /* มือถือ: แถบมอบหมายหลายงานลอยเหนือแถบล่าง — เว้นท้ายหน้าไว้ จะได้เลื่อนดูการ์ดใบสุดท้ายได้ */
+    <div className={`pmplan-m space-y-3.5 ${!ro && pickedKeys.length > 0 ? "max-md:pb-[170px]" : ""}`}>
+      <div className="bar pl-bar">
         <div className="min-w-0">
-          {/* หัวเป็นชื่อโปรเจค แก้ชื่อได้ตรงนี้ (ยกมาจากระบบต้นฉบับ) · เลขดีลบรรทัดล่าง */}
-          <h1 className="flex flex-wrap items-center gap-x-2">
-            {job.name?.trim() || job.cus}
-            {!ro && <RenameButton onClick={() => setRenaming(true)} />}
-          </h1>
-          <p className="num mt-1 text-[13px] font-semibold text-muted-foreground">
-            {job.pj}
-            {job.project ? " · แก้แผน" : ""}
+          {/* ทางเดิน โปรเจค / ลูกค้า / วางแผนงาน แทนปุ่มย้อนกลับ · แก้ชื่อที่หน้าโปรเจค (ผู้ใช้สั่ง 8 ต.ค. 2569)
+              จอคอมย้ายไปแถบบนแล้ว เหลือเฉพาะมือถือ (ผู้ใช้สั่ง 12 ต.ค. 2569) */}
+          <p className="mb-1 text-xs text-muted-foreground md:hidden">
+            <Link href="/pm/projects" className="hover:text-primary">
+              โปรเจค
+            </Link>
+            <span className="mx-1.5">/</span>
+            {job.project ? (
+              <Link href={projectHref(job.pj)} className="hover:text-primary">
+                {job.cus}
+              </Link>
+            ) : (
+              <span>{job.cus}</span>
+            )}
+            <span className="mx-1.5">/</span>
+            <b className="font-semibold text-foreground">วางแผนงาน</b>
+          </p>
+          <h1 style={{ marginTop: 10, marginBottom: 0, lineHeight: 1.25 }}>{job.name?.trim() || job.cus}</h1>
+          {/* ระยะเวลาอยู่ใต้ชื่อโปรเจค แทนกล่องกุญแจด้านขวา (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+          <p className="num text-[13px] text-muted-foreground" style={{ marginTop: 2 }}>
+            ระยะเวลาดำเนินการ{" "}
+            <b className="font-semibold text-foreground">
+              {phases.length && span.s && span.e ? `${thaiDate(span.s)} – ${thaiDate(span.e)}` : "ยังไม่กำหนด"}
+            </b>
           </p>
         </div>
-        <div className="tools w-full flex-wrap items-center sm:w-auto sm:flex-nowrap">
-          <Select
-            value={job.pj}
-            onChange={(e) => {
-              setPjNo(e.target.value);
-              setPicked({});
-              setOpen(null);
-            }}
-            aria-label="เลือกงานที่จะวางแผน"
-            className="h-9 w-full font-semibold max-sm:h-[46px] max-sm:rounded-full! sm:w-[300px]"
-          >
-            {targets.map((t) => (
-              <option key={t.pj} value={t.pj}>
-                {t.cus} ({t.pj}){t.project ? " · แก้แผน" : ""}
-              </option>
-            ))}
-          </Select>
-          {!ro && <button
-            type="button"
-            disabled={problems.length > 0}
-            title={problems.length ? problems.join("\n") : "ส่งแผนงานให้ทีม"}
-            onClick={confirm}
-            /* มือถือ: ปุ่มหลักของหน้าลอยเต็มความกว้างเหนือแถบล่าง กดได้ทุกเมื่อไม่ต้องเลื่อนกลับขึ้นไปหา */
-            /* มือถือ: ปุ่มนี้ซ่อน แล้วไปโผล่เต็มความกว้างท้ายหน้าแทน PM จะได้ไล่ดูทุกเฟสก่อนกด (ต้นแบบ pm-plan.html) */
-            className="btn solid btn-solid shrink-0 whitespace-nowrap max-sm:hidden! disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-card disabled:bg-none disabled:text-muted-foreground disabled:shadow-none"
-          >
-            <span>{job.project ? "บันทึกแผนงาน" : "ยืนยันแผนงาน"}</span>
-            {problems.length > 0 && left > 0 && (
-              <span className="text-[11px] font-medium">เหลืออีก {left} งาน</span>
-            )}
-          </button>}
+        <div className="tools w-full flex-wrap items-center md:w-auto md:flex-nowrap">
+          {/* ปุ่มแนบไฟล์อยู่ข้างปุ่มบันทึกแผนงาน (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+          {/* ร่างเดิมที่ยังมีช่องว่าง — ให้ระบบเติมแบบเดียวกับแผนใหม่ เฉพาะช่องที่ว่าง ไม่ทับที่ PM เลือกไว้ (ผู้ใช้สั่ง 21 ต.ค. 2569) */}
+          {!ro && fillable > 0 && (
+            <button
+              type="button"
+              className="btn glass-thin whitespace-nowrap"
+              title="ระบบเติมผู้รับผิดชอบ วัน และรายละเอียดให้เฉพาะช่องที่ยังว่าง"
+              onClick={() =>
+                edit((b) => {
+                  const r = fillEmpty(b, fillCtx, Boolean(job.project)).board;
+                  b.phases = r.phases;
+                  b.plan = r.plan;
+                })
+              }
+            >
+              เติมช่องที่ว่างให้
+            </button>
+          )}
+          {!ro && <AddDocButton className="pl-docbtn whitespace-nowrap" label="แนบไฟล์" onClick={() => setAddingDoc(true)} />}
+          {!ro && confirmButton("pl-confirm-top")}
         </div>
       </div>
       <ReadOnlyNote />
@@ -383,98 +492,36 @@ export function PmPlanPage() {
       {/* ร่างแผนบันทึกเองตั้งแต่ตอนแก้ — บอกให้เห็นว่ามีร่างค้างอยู่และแก้ล่าสุดเมื่อไร */}
       {draft && (
         <p className="rounded-[10px] bg-[var(--warning-soft)] px-3.5 py-[9px] text-[12.5px] font-semibold text-[var(--warning)]">
-          ร่างแผนยังไม่ยืนยัน · บันทึกอัตโนมัติแล้ว แก้ล่าสุด {thaiStamp(draft.at)} น. โดย {draft.by}
+          ร่างแผนยังไม่ยืนยัน · แก้ล่าสุด {thaiStamp(draft.at)} น. โดย {nameOfEmp(draft.by)}
         </p>
       )}
 
       {/* ── เอกสารอ้างอิงและกรอบเวลา — วางบนพื้นหน้า ไม่มีกล่องครอบ (ตามต้นแบบ) ── */}
-      <section className="flex flex-wrap items-start gap-3.5">
-        <span className="flex gap-2 max-sm:w-full">
-          <button
-            type="button"
-            className="btn glass-thin disabled:opacity-45 max-sm:h-9 max-sm:flex-1 max-sm:justify-center max-sm:rounded-full!"
-            disabled={!docs}
-            title={docs ? undefined : "โปรเจคนี้ไม่มีเอกสารแนบในระบบ"}
-            onClick={() => setDoc("quo")}
-          >
-            <QuotationIcon className="size-[15px]" strokeWidth={2} />
-            ใบเสนอราคา
-          </button>
-          <button
-            type="button"
-            className="btn glass-thin disabled:opacity-45 max-sm:h-9 max-sm:flex-1 max-sm:justify-center max-sm:rounded-full!"
-            disabled={!docs?.proposal}
-            title={docs?.proposal ? undefined : "งานนี้ไม่มีข้อเสนอ"}
-            onClick={() => setDoc("prop")}
-          >
-            <QuotationIcon className="size-[15px]" strokeWidth={2} />
-            Proposal
-          </button>
-          {/* เอกสารอื่นที่แนบให้ทีมเห็น + ปุ่มแนบเพิ่ม (ยกมาจากระบบต้นฉบับ) */}
+      {/* ไม่มีไฟล์แนบ ไม่เว้นที่ว่าง */}
+      {job.extra.length > 0 && (
+      <section className="flex flex-wrap items-start gap-3.5 max-md:items-center max-md:gap-2">
+        <span className="flex flex-wrap items-center gap-2">
+          {/* ไม่มีปุ่มใบเสนอราคา/Proposal ตั้งต้น — PM แนบไฟล์เองทุกไฟล์ (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+          {/* เอกสารอื่นที่แนบให้ทีมเห็น + ปุ่มแนบเพิ่ม (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
           <DocChips pj={job.pj} docs={job.extra} canEdit={!ro} />
-          {!ro && <AddDocButton onClick={() => setAddingDoc(true)} />}
-        </span>
-        {/* มือถือ: กรอบเวลาเป็นแคปซูลชมพูบรรทัดเดียว (ต้นแบบ pm-plan.html) */}
-        <span className="ml-auto flex items-center gap-2 rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-semibold text-primary sm:hidden">
-          <span className="num">
-            {phases.length === 0 ? thaiDate(job.firstDay) : `${thaiDate(span.s)} – ${thaiDate(span.e)}`}
-          </span>
-          <span className="num">{phases.length === 0 ? "ยังไม่มีเฟส" : `${phases.length} เฟส`}</span>
-        </span>
-        <span className="ml-auto flex items-start gap-[22px] text-[12.5px] max-sm:hidden">
-          <span className="grid size-6 flex-none place-items-center rounded-full bg-muted text-muted-foreground">
-            <LockIcon className="size-3.5" />
-          </span>
-          {phases.length === 0 ? (
-            <>
-              <LockLine label="เริ่มโครงการ" value={thaiDate(job.firstDay)} />
-              <LockLine label="เฟส" value="ยังไม่มี" />
-            </>
-          ) : (
-            <>
-              <LockLine
-                label={own ? "แผนที่วางไว้" : "ระยะเวลาตามใบเสนอราคา"}
-                value={`${thaiDate(span.s)} – ${thaiDate(span.e)}`}
-              />
-              <LockLine label="เฟส" value={String(phases.length)} />
-            </>
-          )}
         </span>
       </section>
+      )}
 
       {/* ── เลือกหลายใบแล้วมอบหมายพร้อมกัน — โผล่เมื่อมีงานถูกติ๊กไว้ ── */}
       {!ro && pickedKeys.length > 0 && (
         <section
-          className="panel glass relative z-40 flex flex-wrap items-center gap-3.5 px-[18px] py-3"
+          className="panel glass pl-bulk relative z-40 flex flex-wrap items-center gap-3.5 px-[18px] py-3"
           aria-label="งานที่ถูกติ๊กไว้เพื่อมอบหมายพร้อมกัน"
         >
-          <span className="rounded-[20px] bg-accent px-3.5 py-[5px] text-[13px] font-bold text-primary">
+          <span className="pl-bcount rounded-[20px] bg-accent px-3.5 py-[5px] text-[13px] font-bold text-primary">
             เลือก {pickedKeys.length} งาน
           </span>
-          <span className="flex min-w-[240px] flex-1 items-center gap-2.5 max-sm:min-w-0 max-sm:basis-full">
+          <span className="pl-bpick flex min-w-[240px] flex-1 items-center gap-2.5">
             <span className="flex-none text-[12.5px] font-semibold text-muted-foreground">มอบหมายให้</span>
             <WhoPicker team={team} value={bulkWho} onChange={setBulkWho} />
           </span>
-          <span className="flex flex-wrap gap-2 max-sm:w-full max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center">
-            <button type="button" className="btn glass-thin" onClick={() => setPicked({})}>
-              ล้างการเลือก
-            </button>
-            <button
-              type="button"
-              className="btn glass-thin disabled:opacity-45"
-              disabled={removable === 0}
-              title={removable ? `ถอดออกจาก ${removable} งาน` : "คนนี้ยังไม่ได้เป็นผู้รับผิดชอบในงานที่เลือกไว้"}
-              onClick={() =>
-                edit((b) => {
-                  for (const k of pickedKeys) {
-                    const t = at(b.plan, k);
-                    if (t) t.whos = t.whos.filter((id) => id !== bulkWho);
-                  }
-                })
-              }
-            >
-              เอาคนนี้ออก
-            </button>
+          <span className="pl-bacts flex flex-wrap gap-2">
             <button
               type="button"
               className="btn solid btn-solid"
@@ -482,7 +529,11 @@ export function PmPlanPage() {
                 edit((b) => {
                   for (const k of pickedKeys) {
                     const t = at(b.plan, k);
-                    if (t && !t.whos.includes(bulkWho)) t.whos.push(bulkWho);
+                    if (t && !t.whos.includes(bulkWho)) {
+                      t.whos.push(bulkWho);
+                      /* PM เลือกคนเองแล้ว — คำบอก "แนะนำจากตำแหน่ง…" หายไป */
+                      t.autoFill = unflag(t.autoFill, "who");
+                    }
                   }
                 })
               }
@@ -498,9 +549,6 @@ export function PmPlanPage() {
         /* โปรเจคที่ไม่มีข้อเสนอยังไม่มีเฟส ถือว่าปกติ บอกให้ชัดว่าเริ่มจากสร้างเฟสเอง */
         <section className="glass rounded-[15px] px-5 py-14 text-center">
           <p className="text-[15px] font-bold">ยังไม่มีแผนงาน</p>
-          <p className="mt-1.5 text-[13px] text-muted-foreground">
-            งานนี้ไม่มีข้อเสนอมาเป็นโครงตั้งต้น เริ่มจากสร้างเฟสแรกได้เลย
-          </p>
           {!ro && (
             <button type="button" className="btn solid btn-solid mt-5 inline-flex" onClick={() => setPhaseEdit(-1)}>
               <PlusIcon className="size-[15px]" strokeWidth={2.2} />
@@ -510,9 +558,26 @@ export function PmPlanPage() {
         </section>
       ) : (
         <>
-        {/* จอกว้างเรียงทุกเฟสเป็นกระดานปัดข้าง · มือถือเรียงทุกเฟสลงมาเป็นการ์ด (ต้นแบบ pm-plan.html 1 ต.ค. 2569)
-            เลิกใช้ชิปเลือกทีละเฟสแล้ว เพราะต้นแบบใหม่ให้ไล่ดูทุกเฟสรวดเดียวก่อนยืนยันแผน */}
-        <div className="flex items-stretch gap-3 overflow-x-auto pb-2 max-sm:flex-col max-sm:overflow-x-visible">
+        {/* มือถือ: แถวชิปเลือกเฟส ปัดข้างได้ — เลือกแล้วแสดงเฉพาะเฟสนั้น (จอกว้างซ่อน) */}
+        <div className="pl-phase-chips md:hidden" role="tablist" aria-label="เลือกเฟส">
+          {(["all", ...phases.map((_, pi) => pi)] as (number | "all")[]).map((k) => {
+            const on = (mPhase === "all" || mPhase >= phases.length ? "all" : mPhase) === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                className={on ? "on" : ""}
+                onClick={() => setMPhase(k)}
+              >
+                {k === "all" ? "ทั้งหมด" : phases[k].name}
+              </button>
+            );
+          })}
+        </div>
+        {/* จอกว้างเรียงทุกเฟสเป็นกระดานปัดข้าง · มือถือเรียงเฟสลงมาเป็นการ์ดทีละใบ แล้วต่อด้วยปุ่มเพิ่มเฟส (ตามต้นแบบ) */}
+        <div className="flex items-stretch gap-3 overflow-x-auto pb-2 max-md:flex-col max-md:gap-3.5 max-md:overflow-visible max-md:pb-0">
           {phases.map((ph, pi) => {
             const list = plan[pi] ?? [];
             const color = phaseColor(pi);
@@ -521,7 +586,7 @@ export function PmPlanPage() {
               <section
                 key={`${pi}-${ph.name}`}
                 id={`plan-ph-${pi}`}
-                className="flex max-h-[560px] w-[276px] flex-none flex-col overflow-hidden rounded-[14px] border border-border bg-card max-sm:max-h-none max-sm:w-full max-sm:rounded-[20px] max-sm:border-0 max-sm:shadow-[0_1px_2px_rgb(40_20_25/0.04)]"
+                className={`${mPhase !== "all" && mPhase < phases.length && mPhase !== pi ? "max-md:hidden " : ""}flex max-h-[560px] w-[276px] flex-none flex-col overflow-hidden rounded-[14px] border border-border bg-card max-md:max-h-none max-md:w-auto max-md:rounded-[20px] max-md:border-0 max-md:bg-white max-md:shadow-[0_1px_2px_rgba(40,20,25,.04)]`}
               >
                 <header
                   className="flex items-center gap-[9px] px-3.5 py-3 text-white"
@@ -539,7 +604,7 @@ export function PmPlanPage() {
                     aria-label={`เพิ่มงานในเฟส ${ph.name}`}
                     title="เพิ่มงาน"
                     onClick={() => setAdding(pi)}
-                    className="grid size-[26px] place-items-center rounded-lg bg-white/18 hover:bg-white/35 max-sm:size-9"
+                    className="grid size-[26px] place-items-center rounded-lg bg-white/18 hover:bg-white/35 max-md:size-9"
                   >
                     <PlusIcon className="size-3.5" strokeWidth={2.4} />
                   </button>
@@ -548,9 +613,18 @@ export function PmPlanPage() {
                     aria-label={`แก้เฟส ${ph.name}`}
                     title="แก้เฟส"
                     onClick={() => setPhaseEdit(pi)}
-                    className="grid size-[26px] place-items-center rounded-lg bg-white/18 hover:bg-white/35 max-sm:size-9"
+                    className="grid size-[26px] place-items-center rounded-lg bg-white/18 hover:bg-white/35 max-md:size-9"
                   >
                     <PencilIcon className="size-3.5" strokeWidth={2} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`ลบเฟส ${ph.name}`}
+                    title="ลบเฟส"
+                    onClick={() => setAsking({ phase: pi })}
+                    className="grid size-[26px] place-items-center rounded-lg bg-white/18 hover:bg-white/35 max-md:size-9"
+                  >
+                    <TrashIcon className="size-3.5" strokeWidth={2} />
                   </button>
                   </>}
                 </header>
@@ -571,7 +645,7 @@ export function PmPlanPage() {
                 )}
 
                 <div
-                  className={`scroll-stable flex min-h-0 flex-1 flex-col gap-[11px] overflow-y-auto px-3.5 pt-[11px] pb-3.5 max-sm:overflow-y-visible ${
+                  className={`scroll-stable flex min-h-0 flex-1 flex-col gap-[11px] overflow-y-auto px-3.5 pt-[11px] pb-3.5 max-md:gap-2 max-md:overflow-visible max-md:p-2.5 ${
                     over === pi ? "bg-primary/[.06]" : ""
                   }`}
                 >
@@ -579,6 +653,7 @@ export function PmPlanPage() {
                     <TaskCard
                       key={`${pi}-${ti}-${t.name}`}
                       task={t}
+                      notes={cardNotes(t, pi)}
                       outside={Boolean(t.start && t.due && (t.start < ph.start || t.due > ph.end))}
                       order={ti + 1}
                       checked={Boolean(picked[key(pi, ti)])}
@@ -586,6 +661,7 @@ export function PmPlanPage() {
                       onCheck={() => setPicked({ ...picked, [key(pi, ti)]: !picked[key(pi, ti)] })}
                       readOnly={ro}
                       onOpen={() => setOpen({ phase: pi, index: ti })}
+                      onDelete={() => setAsking({ phase: pi, index: ti })}
                       onDragStart={() => setDrag(key(pi, ti))}
                       onDragOver={(e) => {
                         if (drag && Number(drag.split(":")[0]) === pi) {
@@ -603,7 +679,7 @@ export function PmPlanPage() {
                   {!ro && <button
                     type="button"
                     onClick={() => setAdding(pi)}
-                    className="mt-2 w-full flex-none rounded-[11px] border-[1.5px] border-dashed border-border p-[9px] text-[12px] font-semibold text-muted-foreground hover:border-primary hover:text-primary max-sm:min-h-11"
+                    className="mt-2 w-full flex-none rounded-[11px] border-[1.5px] border-dashed border-border p-[9px] text-[12px] font-semibold text-muted-foreground hover:border-primary hover:text-primary max-md:mt-0 max-md:h-[42px] max-md:rounded-[12px] max-md:py-0"
                   >
                     + เพิ่มงาน
                   </button>}
@@ -614,33 +690,70 @@ export function PmPlanPage() {
           {!ro && <button
             type="button"
             onClick={() => setPhaseEdit(-1)}
-            className="min-h-[120px] w-[236px] flex-none self-stretch rounded-[16px] border-[1.5px] border-dashed border-border py-4 text-[13.5px] font-semibold text-muted-foreground hover:border-primary hover:text-primary max-sm:min-h-0 max-sm:w-full"
+            className="min-h-[120px] w-[236px] flex-none self-stretch rounded-[16px] border-[1.5px] border-dashed border-border py-4 text-[13.5px] font-semibold text-muted-foreground hover:border-primary hover:text-primary max-md:h-[50px] max-md:min-h-0 max-md:w-full max-md:py-0"
           >
             + เพิ่มเฟส
           </button>}
         </div>
-        {!ro && (
-          <button
-            type="button"
-            disabled={problems.length > 0}
-            onClick={confirm}
-            className="btn solid btn-solid mt-4 h-[50px] w-full justify-center rounded-[14px]! text-[15px] sm:hidden disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-card disabled:bg-none disabled:text-muted-foreground disabled:shadow-none"
-          >
-            <span>{job.project ? "บันทึกแผนงาน" : "ยืนยันแผนงาน"}</span>
-            {problems.length > 0 && left > 0 && (
-              <span className="text-[11px] font-medium">เหลืออีก {left} งาน</span>
-            )}
-          </button>
-        )}
         </>
       )}
+
+      {asking && phases[asking.phase] && (
+        <Sheet
+          title={asking.index === undefined ? "ลบเฟส" : "ลบงาน"}
+          onClose={() => setAsking(null)}
+          footer={
+            <>
+              <button type="button" className="btn glass-thin" onClick={() => setAsking(null)}>
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                className="btn solid btn-solid"
+                onClick={() => {
+                  const a = asking;
+                  edit((b) => {
+                    if (a.index === undefined) {
+                      b.phases.splice(a.phase, 1);
+                      b.plan.splice(a.phase, 1);
+                    } else {
+                      b.plan[a.phase].splice(a.index, 1);
+                    }
+                  });
+                  setPicked({});
+                  setOpen(null);
+                  setAsking(null);
+                }}
+              >
+                ลบ
+              </button>
+            </>
+          }
+        >
+          <p className="text-[13.5px]">
+            {asking.index === undefined ? (
+              <>
+                ลบเฟส <b>{phases[asking.phase].name}</b>
+                {(plan[asking.phase] ?? []).length ? ` และงานในเฟสนี้ ${plan[asking.phase].length} งาน` : ""} ใช่ไหม?
+              </>
+            ) : (
+              <>
+                ลบงาน <b>{plan[asking.phase]?.[asking.index]?.name}</b> ใช่ไหม?
+              </>
+            )}
+          </p>
+        </Sheet>
+      )}
+
+      {/* มือถือ: ปุ่มยืนยันแผนอยู่ท้ายหน้าต่อจากกระดาน เต็มความกว้าง (จอกว้างอยู่บนแถบบน) */}
+      {!ro && <div className="pt-0.5 md:hidden">{confirmButton("pl-confirm-bottom")}</div>}
 
       {doc && docs && (
         <Sheet
           title={
             doc === "quo"
               ? `ใบเสนอราคา ${docs.quo}`
-              : `Proposal ${docs.proposal?.no ?? ""} รอบ ${docs.proposal?.round ?? ""}`
+              : `Proposal รอบ ${docs.proposal?.round ?? ""}`
           }
           wide
           onClose={() => setDoc(null)}
@@ -674,17 +787,7 @@ export function PmPlanPage() {
           firstDay={job.firstDay}
           phases={phases}
           index={phaseEdit}
-          taskCount={phaseEdit >= 0 ? (plan[phaseEdit]?.length ?? 0) : 0}
           onClose={() => setPhaseEdit(null)}
-          onDelete={() => {
-            edit((b) => {
-              b.phases.splice(phaseEdit, 1);
-              b.plan.splice(phaseEdit, 1);
-            });
-            /* ลำดับเฟสขยับ คีย์ที่ติ๊กไว้จึงชี้ผิดใบ ล้างทิ้งเหมือนตอนลากสลับลำดับ */
-            setPicked({});
-            setPhaseEdit(null);
-          }}
           onSave={(v) => {
             edit((b) => {
               if (phaseEdit < 0) {
@@ -711,6 +814,7 @@ export function PmPlanPage() {
       {adding !== null && phases[adding] && (
         <AddTaskDialog
           phase={phases[adding]}
+          pj={job?.pj}
           onClose={() => setAdding(null)}
           onSave={(t) => {
             edit((b) => {
@@ -724,6 +828,7 @@ export function PmPlanPage() {
       {open && plan[open.phase]?.[open.index] && (
         <TaskDialog
           phase={phases[open.phase]}
+          pj={job?.pj}
           color={phaseColor(open.phase)}
           spot={open}
           task={plan[open.phase][open.index]}
@@ -734,13 +839,6 @@ export function PmPlanPage() {
               fn(b.plan[open.phase][open.index]);
             })
           }
-          onDelete={() => {
-            edit((b) => {
-              b.plan[open.phase].splice(open.index, 1);
-            });
-            setPicked({});
-            setOpen(null);
-          }}
         />
       )}
     </div>
@@ -749,9 +847,9 @@ export function PmPlanPage() {
 
 function PageBar() {
   return (
-    <div className="bar">
-      <div>
-      </div>
+    /* ชื่อหน้าชิดซ้าย ปุ่มชิดขวา · มือถือคงเดิม (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+    <div className="bar max-md:justify-end!">
+      <h1 className="page-h1">จัดคิวงาน</h1>
       <div className="tools">
         <Link href="/pm/projects" className="btn glass-thin">
           ไปหน้าโปรเจค
@@ -765,17 +863,10 @@ function PageBar() {
  * บรรทัดบอกส่วนต่างจากข้อเสนอใต้หัวเฟส
  * เฟสที่ PM สร้างเองไม่มีค่าเทียบ บอกแค่ว่าเพิ่มเอง
  */
-function baseLines(ph: PlanPhase): string[] {
-  if (ph.own) return ["เฟสที่เพิ่มเอง ไม่ได้อยู่ในข้อเสนอ"];
-  if (ph.baseStart === undefined || ph.baseEnd === undefined) return [];
-  const d1 = daysBetween(ph.baseStart, ph.start);
-  const d2 = daysBetween(ph.baseEnd, ph.end);
-  const renamed = ph.baseName !== undefined && ph.baseName !== ph.name;
-  const out: string[] = [];
-  if (renamed) out.push(`เดิมชื่อ ${ph.baseName}`);
-  if (d1 || d2) out.push(`ตามข้อเสนอ ${thaiDate(ph.baseStart)} – ${thaiDate(ph.baseEnd)}`);
-  if (d2) out.push(d2 > 0 ? `เลื่อนออก ${d2} วัน` : `ร่นเข้า ${Math.abs(d2)} วัน`);
-  return out;
+/* ไม่เทียบกับข้อเสนอแล้ว — PM กำหนดเฟสเอง (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function baseLines(_ph: PlanPhase): string[] {
+  return [];
 }
 
 // ─── เพิ่ม / แก้เฟส ──────────────────────────────────────────────
@@ -784,19 +875,14 @@ function PhaseDialog({
   firstDay,
   phases,
   index,
-  taskCount,
   onClose,
   onSave,
-  onDelete,
 }: {
   firstDay: string;
   phases: PlanPhase[];
   index: number;
-  /** จำนวนงานในเฟสนี้ — ลบเฟสแล้วงานข้างในหายไปด้วย ต้องบอกก่อน */
-  taskCount: number;
   onClose: () => void;
   onSave: (v: { name: string; start: string; end: string }) => void;
-  onDelete: () => void;
 }) {
   const isNew = index < 0;
   const ph = isNew ? undefined : phases[index];
@@ -807,12 +893,8 @@ function PhaseDialog({
   const [end, setEnd] = useState(ph?.end ?? (last ? addDays(last.end, 7) : addDays(first, 6)));
   const [pick, setPick] = useState<"s" | "e" | null>(null);
   const [warn, setWarn] = useState(false);
-  const [delAsk, setDelAsk] = useState(false);
 
   const ok = Boolean(name.trim() && start && end && end >= start);
-  /* ยังไม่เคยแก้ก็ยังไม่มี baseEnd — ค่าบนเฟสตอนนี้คือค่าตามข้อเสนอ */
-  const ref = ph && !ph.own ? (ph.baseEnd ?? ph.end) : "";
-  const shift = ref && end ? daysBetween(ref, end) : 0;
 
   return (
     <Sheet
@@ -820,21 +902,6 @@ function PhaseDialog({
       onClose={onClose}
       footer={
         <>
-          {!isNew && (
-            <button
-              type="button"
-              className={`btn glass-thin mr-auto ${delAsk ? "!border-destructive !text-destructive" : ""}`}
-              title={taskCount ? `ลบเฟสนี้พร้อมงาน ${taskCount} ใบข้างใน` : "ลบเฟสนี้"}
-              onClick={() => (delAsk ? onDelete() : setDelAsk(true))}
-            >
-              <TrashIcon className="size-[14px]" strokeWidth={2.2} />
-              {delAsk
-                ? taskCount
-                  ? `กดอีกครั้ง ลบพร้อมงาน ${taskCount} ใบ`
-                  : "กดอีกครั้งเพื่อลบ"
-                : "ลบเฟสนี้"}
-            </button>
-          )}
           <button type="button" className="btn glass-thin" onClick={onClose}>
             ยกเลิก
           </button>
@@ -853,7 +920,7 @@ function PhaseDialog({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="เช่น พัฒนาระบบหลังบ้าน"
-          className="field-control"
+          className={`field-control ${warn && !name.trim() ? "!border-destructive" : ""}`}
         />
       </Field>
       <div className="grid gap-x-4 sm:grid-cols-2">
@@ -862,6 +929,7 @@ function PhaseDialog({
             value={start}
             open={pick === "s"}
             label="วันเริ่มเฟส"
+            invalid={warn && (!start || (Boolean(end) && end < start))}
             onToggle={() => setPick((p) => (p === "s" ? null : "s"))}
             onPick={(iso) => {
               setStart(iso);
@@ -876,6 +944,7 @@ function PhaseDialog({
             min={start || undefined}
             open={pick === "e"}
             label="วันสิ้นสุดเฟส"
+            invalid={warn && (!end || (Boolean(start) && end < start))}
             onToggle={() => setPick((p) => (p === "e" ? null : "e"))}
             onPick={(iso) => {
               setEnd(iso);
@@ -884,27 +953,7 @@ function PhaseDialog({
           />
         </Field>
       </div>
-      {warn && !ok && (
-        <p className="mb-3 rounded-[11px] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] font-semibold text-destructive">
-          กรอกชื่อเฟสและวันให้ครบ วันเริ่มต้องไม่หลังวันสิ้นสุด
-        </p>
-      )}
-      <p className="rounded-[11px] bg-muted px-3.5 py-2.5 text-[12px] leading-[1.6] text-muted-foreground">
-        {start && end && end >= start ? (
-          <>
-            ระยะ {daysBetween(start, end) + 1} วัน
-            {ref && (
-              <>
-                {" "}
-                ตามข้อเสนอจบ {thaiDate(ref)}
-                {shift !== 0 && (shift > 0 ? ` เลื่อนออก ${shift} วัน` : ` ร่นเข้า ${Math.abs(shift)} วัน`)}
-              </>
-            )}
-          </>
-        ) : (
-          "เลือกวันเริ่มและวันสิ้นสุด"
-        )}
-      </p>
+      {/* ไม่มีกล่องเตือนแยก — ช่องที่ยังไม่ครบขึ้นขอบแดงแทน (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
     </Sheet>
   );
 }
@@ -913,14 +962,16 @@ function PhaseDialog({
 
 function AddTaskDialog({
   phase,
+  pj,
   onClose,
   onSave,
 }: {
   phase: PlanPhase;
+  pj?: string;
   onClose: () => void;
   onSave: (t: Draft) => void;
 }) {
-  const team = useTeam().filter((m) => !m.left);
+  const team = useMarketingTeam();
   const [name, setName] = useState("");
   const [role, setRole] = useState<TeamRole | "">(phase.role ?? "");
   const [who, setWho] = useState("");
@@ -933,10 +984,13 @@ function AddTaskDialog({
   const [brief, setBrief] = useState("");
   const [pick, setPick] = useState<"s" | "e" | null>(null);
   const [warn, setWarn] = useState(false);
-  const people = team.filter((m) => !role || m.roles.includes(role));
+  /* เลือกคนได้อิสระทุกคนในทีม ไม่กรองตามตำแหน่งของเฟส · บอกตำแหน่งท้ายชื่อเหมือนหน้าต่างงาน (ผู้ใช้สั่ง 27 ต.ค. 2569) */
+  const hr = useHr();
+  const people = team;
   /* ลาของแต่ละคนที่ทับช่วงงาน — บอกท้ายชื่อในรายการ และเตือนใต้ช่องเมื่อเลือกคนนั้น (ตามต้นแบบ) */
   const clashOf = useLeaveClash();
   const whoClash = who ? clashOf(who, start, due) : [];
+  const busyOf = useBusyOf(pj);
   const ok = Boolean(name.trim() && start && due && due >= start);
 
   return (
@@ -977,38 +1031,22 @@ function AddTaskDialog({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="เช่น ทำระบบรับเข้าสินค้า"
-          className="field-control"
+          className={`field-control ${warn && !name.trim() ? "!border-destructive" : ""}`}
         />
       </Field>
-      <div className="grid gap-x-4 sm:grid-cols-2">
-        <Field label="ตำแหน่งที่ควรทำ">
-          <select
-            value={role}
-            onChange={(e) => {
-              if (addRole.pick(e.target.value)) return;
-              setRole(e.target.value as TeamRole | "");
-              setWho("");
-            }}
-            className="field-control cursor-pointer"
-          >
-            <option value="">ยังไม่ระบุ</option>
-            {teamRoles().map((r) => (
-              <option key={r.key} value={r.key}>
-                {r.label}
-              </option>
-            ))}
-            {addRole.option}
-          </select>
-        </Field>
-        {addRole.dialog}
+      <div className="grid gap-x-4">
+        {/* ไม่มีตำแหน่งในทีม — เลือกผู้รับผิดชอบจากพนักงานได้เลย (ผู้ใช้สั่ง 12 ต.ค. 2569) */}
         <Field label="ผู้รับผิดชอบ">
           <select value={who} onChange={(e) => setWho(e.target.value)} className="field-control cursor-pointer">
             <option value="">ยังไม่มอบหมาย</option>
             {people.map((m) => {
               const c = clashOf(m.id, start, due);
+              const emp = hr.emp.find((e) => e.id === m.id);
+              const busy = busyOf(m.id, start, due).length;
               return (
-                <option key={m.id} value={m.id}>
-                  {m.name}
+                <option key={m.id} value={m.id} style={busyStyle(busy)}>
+                  {whoLabel(m, emp?.pos)}
+                  {busyTag(busy)}
                   {c.length ? ` — ${leaveText(c[0])}` : ""}
                 </option>
               );
@@ -1019,6 +1057,7 @@ function AddTaskDialog({
               คนนี้{whoClash.map(leaveText).join(" และ ")} อยู่ในช่วงงานนี้
             </p>
           )}
+          <BusyList list={who ? busyOf(who, start, due) : []} />
         </Field>
       </div>
       <div className="grid gap-x-4 sm:grid-cols-2">
@@ -1029,6 +1068,7 @@ function AddTaskDialog({
             max={phase.end}
             open={pick === "s"}
             label="วันเริ่มงาน"
+            invalid={warn && (!start || (Boolean(due) && due < start))}
             onToggle={() => setPick((p) => (p === "s" ? null : "s"))}
             onPick={(iso) => {
               setStart(iso);
@@ -1044,6 +1084,7 @@ function AddTaskDialog({
             max={phase.end}
             open={pick === "e"}
             label="กำหนดส่งงาน"
+            invalid={warn && (!due || (Boolean(start) && due < start))}
             onToggle={() => setPick((p) => (p === "e" ? null : "e"))}
             onPick={(iso) => {
               setDue(iso);
@@ -1061,14 +1102,6 @@ function AddTaskDialog({
           className="field-control h-[86px] resize-y py-2.5 leading-relaxed"
         />
       </Field>
-      {warn && !ok && (
-        <p className="mb-3 rounded-[11px] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] font-semibold text-destructive">
-          กรอกชื่องานและวันให้ครบ วันเริ่มต้องไม่หลังกำหนดส่ง
-        </p>
-      )}
-      <p className="rounded-[11px] bg-muted px-3.5 py-2.5 text-[12px] text-muted-foreground">
-        ผู้รับผิดชอบเว้นว่างได้ มอบหมายทีหลังในกระดานก็ได้
-      </p>
     </Sheet>
   );
 }
@@ -1120,11 +1153,92 @@ function printDoc() {
   window.setTimeout(() => document.body.classList.remove("print-doc"), 400);
 }
 
+/* งานที่คนนี้ถืออยู่และวันทับช่วงของงานที่กำลังมอบ — บอกจำนวนในดรอปดาวน์ และรายการใต้ช่องเมื่อเลือกแล้ว (ผู้ใช้สั่ง 29 ต.ค. 2569)
+   ไม่นับงานที่เสร็จแล้ว โปรเจคที่ยกเลิก และตัวงานที่กำลังแก้อยู่เอง */
+type Busy = { name: string; where: string; start: string; due: string };
+function useBusyOf(pj?: string) {
+  const pm = usePm();
+  return useCallback(
+    (id: string, start: string, due: string, self?: string): Busy[] => {
+      if (!id || !start || !due) return [];
+      return taskHomes(pm)
+        .filter((p) => p.status !== "cancelled")
+        .flatMap((p) =>
+          p.tasks
+            .filter(
+              (t) =>
+                t.status !== "done" &&
+                t.whos.includes(id) &&
+                Boolean(t.start && t.due) &&
+                t.start <= due &&
+                t.due >= start &&
+                !(pj && isRef(p, pj) && t.name === self),
+            )
+            .map((t) => ({ name: t.name, where: p.name || p.cus, start: t.start, due: t.due })),
+        )
+        .sort((a, b) => a.start.localeCompare(b.start));
+    },
+    [pm, pj],
+  );
+}
+
+/* สถานะงานชน: 1–2 งาน เหลือง · 3 งานขึ้นไป แดง (ผู้ใช้สั่ง 29 ต.ค. 2569) */
+function busyTag(n: number) {
+  return n ? `  ${n >= 3 ? "🔴" : "🟡"} ${n} งาน` : "";
+}
+function busyStyle(n: number): React.CSSProperties | undefined {
+  return n ? { color: n >= 3 ? "var(--destructive)" : "var(--warning)" } : undefined;
+}
+
+function BusyList({ list }: { list: Busy[] }) {
+  if (!list.length) return null;
+  return (
+    <div className="mt-1.5 text-[12px]">
+      <p className="font-semibold" style={busyStyle(list.length)}>
+        {list.length >= 3 ? "🔴" : "🟡"} ถืองานช่วงนี้อยู่ {list.length} งาน
+      </p>
+      <ul className="mt-1 space-y-0.5 text-muted-foreground">
+        {list.map((b, i) => (
+          <li key={i}>
+            {b.name} · {b.where} · {thaiDate(b.start)} – {thaiDate(b.due)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* คนที่ PM มอบงานได้ = ตำแหน่งในแผนก marketing เท่านั้น ไม่รวมคนที่พ้นสภาพ (ผู้ใช้สั่ง 29 ต.ค. 2569) */
+function useMarketingTeam() {
+  const hr = useHr();
+  return useTeam().filter((m) => {
+    const emp = hr.emp.find((e) => e.id === m.id);
+    return !m.left && Boolean(emp) && hrPos(emp!.pos).dept === "marketing";
+  });
+}
+
+/* ตัวเลือกผู้รับผิดชอบ = "ตำแหน่งเต็ม (ชื่อ)" เช่น System Analysis (นุ่น) — ตำแหน่งย่อเขียนเต็มเฉพาะในดรอปดาวน์นี้ (ผู้ใช้สั่ง 29 ต.ค. 2569) */
+const POS_FULL: Record<string, string> = {
+  SA: "System Analysis",
+  PM: "Project Manager",
+  GM: "General Manager",
+  BD: "Business Development",
+  Dev: "Developer",
+};
+function whoLabel(m: Member, pos?: PosKey) {
+  const label = pos ? hrPos(pos).label : m.roles.map(roleLabel).join(" | ");
+  return `${POS_FULL[label] ?? label} (${m.name})`;
+}
+
 // ─── ตัวเลือกผู้รับผิดชอบในแถบมอบหมายพร้อมกัน ────────────────────────
 
 /*
  * ทำเองแทน <select> เพราะต้องเห็นทั้งชื่อและตำแหน่งงานสองบรรทัด
  * ช่องเลือกของเบราว์เซอร์แสดงได้บรรทัดเดียว ชื่อยาวกับตำแหน่งจึงถูกตัดจนอ่านไม่ออก
+ */
+/*
+ * เลือกคนที่จะมอบหมายพร้อมกัน — ดรอปดาวน์ธรรมดา ชื่อ · ตำแหน่งตามทะเบียน HR (ผู้ใช้สั่ง 8 ต.ค. 2569)
+ * เดิมเป็นรายการลอยที่ถูกกล่องแถบมอบหมายตัดทิ้ง กดแล้วไม่เห็นรายชื่อ
  */
 function WhoPicker({
   team,
@@ -1135,86 +1249,64 @@ function WhoPicker({
   value: string;
   onChange: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLSpanElement>(null);
-  const current = team.find((m) => m.id === value);
-
-  /* กดนอกกล่องหรือกด Esc แล้วปิด — ลงทะเบียนเฉพาะตอนเปิดอยู่ */
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
+  const hr = useHr();
   return (
-    <span ref={box} className="relative block min-w-0 flex-1">
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className={`flex w-full min-w-0 items-center gap-2 rounded-[10px] border bg-card px-3 py-[7px] text-left ${
-          open ? "border-primary ring-[3px] ring-primary/10" : "border-border hover:border-primary"
-        }`}
-      >
-        <span className="min-w-0 flex-1">
-          <b className="block truncate text-[13px] font-bold">{current?.name ?? "เลือกผู้รับผิดชอบ"}</b>
-          <span className="mt-0.5 block truncate text-[11.5px] text-muted-foreground">
-            {current ? current.roles.map(roleLabel).join(" · ") : "ยังไม่ได้เลือก"}
-          </span>
-        </span>
-        <ChevronDownIcon className="size-3.5 flex-none text-muted-foreground" strokeWidth={2.4} />
-      </button>
+    <PlainSelect value={value} label="มอบหมายให้" onChange={onChange} className="min-w-0 flex-1">
+      <option value="">— เลือกผู้รับผิดชอบ —</option>
+      {team.map((m) => {
+        const emp = hr.emp.find((e) => e.id === m.id);
+        return (
+          <option key={m.id} value={m.id}>
+            {whoLabel(m, emp?.pos)}
+          </option>
+        );
+      })}
+    </PlainSelect>
+  );
+}
 
-      {open && (
-        <span
-          role="listbox"
-          className="absolute top-[calc(100%+5px)] left-0 z-90 block max-h-[296px] w-full min-w-[320px] max-w-[420px] overflow-y-auto rounded-[13px] border border-border bg-card p-1.5 shadow-[0_22px_46px_-20px_rgba(40,25,60,.42)]"
-        >
-          {team.map((m) => {
-            const on = m.id === value;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                role="option"
-                aria-selected={on}
-                onClick={() => {
-                  onChange(m.id);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center gap-[11px] rounded-[10px] px-2.5 py-2 text-left ${
-                  on ? "bg-accent" : "hover:bg-muted"
-                }`}
-              >
-                <span className="grid size-[34px] flex-none place-items-center rounded-[10px] bg-accent text-xs font-bold text-primary">
-                  {initials(m.name)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <b className={`block truncate text-[13.5px] font-bold ${on ? "text-primary" : ""}`}>
-                    {m.name}
-                  </b>
-                  <span
-                    className={`mt-0.5 block truncate text-[11.5px] ${on ? "text-primary" : "text-muted-foreground"}`}
-                  >
-                    {m.roles.map(roleLabel).join(" · ")}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </span>
-      )}
+/*
+ * ดรอปดาวน์ธรรมดา ลูกศรห่างขอบ และกลับหัวเป็น ^ ตอนกางรายการ (ผู้ใช้สั่ง 8 ต.ค. 2569)
+ * select ของเบราว์เซอร์บอกไม่ได้ว่ากางอยู่ไหม — นับจากการกด/เลือก/ออกจากช่องแทน
+ */
+function PlainSelect({
+  value,
+  label,
+  onChange,
+  className = "",
+  children,
+}: {
+  value: string;
+  label: string;
+  onChange: (v: string) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className={`relative block ${className}`}>
+      <select
+        value={value}
+        aria-label={label}
+        onMouseDown={() => setOpen((o) => !o)}
+        onChange={(e) => {
+          setOpen(false);
+          onChange(e.target.value);
+        }}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" || e.key === "Enter" || e.key === "Tab") setOpen(false);
+        }}
+        className="field-control cursor-pointer appearance-none"
+        style={{ paddingRight: 40 }}
+      >
+        {children}
+      </select>
+      <ChevronDownIcon
+        className={`pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        style={{ right: 14 }}
+        strokeWidth={2.4}
+      />
     </span>
   );
 }
@@ -1224,14 +1316,20 @@ function WhoPicker({
 /* วันบนการ์ดตัดปีออก เพราะอยู่ในกรอบเฟสเดียวกันอยู่แล้ว */
 const short = (iso: string) => thaiDate(iso).replace(/\s\d{4}$/, "");
 
+/*
+ * การ์ดบอกแค่ชื่องาน คน และวันที่ (ผู้ใช้สั่ง 21 ต.ค. 2569)
+ * บรรทัดอื่นขึ้นเฉพาะข้อยกเว้น (notes) และคำเตือนเดิม (ลาทับช่วงงาน · นอกกรอบเฟส)
+ */
 function TaskCard({
   task,
+  notes,
   outside,
   order,
   checked,
   dragging,
   onCheck,
   onOpen,
+  onDelete,
   readOnly = false,
   onDragStart,
   onDragOver,
@@ -1239,6 +1337,8 @@ function TaskCard({
   onDragEnd,
 }: {
   task: Draft;
+  /** บรรทัดข้อยกเว้น — การตรวจที่ไม่ใช่ค่าตั้งต้น · งานต่อกันเดิมที่ต่างจากแม่แบบ */
+  notes: string[];
   /** วันของงานเลยกรอบเฟส */
   outside: boolean;
   order: number;
@@ -1246,6 +1346,7 @@ function TaskCard({
   dragging: boolean;
   onCheck: () => void;
   onOpen: () => void;
+  onDelete: () => void;
   readOnly?: boolean;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -1273,8 +1374,8 @@ function TaskCard({
         onDrop();
       }}
       onDragEnd={onDragEnd}
-      className={`flex flex-none cursor-grab items-stretch overflow-hidden rounded-[11px] border bg-card shadow-[0_1px_2px_rgba(31,36,48,.06),0_3px_8px_-4px_rgba(31,36,48,.16)] transition-colors hover:border-primary active:cursor-grabbing ${
-        checked ? "border-primary ring-2 ring-primary/16" : "border-[#D8DDE6]"
+      className={`relative flex flex-none cursor-grab items-stretch overflow-hidden rounded-[11px] border bg-card shadow-[0_1px_2px_rgba(31,36,48,.06),0_3px_8px_-4px_rgba(31,36,48,.16)] transition-colors hover:border-primary active:cursor-grabbing max-md:rounded-[14px] max-md:shadow-none ${
+        checked ? "border-primary ring-2 ring-primary/16" : "border-[#D8DDE6] max-md:border-[#F0E6E8]"
       } ${ready ? "border-l-4 border-l-[var(--success)]" : ""} ${dragging ? "opacity-45" : ""}`}
     >
       {/* ซ้ายคือแถบเลือกงาน ขวาคือพื้นที่เปิดรายละเอียด แยกกันชัดเจน */}
@@ -1308,13 +1409,13 @@ function TaskCard({
             onOpen();
           }
         }}
-        className="min-w-0 flex-1 cursor-pointer p-[11px]"
+        className={`min-w-0 flex-1 cursor-pointer p-[11px] ${readOnly ? "" : "pr-8"}`}
       >
         <div className="flex items-start gap-2">
           <span className="num grid size-[19px] flex-none place-items-center rounded-[6px] bg-muted text-[10.5px] font-bold text-muted-foreground">
             {order}
           </span>
-          <span className="block min-w-0 flex-1 truncate text-[12.5px] leading-[1.5] font-semibold max-sm:text-[13.5px] max-sm:whitespace-normal" title={task.name}>
+          <span className="block min-w-0 flex-1 truncate text-[12.5px] leading-[1.5] font-semibold max-md:overflow-visible max-md:text-[13.5px] max-md:whitespace-normal" title={task.name}>
             {task.name}
           </span>
         </div>
@@ -1334,14 +1435,12 @@ function TaskCard({
             {task.start && task.due ? `${short(task.start)} – ${short(task.due)}` : "ยังไม่กำหนด"}
             {outside && " · นอกกรอบเฟส"}
           </MetaRow>
-          {/* คนทำต้องได้โจทย์ ไม่ใช่แค่ชื่องาน — การ์ดจึงบอกตั้งแต่บนกระดานว่าใบไหนยังไม่มี */}
-          <MetaRow icon={<FileIcon className="size-[13px]" />} none={!task.brief && !task.files?.length}>
-            {task.brief
-              ? `${task.brief}${task.files?.length ? ` · ${task.files.length} ไฟล์` : ""}`
-              : task.files?.length
-                ? `${task.files.length} ไฟล์แนบ`
-                : "ยังไม่มีรายละเอียดงาน"}
-          </MetaRow>
+          {/* ไม่มีบรรทัดรายละเอียด/ไฟล์ "รอ…/เริ่มได้ทันที" และผู้ตรวจประจำการ์ดแล้ว — ขึ้นเฉพาะที่ต่างจากค่าตั้งต้น (ผู้ใช้สั่ง 21 ต.ค. 2569) */}
+          {notes.map((n) => (
+            <MetaRow key={n} icon={n.startsWith("รอ ") ? <LinkIcon className="size-[13px]" /> : <CheckIcon className="size-[13px]" />}>
+              <span title={n}>{n}</span>
+            </MetaRow>
+          ))}
           {clash.length > 0 && (
             <span
               title="มอบงานในช่วงที่ผู้รับผิดชอบลา"
@@ -1352,6 +1451,22 @@ function TaskCard({
           )}
         </div>
       </div>
+      {/* ลบงานใบนี้ — มุมขวาล่างของการ์ด (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+      {!readOnly && (
+        <button
+          type="button"
+          aria-label={`ลบงาน ${task.name}`}
+          title="ลบงาน"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="absolute grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-[var(--destructive-soft)] hover:text-destructive"
+          style={{ right: 6, bottom: 6 }}
+        >
+          <TrashIcon className="size-3.5" />
+        </button>
+      )}
     </article>
   );
 }
@@ -1381,11 +1496,29 @@ function MetaRow({
 }
 
 /** ป้ายบน ค่าล่าง — ข้อมูลกรอบเวลาบนแถบเอกสาร */
-function LockLine({ label, value }: { label: string; value: string }) {
+function LockLine({
+  label,
+  value,
+  mobile,
+}: {
+  label: string;
+  value: string;
+  /** ข้อความบนมือถือที่ไม่มีหัวข้อกำกับ เช่น "4 เฟส" — ไม่ส่งมาใช้ value */
+  mobile?: string;
+}) {
   return (
-    <span className="flex flex-col gap-[3px] leading-[1.45]">
-      <em className="text-[11px] whitespace-nowrap text-muted-foreground not-italic">{label}</em>
-      <b className="num font-semibold whitespace-nowrap">{value}</b>
+    <span className="flex flex-col gap-[3px] leading-[1.45] max-md:gap-0">
+      <em className="text-[11px] whitespace-nowrap text-muted-foreground not-italic max-md:hidden">{label}</em>
+      <b className="num font-semibold whitespace-nowrap max-md:text-[12.5px] max-md:font-bold max-md:text-[#8A1B2A]">
+        {mobile ? (
+          <>
+            <span className="max-md:hidden">{value}</span>
+            <span className="md:hidden">{mobile}</span>
+          </>
+        ) : (
+          value
+        )}
+      </b>
     </span>
   );
 }
@@ -1393,39 +1526,36 @@ function LockLine({ label, value }: { label: string; value: string }) {
 // ─── การ์ดรายละเอียดงานย่อย ──────────────────────────────────────
 
 /*
- * สิ่งที่ต้องกรอกคือคนทำและวันเริ่ม-ส่ง ท้ายกล่องบอกสถานะพร้อมปุ่มเสร็จสิ้น (ตามต้นแบบ)
+ * หน้าต่างนี้ใช้แก้ข้อยกเว้น ไม่ใช่ฟอร์มให้กรอกทุกช่อง — ระบบเติมคน วัน และรายละเอียดไว้ก่อน (ผู้ใช้สั่ง 21 ต.ค. 2569)
+ * ท้ายกล่องบอกสถานะพร้อมปุ่มบันทึก
  * ตำแหน่งของงานใช้เตือนเวลาเลือกคนข้ามสาย — งานไม่มีตำแหน่งใช้ของเฟส ไม่มีทั้งคู่ก็ไม่เตือน
  */
 function TaskDialog({
   phase,
+  pj,
   color,
   spot,
   task,
   count,
   onClose,
   onEdit,
-  onDelete,
 }: {
   phase: PlanPhase;
+  pj?: string;
   color: string;
   spot: Spot;
   task: Draft;
   count: number;
   onClose: () => void;
   onEdit: (fn: (t: Draft) => void) => void;
-  /** ลบงานนี้ออกจากแผน (เจ้าของสั่ง 29 ก.ย. 2569 — ของเดิมเพิ่มได้แต่เอาออกไม่ได้) */
-  onDelete: () => void;
 }) {
-  const team = useTeam().filter((m) => !m.left);
+  const team = useMarketingTeam();
+  const hr = useHr();
   /* วันลาของทีม — อนุมัติแล้ว (ใบลาจริง + ทะเบียนฝ่ายบุคคล) และใบที่ยื่นไว้รออนุมัติ (ต้นแบบ PM_LEAVE_PENDING) */
   const clashOf = useLeaveClash();
   const leaveIn = (id: string) => clashOf(id, task.start, task.due).map(leaveText).join(" · ");
-  /* รายชื่อปิดไว้เสมอตอนเปิดงาน กดปุ่มเองถึงจะเปิด (ตามต้นแบบ) */
-  const [listOpen, setListOpen] = useState(false);
+  const busyOf = useBusyOf(pj);
   const [pick, setPick] = useState<"s" | "e" | null>(null);
-  /* ลบต้องกดสองครั้ง — ลบพลาดแล้วโจทย์กับไฟล์ที่แนบไว้หายไปด้วย */
-  const [delAsk, setDelAsk] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
   const role = task.role ?? phase.role;
   const fits = (m: Member) => !role || m.roles.includes(role);
   const offFit = task.whos.filter((id) => {
@@ -1434,27 +1564,12 @@ function TaskDialog({
   }).length;
   const onLeave = task.whos.filter((id) => leaveIn(id)).length;
 
-  function toggleWho(id: string) {
-    onEdit((t) => {
-      t.whos = t.whos.includes(id) ? t.whos.filter((x) => x !== id) : [...t.whos, id];
-    });
-  }
-
-  /* เลือกจากรายชื่อ = แทนที่คนเดิม กดคนเดิมซ้ำ = เอาออก แล้วปิดรายการ (ต้นแบบ PLIST)
-     มอบหมายหลายคนต่องานยังทำได้จากแถบมอบหมายพร้อมกันบนกระดาน */
-  function pickWho(id: string) {
-    onEdit((t) => {
-      t.whos = t.whos.length === 1 && t.whos[0] === id ? [] : [id];
-    });
-    setListOpen(false);
-  }
-
   const ready = task.whos.length > 0 && Boolean(task.start) && Boolean(task.due);
 
   return (
     <Sheet
       title={task.name}
-      wide
+      mid
       onClose={onClose}
       footer={
         <>
@@ -1465,144 +1580,64 @@ function TaskDialog({
           >
             {ready ? "พร้อมมอบหมาย" : !task.whos.length ? "ยังไม่มีผู้รับผิดชอบ" : "ยังไม่ได้กำหนดวัน"}
           </span>
-          <button
-            type="button"
-            className={`btn glass-thin ${delAsk ? "!border-destructive !text-destructive" : ""}`}
-            title={
-              task.from !== undefined
-                ? "งานนี้อยู่ในโปรเจคจริงแล้ว ลบออกจากแผนแล้วงานและไฟล์ที่ส่งไว้จะหายไปด้วย"
-                : "ลบงานนี้ออกจากแผน"
-            }
-            onClick={() => (delAsk ? onDelete() : setDelAsk(true))}
-          >
-            <TrashIcon className="size-[14px]" strokeWidth={2.2} />
-            {delAsk ? "กดอีกครั้งเพื่อลบ" : "ลบงานนี้"}
-          </button>
+          {/* ทุกช่องบันทึกตั้งแต่ตอนแก้ ปุ่มนี้แค่ปิดหน้าต่าง — ใช้คำว่า "บันทึก" ตามที่เจ้าของสั่ง (ผู้ใช้สั่ง 21 ต.ค. 2569) */}
           <button type="button" className="btn solid btn-solid" onClick={onClose}>
             <CheckIcon className="size-[14px]" strokeWidth={2.3} />
-            เสร็จสิ้น
+            บันทึก
           </button>
         </>
       }
     >
       <div onClick={() => setPick(null)}>
-        <p className="text-[12px] text-muted-foreground" style={{ borderLeft: `3px solid ${color}`, paddingLeft: 8 }}>
-          เฟส {phase.name} · ลำดับที่ {spot.index + 1} จาก {count}
-        </p>
-
-        <div className="mt-4 mb-[18px] flex flex-wrap gap-2">
-          {role && (
-            <span
-              className="inline-flex items-center rounded-lg border px-[11px] py-[5px] text-xs font-semibold"
-              style={{ background: `${color}1a`, color, borderColor: `${color}55` }}
+        {/* ── ผู้รับผิดชอบ 65% · ระยะเวลา 35% แถวเดียวกัน (ผู้ใช้สั่ง 8 ต.ค. 2569) ── */}
+        {/* ช่องวันกว้างเท่าที่ต้องใช้และอยู่บรรทัดเดียวเสมอ ผู้รับผิดชอบใช้พื้นที่ที่เหลือ */}
+        <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <section className="min-w-0">
+            <h3 className="text-xs font-bold text-muted-foreground">ผู้รับผิดชอบ</h3>
+            <PlainSelect
+              value={task.whos[0] ?? ""}
+              label="ผู้รับผิดชอบ"
+              className="mt-2"
+              onChange={(id) =>
+                onEdit((t) => {
+                  t.whos = id ? [id] : [];
+                  t.autoFill = unflag(t.autoFill, "who");
+                })
+              }
             >
-              {roleLabel(role)}
-            </span>
-          )}
-          {task.whos.map((id) => {
-            const name = memberOf(id)?.name ?? id;
-            return (
-              <span
-                key={id}
-                className="inline-flex items-center gap-[7px] rounded-lg border border-border bg-card px-[11px] py-[5px] text-xs font-semibold text-muted-foreground"
-              >
-                <span className="grid size-[17px] place-items-center rounded-[5px] bg-accent text-[8.5px] font-bold text-primary">
-                  {initials(name)}
-                </span>
-                {name}
-              </span>
-            );
-          })}
-          {task.start && task.due && (
-            <span className="num inline-flex items-center rounded-lg border border-border bg-card px-[11px] py-[5px] text-xs font-semibold text-muted-foreground">
-              {thaiDate(task.start)} – {thaiDate(task.due)}
-            </span>
-          )}
-        </div>
-
-        {/* ── ผู้รับผิดชอบ ── */}
-        <section>
-          <h3 className="text-xs font-bold text-muted-foreground">ผู้รับผิดชอบ</h3>
-          {offFit > 0 && (
-            <p className="mt-1.5 text-[11.5px] font-semibold text-destructive">
-              มี {offFit} คนที่ไม่ได้อยู่ตำแหน่ง “{role ? roleLabel(role) : ""}”
-            </p>
-          )}
-          {onLeave > 0 && (
-            /* ยังมอบหมายได้ แต่ให้รู้ก่อนว่างานจะช้าเพราะคนลา */
-            <p className="mt-1.5 text-[11.5px] font-semibold text-[var(--warning)]">
-              มี {onLeave} คนลาในช่วงวันของงานนี้
-            </p>
-          )}
-          <div className="mt-2.5 flex flex-col gap-[7px]">
-            {task.whos.map((id) => {
-              const m = memberOf(id);
-              if (!m) return null;
-              return (
-                <PersonRow key={id} member={m} fits={fits(m)} leave={leaveIn(id)}>
-                  <button
-                    type="button"
-                    aria-label={`เอา ${m.name} ออก`}
-                    onClick={() => toggleWho(id)}
-                    className="grid size-6 flex-none place-items-center rounded-lg text-muted-foreground hover:bg-[var(--destructive-soft)] hover:text-destructive"
-                  >
-                    <CloseIcon className="size-3.5" strokeWidth={2.4} />
-                  </button>
-                </PersonRow>
-              );
-            })}
-
-            <button
-              type="button"
-              aria-expanded={listOpen}
-              onClick={() => setListOpen((v) => !v)}
-              className="flex h-[38px] w-full items-center justify-between rounded-[10px] border border-border bg-card px-3 text-[12.5px] font-semibold text-muted-foreground hover:border-primary hover:text-primary"
-            >
-              {task.whos.length ? "เปลี่ยนผู้รับผิดชอบ" : "เลือกผู้รับผิดชอบ"}
-              <ChevronDownIcon className={`size-3.5 transition-transform ${listOpen ? "rotate-180" : ""}`} strokeWidth={2.4} />
-            </button>
-
-            {listOpen && (
-              <div className="scroll-stable mt-1 flex max-h-[236px] flex-col gap-[7px] overflow-y-auto p-0.5">
-                {team.map((m) => {
-                  const on = task.whos.includes(m.id);
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => pickWho(m.id)}
-                      aria-pressed={on}
-                      className={`rounded-[14px] text-left ${on ? "ring-1 ring-primary" : ""}`}
-                    >
-                      <PersonRow member={m} fits={fits(m)} on={on} leave={leaveIn(m.id)}>
-                        <span
-                          className={`grid size-[22px] flex-none place-items-center rounded-full border-[1.6px] ${
-                            on ? "border-primary bg-primary text-white" : "border-border text-transparent"
-                          }`}
-                        >
-                          <CheckIcon className="size-3" strokeWidth={3} />
-                        </span>
-                      </PersonRow>
-                    </button>
-                  );
-                })}
-              </div>
+              <option value="">— เลือกผู้รับผิดชอบ —</option>
+              {/* ชื่อกับตำแหน่งตามทะเบียนพนักงานฝ่ายบุคคล ไม่มีวันลา (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+              {team.map((m) => {
+                const emp = hr.emp.find((e) => e.id === m.id);
+                const busy = busyOf(m.id, task.start, task.due, task.name).length;
+                return (
+                  <option key={m.id} value={m.id} style={busyStyle(busy)}>
+                    {whoLabel(m, emp?.pos)}
+                    {busyTag(busy)}
+                  </option>
+                );
+              })}
+            </PlainSelect>
+            <BusyList list={task.whos[0] ? busyOf(task.whos[0], task.start, task.due, task.name) : []} />
+            {offFit > 0 && (
+              <p className="mt-1.5 text-[11.5px] font-semibold text-destructive">
+                มี {offFit} คนที่ไม่ได้อยู่ตำแหน่ง “{role ? roleLabel(role) : ""}”
+              </p>
             )}
-          </div>
-        </section>
+            {onLeave > 0 && (
+              /* ยังมอบหมายได้ แต่ให้รู้ก่อนว่างานจะช้าเพราะคนลา */
+              <p className="mt-1.5 text-[11.5px] font-semibold text-[var(--warning)]">
+                มี {onLeave} คนลาในช่วงวันของงานนี้
+              </p>
+            )}
+          </section>
 
-        {/* ── วันเริ่มงานและกำหนดส่ง ── */}
-        <section className="mt-5">
-          <h3 className="text-xs font-bold text-muted-foreground">วันเริ่มงานและกำหนดส่ง</h3>
-          <p className="mt-1.5 mb-2.5 text-[11.5px] text-muted-foreground">
-            เลือกได้เฉพาะในกรอบเฟส{" "}
-            <b className="num font-semibold text-foreground">
-              {thaiDate(phase.start)} – {thaiDate(phase.end)}
-            </b>
-          </p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <p className="mb-1 text-[11px] text-muted-foreground">วันที่เริ่มต้น</p>
+          <section className="min-w-0">
+            <h3 className="text-xs font-bold text-muted-foreground">
+              ระยะเวลา
+              {task.start && task.due ? <span className="num font-semibold"> · {daysBetween(task.start, task.due) + 1} วัน</span> : null}
+            </h3>
+            <div className="mt-2 flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
               <ThaiDatePicker
                 variant="chip"
                 value={task.start}
@@ -1610,19 +1645,18 @@ function TaskDialog({
                 max={phase.end}
                 open={pick === "s"}
                 label="วันเริ่มงาน"
-                placeholder="เลือกวันเริ่มงาน"
+                placeholder="วันเริ่ม"
                 onToggle={() => setPick((p) => (p === "s" ? null : "s"))}
                 onPick={(iso) => {
                   onEdit((t) => {
                     t.start = iso;
                     if (t.due && t.due < iso) t.due = iso;
+                    t.autoFill = unflag(t.autoFill, "dates");
                   });
                   setPick(null);
                 }}
               />
-            </div>
-            <div>
-              <p className="mb-1 text-[11px] text-muted-foreground">วันที่สิ้นสุด</p>
+              <span className="text-muted-foreground">–</span>
               <ThaiDatePicker
                 variant="chip"
                 value={task.due}
@@ -1630,144 +1664,60 @@ function TaskDialog({
                 max={phase.end}
                 open={pick === "e"}
                 label="วันส่งงาน"
-                placeholder="เลือกวันส่งงาน"
+                placeholder="วันส่ง"
                 onToggle={() => setPick((p) => (p === "e" ? null : "e"))}
                 onPick={(iso) => {
                   onEdit((t) => {
                     t.due = iso;
                     if (t.start && t.start > iso) t.start = iso;
+                    t.autoFill = unflag(t.autoFill, "dates");
                   });
                   setPick(null);
                 }}
               />
             </div>
-            <div>
-              <p className="mb-1 text-[11px] text-muted-foreground">ระยะเวลา</p>
-              <p className="num pt-1.5 text-[13px] font-semibold">
-                {task.start && task.due ? `${daysBetween(task.start, task.due) + 1} วัน` : "—"}
-              </p>
-            </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
         {/* ── โจทย์ที่ส่งให้คนทำ ──
             คนทำเห็นแค่ชื่องานกับกำหนดส่งไม่พอ ต้องได้โจทย์และไฟล์ประกอบไปด้วย
             ไม่งั้นต้องเดินมาถาม PM ทุกใบ (ผู้ใช้กำหนด 23 ก.ย. 2569) */}
         <section className="mt-5">
           <h3 className="text-xs font-bold text-muted-foreground">รายละเอียดงาน (โจทย์)</h3>
-          <p className="mt-1.5 mb-2 text-[11.5px] text-muted-foreground">
-            ข้อความนี้ขึ้นในหน้างานที่ได้รับของคนทำ · บันทึกเองทุกครั้งที่พิมพ์
-          </p>
           <textarea
             value={task.brief ?? ""}
             onChange={(e) => {
               const v = e.target.value;
               onEdit((t) => {
                 t.brief = v;
+                t.autoFill = unflag(t.autoFill, "brief");
               });
             }}
             placeholder="บอกให้ชัดว่าต้องทำอะไร ส่งอะไร และมีอะไรที่ต้องระวัง"
             aria-label="รายละเอียดงาน"
-            className="field-control h-[96px] resize-y py-2.5 leading-relaxed max-sm:h-[120px]"
+            className="field-control resize-y py-2.5 leading-relaxed text-muted-foreground/70 placeholder:text-muted-foreground/35"
+            /* .field-control ล็อกความสูงไว้ — ต้องกำหนดผ่าน style ถึงจะสูงจริง */
+            style={{ height: 160 }}
           />
-
-          <div className="mt-3.5 flex items-center justify-between gap-2.5">
-            <h4 className="text-xs font-bold text-muted-foreground">ไฟล์ประกอบโจทย์</h4>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="btn glass-thin h-8 px-3 text-[12px] max-sm:h-10"
-            >
-              <PlusIcon className="size-3.5" strokeWidth={2.2} />
-              แนบไฟล์
-            </button>
-          </div>
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            hidden
-            aria-label="เลือกไฟล์ประกอบโจทย์"
-            onChange={(e) => {
-              const added = pickedFiles(e.target.files);
-              if (added.length) {
-                onEdit((t) => {
-                  t.files = [...(t.files ?? []), ...added];
-                });
-              }
-              e.target.value = "";
-            }}
-          />
-          {task.files?.length ? (
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {task.files.map((f) => (
-                <li
-                  key={f.n}
-                  className="flex items-center gap-2.5 rounded-[10px] border border-border bg-card px-3 py-2"
-                >
-                  <FileIcon className="size-3.5 flex-none text-muted-foreground" strokeWidth={2} />
-                  <span className="min-w-0 flex-1">
-                    <b className="block truncate text-[12.5px] font-semibold">{f.n}</b>
-                    <em className="num block text-[11px] text-muted-foreground not-italic">
-                      {fileKindLabel(f.n, f.k)} · {f.sz}
-                    </em>
-                  </span>
-                  {f.fileId && (
-                    <button
-                      type="button"
-                      className="btn glass-thin h-7 flex-none px-2.5 text-[11.5px] max-sm:h-9"
-                      onClick={() => void openStoredFile(f.fileId!)}
-                    >
-                      เปิด
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    aria-label={`เอาไฟล์ ${f.n} ออก`}
-                    onClick={() => {
-                      if (f.fileId) void removeStoredFile(f.fileId);
-                      onEdit((t) => {
-                        t.files = (t.files ?? []).filter((x) => x.n !== f.n);
-                      });
-                    }}
-                    className="grid size-7 flex-none place-items-center rounded-lg text-muted-foreground hover:bg-[var(--destructive-soft)] hover:text-destructive max-sm:size-9"
-                  >
-                    <CloseIcon className="size-3.5" strokeWidth={2.4} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-[12px] text-muted-foreground">
-              ยังไม่มีไฟล์แนบ — แนบแบบ ภาพตัวอย่าง หรือข้อมูลที่คนทำต้องใช้ได้
-            </p>
-          )}
-          {/* ไฟล์เก็บอยู่ในเครื่องผู้ใช้ (IndexedDB) · ต่อ backend แล้วย้ายไปอัปโหลดขึ้น storage จริง */}
         </section>
+
+        {/* ไม่มีส่วนการตรวจงานในหน้าต่างงานแล้ว — ผู้ตรวจคือผู้สั่งเสมอ ไม่ต้องตั้งอะไร (ผู้ใช้สั่ง 27 ต.ค. 2569) */}
       </div>
     </Sheet>
   );
 }
 
-/*
- * ไฟล์ที่เพิ่งเลือกจากเครื่อง → รายการไฟล์ของงาน
- * เก็บไบต์ไว้ในเครื่อง (file-store · IndexedDB) ด้วย คนทำงานจะได้กดเปิดไฟล์โจทย์ได้จริง ไม่ใช่เห็นแค่ชื่อ
- */
+/** ไฟล์ที่เพิ่งเลือกจากเครื่อง → รายการไฟล์ของงาน (ยังไม่มีที่เก็บไฟล์จริง เก็บแค่ชื่อกับขนาด) */
 function pickedFiles(list: FileList | null): TaskFile[] {
   if (!list) return [];
   const at = todayIso();
-  return Array.from(list).map((f) => {
-    const fileId = `tf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    void putFile(fileId, f);
-    return {
-      n: f.name,
-      k: fileKind(f.name),
-      sz: fileSize(f.size),
-      at,
-      by: "PM",
-      fileId,
-    };
-  });
+  return Array.from(list).map((f) => ({
+    n: f.name,
+    k: fileKind(f.name),
+    sz: fileSize(f.size),
+    at,
+    by: "PM",
+  }));
 }
 
 /** แถวคนหนึ่งคน — ชื่อ ตำแหน่ง และงานที่ถืออยู่ ใช้ทั้งในรายการที่เลือกแล้วและรายชื่อทีม */
@@ -1793,8 +1743,8 @@ function PersonRow({
         on ? "border-primary bg-accent" : "border-border bg-white hover:border-primary"
       }`}
     >
-      <span className="grid size-11 flex-none place-items-center rounded-[13px] bg-accent text-sm font-bold text-primary">
-        {initials(member.name)}
+      <span className="grid size-11 flex-none place-items-center rounded-full bg-accent text-sm font-bold text-primary">
+        {initialOf(member.name)}
       </span>
       <span className="min-w-0 flex-1">
         <b className="block truncate text-[14.5px] font-bold">{member.name}</b>
@@ -1825,7 +1775,8 @@ function PersonRow({
 // ─── ตัวช่วยของหน้านี้ ────────────────────────────────────────────
 
 /** ช่วงลาหนึ่งช่วงของคนในทีม — pending = ใบที่ยื่นไว้แต่ยังไม่อนุมัติ */
-type TeamLeave = { from: string; to: string; type: string; pending: boolean };
+/* hours = ชั่วโมงลาของวันที่ลาไม่เต็มวัน · ไม่มีค่า = ลาเต็มวัน (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+type TeamLeave = { from: string; to: string; type: string; pending: boolean; hours?: number };
 
 const TH_MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
@@ -1839,14 +1790,14 @@ function leaveText(l: TeamLeave) {
       : m1 === m2
         ? `${d1}–${d2} ${TH_MON[m1 - 1]}`
         : `${d1} ${TH_MON[m1 - 1]} – ${d2} ${TH_MON[m2 - 1]}`;
-  return `${l.type} ${rng}${l.pending ? " (รออนุมัติ)" : ""}`;
+  return `${l.type} ${rng}${l.hours != null ? ` ${fmtLeaveHours(l.hours)}` : ""}${l.pending ? " (รออนุมัติ)" : ""}`;
 }
 
 /*
  * วันลาของทีม: ลาที่อนุมัติแล้วจากฝ่ายบุคคล และใบลาที่ยื่นไว้รออนุมัติ (ต้นแบบ PM_LEAVE_TIME + PM_LEAVE_PENDING)
  *   อนุมัติแล้ว — useHrTime (ทะเบียน + ใบลาจริงของบทบาทที่ล็อกอินได้) รวมวันติดกันเป็นช่วงเดียว
- *   รออนุมัติ — ใบของบทบาทใน leave-store และคำขอของพนักงานใน emp-requests
- *   คำขอของพนักงานที่อนุมัติแล้วยังไม่ไหลเข้าทะเบียน จึงนับจาก emp-requests ด้วย
+ *   รออนุมัติ — ใบของบทบาทใน leave-store และคำขอของทีมงานใน emp-requests
+ *   คำขอของทีมงานที่อนุมัติแล้วยังไม่ไหลเข้าทะเบียน จึงนับจาก emp-requests ด้วย
  * คืนฟังก์ชันหาลาที่ทับช่วงงาน — งานที่ยังไม่กำหนดวันไม่เตือน
  */
 function useLeaveClash() {
@@ -1861,17 +1812,18 @@ function useLeaveClash() {
       for (const l of days) {
         const type = HR_LEAVE_LABEL[l.type as keyof typeof HR_LEAVE_LABEL] ?? "ลา";
         const last = out[out.length - 1];
-        if (last && last.type === type && addDays(last.to, 1) === l.d) last.to = l.d;
-        else out.push({ from: l.d, to: l.d, type, pending: false });
+        const partial = l.span === "half";
+        if (!partial && last && last.hours == null && last.type === type && addDays(last.to, 1) === l.d) last.to = l.d;
+        else out.push({ from: l.d, to: l.d, type, pending: false, ...(partial ? { hours: leaveRowHours(l) } : {}) });
       }
       for (const r of extra) {
         if (r.emp !== id || r.kind !== "leave" || r.status === "rejected" || !r.from) continue;
-        out.push({ from: r.from, to: r.toDate || r.from, type: r.leaveType ?? "ลา", pending: r.status === "pending" });
+        out.push({ from: r.from, to: r.toDate || r.from, type: r.leaveType ?? "ลา", pending: r.status === "pending", ...(r.span === "half" ? { hours: empReqLeaveHours(r) } : {}) });
       }
       for (const [role, emp] of Object.entries(ROLE_EMPLOYEE)) {
         if (emp !== id) continue;
         for (const v of byRole[role as Role] ?? []) {
-          if (v.status === "รอการอนุมัติ") out.push({ from: v.date, to: v.toDate, type: v.type, pending: true });
+          if (v.status === "รอการอนุมัติ") out.push({ from: v.date, to: v.toDate, type: v.type, pending: true, ...(v.days < 1 ? { hours: leaveHoursOf(v) } : {}) });
         }
       }
       return out.filter((l) => l.from <= due && l.to >= start);
@@ -1883,7 +1835,7 @@ function useLeaveClash() {
 /** กระดานตั้งต้นจากข้อเสนอ — งานที่ไม่มีข้อเสนอเริ่มจากกระดานว่าง */
 function blankBoard(job: InboxJob): Board {
   return {
-    phases: job.phases.map((ph) => ({ name: ph.name, role: ph.role, start: ph.start, end: ph.end })),
+    phases: job.phases.map((ph) => ({ name: ph.name, role: ph.role, start: ph.start, end: ph.end, par: ph.par })),
     plan: job.phases.map((ph) =>
       ph.tasks.map((name) => ({ name, role: ph.role, whos: [], start: "", due: "" })),
     ),
@@ -1893,8 +1845,87 @@ function blankBoard(job: InboxJob): Board {
 function cloneBoard(b: Board): Board {
   return {
     phases: b.phases.map((ph) => ({ ...ph })),
-    plan: b.plan.map((list) => list.map((t) => ({ ...t, whos: [...t.whos], files: t.files?.map((f) => ({ ...f })) }))),
+    plan: b.plan.map((list) =>
+      list.map((t) => ({
+        ...t,
+        whos: [...t.whos],
+        files: t.files?.map((f) => ({ ...f })),
+        autoFill: t.autoFill ? { ...t.autoFill } : undefined,
+      })),
+    ),
   };
+}
+
+// ─── ระบบร่างแผนให้ (ผู้ใช้สั่ง 21 ต.ค. 2569) ─────────────────────────
+
+type FillCtx = { team: Member[]; projects: Project[]; scope: string };
+
+/** PM แก้ช่องนี้เองแล้ว — ล้างธง "ระบบเติมให้" ของช่องนั้น ไม่เหลือธงก็ไม่เก็บ */
+function unflag(f: Draft["autoFill"], k: "who" | "dates" | "brief"): Draft["autoFill"] {
+  if (!f?.[k]) return f;
+  const next = { ...f, [k]: undefined };
+  return next.who || next.dates || next.brief ? next : undefined;
+}
+
+/** แบ่งช่วงเฟสให้งานในเฟสเรียงต่อกันเท่า ๆ กัน (นับวันปฏิทิน อย่างน้อยงานละ 1 วัน งานสุดท้ายจบวันจบเฟส) */
+function splitSpan(start: string, end: string, n: number): { start: string; due: string }[] {
+  if (!start || !end || end < start || n <= 0) return [];
+  const days = daysBetween(start, end) + 1;
+  return Array.from({ length: n }, (_, i) => {
+    const a = Math.floor((i * days) / n);
+    const b = Math.max(a, Math.floor(((i + 1) * days) / n) - 1);
+    return { start: addDays(start, a), due: addDays(start, Math.min(b, days - 1)) };
+  });
+}
+
+/*
+ * เติมเฉพาะช่องที่ว่าง ไม่ทับที่ PM เลือกไว้ — ใช้ทั้งตอนเปิดกระดานใหม่และปุ่ม "เติมช่องที่ว่างให้"
+ *   ผู้รับผิดชอบ: คนในทีม (ไม่รวมคนที่พ้นสภาพ) ที่มีตำแหน่งของงาน/เฟส และงานค้างน้อยสุด เท่ากันเอาคนแรกในรายการ
+ *                นับงานที่เพิ่งเติมในกระดานนี้ด้วย ไม่งั้นงานทั้งเฟสไปกองที่คนเดียว
+ *   วัน: แบ่งช่วงเฟสให้งานเรียงต่อกัน · รายละเอียด: ข้อเสนอยังไม่มีข้อความรายงาน จึงสร้างประโยคสั้นจากชื่องาน เฟส และขอบเขต
+ * onlyNew = แก้แผนโปรเจคที่เดินอยู่ — เติมเฉพาะงานที่เพิ่มใหม่ งานเดิมไม่แตะ
+ * คืนจำนวนช่องที่เติม (0 = ไม่มีอะไรให้เติม ซ่อนปุ่ม)
+ */
+function fillEmpty(b: Board, ctx: FillCtx, onlyNew: boolean): { board: Board; n: number } {
+  const next = cloneBoard(b);
+  let n = 0;
+  const load = new Map(ctx.team.map((m) => [m.id, openTaskCount(ctx.projects, m.id)]));
+  for (const t of next.plan.flat()) for (const id of t.whos) load.set(id, (load.get(id) ?? 0) + 1);
+  next.phases.forEach((ph, pi) => {
+    const list = next.plan[pi] ?? [];
+    const slots = splitSpan(ph.start, ph.end, list.length);
+    list.forEach((t, ti) => {
+      if (onlyNew && t.from !== undefined) return;
+      const auto = { ...t.autoFill };
+      const role = t.role ?? ph.role;
+      if (!t.whos.length && role) {
+        let pick: Member | undefined;
+        for (const m of ctx.team) {
+          if (!m.roles.includes(role)) continue;
+          if (!pick || (load.get(m.id) ?? 0) < (load.get(pick.id) ?? 0)) pick = m;
+        }
+        if (pick) {
+          t.whos = [pick.id];
+          load.set(pick.id, (load.get(pick.id) ?? 0) + 1);
+          auto.who = true;
+          n += 1;
+        }
+      }
+      if ((!t.start || !t.due) && slots[ti]) {
+        t.start = slots[ti].start;
+        t.due = slots[ti].due;
+        auto.dates = true;
+        n += 1;
+      }
+      if (!t.brief?.trim()) {
+        t.brief = `${t.name} ในเฟส ${ph.name}${ctx.scope.trim() ? ` · ขอบเขต: ${ctx.scope.trim()}` : ""}`;
+        auto.brief = true;
+        n += 1;
+      }
+      if (auto.who || auto.dates || auto.brief) t.autoFill = auto;
+    });
+  });
+  return { board: next, n };
 }
 
 function key(phase: number, index: number) {

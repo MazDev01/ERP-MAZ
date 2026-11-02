@@ -6,7 +6,7 @@ import {
   type FuelRow,
   type OtherRow,
 } from "./expense-data";
-import { checkClaim, isLocked } from "./expense-data";
+import { addMissingClaims, checkClaim, claimApproveBlock, isLocked } from "./expense-data";
 import { bkkNow, nextDocNo, pad2 } from "./format";
 import type { Role } from "./role";
 import { empRequestIds } from "./emp-requests";
@@ -26,6 +26,7 @@ const store = createRoleStore<ExpenseClaim[]>(
     claims.map((c) =>
       (c.status === "ร่าง" || c.status === "รออนุมัติ") && c.income.length ? { ...c, income: [] } : c,
     ),
+  addMissingClaims,
 );
 
 export function useExpenseClaims() {
@@ -151,11 +152,9 @@ export function submitClaim(month: string) {
     ...empRequestIds("expense"),
     ...HR_REIMB.map((r) => r.no),
   ]);
-  const mine = store.current().find((c) => c.month === month);
-  if (mine && (mine.status === "ร่าง" || mine.status === "ไม่อนุมัติ")) {
-  }
+  /* ใบที่ยกเลิกไปแล้วยื่นใหม่ได้ด้วยเลขเดิม เหมือนใบที่ถูกตีกลับ (ผู้ใช้สั่ง 9 ต.ค. 2569) */
   edit(month, (c) =>
-    c.status === "ร่าง" || c.status === "ไม่อนุมัติ"
+    c.status === "ร่าง" || c.status === "ไม่อนุมัติ" || c.status === "ยกเลิก"
       ? {
           ...c,
           status: "รออนุมัติ",
@@ -178,6 +177,8 @@ export function useAllClaims() {
 export function approveClaim(role: Role, month: string, comment: string) {
   /* ใบที่ตัดสินไปแล้วไม่ส่งแจ้งเตือนซ้ำ — เช็คก่อนส่ง เหมือนใบลาและโอที */
   if (!store.ofRole(role).some((c) => c.month === month && c.status === "รออนุมัติ")) return;
+  /* ใบที่มีค่าคอมมิชชั่น/อินเซนทีฟอนุมัติไม่ได้ — กันที่สโตร์ด้วย ไม่ใช่แค่ปุ่มบนหน้าจอ (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+  if (store.ofRole(role).some((c) => c.month === month && c.status === "รออนุมัติ" && claimApproveBlock(c))) return;
   store.updateRole(role, (claims) =>
     claims.map((c) =>
       c.month === month && c.status === "รออนุมัติ"
@@ -212,35 +213,13 @@ export function markReimbursed(items: { role: Role; month: string }[], payMonth:
   }
 }
 
-/*
- * ยกเลิกการอนุมัติใบเบิก — ใบที่จ่ายคืนไปแล้ว (มี paidIn) ย้อนไม่ได้
- * เพราะเงินออกไปกับสลิปของรอบนั้นแล้ว ต้องไปเปิดรอบเงินเดือนก่อน
- */
-export function undoClaimDecision(role: Role, month: string, why: string) {
-  const reason = why.trim();
-  if (!reason) return false;
-  const claim = store.ofRole(role).find((c) => c.month === month);
-  if (!claim || claim.paidIn) return false;
-  if (claim.status !== "อนุมัติแล้ว" && claim.status !== "ไม่อนุมัติ") return false;
-  store.updateRole(role, (claims) =>
-    claims.map((c) =>
-      c.month === month
-        ? {
-            ...c,
-            status: "รออนุมัติ" as const,
-            comment: `ยกเลิกการอนุมัติ: ${reason}`,
-            decidedAt: undefined,
-            undoneAt: stampNow(),
-            undoneWhy: reason,
-          }
-        : c,
-    ),
-  );
-  return true;
-}
-
 export function resetExpenseClaims() {
   store.reset();
+}
+
+/** ยกเลิกใบที่รออนุมัติ — ใบยังอยู่ในรายการเป็นสถานะ "ยกเลิก" (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+export function cancelClaim(month: string) {
+  edit(month, (c) => (c.status === "รออนุมัติ" ? { ...c, status: "ยกเลิก" } : c), true);
 }
 
 /** ดึงใบที่ยื่นไปแล้วกลับมาแก้ ทำได้ตราบใดที่หัวหน้ายังไม่อนุมัติ */

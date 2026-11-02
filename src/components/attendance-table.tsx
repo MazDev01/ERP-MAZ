@@ -13,7 +13,7 @@ import {
   subscribeClock,
   subscribeRecords,
 } from "@/lib/attendance-store";
-import { type LeaveRecord } from "@/lib/leave-data";
+import { fmtLeaveHours, leaveHoursOf, type LeaveRecord } from "@/lib/leave-data";
 import { OT_KIND, otKindOf, type OtRecord } from "@/lib/ot-data";
 import { useOtRecords } from "@/lib/ot-store";
 import { leavesOnDate, useLeaveRecords } from "@/lib/leave-store";
@@ -24,8 +24,10 @@ import {
   minutesOfTime,
   shiftOf,
   actualMinutesOf,
+  type DaySchedule,
   type LeaveWindow,
 } from "@/lib/work-schedule";
+import { useMySchedule } from "@/lib/hr-link";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 
 const PER_PAGE = 10;
@@ -74,6 +76,8 @@ type DayRow = {
   inMin: number | null;
   outMin: number | null;
   leave: LeaveWindow;
+  /** เวลาทำงานของเจ้าของตาราง — แม่บ้าน 08:00–17:00 (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  sch: DaySchedule;
   leaveName: string;
   /** ใบลาของวันนั้นยังรออนุมัติอยู่ — ยังไม่หักสิทธิ์และยังไม่ใช่วันลา */
   leaveWaiting: boolean;
@@ -96,6 +100,8 @@ export function AttendanceTable() {
   const leaveRecords = useLeaveRecords();
   const otRecords = useOtRecords();
   const now = useMemo(() => (tick ? new Date(tick) : null), [tick]);
+  const sch = useMySchedule();
+  const schKey = `${sch.start}-${sch.end}-${sch.lunchStart}-${sch.lunchEnd}`;
 
   /* หน้าการลากับโอทีลิงก์มาหาเดือนของรายการที่กดด้วย ?month=YYYY-MM
      แปลงเป็นระยะห่างจากเดือนนี้ เพราะตารางเดินด้วยตัวนับเดือนอยู่แล้ว */
@@ -113,8 +119,9 @@ export function AttendanceTable() {
   const todayKey = now ? dayKey(now) : null;
   const rows = useMemo(
     () =>
-      todayKey ? buildRows(viewMonth, todayKey, records, leaveRecords, otRecords) : [],
-    [viewMonth, todayKey, records, leaveRecords, otRecords],
+      todayKey ? buildRows(viewMonth, todayKey, records, leaveRecords, otRecords, sch) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sch เปลี่ยนตาม schKey
+    [viewMonth, todayKey, records, leaveRecords, otRecords, schKey],
   );
 
   const workdays = useMemo(() => rows.filter((r) => !r.off), [rows]);
@@ -135,7 +142,7 @@ export function AttendanceTable() {
   const from = (safePage - 1) * PER_PAGE;
   const list = scoped.slice(from, from + PER_PAGE);
   const totalMinutes = scoped.reduce(
-    (sum, r) => sum + actualMinutesOf(r.inMin, r.outMin),
+    (sum, r) => sum + actualMinutesOf(r.inMin, r.outMin, r.sch),
     0,
   );
 
@@ -208,7 +215,7 @@ export function AttendanceTable() {
           {/* ใบที่ยังรออนุมัติไม่ถูกนับเป็นวันลา แต่ต้องเห็นว่ามีค้างอยู่ ไม่ใช่หายไปเฉย ๆ */}
           {tab === "leave" && waitingDays > 0 && (
             <span className="py-2 text-[12px] font-semibold text-[var(--warning)]">
-              รออนุมัติอีก {waitingDays} วัน (ยังไม่นับเป็นวันลา)
+              รออนุมัติอีก {waitingDays} วัน
             </span>
           )}
           <div className="legend hidden sm:flex">
@@ -226,20 +233,19 @@ export function AttendanceTable() {
             <thead>
               <tr>
                 {/* ความกว้างเป็นสัดส่วน คอลัมน์จะกระจายเต็มตารางทุกขนาดจอ ไม่กองที่ช่องหมายเหตุ */}
-                <th style={{ width: "14%" }}>วันที่</th>
-                <th className="c" style={{ width: "11%" }}>เข้างาน</th>
-                <th className="c" style={{ width: "11%" }}>ออกงาน</th>
-                <th className="c" style={{ width: "12%" }}>กะที่ต้องทำ</th>
-                <th className="c" style={{ width: "12%" }}>ชั่วโมงทำงาน</th>
-                <th className="c" style={{ width: "12%" }}>โอที</th>
-                <th className="c" style={{ width: "12%" }}>สถานะ</th>
-                <th style={{ width: "16%" }}>หมายเหตุ</th>
+                {/* ไม่มีโอทีและหมายเหตุในตารางเวลา · "กะที่ต้องทำ" เรียกว่าเวลา (ผู้ใช้สั่ง 9 ต.ค. 2569) */}
+                <th style={{ width: "20%" }}>วันที่</th>
+                <th className="c" style={{ width: "16%" }}>เข้างาน</th>
+                <th className="c" style={{ width: "16%" }}>ออกงาน</th>
+                <th className="c" style={{ width: "16%" }}>เวลา</th>
+                <th className="c" style={{ width: "16%" }}>ชั่วโมงทำงาน</th>
+                <th className="c" style={{ width: "16%" }}>สถานะ</th>
               </tr>
             </thead>
             <tbody>
               {list.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-[50px] text-center text-muted-foreground">
+                  <td colSpan={6} className="py-[50px] text-center text-muted-foreground">
                     ไม่มีรายการในหมวดนี้
                   </td>
                 </tr>
@@ -307,10 +313,10 @@ export function AttendanceTable() {
 }
 
 function Row({ row }: { row: DayRow }) {
-  const s = shiftOf(row.leave);
+  const s = shiftOf(row.leave, row.sch);
   const status = statusOf(row);
   /* แสดงชั่วโมงที่อยู่จริง · เงินเดือนคิดเฉพาะในกะ (ไม่เกิน 8 ชม.) ที่ workedMinutesOf */
-  const worked = actualMinutesOf(row.inMin, row.outMin);
+  const worked = actualMinutesOf(row.inMin, row.outMin, row.sch);
   const lateM = status === "late" && row.inMin != null ? row.inMin - s.in : 0;
   const earlyM = status === "early" && row.outMin != null ? s.out - row.outMin : 0;
 
@@ -326,11 +332,11 @@ function Row({ row }: { row: DayRow }) {
       </td>
       <td className="c num">
         {hhmm(row.inMin)}
-        {lateM > 0 && <span className="diff late">+{lateM}</span>}
+        
       </td>
       <td className="c num">
         {hhmm(row.outMin)}
-        {earlyM > 0 && <span className="diff early">−{earlyM}</span>}
+        
       </td>
       <td className="c num muted whitespace-nowrap">
         {row.holiday
@@ -346,38 +352,25 @@ function Row({ row }: { row: DayRow }) {
           "—"
         )}
       </td>
-      <td className="c num">
-        {row.ot ? (
-          <>
-            <b className="font-semibold">{row.ot.hours} ชม.</b>
-            <span className="sub2">
-              ×{row.ot.rate} · {row.ot.status}
-            </span>
-          </>
-        ) : (
-          <span className="muted">—</span>
-        )}
-      </td>
       <td className="c">
         <span className={`tag ${STATUS[status].cls}`}>
           <i />
           {STATUS[status].label}
         </span>
       </td>
-      <td className="muted">{row.note || "—"}</td>
     </tr>
   );
 }
 
 /** แถวเดียวกันแต่จัดเป็นการ์ดสำหรับจอแคบ */
 function MobileRow({ row }: { row: DayRow }) {
-  const s = shiftOf(row.leave);
+  const s = shiftOf(row.leave, row.sch);
   const status = statusOf(row);
-  const worked = actualMinutesOf(row.inMin, row.outMin);
+  const worked = actualMinutesOf(row.inMin, row.outMin, row.sch);
   const lateM = status === "late" && row.inMin != null ? row.inMin - s.in : 0;
   const earlyM = status === "early" && row.outMin != null ? s.out - row.outMin : 0;
   /* กะของวันนี้ต่างจากกะมาตรฐานไหม — ต่างเมื่อวันนั้นมีใบลาครึ่งวันหรือลาทั้งวัน */
-  const std = shiftOf(null);
+  const std = shiftOf(null, row.sch);
   const offShift = s.in !== std.in || s.out !== std.out;
 
   return (
@@ -404,14 +397,14 @@ function MobileRow({ row }: { row: DayRow }) {
           <dt className="text-[10.5px] text-muted-foreground">เข้างาน</dt>
           <dd className="num mt-0.5 text-[13.5px] font-semibold">
             {hhmm(row.inMin)}
-            {lateM > 0 && <span className="diff late">+{lateM}</span>}
+            
           </dd>
         </div>
         <div>
           <dt className="text-[10.5px] text-muted-foreground">ออกงาน</dt>
           <dd className="num mt-0.5 text-[13.5px] font-semibold">
             {hhmm(row.outMin)}
-            {earlyM > 0 && <span className="diff early">−{earlyM}</span>}
+            
           </dd>
         </div>
         <div>
@@ -422,11 +415,6 @@ function MobileRow({ row }: { row: DayRow }) {
         </div>
       </dl>
 
-      {row.ot && (
-        <p className="mt-2 text-xs text-[var(--info)]">
-          โอที {row.ot.hours} ชม. ×{row.ot.rate} · {row.ot.status}
-        </p>
-      )}
 
       {/* กะปกติไม่ต้องบอกซ้ำทุกวัน — บอกเฉพาะวันที่กะไม่ตรงค่ามาตรฐาน (ลาครึ่งวัน/ลาทั้งวัน) หรือมีหมายเหตุ */}
       {(offShift || row.note) && (
@@ -449,7 +437,7 @@ function hhmm(m: number | null) {
 }
 
 function statusOf(r: DayRow): Status {
-  const s = shiftOf(r.leave);
+  const s = shiftOf(r.leave, r.sch);
   const required = Math.max(0, s.out - s.in);
   // ลาทั้งวัน = ไม่ต้องทำงาน ต่อให้แวะมาตอกบัตรก็ยังนับเป็นวันลา
   if (r.leave && required === 0) return "leave";
@@ -477,6 +465,7 @@ function buildRows(
   records: PunchRecord[],
   leaves: LeaveRecord[],
   otRecords: OtRecord[],
+  sch: DaySchedule,
 ): DayRow[] {
   const year = month.getFullYear();
   const m = month.getMonth();
@@ -518,7 +507,8 @@ function buildRows(
       isToday: key === todayKey,
       inMin: first ? minutesOfTime(new Date(first.at)) : null,
       outMin: last ? minutesOfTime(new Date(last.at)) : null,
-      leave: leaveWindowOf(leave),
+      leave: leaveWindowOf(leave, sch),
+      sch,
       leaveName: leave?.type ?? waiting?.type ?? "",
       leaveWaiting: Boolean(waiting),
       ot: otOfDay.length
@@ -532,9 +522,10 @@ function buildRows(
       note:
         dayRecords.find((r) => r.note)?.note ??
         (leave
-          ? `${leave.type}${leave.comment ? ` · ${leave.comment}` : ""}`
+          ? /* ลาไม่เต็มวันบอกชั่วโมง (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+            `${leave.type}${leave.days < 1 ? ` ${fmtLeaveHours(leaveHoursOf(leave))}` : ""}${leave.comment ? ` · ${leave.comment}` : ""}`
           : waiting
-            ? `ยื่นลาไว้ ${waiting.type} เลขที่ ${waiting.id} · รออนุมัติ`
+            ? `ยื่นลาไว้ ${waiting.type} · รออนุมัติ`
             : ""),
     });
   }

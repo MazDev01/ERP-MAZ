@@ -40,12 +40,14 @@ import {
   pmSnapshot,
   setTaskProgress,
   setTaskStatus,
+  submitWork,
   type PmState,
 } from "./pm-store";
 import { isRef, planHref, projectHref, type InboxJob, type Phase, type Proposal, type Project, type TeamRole } from "./pm-data";
 import type { TaskStatus } from "./pm-data";
 import { firstLine } from "./rich-text";
-import { closePayrun } from "./hr-store";
+import { closeDailyPay, closePayrun } from "./hr-store";
+import { nameOf } from "./emp-name";
 import type { CycleSum, PayGroup } from "./hr-data";
 import { markReimbursed } from "./expense-store";
 import type { Role } from "./role";
@@ -62,8 +64,18 @@ export function closePayrunFlow(
   sum: CycleSum,
   reimbursed: { role: Role; month: string }[],
 ) {
-  closePayrun(month, today, group, sum);
-  markReimbursed(reimbursed, month);
+  /* ยังไม่ผ่าน CEO = ปิดไม่สำเร็จ ใบเบิกยังไม่นับว่าจ่าย (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  if (closePayrun(month, today, group, sum)) markReimbursed(reimbursed, month);
+}
+
+/** แบบเดียวกันสำหรับรอบจ่ายรายวันของทดลองงาน — ใบเบิกบันทึกว่าจ่ายกับรอบนี้ (id = "จาก~ถึง") (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+export function closeDailyPayFlow(
+  id: string,
+  today: string,
+  sum: CycleSum,
+  reimbursed: { role: Role; month: string }[],
+) {
+  if (closeDailyPay(id, today, sum)) markReimbursed(reimbursed, id);
 }
 
 // ═══ ยกเลิกดีลหลังปิดการขาย ═══════════════════════════════════════
@@ -73,7 +85,7 @@ export function closePayrunFlow(
  *   ต้องระบุเหตุผลเสมอ · โปรเจคของ PM เปลี่ยนเป็นยกเลิก งานหยุด
  *
  * ใบแจ้งหนี้ที่ยังไม่ได้รับชำระถูกยกเลิกไปด้วย พร้อมบันทึกว่าใครยกเลิกและเมื่อไร
- * ใบเสร็จที่ออกไปแล้วยังอยู่ตามเดิม และระบบไม่คืนเงินให้เอง
+ * ใบเสร็จที่ออกไปแล้วยังอยู่ตามเดิม (ระบบไม่มีเอกสารคืนเงิน — ผู้ใช้สั่ง 14 ต.ค. 2569)
  *
  * note = บันทึกเพิ่มเติมว่าตกลงอะไรกับลูกค้าไว้ ไม่บังคับ (เจ้าของระบบสั่งเพิ่ม 24 ก.ย. 2569)
  * เช่นออกเอกสารอะไรในโปรแกรมบัญชีของฝ่ายบัญชี หรือแจ้งลูกค้าไปว่าอย่างไร
@@ -116,7 +128,7 @@ export function acceptQuotationFlow(quotationId: string) {
   const money = quotationTotals(quotation);
   const accDeal: AccDeal = {
     no: deal.no,
-    cus: crm.customers.find((c) => c.code === deal.customerCode)?.name ?? deal.customerCode,
+    cus: crm.customers.find((c) => c.code === deal.customerCode)?.name ?? "—",
     quo: quotation.no,
     quoDate: quotation.issued,
     base: money.base,
@@ -328,8 +340,14 @@ function closeJobIfDone(pj: string) {
  * หน้างานรอตรวจต้องเรียกตัวนี้ ไม่ใช่ approveWork ตรง ๆ
  * ไม่งั้นฝ่ายขายจะเห็นใบงานค้างอยู่ทั้งที่ทีมทำเสร็จและส่งมอบไปแล้ว
  */
-export function approveWorkFlow(pj: string, taskName: string, stamp: string) {
-  approveWork(pj, taskName, stamp);
+export function approveWorkFlow(pj: string, taskName: string, stamp: string, byClient = false) {
+  approveWork(pj, taskName, stamp, byClient);
+  closeJobIfDone(pj);
+}
+
+/** ทีมส่งงาน — งาน "ไม่ต้องตรวจ" ปิดทันที อาจเป็นใบสุดท้ายของโปรเจค จึงเช็คส่งมอบด้วย (ผู้ใช้สั่ง 21 ต.ค. 2569) */
+export function submitWorkFlow(pj: string, taskName: string, input: Parameters<typeof submitWork>[2]) {
+  submitWork(pj, taskName, input);
   closeJobIfDone(pj);
 }
 
@@ -370,7 +388,7 @@ export type DealTrack = {
 export function dealTrack(dealNo: string, acc: AccState, pm: PmState): DealTrack | null {
   /* ดีลที่ยกเลิกแล้ว — ทุกฝ่ายหยุดงาน บอกว่าใครยกเลิก ไม่ต้องบอกขั้นที่ค้างอยู่ */
   const cancelled = acc.deals.find((d) => d.no === dealNo)?.cancelled;
-  if (cancelled) return { label: "ยกเลิกแล้ว", cls: "t-miss", detail: `โดย${cancelled.by} · งานหยุด`, href: "" };
+  if (cancelled) return { label: "ยกเลิกแล้ว", cls: "t-miss", detail: `โดย${nameOf(cancelled.by)} · งานหยุด`, href: "" };
   const project = pm.projects.find((p) => p.deal === dealNo);
   if (project) {
     const href = projectHref(project.pj);
@@ -382,7 +400,7 @@ export function dealTrack(dealNo: string, acc: AccState, pm: PmState): DealTrack
       return { label: "ยกเลิกแล้ว", cls: "t-miss", detail: `งานหยุด · ${project.cancelled?.why ?? ""}`, href };
     return project.status === "done"
       ? { label: "ส่งมอบแล้ว", cls: "t-ok", detail: `งานย่อยครบ ${project.tasks.length} ใบ`, href }
-      : { label: `กำลังดำเนินงาน ${pct}%`, cls: "t-job", detail: `เสร็จ ${done}/${project.tasks.length} ใบ · PM ${project.pm}`, href };
+      : { label: `กำลังดำเนินงาน ${pct}%`, cls: "t-job", detail: `เสร็จ ${done}/${project.tasks.length} ใบ · PM ${nameOf(project.pm)}`, href };
   }
 
   const job = pm.inbox.find((j) => j.deal === dealNo);
@@ -395,7 +413,7 @@ export function dealTrack(dealNo: string, acc: AccState, pm: PmState): DealTrack
           href: planHref(job.pj),
         }
       : {
-          label: "รอ PM รับงาน",
+          label: "รอ GM มอบหมาย PM", // PM กดรับงานเองไม่ได้แล้ว (ผู้ใช้สั่ง 27 ต.ค. 2569)
           cls: "t-early",
           detail: `ชำระงวดแรกเมื่อ ${job.paidAt}`,
           href: `/pm/inbox?find=${encodeURIComponent(job.pj)}`,

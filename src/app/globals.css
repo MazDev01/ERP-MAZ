@@ -135,14 +135,9 @@
   --shadow-lg: var(--shadow-lg);
 }
 
-/* จองที่แถบเลื่อนไว้ตลอด — หน้าที่เนื้อหาสั้นไม่มีแถบเลื่อน หน้าที่ยาวมี
-   ถ้าไม่จอง ความกว้างของสองหน้าจะต่างกันราว 15px พอสลับหน้าแล้วเห็นทั้งหน้าขยับข้าง
-   ยอมให้เห็นช่องว่างที่ขอบขวาเท่ากันทุกหน้า ดีกว่าหน้ากระตุกตอนสลับ */
-html {
-  scrollbar-gutter: stable;
-}
-
-/* ล็อกพื้นหลังตอนเปิดกล่องทับหน้า — ที่แถบเลื่อนจองไว้แล้วที่ html จึงไม่กระตุกตอนเปิดกล่อง */
+/* ไม่จองที่แถบเลื่อนไว้ตลอดแล้ว (ผู้ใช้สั่ง 2 ต.ค. 2569) — เดิมจองไว้ทุกหน้า หน้าที่เนื้อหาสั้นจึงเห็นแถบว่าง
+   ที่ขอบขวา และแถบบนสีขาวไปไม่สุดจอ · แลกกับหน้ายาว/สั้นกว้างต่างกันราว 15px ตอนสลับหน้า ซึ่งเป็นปกติของเว็บ
+   ตอนเปิดกล่องทับหน้า lockScroll() จองที่ให้เฉพาะหน้าที่มีแถบเลื่อนอยู่ หน้าจึงไม่กระตุกตอนเปิดกล่อง */
 body.modal-open {
   overflow: hidden;
 }
@@ -150,6 +145,8 @@ body.modal-open {
 /* กล่องที่เลื่อนได้ภายใน เช่น เนื้อในป็อบอัพ — จองที่แถบเลื่อนไว้ตลอด
    ไม่งั้นพอเปิดตัวเลือกเวลาแล้วแถบโผล่ ขอบช่องกรอกจะกระตุกไปทางซ้าย */
 .scroll-stable { scrollbar-gutter: stable; }
+/* ตารางรายการไม่เว้นที่ให้แถบเลื่อน — หัวตารางเต็มกว้าง ไม่มีช่องว่างท้ายแถว (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+.scroll-stable:has(> table.data-table) { scrollbar-gutter: auto; }
 
 body {
   /* หน้าจอนี้ห้ามเลื่อนไปทางข้าง — แถบหัวกับแถบแดงเป็น sticky/fixed จึงอยู่กับที่
@@ -211,8 +208,9 @@ body {
   color: var(--primary);
 }
 
+/* แถบข้างกระชับขึ้น (ผู้ใช้สั่ง 30 ก.ย. 2569 — เดิมรายการสูงจนดูเหมือนเว้นช่องว่างระหว่างเมนูมาก) */
 .side-group {
-  padding: 16px 12px 8px;
+  padding: 12px 10px 4px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -220,6 +218,23 @@ body {
   color: var(--muted-foreground);
 }
 
+.side-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--foreground);
+  transition: background-color 0.15s, color 0.15s;
+}
+.side-link:hover { background: var(--accent); }
+.side-link.on {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+}
 
 /* เมนูย่อยใต้เมนูแม่ที่เปิดอยู่ (ผู้ใช้สั่ง 5 ต.ค. 2569 — แทนแถบชิปเหนือเนื้อหา)
    เยื้องให้ตรงกับชื่อเมนูแม่ (ไอคอน 17px + ช่องไฟ 10px) ตัวเล็กกว่า ไม่มีไอคอน ใช้จุดเล็กแทน */
@@ -260,24 +275,6 @@ body {
   color: var(--muted-foreground);
 }
 .side-sub li:first-child .side-sub-cap { padding-top: 2px; }
-
-.side-link {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--foreground);
-  transition: background-color 0.15s, color 0.15s;
-}
-.side-link:hover { background: var(--accent); }
-.side-link.on {
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-weight: 600;
-}
 
 /* ปุ่มเมนูกลางจอบนมือถือ — แทนปุ่มแฮมเบอร์เกอร์เดิม */
 .menu-pill {
@@ -325,6 +322,10 @@ body {
   outline-offset: 3px;
   border-radius: var(--radius-sm);
 }
+/* ช่องกรอก — โฟกัสแล้วเปลี่ยนสีกรอบเป็นแดง ไม่ใส่เส้นแดงอีกชั้นรอบนอก (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):focus-visible {
+  outline: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -359,6 +360,15 @@ body {
 .bar h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
 .bar p { margin-top: 4px; font-size: 13.5px; color: var(--muted-foreground); }
 .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* ชื่อหน้าในเนื้อหามุมซ้ายบน หน้าตาเดียวกับ .bar h1 — แถบบนจอคอมเป็นเส้นทางแล้ว (ผู้ใช้สั่ง 12 ต.ค. 2569)
+   มือถือ (<md) ชื่อหน้าอยู่บนแถบบนของมือถือ จึงซ่อนไว้ให้โปรแกรมอ่านหน้าจออย่างเดียวเหมือนเดิม */
+.page-h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; }
+@media (max-width: 767px) {
+  .page-h1 {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0;
+  }
+}
 
 /* ---------- ตัวเลื่อนเดือน/ปี ---------- */
 .mo {
@@ -502,17 +512,11 @@ body {
   transition: border-color 0.15s, background 0.15s;
 }
 .lnk:hover { border-color: var(--primary); background: var(--accent); }
-/* บนมือถือปุ่มสูง 28px กดพลาดง่าย — ขยายเป็น 36px ให้นิ้วกดติดแน่ ๆ (ตรวจหน้าจอ 2 ต.ค. 2569) */
-@media (max-width: 767.98px) {
-  .lnk { height: 36px; padding: 0 12px; font-size: 12.5px; }
-}
 /* ปุ่มรองในชุดเดียวกัน เช่น ปฏิเสธ ที่ไม่ควรเด่นเท่าปุ่มหลัก */
 .lnk.quiet { color: var(--muted-foreground); }
 /* รหัสในตาราง — เป็นลิงก์ไปยังรายการนั้น ไม่ใช่ปุ่มสั่งงาน */
 .lnk-code { font-weight: 600; color: var(--primary); }
 .lnk-code:hover { text-decoration: underline; }
-/* ลิงก์ในบรรทัดสูงแค่ 20px กดยากบนมือถือ — เพิ่มพื้นที่กดโดยไม่ขยับหน้าตา (ตรวจหน้ามือถือ 5 ต.ค. 2569) */
-.lnk-code { padding-block: 7px; margin-block: -7px; }
 
 /* ---------- ป้ายสถานะ ---------- */
 .tag {
@@ -555,9 +559,8 @@ body {
 .pages button:disabled { opacity: 0.35; cursor: default; }
 
 /* ---------- ปุ่มไอคอน ---------- */
-/* ปุ่มไอคอนเป็นวงกลมทุกที่ (ผู้ใช้สั่ง 5 ต.ค. 2569) — รวมกระดิ่งบนแถบหัวที่เดิมเป็นสี่เหลี่ยมมุมมน */
 .iconbtn {
-  width: 34px; height: 34px; border-radius: 50%;
+  width: 34px; height: 34px; border-radius: 9px;
   color: var(--muted-foreground);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; position: relative; flex: none;
@@ -599,7 +602,6 @@ body {
 .field-control:hover { border-color: #d4d4d4; }
 .field-control:focus {
   border-color: var(--ring);
-  box-shadow: 0 0 0 3px rgb(219 0 0 / 0.12);
 }
 .field-control::placeholder { color: var(--muted-foreground); }
 
@@ -622,7 +624,8 @@ body {
 .task-range:focus-visible { outline: 2.5px solid var(--ring); outline-offset: 3px; }
 
 /* ═══ หน้าเช็คอิน — พื้นแดงทึบและอนิเมชันหน้าตัวการ์ตูน ═══════════ */
-.checkin-top { background: var(--primary); }
+/* ไล่เฉดแดงชุดเดียวกับหน้าเข้าสู่ระบบ (.login-card) (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+.checkin-top { background: linear-gradient(168deg, #6b0000 0%, #a80000 40%, #db0000 78%, #f05a4a 100%); }
 
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
 .bob { animation: bob 4.4s ease-in-out infinite; }
@@ -667,13 +670,15 @@ body {
 .tick { stroke-dasharray: 58; stroke-dashoffset: 58; animation: drawTick 0.5s ease 0.2s forwards; }
 @keyframes popIn { from { opacity: 0; transform: scale(0.84) translateY(22px); } to { opacity: 1; transform: none; } }
 .pop-in { animation: popIn 0.45s cubic-bezier(0.34, 1.4, 0.5, 1) both; }
+/* สลับขั้นในฟอร์มหลายขั้น: ไปข้างหน้าเลื่อนเข้าจากขวา ย้อนกลับเลื่อนเข้าจากซ้าย */
+@keyframes stepInNext { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes stepInBack { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.step-in-next { animation: stepInNext 0.26s ease-out both; }
+.step-in-back { animation: stepInBack 0.26s ease-out both; }
 
 /* แท็บบนจอแคบ: แถวเดียวเลื่อนข้างได้ ไม่ตัดบรรทัด */
 .tabs::-webkit-scrollbar { display: none; }
 .tabs { scrollbar-width: none; }
-/* แถวชิปที่เลื่อนแนวนอนบนมือถือ ไม่ต้องมีแถบเลื่อนให้เกะกะ */
-.chip-scroll::-webkit-scrollbar { display: none; }
-.chip-scroll { scrollbar-width: none; }
 .tabs button { white-space: nowrap; }
 
 /* ข้อความไทยยาว ๆ ไม่มีช่องว่าง ถ้าไม่ยอมให้ตัดคำจะดันหน้าจอกว้างเกินจอมือถือ */
@@ -727,8 +732,6 @@ body {
   outline: none;
   font: inherit;
   color: inherit;
-  /* เหมือน .search input — กดขอบบนล่างของกรอบก็โฟกัสได้ */
-  align-self: stretch;
 }
 .field-shell input::placeholder { color: var(--muted-foreground); }
 
@@ -746,8 +749,6 @@ body {
 .search input {
   min-width: 0; flex: 1; border: none; background: none; outline: none;
   font: inherit; color: var(--foreground);
-  /* สูงเต็มกรอบ — นิ้วกดตรงไหนของแถบก็โฟกัสได้ ไม่ใช่ต้องกดกลางแถวพอดี */
-  align-self: stretch;
 }
 .search input::placeholder { color: var(--muted-foreground); }
 .search:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px rgb(208 2 27 / 0.09); }
@@ -817,14 +818,6 @@ table.inner .r, table.inner th.r { text-align: right; }
   body::before, body::after { display: none; }
   .no-print { display: none !important; }
   .app-side, .app-top, .app-sub, .botnav { display: none !important; }
-  /* เปิดเอกสารอยู่ในกล่อง (สลิป ใบแจ้งหนี้ ใบเสร็จ) — พิมพ์เฉพาะกล่อง
-     ไม่งั้นตารางรายการที่อยู่ข้างหลังจะติดไปด้วยและล้นขอบกระดาษ (ตรวจการพิมพ์ 7 ต.ค. 2569) */
-  body:has([role="dialog"], [role="alertdialog"]) #main { display: none !important; }
-  /* แถบปุ่มของกล่อง (ปิด · ดาวน์โหลด) เป็นเครื่องมือบนจอ ไม่ใช่ส่วนหนึ่งของเอกสาร */
-  .ui-sheet-foot, .ui-sheet-head { display: none !important; }
-  /* กล่องเอกสารกินเต็มหน้ากระดาษ ไม่มีฉากหลังสีเทา */
-  .ui-sheet { position: absolute !important; inset: 0 auto auto 0 !important; display: block !important; padding: 0 !important; background: none !important; }
-  .ui-sheet-panel { max-height: none !important; overflow: visible !important; border-radius: 0 !important; box-shadow: none !important; background: #fff !important; }
   #main { padding: 0 !important; }
   .paper { width: auto; min-height: auto; padding: 0; box-shadow: none; }
   @page { size: A4; margin: 14mm; }
@@ -874,9 +867,6 @@ table.inner .r, table.inner th.r { text-align: right; }
 .claim .mrow > b { font-weight: 600; }
 .claim .mrow input { flex: 1; min-width: 0; height: 34px; }
 .claim .lead { margin-top: 14px; font-size: 13px; color: var(--muted-foreground); }
-/* ใบที่ยื่นแล้วแสดงเป็นข้อความแทนช่องกรอก — ตัดบรรทัดได้ ข้อความยาวจึงไม่หายตอนพิมพ์
-   (ตรวจงานพิมพ์ 12 ต.ค. 2569) */
-.claim .cellwrap { display: block; font-size: 12.5px; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; padding: 4px 2px; }
 
 table.sheet { width: 100%; border-collapse: collapse; margin-top: 12px; }
 table.sheet th {
@@ -901,10 +891,7 @@ table.sheet .del {
   width: 28px; height: 28px; border-radius: 7px; border: none; background: none;
   color: var(--muted-foreground); cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
-  position: relative;
 }
-/* พื้นที่กดกว้างกว่าปุ่ม 6px รอบด้าน — ปุ่มลบในตารางเล็กเกินกดด้วยนิ้ว */
-table.sheet .del::before { content: ""; position: absolute; inset: -6px; }
 table.sheet .del:hover { color: var(--destructive); background: var(--destructive-soft); }
 
 .note-red { margin-top: 14px; font-size: 12px; line-height: 1.6; color: var(--destructive); }
@@ -969,6 +956,24 @@ table.sheet .del:hover { color: var(--destructive); background: var(--destructiv
 .rich-out u { text-decoration: underline; }
 .rich-out hr { display: none; }
 
+/* ตารางในรายละเอียด — ช่องกรอก กระดาษ และตอนพิมพ์ (ผู้ใช้สั่ง 14 ต.ค. 2569)
+   selector ยาวเพื่อชนะ .paper table.items td ที่ไม่มีเส้นขอบ */
+.rich table, .paper table.items td.rich-out table {
+  width: 100%; border-collapse: collapse; margin: 4px 0 8px; table-layout: fixed;
+}
+.rich td, .rich th,
+.paper table.items td.rich-out td, .paper table.items td.rich-out th {
+  border: 1px solid #b9bfc8; padding: 4px 8px; vertical-align: top;
+  font-size: inherit; text-align: left; overflow-wrap: anywhere; background: none;
+}
+.rich th, .paper table.items td.rich-out th {
+  background: #edeef1; font-weight: 600; color: #25292f;
+}
+.rich td p, .rich th p, .rich-out td p, .rich-out th p { margin: 0; }
+/* ช่องที่เคอร์เซอร์อยู่ — เห็นว่ากำลังแก้ช่องไหน */
+.rich td:focus-within, .rich th:focus-within { outline: 2px solid var(--ring); outline-offset: -2px; }
+.paper table.items td.rich-out tr { break-inside: avoid; page-break-inside: avoid; }
+
 /* เลขหน้าใต้กระดาษแต่ละแผ่น */
 .sheet-no { display: block; margin-top: 18px; text-align: center; font-size: 11px; color: #8a9099; }
 
@@ -976,6 +981,24 @@ table.sheet .del:hover { color: var(--destructive); background: var(--destructiv
   /* แผ่นที่สองเป็นต้นไปเริ่มกระดาษใหม่จริง */
   .paper + .paper { break-before: page; page-break-before: always; }
   .sheet-no { display: none; }
+  /* ความสูง A4 บนจอใส่ไว้แบบ inline — ตอนพิมพ์ให้ @page คุมเอง (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+  .paper.q-sheet { min-height: 0 !important; }
+}
+
+/* ── ต้นฉบับ / สำเนา และรูปเอกสารแนบท้ายใบเสนอราคา (ผู้ใช้สั่ง 15 ต.ค. 2569) ── */
+.copy-mark {
+  display: inline-block; padding: 2px 14px; border: 1.5px solid #25292f; border-radius: 4px;
+  font-size: 13px; font-weight: 700; line-height: 1.5; color: #25292f; white-space: nowrap;
+}
+.copy-row { margin-bottom: 8px; }
+/* กล่องรูป: สัดส่วนตามรูป (--ar = กว้าง/สูง) กว้างไม่เกินขอบกระดาษ สูงไม่เกินพื้นที่ที่เหลือ (--att-h) */
+.att-box { aspect-ratio: var(--ar); width: min(100%, calc(var(--att-h, 70vh) * var(--ar))); }
+@media print {
+  /* ชุดสำเนาและแผ่นรูปแนบขึ้นกระดาษใหม่ — แผ่นวัดความสูงที่ซ่อนอยู่คั่นไว้ .paper + .paper จึงจับไม่ได้ */
+  .pg-break { break-before: page; page-break-before: always; }
+  /* พื้นที่พิมพ์ A4 ขอบ 14mm สูง 269mm — หักแถวหัวแผ่นแล้วเหลือราว 240mm */
+  .att-box { width: min(100%, calc(240mm * var(--ar))); }
+  .q-att { break-inside: avoid; page-break-inside: avoid; }
 }
 
 /* แถวที่กรอกไม่ครบ ตอนกดยื่นแล้วยังไม่ผ่าน */
@@ -1021,7 +1044,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 @media (max-width: 767.98px) {
   /* ความสูงจริงของแถบล่าง ใช้เป็นที่อ้างอิงที่เดียว — ปุ่มลอยทุกหน้าวัดจากค่านี้
      เคยเขียนเลข 66px ไว้ตามหน้าต่าง ๆ แล้วแถบโตขึ้นเป็น 74px ปุ่มจึงไปซ่อนอยู่ใต้แถบ */
-  :root { --botbar: calc(78px + env(safe-area-inset-bottom)); }
+  :root { --botbar: calc(74px + env(safe-area-inset-bottom)); }
   body { background: #fbf5f4; }
 
   /* การ์ดทุกใบบนมือถือ — มนขึ้น ไม่มีเส้นขอบ เงาอมแดงแบบในแบบ */
@@ -1047,30 +1070,19 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 @media (max-width: 767.98px) {
   /* บนมือถือแท็บขึ้นบรรทัดใหม่ได้ เส้นใต้จึงใช้ไม่ได้ — แท็บแถวบนจะมีเส้น แถวล่างไม่มี
      เปลี่ยนเป็นปุ่มเม็ดยาแทน อันที่เลือกอยู่เป็นสีแดงทึบ มองออกทันทีไม่ว่าจะตกไปบรรทัดไหน */
-  /* แท็บมากกว่าสามอันเลื่อนแนวนอนแถวเดียว ไม่ตกบรรทัดจนกินพื้นที่ครึ่งจอ
-     (ต้นแบบมือถือชุดใหม่ attendance.html · เจ้าของแจ้ง 30 ก.ย. 2569) */
   .tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    overflow-x: visible;
     row-gap: 8px;
     gap: 8px;
     padding: 10px 0;
   }
-  .tabs::-webkit-scrollbar { display: none }
-  .tabs button { flex: none }
   .tabs button {
-    /* ยืดเต็มความกว้างแถว ไม่ปล่อยที่ว่างท้ายบรรทัด (เจ้าของสั่ง 29 ก.ย. 2569) */
-    flex: 1 1 auto;
-    justify-content: center;
     padding: 8px 13px;
     font-size: 13px;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--card);
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
   }
   .tabs button.on {
     background: var(--primary);
@@ -1080,47 +1092,6 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .tabs button.on b {
     background: rgba(255, 255, 255, 0.22);
     border-color: transparent;
-    color: #fff;
-  }
-
-  /* สามแท็บหรือน้อยกว่า วางเรียงเต็มแถวเดียวแบบเส้นใต้ตามต้นแบบมือถือชุดใหม่
-     (dose-erp-maz/mobile/billing-mobile-preview.html · 30 ก.ย. 2569)
-     มากกว่านั้นยังเป็นเม็ดยาเหมือนเดิม เพราะแท็บจะตกบรรทัดแล้วเส้นใต้ใช้ไม่ได้ */
-  .tabs:not(:has(button:nth-child(4))) {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-    gap: 0;
-    padding: 0;
-    border-bottom: 1.5px solid var(--border);
-  }
-  .tabs:not(:has(button:nth-child(4))) button {
-    position: relative;
-    height: 46px;
-    padding: 0 6px;
-    gap: 6px;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--muted-foreground);
-  }
-  .tabs:not(:has(button:nth-child(4))) button.on {
-    background: none;
-    color: var(--primary);
-  }
-  .tabs:not(:has(button:nth-child(4))) button.on::after {
-    content: "";
-    position: absolute;
-    left: 14%;
-    right: 14%;
-    bottom: -1.5px;
-    height: 3px;
-    border-radius: 3px 3px 0 0;
-    background: var(--primary);
-  }
-  .tabs:not(:has(button:nth-child(4))) button.on b {
-    background: var(--primary);
     color: #fff;
   }
 }
@@ -1150,10 +1121,10 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     align-items: end;
     /* มุมบนมนตามแบบ ไม่มีเส้นขอบ เงาลอยขึ้นด้านบน */
     border: 0;
-    border-radius: 24px 24px 0 0;
-    padding: 6px 6px calc(10px + env(safe-area-inset-bottom));
+    border-radius: 26px 26px 0 0;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
     background: var(--card);
-    box-shadow: 0 -8px 24px -16px rgb(90 20 35 / 0.35);
+    box-shadow: 0 -10px 30px -18px rgb(120 20 35 / 0.45);
   }
   /* เมนูผู้ใช้กับกระดิ่งห่อปุ่มไว้ในกล่องของตัวเอง (ต้องใช้อ้างอิงตอนคลิกนอกกล่อง)
      กล่องนั้นจึงต้องโปร่ง ให้ปุ่มข้างในกลายเป็นช่องในแถบแทน */
@@ -1166,8 +1137,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     align-items: center;
     justify-content: center;
     gap: 3px;
-    height: 62px;
-    padding: 0;
+    padding: 6px 0;
     background: none;
     border: none;
     font-family: inherit;
@@ -1177,7 +1147,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   }
   .botnav > *:not(.botnav-slot) > span,
   .botnav > .botnav-slot > button > span {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
     line-height: 1.25;
     max-width: 100%;
@@ -1195,15 +1165,14 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .botnav > .bn-mid > i {
     display: grid;
     place-items: center;
-    width: 58px;
-    height: 58px;
-    /* ยกขึ้นเท่าต้นแบบ home-sales.html — วงชมพูโผล่พ้นแถบประมาณครึ่งวง ไม่ลอยสูงเกิน */
-    margin-top: -25px;
+    width: 60px;
+    height: 60px;
+    margin-top: -30px;
     border-radius: 50%;
-    background: #c8102e;
+    background: linear-gradient(160deg, #e8253c, #a00f26);
     color: #ffffff;
-    /* วงกลมสีชมพูอ่อนรอบปุ่ม แทนขอบสีพื้น — ตามต้นแบบชุด tabbar2 */
-    box-shadow: 0 0 0 9px rgb(253 227 231 / 0.85), 0 12px 22px -10px rgb(200 16 46 / 0.9);
+    border: 5px solid #fbf5f4;
+    box-shadow: 0 12px 22px -10px rgb(208 2 27 / 0.9);
   }
 }
 
@@ -1226,14 +1195,9 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .data-table.cards-sm { min-width: 0 !important; display: block; }
   .data-table.cards-sm > thead { display: none; }
   .data-table.cards-sm > tbody { display: block; }
-  /* การ์ดต่อแถวใช้ผิวกระจกชุดเดียวกับหน้าหลักบนมือถือ (ต้นแบบชุดใหม่ 1 ต.ค. 2569) */
   .data-table.cards-sm > tbody > tr {
-    display: block; margin: 10px 0; padding: 7px 2px;
-    border: 1px solid rgba(255, 255, 255, 0.95); border-radius: 22px;
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    box-shadow: 0 12px 30px -22px rgb(140 20 40 / 0.45);
+    display: block; margin: 10px 14px; padding: 6px 2px;
+    border: 1px solid var(--border); border-radius: 13px; background: var(--card-solid);
   }
   .data-table.cards-sm > tbody > tr > td {
     display: flex; align-items: flex-start; justify-content: space-between;
@@ -1314,6 +1278,9 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 }
 /* มุมมองสัปดาห์ — แถวเดียวจึงสูงได้ ให้เห็นนัดซ้อนกันหลายชั้น */
 .wk-week { min-height: 320px; }
+/* มุมมองเดือนเตี้ยลง ทั้งเดือนพอดีหนึ่งหน้าจอไม่ต้องเลื่อน (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+.wk:not(.wk-week) { grid-template-rows: 30px; grid-auto-rows: 20px; row-gap: 2px; min-height: calc(34px + var(--lanes, 3) * 22px); padding-bottom: 4px; }
+.wk:not(.wk-week) .evbar { height: 20px; }
 .wk .dn.off { color: var(--muted-foreground); opacity: 0.55; }
 .wk .dn.sun { color: var(--destructive); }
 .wk .dn.today { background: var(--primary); color: #ffffff; font-weight: 700; }
@@ -1448,11 +1415,6 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 /* ── มุมมองของ CEO บนหน้าของฝ่ายอื่น (components/ceo-view.tsx) ──
    ลิงก์ไปหน้าของฝ่ายอื่นดูเป็นข้อความธรรมดา · ปุ่มที่เปลี่ยนข้อมูลถูกซ่อน */
 .ceo-view [data-ceo-hide] { display: none !important; }
-/* ลิงก์ที่พาไปหน้าของฝ่ายอื่นถูกกันไว้ที่ ceo-view.tsx — ทำให้ดูเป็นข้อความธรรมดา
-   ไม่งั้นเห็นเป็นลิงก์สีแดงแล้วกดไม่ไปไหน (ตรวจปุ่มทุกหน้า 2 ต.ค. 2569) */
-.ceo-view a[href]:not([href^="/ceo"]):not([href^="#"]) {
-  color: inherit; cursor: default; text-decoration: none;
-}
 /* GM เปิดหน้าของ PM แบบดูอย่างเดียว (pm-readonly.tsx) */
 .ro-gm [data-ceo-hide], .ro-gm [data-ro-hide] { display: none !important; }
 .ceo-view a[href]:not([href^="/ceo"]) { cursor: default; }
@@ -1463,18 +1425,6 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
 @media (max-width: 639px) {
   .btn.btn-mini { height: 38px; padding: 0 13px; font-size: 12.5px; }
   .seg button { min-height: 36px; }
-}
-
-/*
- * เครื่องที่ใช้นิ้ว: ปุ่มไอคอนกลม ๆ ขยายจาก 34px เป็น 42px (เจ้าของสั่ง 5 ต.ค. 2569 "อยากให้นิ้วกดง่ายขึ้น")
- * ต้นแบบวางไว้ 34px ซึ่งพอดีกับเมาส์ แต่เล็กไปสำหรับนิ้ว — จอที่ใช้เมาส์จึงคงขนาดเดิมไว้ตามต้นแบบ
- * ไอคอนข้างในขนาดเท่าเดิม ขยายแค่วงกลมรอบนอก จุดแดงจึงต้องขยับตามให้อยู่มุมเดิมของวง
- */
-@media (pointer: coarse) {
-  .iconbtn { width: 42px; height: 42px; }
-  .iconbtn .dot { top: 11px; right: 12px; }
-  .btn { min-height: 40px; }
-  .btn.btn-mini { min-height: 38px; }
 }
 
 /* มือถือ: แถบบนบอกชื่อหน้าอยู่แล้ว ไม่ต้องขึ้นชื่อซ้ำในหน้า เหลือคำอธิบายไว้ (ผู้ใช้สั่ง 23 ก.ย. 2569)
@@ -1509,73 +1459,6 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   background-color: #ffffff;
   box-shadow: 0 30px 70px -35px rgba(120, 0, 0, 0.35);
 }
-/* ผิวกระดาษจาง ๆ บนการ์ด ตามต้นแบบ login-3d-redwhite.html (.card::before) */
-.login-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.06;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-}
-
-/*
- * ช่องกรอกของหน้าเข้าสู่ระบบ — เส้นใต้บาง ๆ พอคลิกเส้นแดงวิ่งจากกลางออกสองข้าง
- * แล้วพื้นขาวกับเงาค่อยตามมา (ต้นแบบ login-3d-redwhite.html · .control)
- */
-.login-field {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 -10px;
-  padding: 0 10px;
-  border-bottom: 1.5px solid var(--border);
-  border-radius: 8px 8px 0 0;
-  background: transparent;
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
-}
-.login-field:focus-within {
-  background: #ffffff;
-  box-shadow: 0 10px 22px -12px rgba(40, 26, 28, 0.28), 0 2px 6px -3px rgba(40, 26, 28, 0.1);
-  transition: box-shadow 0.35s ease 0.42s, background-color 0.35s ease 0.42s;
-}
-.login-field::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: -1.5px;
-  left: 0;
-  height: 2.5px;
-  border-radius: 2px;
-  background: var(--primary);
-  transform: scaleX(0);
-  transform-origin: center;
-  transition: transform 0.45s cubic-bezier(0.22, 0.8, 0.3, 1);
-  pointer-events: none;
-}
-.login-field:focus-within::after { transform: scaleX(1); }
-/* กรอกไม่ครบหรือรหัสผิด — เส้นค้างเป็นสีแดงเตือน ไม่ต้องรอโฟกัส */
-.login-field.bad::after { background: var(--destructive); transform: scaleX(1); }
-.login-field input {
-  min-width: 0;
-  flex: 1;
-  height: 44px;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 15px;
-  color: var(--foreground);
-  outline: none;
-}
-.login-field input::placeholder { color: #9c9294; }
-@media (prefers-reduced-motion: reduce) {
-  .login-field::after { transition: none; }
-}
-
 .login-brand {
   position: absolute;
   z-index: 0;
@@ -1636,8 +1519,6 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   }
   /* จอแคบ: โลโก้กับข้อความชิดซ้ายบน ตัวละครไปอยู่ขวาสุดของแถบแดง (ตามไฟล์ตัวอย่าง) */
   .login-brand { top: 24px; left: 24px; width: auto; max-width: 58%; gap: 12px; }
-  /* จอแคบ: ประโยคแนะนำตัวจะไปทับภาพสามมิติ ต้นแบบ login.html บนมือถือก็มีแต่โลโก้ */
-  .login-brand p { display: none; }
   .login-canvas { height: 330px; }
   .login-sheet {
     position: relative;
@@ -1646,82 +1527,6 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
     border-radius: 28px 28px 0 0;
     padding: 28px 22px 32px;
   }
-}
-
-
-/* ===== เอฟเฟกต์กล่องซ้อน (ต้นแบบมือถือชุดใหม่ · attendance.html .veil/.box 30 ก.ย. 2569) =====
-   ฉากหลังเบลอและจาง กล่องเลื่อนขึ้นมาเล็กน้อยตอนเปิด */
-@keyframes veil-in { from { opacity: 0 } to { opacity: 1 } }
-@keyframes sheet-in { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
-.veil-in {
-  animation: veil-in 0.18s ease-out;
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-}
-.sheet-in { animation: sheet-in 0.22s cubic-bezier(0.22, 0.8, 0.3, 1) }
-@media (prefers-reduced-motion: reduce) {
-  .veil-in, .sheet-in { animation: none }
-}
-
-/* ─── มือถือ: แผงรายการกลายเป็นการ์ดลอยบนพื้นหน้า (ต้นแบบ billing.html · 1 ต.ค. 2569) ───
-   แผงครอบ แถบแท็บ และแถบสรุปท้ายรายการ ไม่ต้องมีพื้นของตัวเองอีก
-   เหลือการ์ดขาวของแต่ละรายการลอยบนพื้นชมพูอ่อน ส่วนยอดรวมเป็นการ์ดขาวกลางจอ */
-@media (max-width: 639px) {
-  .panel.plain-mobile {
-    background: transparent !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    margin-bottom: 118px;
-  }
-  .panel.plain-mobile > .strip {
-    background: transparent;
-    border-bottom: 0;
-  }
-  .panel.plain-mobile > .foot {
-    margin: 12px 16px 0;
-    border: 0;
-    border-radius: 16px;
-    background: var(--card);
-    justify-content: center;
-    text-align: center;
-    box-shadow: 0 1px 2px rgb(120 20 35 / 0.05), 0 12px 28px -18px rgb(120 20 35 / 0.3);
-  }
-}
-
-/* ─── มือถือ: ปุ่มงานหลักของหน้าเป็นปุ่มกลมมุมขวาล่าง (ต้นแบบ leave.html · เจ้าของสั่ง 1 ต.ค. 2569) ───
-   เดิมเป็นแถบแดงเต็มความกว้างกินที่ในหน้ารายการ เปลี่ยนเป็นวงกลมลอยเหนือแถบเมนูล่างทุกหน้า
-   ข้อความยังอยู่ในปุ่ม (.lbl) แต่ซ่อนจากสายตา โปรแกรมอ่านหน้าจอจึงยังอ่านชื่อปุ่มได้
-   ต้องอยู่ท้ายไฟล์ เพราะต้องทับ .btn.btn-block-mobile ที่กว้างเต็มแถว */
-@media (max-width: 767px) {
-  .btn.fab-mobile {
-    position: fixed;
-    right: 18px;
-    bottom: calc(100px + env(safe-area-inset-bottom));
-    z-index: 40;
-    width: 58px;
-    height: 58px;
-    padding: 0;
-    border-radius: 50%;
-    justify-content: center;
-    box-shadow: 0 14px 24px -10px rgb(200 16 46 / 0.9);
-  }
-  .btn.fab-mobile svg { width: 24px; height: 24px; }
-  .btn.fab-mobile .lbl {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
-/*
- * ช่องติ๊กบนเครื่องที่ใช้นิ้ว — ตัวช่องสูงแค่ 16–18px ป้ายกำกับก็สูงราว 21px
- * เพิ่มพื้นที่กดขึ้นล่างอย่างละ 7px แล้วหักระยะห่างคืนเท่ากัน หน้าตาจึงเท่าเดิม
- */
-@media (pointer: coarse) {
-  label:has(> input[type="checkbox"]) { padding-block: 7px; margin-block: -7px; }
 }
 
 /* ═══ แดชบอร์ดฝ่ายขายบนมือถือ (/dashboard) — ตามต้นแบบ dashboard (2).html ส่วน .mob · ชุด sd-* ═══
@@ -1763,8 +1568,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .sd-hi { font-size: 13px; color: var(--sd-ink2); padding: 0 2px; }
   .sd-hero { border-radius: 26px; padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 12px; align-items: center; background: linear-gradient(150deg, #fde3e7, #fbeff1 70%); box-shadow: var(--sd-shadow); }
   .sd-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  /* 36px — 28px กดพลาดง่ายบนจอ 360px (พบตอนทดสอบ 7 ต.ค. 2569) */
-  .sd-chips button { border: 0; height: 36px; padding: 0 11px; border-radius: 999px; background: rgb(255 255 255 / 0.7); font: inherit; font-size: 12px; font-weight: 600; color: var(--sd-ink2); cursor: pointer; }
+  .sd-chips button { border: 0; height: 28px; padding: 0 11px; border-radius: 999px; background: rgb(255 255 255 / 0.7); font: inherit; font-size: 12px; font-weight: 600; color: var(--sd-ink2); cursor: pointer; }
   .sd-chips button.on { background: #fff; color: var(--primary); box-shadow: 0 4px 10px -6px rgb(120 20 35 / 0.45); }
   .sd-hero h2 { font-size: 14px; font-weight: 600; color: var(--sd-ink2); margin-top: 14px; }
   .sd-hero .v { font-size: 26px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1778,7 +1582,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .sd-mcal .hd { display: flex; align-items: center; justify-content: space-between; }
   .sd-mcal .hd b { font-size: 16px; }
   .sd-mcal .hd div { display: flex; gap: 8px; }
-  .sd-mcal .hd button { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--sd-line); background: #fff; color: var(--sd-ink2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .sd-mcal .hd button { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--sd-line); background: #fff; color: var(--sd-ink2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .sd-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 12px; text-align: center; }
   .sd-week button { border: 0; background: none; border-radius: 16px; padding: 6px 0 8px; font: inherit; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--sd-ink); }
   .sd-week small { font-size: 11px; color: var(--sd-ink3); }
@@ -1790,8 +1594,7 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .sd-week .sel b { background: var(--primary); color: #fff; box-shadow: none; }
   .sd-sec { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
   .sd-sec h3 { font-size: 16px; font-weight: 700; }
-  /* ลิงก์ท้ายหัวข้อ — ขยายพื้นที่กดให้ถึง 40px ด้วย padding ติดลบ ตัวอักษรยังอยู่ที่เดิม (ตรวจบนมือถือจริง 8 ต.ค. 2569) */
-  .sd-sec a { font-size: 12.5px; font-weight: 600; color: var(--primary); padding: 10px 8px; margin: -10px -8px; }
+  .sd-sec a { font-size: 12.5px; font-weight: 600; color: var(--primary); }
   .sd-mlist { display: flex; flex-direction: column; gap: 10px; }
   .sd-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #fff; border-radius: 20px; padding: 14px; box-shadow: var(--sd-shadow); color: var(--sd-ink); }
   .sd-item b { display: block; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1801,3 +1604,58 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .sd-go { width: 36px; height: 36px; border-radius: 50%; background: #f7eff1; display: flex; align-items: center; justify-content: center; color: var(--sd-ink2); }
   .sd-mempty { text-align: center; font-size: 13px; color: var(--sd-ink3); background: #fff; border-radius: 20px; padding: 22px; box-shadow: var(--sd-shadow); }
 }
+
+/* ═══ แบบฟอร์มกรมสรรพากร (50 ทวิ · ใบแนบ ภ.ง.ด.3/53) ผู้ใช้สั่ง 9 ต.ค. 2569 ═══
+   ขาวดำ เส้นบาง หน้าตาตามแบบราชการ — กระดาษแนวตั้ง rd-form · แนวนอน rd-land */
+.rd-form { color: #000; font-size: 11.5px; line-height: 1.45; padding: 28px 32px !important; page: rdform; width: 794px !important; min-height: 1123px !important; max-width: none !important; flex: none; }
+.rd-land { width: 1123px !important; min-height: 794px !important; page: rdland; }
+.rd-form .bx { border: 1px solid #000; }
+.rd-form .bt { border-top: 1px solid #000; }
+.rd-form .bb { border-bottom: 1px solid #000; }
+.rd-form .bl { border-left: 1px solid #000; }
+.rd-form .br { border-right: 1px solid #000; }
+.rd-form .dot { border-bottom: 1px dotted #000; display: inline-block; min-height: 1.35em; padding: 0 4px; }
+.rd-form .ck { display: inline-grid; place-items: center; width: 12px; height: 12px; border: 1px solid #000; font-size: 10px; line-height: 1; vertical-align: -2px; margin-right: 4px; }
+.rd-form .digits { display: inline-flex; align-items: center; gap: 0; }
+.rd-form .digits i { display: inline-grid; place-items: center; width: 15px; height: 18px; border: 1px solid #000; margin-left: -1px; font-style: normal; font-size: 11.5px; }
+.rd-form .digits b { width: 6px; }
+.rd-form table { width: 100%; border-collapse: collapse; }
+.rd-form th, .rd-form td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
+.rd-form th { font-weight: 600; text-align: center; vertical-align: middle; }
+.rd-form td.r { text-align: right; white-space: nowrap; }
+.rd-form td.c { text-align: center; }
+.rd-form table.inc td { border-top: none; border-bottom: none; }
+.rd-form table.inc tr.tot td { border-top: 1px solid #000; border-bottom: 1px solid #000; }
+.rd-form .stamp { width: 74px; height: 74px; border: 1px solid #000; border-radius: 50%; display: grid; place-items: center; text-align: center; font-size: 9.5px; line-height: 1.3; }
+.rd-form input, .rd-form textarea, .rd-form select { font: inherit; color: #000; background: #fffbe6; border: 1px solid #b9b3a0; border-radius: 3px; padding: 1px 4px; }
+.rd-form input.bad, .rd-form textarea.bad { border-color: var(--destructive); background: var(--destructive-soft); }
+.rd-form button.ck { cursor: pointer; background: #fffbe6; }
+@page rdform { size: A4; margin: 8mm; }
+@page rdland { size: A4 landscape; margin: 8mm; }
+@media print {
+  .rd-form { padding: 0 !important; width: auto !important; min-height: auto !important; }
+  .rd-form input, .rd-form textarea, .rd-form select, .rd-form button.ck { background: none; }
+}
+
+/* ── พิมพ์เฉพาะกระดาษสลิปเงินเดือนในกล่อง (components/payslip-paper.tsx · ผู้ใช้สั่ง 16 ต.ค. 2569) ──
+   ใส่คลาส print-slip ที่ body เฉพาะตอนสั่งพิมพ์ · พื้นฟ้าหัวตารางต้องพิมพ์ออกด้วย */
+@media print {
+  body.print-slip * { visibility: hidden !important; }
+  body.print-slip .ps-paper, body.print-slip .ps-paper * { visibility: visible !important; }
+  body.print-slip .ps-paper { position: absolute; left: 0; top: 0; width: 100% !important; padding: 0 !important; box-shadow: none !important; }
+  .ps-paper, .ps-paper * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ── พิมพ์เฉพาะตารางสรุปเงินเดือน A4 แนวนอน (components/payroll-summary-sheet.tsx · ผู้ใช้สั่ง 16 ต.ค. 2569) ──
+   ใส่คลาส print-sum ที่ body เฉพาะตอนสั่งพิมพ์ · @page แนวนอนใส่ตอนกดพิมพ์ (printSummary) · สีแถวรวมย่อยต้องพิมพ์ออก */
+@media print {
+  /* พิมพ์จากสำเนาใต้ body (printSummary) — ซ่อนทั้งแอป เหลือแต่สำเนา เต็ม A4 แนวนอน ไม่โดนย่อแบบบนจอ (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  body.print-sum > *:not(.pr-sum-host) { display: none !important; }
+  body.print-sum .pr-sum-host { display: block !important; }
+  body.print-sum .pr-sum { width: 100% !important; padding: 0 !important; box-shadow: none !important; }
+  .pr-sum-fit { height: auto !important; overflow: visible !important; }
+  .pr-sum-fit > div { transform: none !important; }
+  .pr-sum, .pr-sum * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+/* สำเนาสำหรับพิมพ์ไม่ขึ้นบนจอ */
+.pr-sum-host { display: none; }

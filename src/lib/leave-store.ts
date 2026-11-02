@@ -6,6 +6,7 @@ import {
   periodRange,
   entitlements,
   fixLeaveStatuses,
+  addMissingLeave,
   leavePeriodOf,
   LEAVE_RECORDS,
   type LeaveRecord,
@@ -16,9 +17,7 @@ import { currentRole, type Role } from "./role";
 import { settings } from "./system-settings";
 import { createRoleStore } from "./role-store";
 import { bkkStamp, nextDocNo } from "./format";
-import { HR_INTERN_LEAVE, ROLE_EMPLOYEE } from "./hr-data";
-import { hrSnapshot } from "./hr-store";
-import { staffEmployeeId } from "./staff-identity";
+import { HR_INTERN_LEAVE } from "./hr-data";
 import { USERS } from "./mock-data";
 import { empRequestIds } from "./emp-requests";
 
@@ -31,6 +30,7 @@ const store = createRoleStore<LeaveRecord[]>(
   LEAVE_RECORDS,
   (v): v is LeaveRecord[] => Array.isArray(v),
   fixLeaveStatuses,
+  addMissingLeave,
 );
 
 export function useLeaveRecords() {
@@ -127,35 +127,6 @@ export function rejectLeave(role: Role, id: string, reason: string) {
   );
 }
 
-/*
- * ยกเลิกการอนุมัติ — ดึงใบที่ตัดสินไปแล้วกลับมารออนุมัติใหม่ (ผู้ใช้สั่ง 12 ต.ค. 2569)
- * เดิมกดอนุมัติผิดคนแล้วแก้ไม่ได้เลย ต้องไปรื้อข้อมูลในเครื่อง
- * หน้าจอเป็นคนกันว่ารอบเวลาปิดแล้วหรือยัง (lockedUntil) ที่นี่กันซ้ำอีกชั้นว่า
- * ต้องเป็นใบที่ตัดสินแล้วจริง ๆ และต้องมีเหตุผลเสมอ เพราะวันลาที่อนุมัติไปแล้ว
- * ไปโผล่ในรอบเวลาและการหักเงิน ย้อนเงียบ ๆ ไม่ได้
- */
-export function undoLeaveDecision(role: Role, id: string, why: string) {
-  const reason = why.trim();
-  if (!reason) return false;
-  let done = false;
-  store.updateRole(role, (records) =>
-    records.map((r) => {
-      if (r.id !== id) return r;
-      if (r.status !== "อนุมัติแล้ว" && r.status !== "ไม่อนุมัติ") return r;
-      done = true;
-      return {
-        ...r,
-        status: "รอการอนุมัติ" as const,
-        decidedAt: undefined,
-        comment: `ยกเลิกการอนุมัติ: ${reason}`,
-        undoneAt: bkkStamp(),
-        undoneWhy: reason,
-      };
-    }),
-  );
-  return done;
-}
-
 export function resetLeaveRecords() {
   store.reset();
 }
@@ -173,35 +144,22 @@ export function daysByStatus(
     .reduce((sum, r) => sum + r.days, 0);
 }
 
-/*
- * สิทธิ์ของประเภทนั้นในรอบปีนั้น — ค่ากลางจากตั้งค่าระบบ
- * ถ้าฝ่ายบุคคลตั้งไว้เฉพาะคน (Employee.leaveDays) ใช้ของคนนั้นแทน (ผู้ใช้สั่ง 8 ต.ค. 2569)
- * ไม่ส่ง empId มา = คนที่ล็อกอินอยู่
- */
-function baseDays(type: LeaveType, period: string, empId = myEmployeeId()) {
-  const own = empId ? hrSnapshot().emp.find((e) => e.id === empId)?.leaveDays?.[type] : undefined;
-  if (typeof own === "number") return own;
+function baseDays(type: LeaveType, period: string) {
   return entitlements().filter((e) => e.type === type && e.period === period).reduce(
     (sum, e) => sum + e.days,
     0,
   );
 }
 
-/** รหัสพนักงานของคนที่ล็อกอินอยู่ — ทีมงานอ่านจากคนที่เลือกไว้ บทบาทอื่นอ่านจากคนที่ผูกกับบทบาท */
-function myEmployeeId() {
-  const role = currentRole();
-  return role === "staff" ? staffEmployeeId() : (ROLE_EMPLOYEE[role] ?? "");
-}
-
 /**
  * ลาพักร้อนที่ยกมาจากปีก่อน — ส่วนที่ปีก่อนยังไม่ได้ใช้ ไม่เกินเพดานที่ผู้ดูแลระบบตั้ง (vacationCarryMax)
  * คิดจากสิทธิ์ปกติของปีก่อนเท่านั้น วันที่ยกมาแล้วไม่ยกต่ออีกทอด · เพดาน 0 = ไม่ยกยอด
  */
-export function carriedDays(records: LeaveRecord[], type: LeaveType, period: string, empId?: string) {
+export function carriedDays(records: LeaveRecord[], type: LeaveType, period: string) {
   const max = settings().rates.vacationCarryMax;
   if (type !== "ลาพักร้อน" || !(max > 0)) return 0;
   const prev = leavePeriodOf(leaveYearOf(periodRange(period)[0]) - 1);
-  const base = baseDays(type, prev, empId);
+  const base = baseDays(type, prev);
   if (!base) return 0;
   /* ยกมาเฉพาะส่วนที่ปีก่อน "ไม่ได้ใช้จริง" — ใบที่ยังรออนุมัติข้ามปียังไม่ได้ตัดสิทธิ์ */
   const used = daysByStatus(records, type, prev, "อนุมัติแล้ว");
@@ -209,8 +167,8 @@ export function carriedDays(records: LeaveRecord[], type: LeaveType, period: str
 }
 
 /** สิทธิ์ของรอบปีนั้น — ส่งใบลาของคนนั้นมาด้วยเพื่อรวมลาพักร้อนที่ยกมาจากปีก่อน */
-export function entitlementDays(type: LeaveType, period: string, records?: LeaveRecord[], empId?: string) {
-  return baseDays(type, period, empId) + (records ? carriedDays(records, type, period, empId) : 0);
+export function entitlementDays(type: LeaveType, period: string, records?: LeaveRecord[]) {
+  return baseDays(type, period) + (records ? carriedDays(records, type, period) : 0);
 }
 
 /**
@@ -243,10 +201,8 @@ export function leaveUsage(
   records: LeaveRecord[],
   type: LeaveType,
   period: string = currentPeriod(),
-  /** ดูสิทธิ์ของคนอื่น (ฝ่ายบุคคล) — ไม่ส่งมาคือของคนที่ล็อกอินอยู่ */
-  empId?: string,
 ): LeaveUsage {
-  const entitled = entitlementDays(type, period, records, empId);
+  const entitled = entitlementDays(type, period, records);
   const approved = daysByStatus(records, type, period, "อนุมัติแล้ว");
   const pending = daysByStatus(records, type, period, "รอการอนุมัติ");
   return {

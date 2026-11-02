@@ -1,6 +1,8 @@
 /*
- * ใบเบิกค่าใช้จ่ายรายเดือน — ค่าน้ำมันรถ กับ incentive/commission
+ * ใบเบิกค่าใช้จ่ายรายเดือน — ค่าน้ำมันรถ กับค่าใช้จ่ายอื่น
  * หนึ่งเดือนมีหนึ่งใบ ยื่นทีเดียวทั้งสองส่วน
+ * ค่าคอมมิชชั่น/อินเซนทีฟเบิกผ่านใบนี้ไม่ได้แล้ว ผู้บริหารให้ในรอบเงินเดือน (ผู้ใช้สั่ง 14 ต.ค. 2569)
+ * ช่อง income ของใบเก่ายังเก็บไว้อ่านเป็นประวัติ
  * TODO: ย้ายไปตาราง expense_claim เมื่อต่อ backend
  */
 
@@ -11,11 +13,6 @@ import { round2 } from "./format";
 
 /** จ่ายคืนกิโลเมตรละกี่บาท — ฝ่ายบุคคลตั้งได้ที่ /admin/rates (Full Proposal · M5) */
 export const fuelRate = () => settings().rates.fuelPerKm;
-/* เพดานกันพิมพ์ผิด — ตั้งที่หน้าอัตราและภาษี · 0 = ไม่จำกัด */
-const kmMax = () => settings().rates.fuelKmMax;
-const itemMax = () => settings().rates.expenseItemMax;
-/** เลขหลักพันคั่นจุลภาค ใช้ในข้อความเตือน */
-const commas = (n: number) => n.toLocaleString("en-US");
 
 /** ค่าคอมมิชชั่นกี่เปอร์เซ็นต์ของมูลค่าดีล — ผู้ดูแลระบบตั้งได้ที่ /admin/rates */
 export const commissionRate = () => settings().rates.commission;
@@ -23,13 +20,15 @@ export const commissionRate = () => settings().rates.commission;
 /** ยอดต่อครั้งที่ไม่เกินนี้ ไม่เข้าเกณฑ์หักภาษี ณ ที่จ่าย */
 export const WHT_FREE_LIMIT = 1000;
 
-export type ClaimStatus = "ร่าง" | "รออนุมัติ" | "อนุมัติแล้ว" | "ไม่อนุมัติ";
+/* ยกเลิก = ผู้ยื่นถอนใบที่รออนุมัติออกเอง ใบยังอยู่ในรายการให้ตามรอย (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+export type ClaimStatus = "ร่าง" | "รออนุมัติ" | "อนุมัติแล้ว" | "ไม่อนุมัติ" | "ยกเลิก";
 
 export const CLAIM_STATUS: Record<ClaimStatus, string> = {
   ร่าง: "t-miss",
   รออนุมัติ: "t-early",
   อนุมัติแล้ว: "t-ok",
   ไม่อนุมัติ: "t-late",
+  ยกเลิก: "t-miss",
 };
 
 /** ส่งแล้วหรืออนุมัติแล้ว ห้ามแก้ต่อ ไม่งั้นตัวเลขจะไม่ตรงกับที่ผู้อนุมัติเห็น */
@@ -72,8 +71,6 @@ export type OtherRow = {
 };
 
 export type ExpenseClaim = {
-  /** ชื่อผู้ยื่น — พนักงานมีหลายคน หน้าอนุมัติต้องรู้ว่าใบนี้ของใคร (29 ก.ย. 2569) */
-  employee?: string;
   /** เดือนของใบเบิก รูปแบบ yyyy-mm */
   month: string;
   status: ClaimStatus;
@@ -96,10 +93,6 @@ export type ExpenseClaim = {
    * หน้าอนุมัติ และในรายละเอียดเงินเดือน (ผู้ใช้ตัดสิน 23 ก.ย. 2569)
    */
   no?: string;
-  /** "yyyy-mm-dd hh:mm" เวลาที่ผู้อนุมัติยกเลิกการอนุมัติ — ว่างคือไม่เคยถูกย้อน */
-  undoneAt?: string;
-  /** เหตุผลที่ย้อน — บังคับกรอก ใช้บอกผู้ยื่นว่าทำไมใบถึงกลับมารออนุมัติ */
-  undoneWhy?: string;
 };
 
 const num = (v: string) => Number(String(v).replace(/,/g, "")) || 0;
@@ -119,40 +112,34 @@ export function otherTotal(rows: OtherRow[] = []) {
   return round2(rows.reduce((sum, r) => sum + num(r.amount), 0));
 }
 
-/*
- * ค่าเดินทางเป็นคนละก้อนกับค่าน้ำมันรถ (เจ้าของระบบสั่ง 8 ต.ค. 2569)
- * ค่าน้ำมัน = ระยะทางที่ขับเอง × อัตราต่อกิโลเมตร
- * ค่าเดินทาง = ค่าโดยสารที่จ่ายจริง เช่น แท็กซี่ รถทัวร์ ตั๋วเครื่องบิน ต้องมีหลักฐานแนบ
- * สองก้อนนี้ห้ามรวมเป็นยอดเดียวหรือเรียกชื่อเดียวกัน ไม่งั้นคนอนุมัติแยกไม่ออกว่าจ่ายอะไรไป
- */
-export const TRAVEL_KIND = "ค่าเดินทาง";
-
-/** ค่าเดินทางที่จ่ายจริงในใบนี้ — ไม่รวมค่าน้ำมันรถ */
-export function travelTotal(rows: OtherRow[] = []) {
-  return round2(rows.filter((r) => r.kind === TRAVEL_KIND).reduce((sum, r) => sum + num(r.amount), 0));
-}
-
-/** ค่าใช้จ่ายอื่นที่ไม่ใช่ทั้งค่าน้ำมันและค่าเดินทาง */
-export function otherOnlyTotal(rows: OtherRow[] = []) {
-  return round2(rows.filter((r) => r.kind !== TRAVEL_KIND).reduce((sum, r) => sum + num(r.amount), 0));
-}
-
-/** สรุปยอดแยกก้อนของใบเบิกหนึ่งใบ — ที่เดียวที่แยกค่าน้ำมัน / ค่าเดินทาง / อื่น ๆ */
-export function claimParts(claim: ExpenseClaim) {
-  const fuel = fuelTotal(claim.fuel);
-  const travel = travelTotal(claim.other);
-  const other = otherOnlyTotal(claim.other);
-  return { fuel, travel, other, total: round2(fuel + travel + other) };
-}
-
 /** กรอกครบไหม — ว่างช่องไหนบอกช่องนั้น */
+/**
+ * หัวข้อที่เป็นค่าคอมมิชชั่น/อินเซนทีฟ — ผู้บริหารให้ในรอบเงินเดือนเท่านั้น พนักงานเบิกเองไม่ได้
+ * ใบเก่าที่ยื่น/อนุมัติไปแล้วยังแสดงเป็นประวัติ แต่ใบใหม่ (ร่าง) ส่งไม่ผ่าน (ผู้ใช้สั่ง 14 ต.ค. 2569)
+ */
+export function isCommissionKind(kind: string) {
+  return /คอมมิชชั่น|คอมมิชชัน|ค่าคอม|อินเซนทีฟ|อินเซ็นทีฟ|commission|incentive/i.test(kind);
+}
+
+/** เหตุผลที่กดอนุมัติไม่ได้ — ใบที่มีค่าคอมมิชชั่น/อินเซนทีฟ (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+export const COMMISSION_APPROVE_BLOCK =
+  "มีรายการค่าคอมมิชชั่น/อินเซนทีฟ ซึ่งให้ในรอบเงินเดือนเท่านั้น — ไม่อนุมัติแล้วให้พนักงานลบรายการออก";
+
+/**
+ * ใบเบิกที่มีรายการค่าคอมมิชชั่น/อินเซนทีฟ (ประเภทค่าคอม หรือ "อื่นๆ" ที่หัวข้อพูดถึงค่าคอม/อินเซนทีฟ)
+ * อนุมัติไม่ได้ — คืนเหตุผล · ว่าง = อนุมัติได้ (ผู้ใช้สั่ง 15 ต.ค. 2569)
+ */
+export function claimApproveBlock(c: Pick<ExpenseClaim, "other">) {
+  return (c.other ?? []).some((r) => isCommissionKind(r.kind)) ? COMMISSION_APPROVE_BLOCK : "";
+}
+
 export function otherRowProblem(r: OtherRow, month: string) {
   if (!r.kind) return "ยังไม่ได้เลือกประเภท";
+  if (isCommissionKind(r.kind))
+    return "ค่าคอมมิชชั่นและอินเซนทีฟ ผู้บริหารให้ในรอบเงินเดือน เบิกผ่านใบเบิกไม่ได้ — ลบรายการนี้ออก";
   if (!r.date) return "ยังไม่ได้เลือกวันที่";
   if (r.date.slice(0, 7) !== month) return "วันที่ไม่อยู่ในเดือนของใบนี้";
   if (!(num(r.amount) > 0)) return "ยังไม่ได้กรอกจำนวนเงิน";
-  if (itemMax() > 0 && num(r.amount) > itemMax())
-    return `จำนวนเงินต่อรายการไม่เกิน ${commas(itemMax())} บาท — ตรวจดูว่าพิมพ์เกินหรือเปล่า`;
   if (!r.note.trim()) return "ยังไม่ได้กรอกรายละเอียด";
   return "";
 }
@@ -243,12 +230,34 @@ const PM_CLAIMS: ExpenseClaim[] = [
   },
 ];
 
-/* บัญชีกับบุคคลเป็นคนเดียวกัน (E12) — ใบเบิกอยู่ที่ HR_CLAIMS ชุดเดียว */
-const ACC_CLAIMS: ExpenseClaim[] = [];
+/* บัญชีกับบุคคลเป็นคนเดียวกัน (E12) — ใบร่างเดือนปัจจุบันอยู่ที่ HR_CLAIMS
+   ประวัติใบที่ยื่นแล้วคนละเดือนกับฝั่งบุคคล ให้หน้ารายการใบเบิกมีข้อมูลครบทุกสถานะ (ผู้ใช้สั่ง 9 ต.ค. 2569)
+   เลขที่ EX-2569-0030 ถึง 0033 ไม่ชนกับเลขเดิม (สูงสุด 0029 ใน emp-requests) */
+const ACC_CLAIMS: ExpenseClaim[] = [
+  { month: "2026-09", status: "รออนุมัติ", no: "EX-2569-0033", plate: "2กจ 8841 เชียงใหม่", nickname: "อร", income: [], comment: "", submittedAt: "2026-10-02 16:10",
+    fuel: [
+      { id: "F171", date: "2026-09-11", place: "ออฟฟิศ → ธนาคารกสิกรไทย สาขานิมมานเหมินท์", km: "7", work: "นำฝากเช็คค่างวดจากลูกค้า", note: "" },
+      { id: "F172", date: "2026-09-25", place: "ออฟฟิศ → สำนักงานสรรพากรพื้นที่เชียงใหม่ 1", km: "11", work: "ยื่นแบบ ภ.พ.30 ประจำเดือนสิงหาคม", note: "" },
+    ],
+    other: [{ id: "O171", kind: "ค่าเดินทาง", date: "2026-09-25", amount: "40", note: "ค่าจอดรถสำนักงานสรรพากร", file: "ใบเสร็จค่าจอดรถ.jpg" }] },
+  { month: "2026-08", status: "อนุมัติแล้ว", no: "EX-2569-0032", plate: "2กจ 8841 เชียงใหม่", nickname: "อร", income: [], comment: "", submittedAt: "2026-09-01 11:30", decidedAt: "2026-09-03 10:20", paidIn: "2026-09",
+    fuel: [
+      { id: "F173", date: "2026-08-07", place: "ออฟฟิศ → สำนักงานประกันสังคมจังหวัดเชียงใหม่", km: "9", work: "ยื่นเงินสมทบประกันสังคมเดือนกรกฎาคม", note: "" },
+      { id: "F174", date: "2026-08-20", place: "ออฟฟิศ → มั่นคงก่อสร้าง สำนักงานใหญ่", km: "26", work: "วางบิลและรับเช็คงวดที่ 2", note: "" },
+    ] },
+  { month: "2026-07", status: "ไม่อนุมัติ", no: "EX-2569-0031", plate: "2กจ 8841 เชียงใหม่", nickname: "อร", income: [], submittedAt: "2026-08-01 09:05", decidedAt: "2026-08-04 14:30",
+    comment: "ระยะทางวันที่ 18 ก.ค. สูงกว่าเส้นทางจริง ตรวจเลขไมล์แล้วยื่นใหม่",
+    fuel: [
+      { id: "F175", date: "2026-07-18", place: "ออฟฟิศ → สยามพลาสติก อ.เมือง", km: "96", work: "วางบิลและรับเช็คค่าบริการ", note: "" },
+    ] },
+  { month: "2026-06", status: "ยกเลิก", no: "EX-2569-0030", plate: "2กจ 8841 เชียงใหม่", nickname: "อร", income: [], comment: "", submittedAt: "2026-07-02 10:40",
+    fuel: [],
+    other: [{ id: "O172", kind: "ค่าอุปกรณ์และวัสดุ", date: "2026-06-26", amount: "320", note: "ซื้อแฟ้มเก็บเอกสารภาษี", file: "ใบเสร็จ.jpg" }] },
+];
 
 /* ฝ่ายบุคคล — เดินเอกสารประกันสังคมและสรรพากรเป็นงานประจำเดือน จึงมีค่าน้ำมันทุกเดือน
    ไม่มีค่าคอมมิชชั่น เพราะตำแหน่งนี้ไม่ได้อยู่ในตาราง HR_COMMISSION */
-/* พนักงานยังไม่เคยตั้งเบิก — เริ่มจากศูนย์ */
+/* ทีมงานยังไม่เคยตั้งเบิก — เริ่มจากศูนย์ */
 const STAFF_CLAIMS: ExpenseClaim[] = [];
 
 const HR_CLAIMS: ExpenseClaim[] = [
@@ -266,19 +275,89 @@ const HR_CLAIMS: ExpenseClaim[] = [
   },
 ];
 
+/*
+ * ตัวอย่างใบเบิกรอบปัจจุบัน (ก.ย. – ต.ค. 2569) สำหรับสาธิต (เจ้าของสั่ง 8 ต.ค. 2569)
+ * ใบเบิกหนึ่งใบต่อหนึ่งเดือน — เครื่องที่เก็บข้อมูลไว้แล้วได้ใบของ "เดือนที่ยังไม่มี" เพิ่มผ่าน addMissingClaims
+ * เดือนที่ผู้ใช้มีใบอยู่แล้ว (แม้เป็นใบร่าง) ไม่ถูกแตะ
+ */
+const CLAIMS_OCT_2569: Partial<Record<Role, ExpenseClaim[]>> = {
+  sales: [
+    { month: "2026-10", status: "ร่าง", plate: "1กจ 4471 เชียงใหม่", nickname: "ชม", income: [], comment: "", submittedAt: "",
+      fuel: [
+        { id: "F101", date: "2026-10-01", place: "ออฟฟิศ – เอ็มเทคเอ็นจิเนียริ่ง อ.สารภี", km: "34", work: "นำเสนอใบเสนอราคาระบบ ERP", note: "" },
+        { id: "F102", date: "2026-10-06", place: "ออฟฟิศ – บุญมีฟาร์ม อ.สันทราย", km: "41", work: "เข้าพบลูกค้าเก็บความต้องการ", note: "" },
+      ],
+      other: [{ id: "O101", kind: "ค่ารับรองลูกค้า", date: "2026-10-06", amount: "850", note: "เลี้ยงกาแฟลูกค้าหลังประชุม", file: "ใบเสร็จร้านกาแฟ.jpg" }] },
+  ],
+  ps: [
+    { month: "2026-09", status: "รออนุมัติ", no: "EX-2569-0026", plate: "1กจ 4471 เชียงใหม่", nickname: "ปุ๊ก", income: [], comment: "", submittedAt: "2026-10-01 09:40",
+      fuel: [
+        { id: "F111", date: "2026-09-16", place: "ออฟฟิศ – สยามพลาสติก อ.เมือง", km: "48", work: "สาธิตระบบให้ทีมลูกค้า", note: "" },
+        { id: "F112", date: "2026-09-24", place: "ออฟฟิศ – มั่นคงก่อสร้าง ไซต์งาน", km: "76", work: "สำรวจระบบเครือข่ายหน้างาน", note: "" },
+      ] },
+  ],
+  pm: [
+    { month: "2026-10", status: "ร่าง", plate: "2กท 8890 เชียงใหม่", nickname: "กร", income: [], comment: "", submittedAt: "",
+      fuel: [
+        { id: "F121", date: "2026-10-03", place: "ออฟฟิศ → บุญมีฟาร์ม อ.สันทราย", km: "41", work: "คุมงานติดตั้งระบบหน้างาน", note: "" },
+      ] },
+  ],
+  hr: [
+    { month: "2026-10", status: "ร่าง", plate: "2กจ 8841 เชียงใหม่", nickname: "อร", income: [], comment: "", submittedAt: "",
+      fuel: [
+        { id: "F131", date: "2026-10-05", place: "ออฟฟิศ → สำนักงานสรรพากรพื้นที่", km: "11", work: "ยื่นแบบ ภ.ง.ด.1 ประจำเดือนกันยายน", note: "" },
+      ] },
+  ],
+  staff: [
+    { month: "2026-10", status: "ร่าง", plate: "ขค 8812 เชียงใหม่", nickname: "มายด์", income: [], comment: "", submittedAt: "",
+      fuel: [
+        { id: "F141", date: "2026-10-02", place: "ออฟฟิศ – ครัวคุณจิ ถ.ช้างคลาน", km: "22", work: "ถ่ายภาพเมนูใหม่ทำเนื้อหาเว็บไซต์", note: "" },
+      ] },
+    { month: "2026-09", status: "รออนุมัติ", no: "EX-2569-0023", plate: "ขค 8812 เชียงใหม่", nickname: "มายด์", income: [], comment: "", submittedAt: "2026-10-01 10:15",
+      fuel: [
+        { id: "F142", date: "2026-09-15", place: "ออฟฟิศ – อัลฟ่าคอร์ป สาขาเชียงใหม่", km: "12", work: "อบรมการใช้งานระบบหลังบ้านเว็บไซต์", note: "" },
+        { id: "F143", date: "2026-09-23", place: "ออฟฟิศ – พูลผลอะไหล่ อ.หางดง", km: "29", work: "เก็บข้อมูลสินค้าทำแคตตาล็อกออนไลน์", note: "" },
+      ],
+      other: [{ id: "O141", kind: "ค่าอุปกรณ์และวัสดุ", date: "2026-09-23", amount: "390", note: "ซื้อฉากถ่ายภาพสินค้า", file: "ใบเสร็จ.jpg" }] },
+  ],
+  gm: [
+    { month: "2026-09", status: "รออนุมัติ", no: "EX-2569-0025", plate: "1กข 2025 เชียงใหม่", nickname: "เสริฐ", income: [], comment: "", submittedAt: "2026-10-02 08:50",
+      fuel: [
+        { id: "F151", date: "2026-09-18", place: "ออฟฟิศ – มั่นคงก่อสร้าง สำนักงานใหญ่", km: "26", work: "ประชุมผู้บริหารลูกค้าเรื่องสัญญาบำรุงรักษา", note: "" },
+      ],
+      other: [{ id: "O151", kind: "ค่ารับรองลูกค้า", date: "2026-09-18", amount: "2450", note: "รับประทานอาหารกลางวันกับผู้บริหารลูกค้า", file: "ใบกำกับภาษีร้านอาหาร.pdf" }] },
+  ],
+  maid: [
+    { month: "2026-10", status: "ร่าง", plate: "", nickname: "ป้าเรือน", income: [], comment: "", submittedAt: "", fuel: [],
+      other: [{ id: "O161", kind: "ค่าอุปกรณ์และวัสดุ", date: "2026-10-05", amount: "640", note: "น้ำยาถูพื้นและถุงขยะ", file: "ใบเสร็จ.jpg" }] },
+    { month: "2026-09", status: "อนุมัติแล้ว", no: "EX-2569-0024", plate: "", nickname: "ป้าเรือน", income: [], comment: "", submittedAt: "2026-09-26 15:20", decidedAt: "2026-09-28 10:05", fuel: [],
+      other: [
+        { id: "O162", kind: "ค่าอุปกรณ์และวัสดุ", date: "2026-09-10", amount: "520", note: "กระดาษชำระและสบู่ล้างมือ", file: "ใบเสร็จ.jpg" },
+        { id: "O163", kind: "อื่นๆ", date: "2026-09-22", amount: "180", note: "น้ำดื่มต้อนรับลูกค้า", file: "ใบเสร็จ.jpg" },
+      ] },
+  ],
+};
+
+/** เติมใบเบิกของเดือนที่ยังไม่มีในเครื่อง — เดือนที่มีใบอยู่แล้วไม่ถูกแตะ */
+export function addMissingClaims(have: ExpenseClaim[], seed: ExpenseClaim[]): ExpenseClaim[] {
+  const months = new Set(have.map((c) => c.month));
+  const add = seed.filter((c) => !months.has(c.month));
+  return add.length ? [...add, ...have] : have;
+}
+
 /* ใบเบิกแยกตามบทบาท เพราะหนึ่งบทบาทคือหนึ่งคน (ดู role-store.ts) */
 export const EXPENSE_CLAIMS: Record<Role, ExpenseClaim[]> = {
-  sales: SALES_CLAIMS,
-  ps: [],
-  pm: PM_CLAIMS,
+  sales: [...CLAIMS_OCT_2569.sales!, ...SALES_CLAIMS],
+  ps: [...CLAIMS_OCT_2569.ps!],
+  pm: [...CLAIMS_OCT_2569.pm!, ...PM_CLAIMS],
   acc: ACC_CLAIMS,
-  hr: HR_CLAIMS,
-  staff: STAFF_CLAIMS,
-  gm: [],
+  hr: [...CLAIMS_OCT_2569.hr!, ...HR_CLAIMS],
+  staff: [...CLAIMS_OCT_2569.staff!, ...STAFF_CLAIMS],
+  gm: [...CLAIMS_OCT_2569.gm!],
   ceo: [],
-  /* ฝึกงานและแม่บ้านเพิ่งเปิดใช้ ยังไม่มีใบของตัวเอง */
+  /* นักศึกษาฝึกงานไม่มีเมนูนี้ */
   intern: [],
-  maid: [],
+  maid: [...CLAIMS_OCT_2569.maid!],
 };
 
 
@@ -314,9 +393,6 @@ export function fuelRowMiss(row: FuelRow, month: string): FuelMiss {
   if (!routeEnds(row.place))
     return { field: "place", why: "เส้นทางต้องบอกทั้งต้นทางและปลายทาง เช่น ออฟฟิศ → ลูกค้า" };
   if (num(row.km) <= 0) return { field: "km", why: "ระยะทางต้องมากกว่า 0" };
-  /* พิมพ์ผิดเป็นหลักแสนแล้วยื่นผ่าน ผู้อนุมัติเห็นเป็นเงินหลายล้าน (ตรวจระบบ 8 ต.ค. 2569) */
-  if (kmMax() > 0 && num(row.km) > kmMax())
-    return { field: "km", why: `ระยะทางต่อครั้งไม่เกิน ${commas(kmMax())} กม. — ตรวจดูว่าพิมพ์เกินหรือเปล่า` };
   if (!row.work.trim()) return { field: "work", why: "ยังไม่ได้กรอกงานที่ไปปฏิบัติ" };
   return { field: "", why: "" };
 }

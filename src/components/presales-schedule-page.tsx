@@ -18,7 +18,7 @@
  * จึงไม่มีใครลงให้ · ที่ยังห้ามคือนัดอิสระที่ไม่ผูกกับงาน ซึ่งก็คือปฏิทินส่วนตัวที่ตัดทิ้งไปแล้ว
  * นัดกลุ่มนี้ไม่ขึ้นในปฏิทินของ PM เพราะยังไม่ใช่งานของโปรเจค
  *
- * ลิงก์พาไปหน้างานก่อนการขายและใบลาของตัวเองเท่านั้น — งานในโปรเจคเป็นหน้าของพนักงาน จึงแสดงเฉย ๆ
+ * ลิงก์พาไปหน้างานก่อนการขายและใบลาของตัวเองเท่านั้น — งานในโปรเจคเป็นหน้าของทีมงาน จึงแสดงเฉย ๆ
  */
 
 import { useMemo, useState } from "react";
@@ -26,25 +26,27 @@ import { type PresalesRequest } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
 import { parseIsoDate, TH_MONTHS_SHORT } from "@/lib/format";
 import { useLeaveRecords } from "@/lib/leave-store";
+import { fmtLeaveHours, leaveHoursOf } from "@/lib/leave-data";
 import { USERS } from "@/lib/mock-data";
 import {
-  KIND_COLOR,
-  eventKinds,
   invitedEvents,
   isPsEvent,
+  type EventColor,
   type EventKind,
   type PmEvent,
 } from "@/lib/pm-schedule-data";
 import { addEvent, cancelEvent, editEvent, useSchedule } from "@/lib/pm-schedule-store";
 import { usePm, useTeam } from "@/lib/pm-store";
-import { usePsMe, psMine as mine, psWorkLink } from "@/lib/presales-work";
+import { PS_ME as ME, psMine as mine, psWorkLink } from "@/lib/presales-work";
 import { AppointmentSheet } from "./appointment-sheet";
 import { Sheet } from "./lead-dialogs";
 import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select } from "./ui";
-import { useAddOption } from "./add-option";
+import { Time24Input, UI_TIME_CLS } from "./time24-input"; // ช่องเวลา 24 ชม. แทน input[type=time] (ผู้ใช้สั่ง 13 ต.ค. 2569)
 import {
+  ColorPick,
   ScheduleBoard,
+  colPaint,
   tintPaint,
   useBoardNav,
   type BoardEvent,
@@ -63,7 +65,7 @@ const KINDS: BoardKind[] = [
 ];
 
 /* เหตุผลตอนยกเลิกเป็นของบังคับ — ข้อความนี้คือสิ่งที่ผู้เข้าร่วมได้รับในแจ้งเตือน */
-const CANCEL_WARN = "กรอกเหตุผลที่ยกเลิกก่อน — ผู้เข้าร่วมจะเห็นข้อความนี้ในแจ้งเตือน";
+const CANCEL_WARN = "กรอกเหตุผลที่ยกเลิกก่อน";
 
 const COLOR = Object.fromEntries(KINDS.map((k) => [k.key, k.color])) as Record<string, string>;
 const paintOf = (kind: string) => ({ dot: COLOR[kind], paint: tintPaint(COLOR[kind]) });
@@ -74,8 +76,6 @@ const shortDate = (day: string) => {
 };
 
 export function PresalesSchedulePage() {
-  /* SA หรือ BD — คนที่เลือกไว้ในเมนูบัญชีของฉัน */
-  const ME = usePsMe();
   const crm = useCrm();
   const pm = usePm();
   const leave = useLeaveRecords();
@@ -85,7 +85,7 @@ export function PresalesSchedulePage() {
   const [open, setOpen] = useState<PmEvent | null>(null);
   /* ฟอร์มตั้งนัดของตัวเอง — เปิดจากปุ่มเพิ่ม หรือกดที่นัดที่ตัวเองตั้งไว้ */
   const [form, setForm] = useState<{ day: string; event?: PmEvent } | null>(null);
-  const nameOfCus = (code: string) => crm.customers.find((c) => c.code === code)?.name ?? code;
+  const nameOfCus = (code: string) => crm.customers.find((c) => c.code === code)?.name ?? "—";
   /* คำขอที่ยังทำอยู่ของเรา — นัดต้องผูกกับใบใดใบหนึ่งในนี้ */
   const myRequests = crm.presales.filter((r) => mine(r) && r.status !== "ปิดคำขอ");
 
@@ -109,9 +109,9 @@ export function PresalesSchedulePage() {
     };
     const nameOf = new Map(crm.customers.map((c) => [c.code, c.name]));
     for (const r of crm.presales.filter(mine)) {
-      const cus = nameOf.get(r.customerCode) ?? r.customerCode;
+      const cus = nameOf.get(r.customerCode) ?? "—";
       if (r.status === "รอรับงาน" || r.status === "กำลังทำ" || r.status === "รอข้อมูลเพิ่ม")
-        add("due", `due-${r.no}`, r.due, r.due, `กำหนดส่งข้อเสนอ · ${cus}`, `${r.no} · ${r.problem}`, psWorkLink(r.no));
+        add("due", `due-${r.no}`, r.due, r.due, `กำหนดส่งข้อเสนอ · ${cus}`, r.problem, psWorkLink(r.no));
       for (const x of crm.presalesRounds.filter((x) => x.requestNo === r.no))
         add("sent", `sent-${r.no}-${x.round}`, x.at, x.at, `ส่งข้อเสนอรอบที่ ${x.round} · ${cus}`, x.note, psWorkLink(r.no));
     }
@@ -133,7 +133,7 @@ export function PresalesSchedulePage() {
     for (const l of leave) {
       if (l.status === "ไม่อนุมัติ" || l.status === "ยกเลิก") continue;
       const state = l.status === "อนุมัติแล้ว" ? "อนุมัติแล้ว" : "รออนุมัติ";
-      add("leave", `leave-${l.id}`, l.date, l.toDate || l.date, l.type, `${state} · ${l.id}`, `/leave?find=${encodeURIComponent(l.id)}`);
+      add("leave", `leave-${l.id}`, l.date, l.toDate || l.date, `${l.type} · ${fmtLeaveHours(leaveHoursOf(l))}` /* จำนวนลาเป็นชั่วโมง (ผู้ใช้สั่ง 19 ต.ค. 2569) */, state, `/leave?find=${encodeURIComponent(l.id)}`);
     }
     /* นัดที่เราตั้งเอง กับนัดที่ PM/GM เชิญเรา — กดแล้วเปิดกล่องในหน้านี้ ไม่มีที่ให้ไปต่อ */
     for (const e of invitedEvents(sc.events, ME.employeeId))
@@ -149,25 +149,25 @@ export function PresalesSchedulePage() {
         /* นัดที่ถูกยกเลิกยังอยู่ในรายการแบบขีดฆ่า ไม่หายเงียบ (เจ้าของสั่ง 24 ก.ย. 2569) */
         cancelled: Boolean(e.cancel),
         cancelWhy: e.cancel?.why,
-        ...paintOf(isPsEvent(e) ? "mine" : "meet"),
+        /* สีที่เลือกเองมาก่อนสีของกลุ่ม เฉพาะนัดที่ตั้งเอง — นัดที่ถูกเชิญคงสีม่วงเดิม (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+        ...(isPsEvent(e) && e.col ? colPaint(e.col) : paintOf(isPsEvent(e) ? "mine" : "meet")),
         data: e,
       });
     return out;
-  }, [crm.customers, crm.presales, crm.presalesRounds, pm.projects, leave, sc.events, ME.employeeId]);
+  }, [crm.customers, crm.presales, crm.presalesRounds, pm.projects, leave, sc.events]);
 
   return (
     <div className="space-y-4">
-      <div className="bar max-sm:hidden!">
-        <div>
-          <p>{ME.full} · กำหนดส่งข้อเสนอ งานในโปรเจค และวันลา</p>
-        </div>
-      </div>
+      {/* หน้าตาเดียวกับตารางงาน PM — ไม่มีหัวข้อหน้า ดับเบิลคลิกช่องวันเพื่อเพิ่มนัด (ผู้ใช้สั่ง 9 ต.ค. 2569) */}
+      {/* ชื่อหน้ามุมซ้ายบน — แถบบนจอคอมเป็นเส้นทางแล้ว (ผู้ใช้สั่ง 12 ต.ค. 2569) */}
+      <h1 className="page-h1">ตารางงาน</h1>
 
       <ScheduleBoard
         nav={nav}
         events={events}
         kinds={KINDS}
-        hint="กำหนดส่ง ใบงาน และใบลา มาจากที่อื่น · เพิ่มได้เฉพาะนัดของคำขอก่อนการขายที่คุณรับผิดชอบ — นัดของโปรเจคยังเป็นของ PM"
+        /* ไม่โชว์คำอธิบายการทำงานของระบบ (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+        hint=""
         onAdd={(day) => setForm({ day })}
         onOpen={(e) => {
           if (!e.data) return;
@@ -175,6 +175,7 @@ export function PresalesSchedulePage() {
           if (isPsEvent(e.data) && !e.data.cancel) setForm({ day: e.data.date, event: e.data });
           else setOpen(e.data);
         }}
+        noKinds
       />
 
       {open && (
@@ -227,16 +228,16 @@ function PsEventForm({
   onClose: () => void;
   onSaved: (date: string) => void;
 }) {
-  const ME = usePsMe();
   /* เชิญได้เฉพาะคนที่ยังอยู่ และไม่ใช่ PM (นัดกลุ่มนี้ไม่ขึ้นในปฏิทินของ PM) */
   const team = useTeam().filter(
     (m) => !m.left && m.id !== USERS.pm.employeeId && m.id !== ME.employeeId,
   );
   const [ps, setPs] = useState(event?.ps ?? requests[0]?.no ?? "");
   const [title, setTitle] = useState(event?.title ?? "");
-  const [kind, setKind] = useState<EventKind>(event?.kind ?? "client");
-  /* เพิ่มประเภทนัดหมายใหม่ได้จากหน้างาน (ข้อมูลหลัก HR-10) */
-  const addKind = useAddOption({ catalog: "eventKinds" }, (v) => setKind(v as EventKind));
+  /* ประเภทไม่ให้เลือกแล้ว เก็บค่าเดิมไว้ข้างใน (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+  const kind: EventKind = event?.kind ?? "client";
+  /* ใบใหม่ตั้งต้นสีเขียวน้ำทะเล ตรงกับสีนัดที่ตั้งเองที่เห็นในปฏิทินนี้อยู่แล้ว */
+  const [col, setCol] = useState<EventColor>(event?.col ?? "teal");
   const [date, setDate] = useState(event?.date ?? day);
   const [from, setFrom] = useState(event?.from ?? "10:00");
   const [to, setTo] = useState(event?.to ?? "11:00");
@@ -273,7 +274,7 @@ function PsEventForm({
       /* ตัวเองอยู่ในนัดเสมอ — เป็นคนตั้งและเป็นคนไป */
       who: [ME.employeeId, ...who],
       note: detail,
-      col: KIND_COLOR[kind],
+      col,
       by: "ps" as const,
       ps,
     };
@@ -318,9 +319,8 @@ function PsEventForm({
           role="alert"
           className="mb-3.5 rounded-[11px] bg-[var(--destructive-soft)] px-3 py-2.5 text-xs leading-[1.6] font-semibold text-destructive"
         >
-          ยกเลิกแล้วใบจะยังอยู่ในปฏิทินของผู้เข้าร่วมแบบขีดฆ่า ไม่หายไป · ทุกคนจะได้รับแจ้งพร้อมเหตุผล
           <Input
-            className="mt-2 bg-white"
+            className="bg-white"
             value={why}
             aria-label="เหตุผลที่ยกเลิก"
             onChange={(e) => {
@@ -336,10 +336,10 @@ function PsEventForm({
       <div className="space-y-3.5" onClick={() => setPick(false)}>
         {requests.length === 0 ? (
           <p className="rounded-[11px] bg-[var(--warning-soft)] px-3.5 py-3 text-[12.5px] leading-relaxed font-semibold text-[var(--warning)]">
-            ยังไม่มีคำขอก่อนการขายที่คุณรับผิดชอบอยู่ · นัดของทีมก่อนการขายต้องผูกกับคำขอเสมอ
+            ยังไม่มีคำขอก่อนการขายที่คุณรับผิดชอบอยู่
           </p>
         ) : (
-          <Field label="คำขอก่อนการขาย" hint="นัดนี้เป็นงานของคำขอใบไหน — เลือกได้เฉพาะใบที่คุณรับผิดชอบ">
+          <Field label="คำขอก่อนการขาย">
             <Select
               value={ps}
               onChange={(e) => {
@@ -349,7 +349,7 @@ function PsEventForm({
             >
               {requests.map((r) => (
                 <option key={r.no} value={r.no}>
-                  {r.no} · {customerName(r.customerCode)}
+                  {customerName(r.customerCode)} · {r.problem.length > 40 ? `${r.problem.slice(0, 40)}…` : r.problem}
                 </option>
               ))}
             </Select>
@@ -367,23 +367,8 @@ function PsEventForm({
           />
         </Field>
 
-        <Field label="ประเภท">
-          <Select
-            value={kind}
-            onChange={(e) => {
-              if (addKind.pick(e.target.value)) return;
-              setKind(e.target.value as EventKind);
-            }}
-          >
-            {eventKinds().map((k) => (
-              <option key={k.key} value={k.key}>
-                {k.label}
-              </option>
-            ))}
-            {addKind.option}
-          </Select>
-          {addKind.dialog}
-        </Field>
+        {/* ไม่มีช่องประเภท — สีของนัดแยกนัดแทน เหมือนตารางงาน PM (ผู้ใช้สั่ง 9 ต.ค. 2569) */}
+        <ColorPick value={col} onChange={setCol} />
 
         <div className="grid grid-cols-2 items-end gap-2.5 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <Field label="วันที่" className="col-span-2 sm:col-span-1">
@@ -400,10 +385,10 @@ function PsEventForm({
             />
           </Field>
           <Field label="เวลาเริ่ม">
-            <Input type="time" step={900} value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Time24Input step={900} className={UI_TIME_CLS} value={from} onChange={(e) => setFrom(e.target.value)} />
           </Field>
           <Field label="ถึง">
-            <Input type="time" step={900} value={to} onChange={(e) => setTo(e.target.value)} />
+            <Time24Input step={900} className={UI_TIME_CLS} value={to} onChange={(e) => setTo(e.target.value)} />
           </Field>
         </div>
 
@@ -417,7 +402,6 @@ function PsEventForm({
 
         <Field
           label="ชวนใครไปด้วย"
-          hint="ไม่เลือกก็ได้ — คนที่เลือกจะเห็นนัดนี้ในตารางงานของตัวเองแบบดูอย่างเดียว · ผู้จัดการโครงการไม่อยู่ในรายการ เพราะงานช่วงนี้ยังไม่ใช่งานของโปรเจค"
         >
           <span className="grid max-h-[180px] grid-cols-1 gap-x-3 overflow-y-auto sm:grid-cols-2">
             {team.map((m) => {
@@ -459,10 +443,6 @@ function PsEventForm({
           </p>
         )}
 
-        <p className="text-[11.5px] leading-[1.7] text-muted-foreground">
-          ผู้ตั้งนัด {ME.full} · นัดนี้เห็นได้ที่ตารางงานของคุณ ปฏิทินของคนที่ชวนไป ปฏิทินของผู้จัดการทั่วไป
-          และหน้าคำขอก่อนการขายของพนักงานขายเจ้าของผู้สนใจรายนั้น
-        </p>
       </div>
     </Sheet>
   );

@@ -4,43 +4,52 @@
  */
 
 import { toIsoDate } from "./format";
-import { isHoliday } from "./holidays";
+import { isHoliday, isLabourDay } from "./holidays";
 import { settings } from "./system-settings";
 import type { Role } from "./role";
-import { minutesOfDay, WORK_SCHEDULE } from "./work-schedule";
+import { companySchedule, minutesOfDay, type DaySchedule } from "./work-schedule";
 
 /**
- * ช่วงพักที่ไม่นับเป็นโอที — พักกลางวันและพักเย็น
- * ถ้าช่วงที่ขอคาบเกี่ยว ระบบหักออกให้เอง ไม่ต้องแยกใบ
+ * ช่วงพักที่ไม่นับเป็นโอที — ถ้าช่วงที่ขอคาบเกี่ยว ระบบหักออกให้เอง ไม่ต้องแยกใบ
+ * วันธรรมดา: พักกลางวันตามเวลาทำงาน + เลิกงานถึงเวลาเริ่มนับโอที (เหมือนเดิม)
+ * วันหยุด/วันแรงงาน: พักเที่ยงและพักเย็นที่ตั้งแยกในหน้าการคำนวณเงินเดือน (ผู้ใช้สั่ง 13 ต.ค. 2569)
+ * iso ว่าง = ยังไม่เลือกวัน ใช้กติกาวันธรรมดา
  */
-export function otBreaks(): { from: number; to: number; label: string }[] {
+/* sch = เวลาทำงานของคนที่ขอ — แม่บ้านเลิก 17:00 เริ่มโอที 18:00 (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+export function otBreaks(iso = "", sch: DaySchedule = companySchedule()): { from: number; to: number; label: string }[] {
+  if (iso && isOffDayKind(otKindOf(iso))) {
+    const s = settings().schedule;
+    return [
+      { from: minutesOfDay(s.holLunchStart), to: minutesOfDay(s.holLunchEnd), label: "พักเที่ยง" },
+      { from: minutesOfDay(s.holDinnerStart), to: minutesOfDay(s.holDinnerEnd), label: "พักเย็น" },
+    ];
+  }
   return [
-  {
-    from: minutesOfDay(WORK_SCHEDULE.lunchStart),
-    to: minutesOfDay(WORK_SCHEDULE.lunchEnd),
-    label: "พักกลางวัน",
-  },
-  {
-    from: minutesOfDay(WORK_SCHEDULE.end),
-    to: minutesOfDay(WORK_SCHEDULE.otStart),
-    label: "พักเย็น",
-  },
+    {
+      from: minutesOfDay(sch.lunchStart),
+      to: minutesOfDay(sch.lunchEnd),
+      label: "พักกลางวัน",
+    },
+    {
+      from: minutesOfDay(sch.end),
+      to: minutesOfDay(sch.otStart),
+      label: "พักเย็น",
+    },
   ];
 }
 
-/** นาทีที่ตกอยู่ในช่วงพัก ของช่วงเวลาที่ขอ */
-export function breakMinutesIn(startMin: number, endMin: number) {
-  return otBreaks().reduce(
-    (sum, b) =>
-      sum + Math.max(0, Math.min(endMin, b.to) - Math.max(startMin, b.from)),
+/** นาทีที่ตกอยู่ในช่วงพัก ของช่วงเวลาที่ขอ — iso = วันที่ทำโอที (ใช้เลือกช่วงพักวันธรรมดา/วันหยุด) */
+export function breakMinutesIn(startMin: number, endMin: number, iso = "", sch: DaySchedule = companySchedule()) {
+  return otBreaks(iso, sch).reduce(
+    (sum, b) => sum + Math.max(0, Math.min(endMin, b.to) - Math.max(startMin, b.from)),
     0,
   );
 }
 
-/** ชั่วโมงโอทีสุทธิ หักช่วงพักออกแล้ว */
-export function otHours(startMin: number, endMin: number) {
+/** ชั่วโมงโอทีสุทธิ หักช่วงพักของวันนั้นออกแล้ว (ผู้ใช้สั่ง 13 ต.ค. 2569 — วันหยุดหักพักเที่ยง/พักเย็นที่ตั้งไว้) */
+export function otHours(startMin: number, endMin: number, iso: string, sch: DaySchedule = companySchedule()) {
   if (endMin <= startMin) return 0;
-  const net = endMin - startMin - breakMinutesIn(startMin, endMin);
+  const net = endMin - startMin - breakMinutesIn(startMin, endMin, iso, sch);
   return Math.max(0, Math.round((net / 60) * 100) / 100);
 }
 
@@ -52,11 +61,13 @@ export type OtKind = "weekday" | "holiday" | "public";
 /* เรตอ่านจากการตั้งค่าทุกครั้ง (ผู้ดูแลระบบแก้ได้ที่ /admin/rates) */
 export const OT_KIND: Record<OtKind, { label: string; rate: number }> = {
   weekday: { label: "วันธรรมดา", get rate() { return settings().rates.otAfterWork; } },
+  /* วันหยุด = เสาร์-อาทิตย์ และวันหยุดบริษัทที่ไม่ใช่วันแรงงาน (ผู้ใช้สั่ง 13 ต.ค. 2569) */
   holiday: { label: "วันหยุด", get rate() { return settings().rates.otHoliday; } },
-  public: { label: "วันหยุดบริษัท", get rate() { return settings().rates.otPublic; } },
+  /* อัตรา 3 เท่าใช้กับวันแรงงานเท่านั้น (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  public: { label: "วันแรงงาน", get rate() { return settings().rates.otPublic; } },
 };
 
-/** วันหยุด (เสาร์-อาทิตย์หรือวันหยุดราชการ) ทำโอทีได้ทั้งวัน */
+/** วันหยุด (เสาร์-อาทิตย์ วันหยุดบริษัท หรือวันแรงงาน) ทำโอทีได้ทั้งวัน */
 export function isOffDayKind(k: OtKind) {
   return k !== "weekday";
 }
@@ -78,22 +89,15 @@ export type OtRecord = {
   submittedAt: string;
   /** "yyyy-mm-dd hh:mm" เวลาที่ผู้อนุมัติตัดสิน */
   decidedAt?: string;
-  /** "yyyy-mm-dd hh:mm" เวลาที่แก้ไขล่าสุด — แก้ได้เฉพาะตอนยังรออนุมัติ */
-  editedAt?: string;
-  /** ชื่อผู้ยื่น — พนักงานมีหลายคน หน้าอนุมัติต้องรู้ว่าใบนี้ของใคร (29 ก.ย. 2569) */
-  employee?: string;
-  /** "yyyy-mm-dd hh:mm" เวลาที่ผู้อนุมัติยกเลิกการอนุมัติ — ว่างคือไม่เคยถูกย้อน */
-  undoneAt?: string;
-  /** เหตุผลที่ย้อน — บังคับกรอก ใช้บอกผู้ยื่นว่าทำไมใบถึงกลับมารออนุมัติ */
-  undoneWhy?: string;
 };
 
 /**
- * วันที่อยู่ในรายการวันหยุดบริษัท มาก่อนเสาร์-อาทิตย์ ถ้าตรงกันใช้ประเภทวันหยุดบริษัท
+ * วันแรงงาน (1 พ.ค.) = ประเภท public (3 เท่า) · วันหยุดบริษัทอื่นและเสาร์-อาทิตย์ = holiday (ผู้ใช้สั่ง 13 ต.ค. 2569)
  * อัตราของทั้งสามประเภทผู้ดูแลระบบตั้งเองที่ /admin/rates ไม่ได้กำหนดตายในโปรแกรม
  */
 export function otKindOf(iso: string): OtKind {
-  if (isHoliday(iso)) return "public";
+  if (isLabourDay(iso)) return "public";
+  if (isHoliday(iso)) return "holiday";
   const w = new Date(`${iso}T00:00:00`).getDay();
   return w === 0 || w === 6 ? "holiday" : "weekday";
 }
@@ -238,20 +242,55 @@ const ACC_OT: OtRecord[] = [
    อาเรย์ว่างเป็นข้อมูลจริงของคนคนนี้ ไม่ใช่ข้อมูลที่ยังไม่ได้ใส่ */
 const HR_OT: OtRecord[] = [];
 
+/*
+ * ตัวอย่างคำขอโอทีรอบปัจจุบัน (ปลาย ก.ย. – ต.ค. 2569) สำหรับสาธิต (เจ้าของสั่ง 8 ต.ค. 2569)
+ * เครื่องที่เก็บข้อมูลไว้แล้วได้ใบเหล่านี้เพิ่มผ่าน addMissingOt ใน ot-store (เติมเฉพาะเลขที่ที่ยังไม่มี)
+ */
+const OT_OCT_2569: Partial<Record<Role, OtRecord[]>> = {
+  sales: [
+    { id: "OT-2569-0051", date: "2026-10-07", startMin: 19 * 60, endMin: 22 * 60, hours: 3, approvedHours: null, reason: "เตรียมใบเสนอราคาและเดโมระบบให้ลูกค้ารายใหม่", status: "รออนุมัติ", comment: "", submittedAt: "2026-10-07 16:10" },
+    { id: "OT-2569-0050", date: "2026-10-01", startMin: 19 * 60, endMin: 21 * 60, hours: 2, approvedHours: 2, reason: "สรุปยอดขายเดือนกันยายนส่งผู้บริหาร", status: "อนุมัติแล้ว", comment: "", submittedAt: "2026-10-01 15:30", decidedAt: "2026-10-02 09:05" },
+  ],
+  pm: [
+    { id: "OT-2569-0053", date: "2026-10-06", startMin: 19 * 60, endMin: 21 * 60, hours: 2, approvedHours: null, reason: "ทดสอบระบบร่วมกับลูกค้าก่อนขึ้นใช้งานจริง", status: "รออนุมัติ", comment: "", submittedAt: "2026-10-06 17:05" },
+    { id: "OT-2569-0052", date: "2026-10-03", startMin: 13 * 60, endMin: 17 * 60, hours: 4, approvedHours: 4, reason: "ดูแลทีมติดตั้งระบบหน้างานลูกค้าวันเสาร์", status: "อนุมัติแล้ว", comment: "", submittedAt: "2026-10-01 10:20", decidedAt: "2026-10-01 14:00" },
+  ],
+  acc: [
+    { id: "OT-2569-0055", date: "2026-10-07", startMin: 19 * 60, endMin: 21 * 60, hours: 2, approvedHours: null, reason: "เตรียมยื่น ภ.ง.ด.3 และ ภ.ง.ด.53 ของเดือนกันยายน", status: "รออนุมัติ", comment: "", submittedAt: "2026-10-07 15:45" },
+    { id: "OT-2569-0054", date: "2026-09-30", startMin: 19 * 60, endMin: 22 * 60, hours: 3, approvedHours: 2.5, reason: "ปิดงบเดือนกันยายน", status: "อนุมัติแล้ว", comment: "ปรับตามเวลาออกงานจริง", submittedAt: "2026-09-30 16:00", decidedAt: "2026-10-01 10:30" },
+  ],
+  staff: [
+    { id: "OT-2569-0057", date: "2026-10-05", startMin: 1080, endMin: 1260, hours: 3, approvedHours: null, reason: "แก้ไขหน้าเว็บไซต์ตามที่ลูกค้าแจ้งก่อนเปิดตัว", status: "รออนุมัติ", comment: "", submittedAt: "2026-10-05 21:10" },
+    { id: "OT-2569-0058", date: "2026-10-02", startMin: 1080, endMin: 1200, hours: 2, approvedHours: null, reason: "อัปโหลดรูปสินค้าขึ้นเว็บไซต์", status: "ไม่อนุมัติ", comment: "งานไม่เร่งด่วน ให้ทำในเวลางานวันจันทร์", submittedAt: "2026-10-02 17:30", decidedAt: "2026-10-02 17:55" },
+    { id: "OT-2569-0056", date: "2026-09-29", startMin: 1080, endMin: 1200, hours: 2, approvedHours: 2, reason: "ย้ายเว็บไซต์ลูกค้าขึ้นโฮสต์ใหม่นอกเวลาทำการ", status: "อนุมัติแล้ว", comment: "", submittedAt: "2026-09-29 20:15", decidedAt: "2026-09-30 09:20" },
+  ],
+  gm: [
+    { id: "OT-2569-0059", date: "2026-10-10", startMin: 9 * 60, endMin: 12 * 60, hours: 3, approvedHours: null, reason: "ประชุมสรุปแผนงานไตรมาส 4 กับหัวหน้าทีม", status: "รออนุมัติ", comment: "", submittedAt: "2026-10-07 11:30" },
+  ],
+};
+
+/** เติมใบโอทีตั้งต้นที่ยังไม่มีในเครื่อง (เทียบด้วยเลขที่) — ใบเดิมของผู้ใช้ไม่ถูกแตะ */
+export function addMissingOt(have: OtRecord[], seed: OtRecord[]): OtRecord[] {
+  const ids = new Set(have.map((r) => r.id));
+  const add = seed.filter((r) => !ids.has(r.id));
+  return add.length ? [...add, ...have] : have;
+}
+
 /* คำขอโอทีแยกตามบทบาท เพราะหนึ่งบทบาทคือหนึ่งคน (ดู role-store.ts) */
 export const OT_RECORDS: Record<Role, OtRecord[]> = {
-  sales: SALES_OT,
+  sales: [...OT_OCT_2569.sales!, ...SALES_OT],
   ps: [],
-  pm: PM_OT,
-  acc: ACC_OT,
+  pm: [...OT_OCT_2569.pm!, ...PM_OT],
+  acc: [...OT_OCT_2569.acc!, ...ACC_OT],
   hr: HR_OT,
-  /* พนักงาน (E05 Website) — ต้นแบบ ceo-approvals.html CEO_REQ OT-2569-0014 · ตำแหน่งนี้ CEO เป็นผู้อนุมัติ */
+  /* ทีมงาน (E05 Website) — ต้นแบบ ceo-approvals.html CEO_REQ OT-2569-0014 · ตำแหน่งนี้ CEO เป็นผู้อนุมัติ */
   staff: [
+    ...OT_OCT_2569.staff!,
     { id: "OT-2569-0014", date: "2026-09-08", startMin: 1080, endMin: 1260, hours: 3, approvedHours: null, reason: "ปรับหน้าเว็บให้แสดงผลบนมือถือตามที่ลูกค้าขอเพิ่ม", status: "รออนุมัติ", comment: "", submittedAt: "2026-09-08 21:05" },
   ],
-  gm: [],
+  gm: [...OT_OCT_2569.gm!],
   ceo: [],
-  /* ฝึกงานและแม่บ้านเพิ่งเปิดใช้ ยังไม่มีใบของตัวเอง */
+  /* นักศึกษาฝึกงานไม่มีเมนูนี้ */
   intern: [],
   maid: [],
 };

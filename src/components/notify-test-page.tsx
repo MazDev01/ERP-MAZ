@@ -6,7 +6,6 @@ import { DevicePushCard } from "./device-push-card";
 import { Row } from "./install-page";
 import { enableNotify, testNotify, type PwaResult } from "@/lib/pwa";
 import { PUSH_SCENARIOS } from "@/lib/push-scenarios";
-import { popupOn, useNotifySettings } from "@/lib/notify-settings";
 import {
   clearLog,
   diagnose,
@@ -24,13 +23,11 @@ const DELAYS = [0, 5, 15, 30];
  * ไม่ต้องมี backend: จำลอง push ผ่าน service worker ทางเดียวกับ push จริง
  */
 export function NotifyTestPage() {
-  const notify = useNotifySettings();
   const [checks, setChecks] = useState<Check[] | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [msg, setMsg] = useState<PwaResult | null>(null);
   const [scenario, setScenario] = useState(PUSH_SCENARIOS[0].key);
   const [delay, setDelay] = useState(0);
-  const [useProfile, setUseProfile] = useState(true);
 
   const reload = useCallback(async () => {
     const [c, l] = await Promise.all([diagnose(), readLog()]);
@@ -64,32 +61,16 @@ export function NotifyTestPage() {
   async function send() {
     const s = PUSH_SCENARIOS.find((x) => x.key === scenario) ?? PUSH_SCENARIOS[0];
     const payload = { ...s.build(), id: Math.random().toString(36).slice(2, 10) };
-    /* ทำตามค่าตั้งในหน้าโปรไฟล์เหมือนของจริง — ปิดป๊อปอัปไม่ขึ้น · ปิดเสียงให้เงียบ · ปิดสั่นเอารูปแบบสั่นออก */
-    if (useProfile && payload.event) {
-      if (!popupOn(notify, payload.event))
-        return setMsg({ ok: false, reason: "เรื่องนี้ปิดป๊อปอัปไว้ในหน้าโปรไฟล์ — ไม่แสดง (ถูกต้องตามค่าตั้ง)" });
-      const ch = notify.channels[payload.event] ?? {};
-      if (ch.sound === false) {
-        payload.silent = true;
-        delete payload.vibrate;
-      }
-      if (ch.vibrate === false) delete payload.vibrate;
-    }
+    /* ไม่มีค่าตั้งรายเรื่อง (ป๊อปอัป/เสียง/สั่น) ในหน้าโปรไฟล์แล้ว — ส่งตามชุดทดสอบตรง ๆ (ผู้ใช้สั่ง 16 ต.ค. 2569) */
     setMsg(await simulatePush(payload, delay));
   }
 
   const current = PUSH_SCENARIOS.find((x) => x.key === scenario);
 
   return (
-    /* เปลือกแอปมี <main> ของตัวเองอยู่แล้ว ตรงนี้จึงเป็น section — ไม่งั้นโปรแกรมอ่านหน้าจอเจอจุดหลักสองจุด */
-    <section aria-label="ทดสอบแจ้งเตือนบนมือถือ" className="flex justify-center px-4 pt-8 pb-16">
+    <main className="flex min-h-dvh justify-center px-4 pt-8 pb-16">
       <div className="w-full max-w-[560px]">
         <h1 className="text-center text-[21px] font-bold">ทดสอบแจ้งเตือนบนมือถือ</h1>
-        <p className="mt-2 text-center text-sm leading-[1.75] text-muted-foreground">
-          ใช้ได้ทั้ง iPhone และ Android — ทำตามเอกสาร TestPlan_Notifications_Mobile
-          <br />
-          ยังไม่มี backend จึงจำลอง push ในเครื่อง ผ่านทางเดียวกับ push จริง
-        </p>
 
         <Section title="1. ความพร้อมของเครื่อง" action={<SmallBtn onClick={() => reload()}>ตรวจใหม่</SmallBtn>}>
           <div className="glass overflow-hidden rounded-[15px]">
@@ -148,11 +129,6 @@ export function NotifyTestPage() {
             เลือกหน่วงเวลาแล้วกดส่ง จากนั้นกดกลับหน้าโฮมหรือล็อกจอ เพื่อทดสอบตอนแอปไม่ได้เปิดอยู่
           </p>
 
-          <label className="mt-3 flex items-center gap-2 text-[13px]">
-            <input type="checkbox" checked={useProfile} onChange={(e) => setUseProfile(e.target.checked)} className="accent-[var(--primary)]" />
-            ทำตามค่าตั้งแจ้งเตือนในหน้าโปรไฟล์ (ป๊อปอัป / เสียง / สั่น)
-          </label>
-
           <button type="button" onClick={send} className="btn-solid mt-3.5 h-11 w-full rounded-[22px] text-sm font-semibold">
             ส่ง “{current?.label}”
           </button>
@@ -198,10 +174,10 @@ export function NotifyTestPage() {
                   <b className={e.kind === "clicked" ? "text-[var(--success)]" : ""}>
                     {e.kind === "clicked" ? "กดแล้ว" : e.source === "push" ? "รับ push" : "แสดงแล้ว"}
                   </b>{" "}
-                  {new Date(e.at).toLocaleTimeString("th-TH")} · {e.title}
+                  {new Date(e.at).toLocaleTimeString("th-TH", { hour12: false })} · {e.title}{/* บังคับ 24 ชม. (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
                   {e.url && <span className="block text-muted-foreground">→ {e.url}</span>}
                   {e.source === "push" && e.sentAt ? (
-                    <span className="block text-muted-foreground">ส่งถึงเครื่องใช้ {((e.at - e.sentAt) / 1000).toFixed(1)} วินาที (นาฬิกาเซิร์ฟเวอร์กับเครื่องอาจต่างกันเล็กน้อย)</span>
+                    <span className="block text-muted-foreground">ส่งถึงเครื่องใช้ {((e.at - e.sentAt) / 1000).toFixed(1)} วินาที</span>
                   ) : null}
                 </div>
               ))
@@ -218,7 +194,7 @@ export function NotifyTestPage() {
           หน้าติดตั้งแอป
         </Link>
       </div>
-    </section>
+    </main>
   );
 }
 

@@ -1,5 +1,6 @@
 "use client";
-import { bkkNow } from "@/lib/format";
+import { bkkNow, thaiDate, todayIso } from "@/lib/format";
+import "@/styles/mobile/notifications.css";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -10,6 +11,8 @@ import {
   subscribeRecords,
 } from "@/lib/attendance-store";
 import { useCrm } from "@/lib/crm-store";
+import { useContracts } from "@/lib/contract-store";
+import { CURRENT_USER } from "@/lib/mock-data";
 import { useExpenseClaims } from "@/lib/expense-store";
 import { useLeaveRecords } from "@/lib/leave-store";
 import { markAllRead, markRead, useReadNotices } from "@/lib/notification-store";
@@ -17,30 +20,46 @@ import { buildNotices, LEVEL_STYLE, type Notice } from "@/lib/notifications";
 import { useAcc } from "@/lib/acc-store";
 import { canVisitAny, useMenuAccess } from "@/lib/nav";
 import { usePm } from "@/lib/pm-store";
+import { useClientReviews } from "@/lib/client-review-store";
 import { useSchedule } from "@/lib/pm-schedule-store";
 import { useHr } from "@/lib/hr-store";
+import { useSystemSettings } from "@/lib/system-settings";
 import { useAdminLog } from "@/lib/admin-log";
 import { useProfile } from "@/lib/profile-data";
 import { approvesFor, useApprovalRoute, useRole } from "@/lib/role";
-import { useMyRoles } from "@/lib/hr-link";
+import { useHrTime, useMyRoles, usePunchTimes } from "@/lib/hr-link";
 import { useEmpRequests } from "@/lib/emp-requests";
 import { useAllLeave } from "@/lib/leave-store";
 import { useAllOt } from "@/lib/ot-store";
 import { useAllClaims } from "@/lib/expense-store";
-import { popupOn, useNotifySettings } from "@/lib/notify-settings";
 import { useOtRecords } from "@/lib/ot-store";
-import { BellIcon, CheckIcon, CloseIcon } from "./icons";
+import {
+  BellIcon,
+  CalendarIcon,
+  CheckIcon,
+  ChevronLeftIcon,
+  ClockIcon,
+  CloseIcon,
+  FileIcon,
+} from "./icons";
 
-/*
- * เรื่องที่ต้องรู้ของบทบาทที่ล็อกอินอยู่ — กระดิ่งกับหน้าหลักบนมือถือใช้ชุดเดียวกัน
- * แยกเป็นฮุกเพื่อไม่ให้สองที่คิดคนละชุดแล้วตัวเลขไม่ตรงกัน (30 ก.ย. 2569)
- */
-export function useNotices(): Notice[] {
+export function NotificationMenu({
+  variant = "top",
+  icon,
+}: {
+  variant?: "top" | "bar";
+  /** ไอคอนกระดิ่งแทนตัวตั้งต้น — หน้าหลักมือถือของบัญชีใช้เส้นตามต้นแบบ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  icon?: React.ReactNode;
+}) {
+  /* "bar" = ปุ่มในแถบล่างบนมือถือ — กล่องยังคลี่จากขอบบนเหมือนเดิม เพราะกล่องยาว */
+  const bar = variant === "bar";
   const crm = useCrm();
+  /* ใบสัญญาที่ออกแล้ว — แจ้งพนักงานขายเจ้าของดีล (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+  const contracts = useContracts();
   const hr = useHr();
   const adminLog = useAdminLog();
   const me = useProfile();
-  const notify = useNotifySettings();
+  const sys = useSystemSettings();
   const leaves = useLeaveRecords();
   const ot = useOtRecords();
   const punches = useSyncExternalStore(
@@ -49,19 +68,25 @@ export function useNotices(): Notice[] {
     getRecordsServerSnapshot,
   );
   const claims = useExpenseClaims();
+  const read = useReadNotices();
   const role = useRole();
   const route = useApprovalRoute();
   const access = useMenuAccess();
   const pm = usePm();
   const sched = useSchedule();
+  /* รอบที่ลูกค้าตรวจผ่านลิงก์ — ลูกค้าส่งความเห็นแล้วขึ้นกระดิ่งของ PM */
+  const clientReviews = useClientReviews();
   const acc = useAcc();
   const allLeaves = useAllLeave();
   const allOt = useAllOt();
   const allClaims = useAllClaims();
   const extra = useEmpRequests();
+  /* เวลาทำงานและเวลาตอกบัตรของทุกคน — ฝ่ายบุคคลใช้หารายการที่ต้องตรวจ (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  const hrTime = useHrTime();
+  const punchTimes = usePunchTimes();
 
   /* คำขอที่ยังไม่ได้ตัดสิน — นับเฉพาะประเภทและบทบาทที่เราเป็นผู้อนุมัติ
-     รวมคำขอของพนักงานที่ยังไม่มีบัญชีเข้าระบบ (emp-requests) ที่ส่งถึง PM / GM ด้วย
+     รวมคำขอของทีมงานที่ยังไม่มีบัญชีเข้าระบบ (emp-requests) ที่ส่งถึง PM / GM ด้วย
 
      นับรวมทุกบทบาทที่คนนี้ถืออยู่ ไม่ใช่เฉพาะบทบาทที่เลือกอยู่ (เช่น บัญชีกับบุคคลเป็นคนเดียวกัน)
      ตัวเลขบนกระดิ่งจึงตรงกับคิวในหน้าคำขออนุมัติเสมอ — หน้านั้นก็รวมทุกบทบาทเหมือนกัน */
@@ -78,35 +103,12 @@ export function useNotices(): Notice[] {
         else if (kind === "ot") sum += allOt[from].filter((v) => v.status === "รออนุมัติ").length;
         else sum += allClaims[from].filter((v) => v.status === "รออนุมัติ").length;
       }
-    /* คิวของพนักงานที่ยังไม่มีบัญชีเข้าระบบมีเฉพาะสองบทบาทนี้ (emp-requests.to) */
-    const queues = myRoles.filter((r): r is "pm" | "gm" => r === "pm" || r === "gm");
-    return sum + extra.filter((r) => r.to !== "exec" && queues.includes(r.to) && r.status === "pending").length;
+    /* คิวของทีมงานที่ยังไม่มีบัญชีเข้าระบบมีเฉพาะสองบทบาทนี้ (emp-requests.to) */
+    const queues: ("pm" | "gm" | "exec")[] = myRoles.filter((r): r is "pm" | "gm" => r === "pm" || r === "gm");
+    /* โอทีของ SA/Dev ที่ยังไม่มีบัญชีขึ้นถึง CEO (to = exec) — นับเข้าคิวของ CEO ตรงกับหน้า /ceo/approvals (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+    if (myRoles.includes("ceo")) queues.push("exec");
+    return sum + extra.filter((r) => queues.includes(r.to) && r.status === "pending").length;
   }, [myRoles, route, allLeaves, allOt, allClaims, extra]);
-  const notices = useMemo(
-    () =>
-      buildNotices({
-        crm, pm, acc, leaves, ot, punches, claims,
-        now: bkkNow(), role, approvals, meId: me.employeeId, hr, adminLog, myRoles,
-        /* ผลการตัดสินของใบที่เรายื่นไว้ในคิวของทีม ต้องถึงเจ้าของใบเหมือนใบที่ยื่นจากหน้าตัวเอง */
-        empReqs: extra,
-        /* นัดหมายของทั้งระบบ — ในนี้กรองเฉพาะใบที่มีชื่อเราเป็นผู้เข้าร่วม */
-        events: sched.events,
-      })
-        // เรื่องที่ปิดไว้ในหน้าตั้งค่าแจ้งเตือน ไม่ต้องขึ้นกระดิ่ง
-        .filter((n) => !n.event || popupOn(notify, n.event))
-        // เมนูที่ผู้ดูแลระบบปิดไว้ ไม่ต้องเตือนเรื่องของหน้านั้น กดไปก็เข้าไม่ได้
-        .filter((n) => canVisitAny(n.href.split("?")[0], myRoles, access, route)),
-    [crm, pm, acc, hr, leaves, ot, punches, claims, notify, role, myRoles, approvals, me.employeeId, access, route, adminLog, extra, sched.events],
-  );
-
-  return notices;
-}
-
-export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
-  /* "bar" = ปุ่มในแถบล่างบนมือถือ — กล่องยังคลี่จากขอบบนเหมือนเดิม เพราะกล่องยาว */
-  const bar = variant === "bar";
-  const read = useReadNotices();
-  const notices = useNotices();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -125,6 +127,35 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
    * ผูกกับ "วันที่" ไม่ใช่เวลา เพื่อไม่ให้คำนวณใหม่ทุกวินาที
    * (เรื่องแจ้งเตือนทั้งหมดวัดกันเป็นวัน ไม่ใช่นาที)
    */
+  const notices = useMemo(
+    () =>
+      buildNotices({
+        crm, pm, acc, leaves, ot, punches, claims,
+        now: bkkNow(), role, approvals, meId: me.employeeId, hr, adminLog, myRoles,
+        /* ผลการตัดสินของใบที่เรายื่นไว้ในคิวของทีม ต้องถึงเจ้าของใบเหมือนใบที่ยื่นจากหน้าตัวเอง */
+        empReqs: extra,
+        /* นัดหมายของทั้งระบบ — ในนี้กรองเฉพาะใบที่มีชื่อเราเป็นผู้เข้าร่วม */
+        events: sched.events,
+        reviews: clientReviews.rounds,
+        /* คำขอแก้วันหยุดที่ส่ง CEO (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+        holidayReq: sys.holidayReq,
+        /* ใบสัญญาที่ออกแล้ว — ถึงพนักงานขายที่ดูแลดีล (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+        contracts,
+        meName: CURRENT_USER.name,
+        hrTime,
+        punchTimes,
+      })
+        /* กระดิ่งบันทึกทุกเรื่องเสมอ ไม่ขึ้นกับสิทธิ์แจ้งเตือนหรือค่าตั้งรายเรื่อง (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+        // เมนูที่ผู้ดูแลระบบปิดไว้ ไม่ต้องเตือนเรื่องของหน้านั้น กดไปก็เข้าไม่ได้
+        // คำขอทำข้อเสนอที่ส่งถึงตัวเราแม้ไม่ได้อยู่ทีมก่อนการขาย — เมนู "ของฉัน" มีคิวงานให้อยู่แล้ว (ผู้ใช้สั่ง 15 ต.ค. 2569)
+        .filter(
+          (n) =>
+            canVisitAny(n.href.split("?")[0], myRoles, access, route) ||
+            (n.id.startsWith("psto-") && n.href.split("?")[0] === "/presales-work"),
+        ),
+    [sys.holidayReq, contracts, crm, pm, acc, hr, leaves, ot, punches, claims, role, myRoles, approvals, me.employeeId, access, route, adminLog, extra, sched.events, clientReviews.rounds, hrTime, punchTimes],
+  );
+
   const unread = notices.filter((n) => !read.includes(n.id));
 
   useEffect(() => {
@@ -148,7 +179,7 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
     <div ref={wrapRef} className={bar ? "botnav-slot" : "relative"}>
       <button
         type="button"
-        className={bar ? `relative${open ? " on" : ""}` : "iconbtn glass-thin size-[42px] rounded-full"}
+        className={bar ? `relative${open ? " on" : ""}` : "iconbtn glass-thin"}
         aria-label={unread.length ? `แจ้งเตือน ${unread.length} รายการ` : "แจ้งเตือน"}
         aria-expanded={open}
         aria-haspopup="menu"
@@ -169,7 +200,7 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
           </>
         ) : (
           <>
-            <BellIcon className="size-[18px]" />
+            {icon ?? <BellIcon className="size-[18px]" />}
             {unread.length > 0 && (
               <span className="num absolute -top-1.5 -right-1.5 grid min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-bold text-primary-foreground">
                 {unread.length}
@@ -179,7 +210,23 @@ export function NotificationMenu({ variant = "top" }: { variant?: "top" | "bar" 
         )}
       </button>
 
-      {open && (
+      {open &&
+        phone &&
+        /* มือถือ: แผงแจ้งเตือนเต็มจอแบบหน้า (ต้นแบบ notifications.html)
+           z ต่ำกว่าแถบล่าง (.botnav z-35) — แถบล่างยังเห็นและกดได้ตามแบบ */
+        createPortal(
+          <div ref={panelRef} role="menu" aria-label="แจ้งเตือน" className="nt-m">
+            <MobilePanel
+              notices={notices}
+              read={read}
+              unread={unread.length}
+              onClose={() => setOpen(false)}
+            />
+          </div>,
+          document.body,
+        )}
+
+      {open && !phone && (
         <>
           {/* บนมือถือคลุมทั้งจอ จะได้แตะปิดง่ายและแผงไม่ลอยเบียดขอบ
               ยิงออกไปที่ body เพราะแถบหัวเป็น sticky ที่มี z-index จึงเป็นกรอบ
@@ -318,5 +365,101 @@ function Panel({
         )}
       </div>
     </>
+  );
+}
+
+/** สีวงไอคอนตามความด่วน (ต้นแบบ notifications.html) — เรื่องที่อ่านแล้วเป็นสีเทา */
+const M_TINT = {
+  late: { bg: "#FCE3E7", fg: "#B0101F", Icon: ClockIcon },
+  soon: { bg: "#FDEDD6", fg: "#94500A", Icon: CalendarIcon },
+  info: { bg: "#E3EEFC", fg: "#1A5DB5", Icon: FileIcon },
+} as const;
+
+/** มือถือ: หน้าแจ้งเตือนเต็มจอ — "ใหม่" (ยังไม่อ่าน) แล้วตามด้วย "ก่อนหน้านี้" (อ่านแล้ว) */
+function MobilePanel({
+  notices,
+  read,
+  unread,
+  onClose,
+}: {
+  notices: Notice[];
+  read: string[];
+  unread: number;
+  onClose: () => void;
+}) {
+  const today = todayIso();
+  const fresh = notices.filter((n) => !read.includes(n.id));
+  const old = notices.filter((n) => read.includes(n.id));
+
+  const item = (n: Notice, isRead: boolean) => {
+    const t = M_TINT[n.level];
+    return (
+      <Link
+        key={n.id}
+        href={n.href}
+        onClick={() => {
+          markRead(n.id);
+          onClose();
+        }}
+        className={`nt-m-item${isRead ? "" : " unread"}`}
+      >
+        <span
+          className="nt-m-ico"
+          style={isRead ? { background: "#EFEBEC", color: "#5E5255" } : { background: t.bg, color: t.fg }}
+        >
+          <t.Icon strokeWidth={2.1} />
+        </span>
+        <span className="nt-m-txt">
+          <b>{n.title}</b>
+          <span>{n.detail}</span>
+          <small>{n.date === today ? "วันนี้" : thaiDate(n.date)}</small>
+        </span>
+        {!isRead && <span className="nt-m-dot" aria-label="ยังไม่ได้อ่าน" />}
+      </Link>
+    );
+  };
+
+  return (
+    <div className="nt-m-scroll">
+      <div className="nt-m-glow" aria-hidden="true" />
+      <header className="nt-m-head">
+        <button type="button" onClick={onClose} aria-label="ปิด" className="nt-m-back">
+          <ChevronLeftIcon strokeWidth={2.3} />
+        </button>
+        <h1>แจ้งเตือน</h1>
+        <button
+          type="button"
+          className="nt-m-readall"
+          disabled={unread === 0}
+          onClick={() => markAllRead(notices.map((n) => n.id))}
+        >
+          อ่านทั้งหมด
+        </button>
+      </header>
+
+      {notices.length === 0 ? (
+        <p className="nt-m-empty">ไม่มีเรื่องค้าง — เคลียร์หมดแล้ว</p>
+      ) : (
+        <>
+          {fresh.length > 0 && (
+            <>
+              <div className="nt-m-sec">
+                <h2>ใหม่</h2>
+                <span>{fresh.length > 99 ? "99+" : String(fresh.length).padStart(2, "0")}</span>
+              </div>
+              <div className="nt-m-list">{fresh.map((n) => item(n, false))}</div>
+            </>
+          )}
+          {old.length > 0 && (
+            <>
+              <div className="nt-m-sec">
+                <h2>ก่อนหน้านี้</h2>
+              </div>
+              <div className="nt-m-list">{old.map((n) => item(n, true))}</div>
+            </>
+          )}
+        </>
+      )}
+    </div>
   );
 }

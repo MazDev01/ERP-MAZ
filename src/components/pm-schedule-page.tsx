@@ -22,6 +22,9 @@
  * ตารางงานกับการนับวันลาจึงไม่มีทางเห็นวันหยุดไม่ตรงกัน
  *
  * ทุกลิงก์ในหน้านี้อยู่ในหน้าของ PM เท่านั้น ไม่พาข้ามไปหน้าของบทบาทอื่น
+ *
+ * sales = ตารางงานของฝ่ายขาย (/sales-schedule · ผู้ใช้สั่ง 5 ต.ค. 2569) — หน้าตาและการใช้งานเดียวกับ PM
+ * ต่างกันแค่ ผู้เข้าร่วมเลือกจากผู้สนใจแทนทีม · ไม่มีช่องโปรเจค · เห็นเฉพาะนัดที่ฝ่ายขายตั้ง
  */
 
 import { useRef, useState } from "react";
@@ -54,13 +57,13 @@ import {
   type EventDraft,
 } from "@/lib/pm-schedule-store";
 import { AppointmentSheet } from "./appointment-sheet";
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, PlusIcon } from "./icons";
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, MenuIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 import { ScheduleBoard, boardOn, useBoardNav, type BoardEvent, type BoardKind, type BoardNav } from "./schedule-board";
 import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select } from "./ui";
-import { useAddOption } from "./add-option";
+import { Time24Input, UI_TIME_CLS } from "./time24-input"; // ช่องเวลา 24 ชม. แทน input[type=time] (ผู้ใช้สั่ง 13 ต.ค. 2569)
 
 /* ประเภทนัดอ่านจากข้อมูลหลักทุกครั้ง — ฝ่ายบุคคลเพิ่ม/แก้ชื่อได้ที่ /admin/options */
 const kindList = () => eventKinds();
@@ -121,38 +124,12 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
 
   return (
     <div className="space-y-4">
-      {/* มือถือ (< md) ใช้ปฏิทินแบบแอปแทนหัวเรื่องกับกระดานของจอกว้าง (ยกจากระบบต้นฉบับ)
+      {/* มือถือ (< md) ใช้ปฏิทินแบบแอป (PmMobileCalendar) แทนหัวเรื่องและกระดานของจอกว้าง
           ซ่อนที่กล่องนอก เพราะ .bar ประกาศ display ไว้ใน globals.css นอก @layer */}
+      {/* ชื่อหน้ามุมซ้ายบนทุกฝ่ายรวมฝ่ายขาย — แถบบนจอคอมเป็นเส้นทางแล้ว (ผู้ใช้สั่ง 12 ต.ค. 2569)
+          ไม่มีปุ่มเพิ่มนัดหมาย — ดับเบิลคลิกช่องวันในปฏิทินเพื่อเพิ่ม (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
       <div className="max-md:hidden">
-      <div className="bar">
-        <div>
-          <p>
-            {canEdit
-              ? sales
-                ? "นัดหมายกับผู้สนใจของฝ่ายขาย กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น"
-                : "นัดหมายและกิจกรรมของผู้จัดการโครงการ กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น"
-              : "นัดหมายของผู้จัดการโครงการ กดวันเพื่อดูนัดของวันนั้น"}
-          </p>
-        </div>
-        {canEdit && (
-          <div className="tools">
-            {/* มือถือใช้ปุ่ม "+ เพิ่มนัดหมาย" ในการ์ดนัดของวันที่เลือก (schedule-board) จึงซ่อนปุ่มนี้
-                ซ่อนที่ตัวครอบ ไม่ใช่ที่ปุ่ม เพราะ .btn ใน globals.css ตั้ง display ไว้นอก @layer
-                คลาส hidden ของ Tailwind อยู่ในเลเยอร์ จึงแพ้ แล้วปุ่มก็โผล่ทั้งสองขนาดจอ */}
-            <span className="max-sm:hidden">
-              <button
-                type="button"
-                className="btn solid btn-solid"
-                title={`เพิ่มนัดหมายวันที่ ${thaiDate(nav.sel)}`}
-                onClick={() => setEditing({ date: nav.sel })}
-              >
-                <PlusIcon className="size-3.5" strokeWidth={2.4} />
-                เพิ่มนัดหมาย
-              </button>
-            </span>
-          </div>
-        )}
-      </div>
+        <h1 className="page-h1">ตารางงาน</h1>
       </div>
 
       <ReadOnlyNote />
@@ -171,14 +148,9 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
         nav={nav}
         events={events}
         kinds={pmBoardKinds()}
-        /* คำแนะนำตามโครงหน้า · คนที่แก้ไม่ได้ให้บอกวิธีใช้ตัวกรองแทน */
-        hint={
-          canEdit
-            ? "กดที่ช่องวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น"
-            : "กดที่ประเภทเพื่อซ่อนหรือแสดงในปฏิทิน นับจากนัดทั้งหมดที่มี"
-        }
         onOpen={(e) => openEvent(e.data)}
         onAdd={canEdit ? (day) => setEditing({ date: day }) : undefined}
+        noKinds
       />
       </div>
 
@@ -207,7 +179,6 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
     </div>
   );
 }
-
 
 // ─── ปฏิทินแบบแอปบนมือถือ (ต้นแบบ pm-schedule.html .ms) ─────────────
 
@@ -265,6 +236,7 @@ function PmMobileCalendar({
   /* นัดของฝ่ายขาย ผู้เข้าร่วมคือผู้สนใจ */
   const people = sales ? customers.map((c) => ({ id: c.code, name: c.name })) : team;
   const { view, cursor, sel, todayKey } = nav;
+  const [menu, setMenu] = useState(false);
   const touch = useRef<{ x: number; y: number } | null>(null);
 
   const selD = dateOf(sel);
@@ -281,7 +253,8 @@ function PmMobileCalendar({
     nav.pickDay(iso(new Date(y, m, Math.min(selD.getDate(), last))));
   }
 
-  const kindLabel = (e: BoardEvent<PmEvent>) => eventKind(e.data.kind).label;
+  /* ไม่มีประเภทนัดแล้ว — บรรทัดเล็กเหนือหัวข้อบอกสถานที่แทน (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+  const kindLabel = (e: BoardEvent<PmEvent>) => e.data.place || "";
   const timeText = (e: BoardEvent<PmEvent>) => (e.time ? `${e.time}${e.timeEnd ? ` – ${e.timeEnd}` : ""} น.` : "ทั้งวัน");
 
   /* ── มุมมองเดือน ── */
@@ -333,29 +306,50 @@ function PmMobileCalendar({
         <button type="button" className={M_CIRCLE} aria-label="ถัดไป" onClick={() => step(1)}>
           <ChevronRightIcon className="size-4" strokeWidth={2.4} />
         </button>
-      </div>
-
-      {/* ปุ่มสลับมุมมองโชว์ทั้งสองปุ่มตามต้นแบบ mobile/pm-schedule.html (เทียบต้นแบบ 12 ต.ค. 2569)
-          เดิมซ่อนอยู่หลังปุ่มสามขีด ต้องกดสองครั้งกว่าจะเปลี่ยนมุมมอง */}
-      <div className="mb-3.5 flex justify-end gap-1.5" role="group" aria-label="มุมมองปฏิทิน">
-        {(
-          [
-            ["month", "รายเดือน"],
-            ["week", "รายสัปดาห์"],
-          ] as const
-        ).map(([k, label]) => (
+        <div className="relative">
           <button
-            key={k}
             type="button"
-            aria-pressed={view === k}
-            onClick={() => nav.setView(k)}
-            className={`h-9 rounded-full px-3.5 text-[12.5px] font-semibold ${
-              view === k ? "bg-[#C8102E] text-white" : "bg-white text-[#8A7E81] shadow-[0_1px_2px_rgba(120,20,35,.06)]"
-            }`}
+            className={M_CIRCLE}
+            aria-label="เลือกมุมมอง"
+            aria-haspopup="menu"
+            aria-expanded={menu}
+            onClick={() => setMenu((v) => !v)}
           >
-            {label}
+            <MenuIcon className="size-4" strokeWidth={2.2} />
           </button>
-        ))}
+          {menu && (
+            <>
+              <div className="fixed inset-0 z-40" aria-hidden="true" onClick={() => setMenu(false)} />
+              <div
+                role="menu"
+                className="absolute top-[calc(100%+8px)] right-0 z-50 min-w-[150px] rounded-[16px] bg-white p-1.5 shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-12px_rgba(120,20,35,.35)]"
+              >
+                {(
+                  [
+                    ["month", "รายเดือน"],
+                    ["week", "รายสัปดาห์"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={view === k}
+                    className={`flex h-[42px] w-full items-center rounded-[12px] px-3 text-left text-[14px] font-semibold ${
+                      view === k ? "bg-[#FDECEE] text-[#C8102E]" : "text-[#2A1F22]"
+                    }`}
+                    onClick={() => {
+                      nav.setView(k);
+                      setMenu(false);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {view === "month" ? (
@@ -561,7 +555,7 @@ function PmMobileCalendar({
  * เหตุผลตอนยกเลิกเป็นของบังคับ (เจ้าของสั่ง 24 ก.ย. 2569)
  * คนที่กันเวลาไว้แล้วได้รับแจ้งว่า "ยกเลิก" เฉย ๆ ก็ต้องเดินมาถามอยู่ดี
  */
-const CANCEL_WARN = "กรอกเหตุผลที่ยกเลิกก่อน — ผู้เข้าร่วมจะเห็นข้อความนี้ในแจ้งเตือน";
+const CANCEL_WARN = "กรอกเหตุผลที่ยกเลิกก่อน";
 
 /*
  * บอกให้ตรงช่องที่ยังไม่ผ่าน (เจ้าของสั่ง 25 ก.ย. 2569)
@@ -599,7 +593,7 @@ function EventForm({
   const projects = usePm().projects;
   /* ผู้เข้าร่วมเลือกจากทีมที่ซิงก์จากทะเบียนฝ่ายบุคคล — คนที่พ้นสภาพแล้วไม่ขึ้นให้เลือก */
   const team = useTeam().filter((m) => !m.left);
-  /* ฝ่ายขาย — ผู้เข้าร่วมเลือกจากผู้สนใจ (ไม่รวมรายที่ปฏิเสธแล้ว) ไม่ใช่ทีมงาน */
+  /* ฝ่ายขาย — ผู้เข้าร่วมเลือกจากผู้สนใจ (ไม่รวมรายที่ปฏิเสธแล้ว) */
   const leads = useCrm().customers.filter((c) => c.status !== "ปฏิเสธ");
   const people = sales ? leads.map((c) => ({ id: c.code, name: c.name })) : team;
   const actor = sales ? USERS.sales.name : USERS.pm.name;
@@ -618,8 +612,6 @@ function EventForm({
     col: event?.col ?? (event ? KIND_COLOR[event.kind] : "red"),
   }));
   const [err, setErr] = useState("");
-  /* เพิ่มประเภทนัดหมายใหม่ได้จากหน้างาน ไม่ต้องไปหน้าตั้งค่าก่อน (ข้อมูลหลัก HR-10) */
-  const addKind = useAddOption({ catalog: "eventKinds" }, (v) => set("kind", v as EventKind));
   /* เปิดตัวเลือกวันได้ทีละอัน — เปิดอันหนึ่งแล้วอีกอันต้องปิด ไม่งั้นปฏิทินสองอันซ้อนกัน */
   const [pick, setPick] = useState<"s" | "e" | null>(null);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -647,14 +639,14 @@ function EventForm({
   /* บอกให้เห็นทันทีว่านัดนี้กินกี่วัน (ต้นแบบ spanNote) */
   const hint =
     form.date && multi
-      ? `นัดต่อเนื่อง ${dayDiff(form.date, form.dateEnd) + 1} วัน ${thaiDate(form.date)} – ${thaiDate(form.dateEnd)} เวลาที่กรอกคือเวลาของแต่ละวัน`
+      ? `นัดต่อเนื่อง ${dayDiff(form.date, form.dateEnd) + 1} วัน ${thaiDate(form.date)} – ${thaiDate(form.dateEnd)}`
       : "นัดวันเดียว";
 
   function save() {
     const warn = saveWarn(form, multi);
     if (warn) return setErr(warn);
 
-    /* หน้านี้เป็นของ PM — ใบที่สร้างจากที่นี่จึงบันทึกผู้สร้างเป็น PM เสมอ */
+    /* ผู้สร้างตามหน้าที่เปิด — ตารางงานของ PM หรือของฝ่ายขาย */
     const draft: EventDraft = { ...form, title: form.title.trim(), place: form.place.trim(), by: sales ? "sales" : "pm" };
     if (event) editEvent(event.id, draft, actor);
     else addEvent(draft);
@@ -738,27 +730,10 @@ function EventForm({
           />
         </Field>
 
-        <Field label="ประเภท">
-          <Select
-            value={form.kind}
-            onChange={(e) => {
-              if (addKind.pick(e.target.value)) return;
-              set("kind", e.target.value as EventKind);
-            }}
-          >
-            {kindList().map((k) => (
-              <option key={k.key} value={k.key}>
-                {k.label}
-              </option>
-            ))}
-            {addKind.option}
-          </Select>
-        </Field>
-        {addKind.dialog}
-
+        {/* ไม่มีช่องประเภท — สีของนัดแยกนัดแทน (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
         <div>
           <p className="mb-2 block text-[0.8rem] font-medium">
-            สีของนัด <span className={sub}>— เลือกให้ตรงกับงานของคุณเอง</span>
+            สีของนัด
           </p>
           <span className="flex flex-wrap gap-[9px] pt-1 pl-1">
             {PM_COLORS.map((c) => (
@@ -778,7 +753,7 @@ function EventForm({
 
         <div>
           <p className="mb-2 block text-[0.8rem] font-medium">
-            วันและเวลา <span className={sub}>— นัดข้ามวันได้</span>
+            วันและเวลา
           </p>
           <div className="grid grid-cols-[52px_minmax(0,1.5fr)_minmax(0,1fr)] items-center gap-x-2.5 gap-y-[9px]">
             <span className="text-xs font-bold text-muted-foreground">เริ่ม</span>
@@ -792,8 +767,8 @@ function EventForm({
                 setPick(null);
               }}
             />
-            <Input
-              type="time"
+            <Time24Input
+              className={UI_TIME_CLS}
               step={900}
               value={form.from}
               aria-label="เวลาเริ่ม"
@@ -812,8 +787,8 @@ function EventForm({
                 setPick(null);
               }}
             />
-            <Input
-              type="time"
+            <Time24Input
+              className={UI_TIME_CLS}
               step={900}
               value={form.to}
               aria-label="เวลาสิ้นสุด"
@@ -841,7 +816,6 @@ function EventForm({
           />
         </Field>
 
-        {/* นัดของฝ่ายขายยังไม่มีโปรเจค — ช่องนี้จึงมีเฉพาะของ PM */}
         {!sales && (
         <Field label="โปรเจคที่เกี่ยวข้อง">
           <Select value={form.pj} onChange={(e) => set("pj", e.target.value)}>
@@ -858,7 +832,7 @@ function EventForm({
         <Field label={sales ? "ผู้สนใจที่เข้าร่วม" : "ผู้เข้าร่วม"}>
           {/* ผู้สนใจมีหลายราย — ค้นหาแล้วกดเพิ่ม ไม่ไล่ปุ่มทุกรายแบบทีม */}
           {sales && (
-            <span className="mb-2 block">
+            <div className="mb-2">
               <CustomerCombo
                 key={form.who.join(",")}
                 customers={leads.filter((c) => !form.who.includes(c.code))}
@@ -866,7 +840,7 @@ function EventForm({
                 value={null}
                 onChange={(c) => c && toggleWho(c.code)}
               />
-            </span>
+            </div>
           )}
           <span className="flex flex-wrap gap-[7px]">
             {(sales ? people.filter((m) => form.who.includes(m.id)) : people).map((m) => {

@@ -18,18 +18,25 @@ import {
   HR_PAYSLIP,
   HR_PERIOD,
   HR_TIME,
+  addTimeSample,
+  fillSeedLeaveHalf,
+  type ClashOk,
   HR_INTERN_LEAVE,
   HR_PAYAPPROVE,
+  HR_PAST_MONTHS,
+  pastPayrun,
+  pastSlip,
+  pastApprovals,
   ROLE_EMPLOYEE,
   accountRoles,
-  rolesOfEmployee,
-  rolesOfPosition,
-  HR_MAX_ROLES,
   payApproveKey,
   fillPeriod,
+  ensurePeriods,
   withLoginAccounts,
   fillSlip,
+  normalizeExtra,
   hrCycle,
+  payFromAfterPass,
   type CycleSum,
   type PayGroup,
   type PosKey,
@@ -41,7 +48,18 @@ import {
   type TimeRec,
   type InternLeave,
   type PayApproval,
+  type PaySnap,
+  payChanges,
   closedIn,
+  HR_DAILY_SPLIT_MONTH,
+  dailyRoundId,
+  legacyDailyRound,
+  newDailyRound,
+  overlapRound,
+  weekRangeFor,
+  seedSplitRounds,
+  type Cycle,
+  type DailyRound,
 } from "./hr-data";
 import { isWorkday } from "./holidays";
 import { bkkStamp, parseIsoDate, toIsoDate, todayIso } from "./format";
@@ -60,20 +78,67 @@ export type HrState = {
   extras: Record<string, Record<string, Extra>>;
   /** ใบลาของนักศึกษาฝึกงาน — ฝ่ายบุคคลอนุมัติเอง */
   internLeave: InternLeave[];
-  /** CEO อนุมัติยอดเงินเดือน แยกรอบและกลุ่ม (คีย์ month|group) */
+  /**
+   * การอนุมัติยอดเงินเดือนของ CEO (คีย์ รอบ|กลุ่ม) — ด่านก่อนปิดรอบเงินเดือน (กลับมาใช้ ผู้ใช้สั่ง 19 ต.ค. 2569)
+   */
   payApprove: Record<string, PayApproval>;
+  /** รอบจ่ายรายวันของพนักงานทดลองงาน — ช่วงวันที่ใดก็ได้ ไม่ผูกกับรอบเดือน (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+  dailyRounds: DailyRound[];
+  /** วันที่ลาแล้วแต่มีเช็คอินที่ HR ยืนยันแล้ว คีย์ "รหัสพนักงาน|วันที่" (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+  clashOk: Record<string, ClashOk>;
 };
 
-const INITIAL: HrState = {
+/*
+ * ย้ายกลุ่มทดลองงานจากรอบเดือนมาเป็นรอบรายวัน (ผู้ใช้สั่ง 6 ต.ค. 2569) — ทำครั้งเดียวตอนยังไม่มี dailyRounds
+ * รอบ ก.ค. 2569 แบ่งเป็นสามรอบจ่ายที่ปิดครบแล้ว · รอบเดือนอื่นที่ปิดรอบเวลากลุ่มรายวันแล้วกลายเป็นหนึ่งรอบต่อรอบเดือน
+ * การอนุมัติของ CEO ย้ายจากคีย์ "เดือน|day" ไปเป็น "จาก~ถึง|day" — คีย์เดิมที่ยังรอ/ถูกตีกลับลบทิ้ง
+ * ไม่งั้น CEO จะเห็นยอดรายเดือนของกลุ่มที่ไม่ได้จ่ายรายเดือนแล้วค้างในคิว
+ * ช่อง dayClosed/daySum/dayPublished ของรอบเดือนไม่ถูกแตะ (หน้าสลิปของพนักงานยังอ่านอยู่)
+ */
+function addDailyRounds(s: HrState): HrState {
+  if (Array.isArray(s.dailyRounds)) return s;
+  const rounds: DailyRound[] = [];
+  const payApprove = { ...s.payApprove };
+  for (const p of s.periods) {
+    const legacyKey = payApproveKey(p.month, "day");
+    const legacy = payApprove[legacyKey];
+    if (p.month === HR_DAILY_SPLIT_MONTH && p.dayClosed) {
+      for (const r of seedSplitRounds(s.emp, s.time)) {
+        rounds.push(r);
+        payApprove[payApproveKey(r.id, "day")] = { status: "approved", by: "CEO", at: `${r.payClosedAt} 09:10` };
+      }
+    } else {
+      const r = legacyDailyRound(
+        p,
+        s.payruns.find((x) => x.month === p.month),
+        s.slips.find((x) => x.month === p.month),
+        s.emp,
+        s.time,
+      );
+      if (r) {
+        rounds.push(r);
+        if (legacy) payApprove[payApproveKey(r.id, "day")] = legacy;
+      }
+    }
+    if (legacy && (legacy.status === "waiting" || legacy.status === "rejected")) delete payApprove[legacyKey];
+  }
+  return { ...s, payApprove, dailyRounds: rounds.sort((a, b) => a.from.localeCompare(b.from)) };
+}
+
+
+const INITIAL: HrState = addDailyRounds({
   emp: withLoginAccounts(HR_EMP),
   time: HR_TIME,
-  periods: HR_PERIOD,
+  /* รอบเดือนเดินตามวันจริง — เครื่องที่ยังไม่เคยเก็บข้อมูลก็ได้รอบถึงเดือนปัจจุบัน (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+  periods: ensurePeriods(HR_PERIOD, todayIso()),
   payruns: HR_PAYRUN,
   slips: HR_PAYSLIP,
   extras: HR_EXTRA,
   internLeave: HR_INTERN_LEAVE,
   payApprove: HR_PAYAPPROVE,
-};
+  dailyRounds: undefined as unknown as DailyRound[],
+  clashOk: {},
+});
 
 function isHrState(value: unknown): value is HrState {
   if (typeof value !== "object" || value === null) return false;
@@ -107,47 +172,87 @@ function addNewStaff(s: HrState): HrState {
         : e,
     ),
   };
-  /*
-   * เครื่องที่เก็บทะเบียนไว้ก่อน 29 ก.ย. 2569 ยังมีตำแหน่งรวม "บัญชีและบุคคล" (account_hr)
-   * ซึ่งถูกแยกเป็นบัญชีกับฝ่ายบุคคลแล้ว — ย้ายให้ตรงกับทะเบียนใหม่ ไม่งั้นหน้าจอโชว์ชื่อคีย์ดิบ
-   * และบทบาทของบัญชีนั้นจะค้างเป็นของตำแหน่งเดิม
-   */
-  const splitAccHr = {
-    ...withStaff,
-    emp: withStaff.emp.map((e) => {
-      if (e.pos !== ("account_hr" as PosKey)) return e;
-      const now = HR_EMP.find((x) => x.id === e.id);
-      const pos = (now?.pos ?? "hr") as PosKey;
-      return {
-        ...e,
-        pos,
-        posMore: now?.posMore ?? e.posMore,
-        history: e.history.map((h) => (h.pos === ("account_hr" as PosKey) ? { ...h, pos } : h)),
-        /* บทบาทตั้งใหม่ตามตำแหน่งจริง — ของเดิมเป็นชุดของตำแหน่งรวมที่ไม่มีแล้ว */
-        account: e.account ? { ...e.account, roles: rolesOfPosition(pos) } : e.account,
-      };
-    }),
-  };
   /* ข้อมูลที่เก็บไว้ก่อนแยกกลุ่มปิดรอบ ยังไม่มีช่องของกลุ่มรายวัน เติมให้ครบก่อนใช้ */
+  /* เติมรอบ ม.ค. 2569 ถึงรอบปัจจุบันที่ยังไม่มี รอบเดิมไม่ถูกแตะ (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+  const periods = ensurePeriods(withStaff.periods.map(fillPeriod), todayIso());
+  return addPastRounds({
+    ...withStaff,
+    /* รอบรายวันเก่าที่ไม่มีช่องนับครั้งเปิดดู/ยกเลิกการส่ง เติมให้ครบ */
+    dailyRounds: Array.isArray(withStaff.dailyRounds)
+      ? withStaff.dailyRounds.map((r) => ({
+          ...r,
+          unpublished: r.unpublished ?? [],
+          views: r.views ?? {},
+          downloads: r.downloads ?? {},
+        }))
+      : withStaff.dailyRounds,
+    /* บัญชีรับเงินเดือน — ข้อมูลเก่าไม่มี เติมเป็นค่าว่าง (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+    emp: withLoginAccounts(withStaff.emp).map((e) => ({ ...e, bankName: e.bankName ?? "", bankNo: e.bankNo ?? "" })),
+    /* ค่าตอบแทนรุ่นเก่า (Incentive/ค่าตำแหน่ง/รายการปรับปรุง) → รายการตามแบบสลิป (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+    extras: Object.fromEntries(
+      Object.entries(withStaff.extras ?? {}).map(([k, m]) => [
+        k,
+        Object.fromEntries(Object.entries(m ?? {}).map(([id, x]) => [id, normalizeExtra(x)])),
+      ]),
+    ),
+    periods,
+    payruns: withStaff.payruns.map(fillPeriod),
+    slips: withStaff.slips.map(fillSlip),
+    /* ข้อมูลที่เก็บไว้ก่อนมีใบลาฝึกงานและการอนุมัติของ CEO
+       ใบตั้งต้นที่เพิ่มทีหลัง (ตัวอย่าง ต.ค. 2569) เติมเฉพาะเลขที่ที่ยังไม่มี — ใบที่ตัดสินไปแล้วไม่ถูกทับ */
+    internLeave: withStaff.internLeave
+      ? [
+          ...withStaff.internLeave,
+          ...HR_INTERN_LEAVE.filter((r) => !withStaff.internLeave.some((x) => x.id === r.id)),
+        ]
+      : HR_INTERN_LEAVE,
+    /* แถวเวลาทำงานตัวอย่างรอบ ต.ค. 2569 — เติมเฉพาะวันที่ที่ยังไม่มี */
+    /* ลาครึ่งวันตั้งต้นที่ยังไม่มีช่วงเช้า/บ่าย เติมให้เฉพาะแถวที่ตรงกับข้อมูลตั้งต้น (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+    time: fillSeedLeaveHalf(addTimeSample(withStaff.time)),
+    /* ข้อมูลที่เก็บไว้ก่อนมีการยืนยันวันลาที่มีเช็คอิน (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+    clashOk: withStaff.clashOk ?? {},
+    payApprove: withStaff.payApprove ?? HR_PAYAPPROVE,
+  });
+}
+
+/*
+ * รอบ ม.ค.–มิ.ย. 2569 ต้องเดินครบทุกขั้นแบบรอบ ก.ค. (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ * ปิดรอบเวลา → คำนวณ → ปิดรอบเงินเดือน → เผยแพร่สลิป ทั้งสองกลุ่ม (ไม่มีขั้น CEO แล้ว ผู้ใช้สั่ง 13 ต.ค. 2569)
+ * ข้อมูลที่เก็บไว้ก่อนหน้านี้ไม่มีรอบเงินเดือน/สลิป/การอนุมัติของเดือนเหล่านี้ เติมให้เฉพาะที่ยังไม่มี ของเดิมไม่ถูกทับ
+ * เติมเฉพาะเดือนที่รอบเวลาทั้งสองกลุ่มปิดแล้ว — กันรอบเงินเดือนปิดทั้งที่รอบเวลายังเปิดอยู่
+ */
+function addPastRounds(s: HrState): HrState {
+  const months = HR_PAST_MONTHS.filter((m) => {
+    const p = s.periods.find((x) => x.month === m);
+    return closedIn(p, "month") && closedIn(p, "day");
+  });
+  const runHave = new Set(s.payruns.map((p) => p.month));
+  const slipHave = new Set(s.slips.map((sp) => sp.month));
+  const runAdd = months.filter((m) => !runHave.has(m)).map(pastPayrun);
+  const slipAdd = months.filter((m) => !slipHave.has(m)).map(pastSlip);
+  const apAdd = Object.fromEntries(
+    months.flatMap((m) => Object.entries(pastApprovals(m))).filter(([k]) => !(k in s.payApprove)),
+  );
+  if (!runAdd.length && !slipAdd.length && !Object.keys(apAdd).length) return s;
   return {
-    ...splitAccHr,
-    emp: withLoginAccounts(splitAccHr.emp),
-    periods: splitAccHr.periods.map(fillPeriod),
-    payruns: splitAccHr.payruns.map(fillPeriod),
-    slips: splitAccHr.slips.map(fillSlip),
-    /* ข้อมูลที่เก็บไว้ก่อนมีใบลาฝึกงานและการอนุมัติของ CEO */
-    internLeave: splitAccHr.internLeave ?? HR_INTERN_LEAVE,
-    payApprove: splitAccHr.payApprove ?? HR_PAYAPPROVE,
+    ...s,
+    payruns: [...s.payruns, ...runAdd].sort((a, b) => a.month.localeCompare(b.month)),
+    slips: [...s.slips, ...slipAdd].sort((a, b) => a.month.localeCompare(b.month)),
+    payApprove: { ...apAdd, ...s.payApprove },
   };
 }
 
-const store = createPersistedStore<HrState>("maz-erp.hr.v3", INITIAL, isHrState, addNewStaff);
+/* ไม่ล้างสถานะรอ CEO / ตีกลับทิ้งแล้ว — ขั้น CEO อนุมัติกลับมา (ผู้ใช้สั่ง 19 ต.ค. 2569)
+   เครื่องที่ผ่าน dropPayGate ไปแล้วเหลือแต่ที่อนุมัติแล้ว รอบที่ยังเปิดอยู่จึงเริ่มเป็นร่าง HR ส่งใหม่ได้เลย */
+const store = createPersistedStore<HrState>("maz-erp.hr.v3", INITIAL, isHrState, (s) =>
+  addDailyRounds(addNewStaff(s)),
+);
 
 export function useHr() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);
 }
 
-/** อ่านนอก React — พนักงานของ PM ซิงก์จากทะเบียนชุดเดียวกันนี้ (ERD HR-BR-19, ดู pm-store) */
+/** อ่านนอก React — ทีมงานของ PM ซิงก์จากทะเบียนชุดเดียวกันนี้ (ERD HR-BR-19, ดู pm-store) */
 export function hrSnapshot() {
   return store.get();
 }
@@ -194,6 +299,12 @@ export function changeEmpType(id: string, type: EmpType, today: string, note: st
  * เพราะตัวเลขเดิมของคนทดลองงานเป็นฐานของอัตรารายวัน คนละความหมายกับเงินเดือนรายเดือน
  */
 export function passProbation(id: string, at: string, salary: number) {
+  /*
+   * ผ่านกลางรอบ (ผู้ใช้สั่ง 13 ต.ค. 2569) — ประเภทเป็นพนักงานประจำตั้งแต่วันที่มีผล
+   * แต่ค่าจ้างยังคิดแบบทดลองงานจนจบรอบที่วันนั้นตกอยู่ เงินเดือนเริ่มรอบถัดไป (payFrom)
+   * แถวเงินเดือนใหม่จึงลงวันที่ payFrom — baseSalaryIn ของรอบที่ยังจ่ายรายวันได้อัตราเดิม
+   */
+  const payFrom = payFromAfterPass(at);
   store.update((s) => ({
     ...s,
     emp: s.emp.map((e) =>
@@ -202,9 +313,15 @@ export function passProbation(id: string, at: string, salary: number) {
         : {
             ...e,
             type: "full" as const,
+            probPass: { at, payFrom },
             history: [
               ...e.history,
-              { at, pos: e.pos, salary, note: "ผ่านทดลองงาน เปลี่ยนเป็นจ่ายรายเดือน" },
+              {
+                at: payFrom,
+                pos: e.pos,
+                salary,
+                note: at === payFrom ? "ผ่านทดลองงาน เปลี่ยนเป็นจ่ายรายเดือน" : "ผ่านทดลองงาน เริ่มจ่ายรายเดือนรอบนี้",
+              },
             ],
           },
     ),
@@ -262,6 +379,15 @@ function editEmp(id: string, fn: (e: Employee) => Employee) {
   store.update((s) => ({ ...s, emp: s.emp.map((e) => (e.id === id ? fn(e) : e)) }));
 }
 
+/*
+ * บัญชีเป็นของพนักงานรายคน (ERD: user_account ผูกกับ employee หนึ่งต่อหนึ่ง)
+ * สถานะในหน้าเข้าสู่ระบบยังเก็บตามบทบาท (accounts.ts) เพราะตอนนี้หนึ่งบทบาทคือหนึ่งคนที่ล็อกอินได้ (ROLE_EMPLOYEE)
+ * จึงแตะสถานะของบทบาทได้เฉพาะเมื่อพนักงานคนนี้คือคนที่ล็อกอินในบทบาทนั้นจริง
+ * ไม่งั้นระงับพนักงานใหม่ที่ได้บทบาท "ทีมงาน" จะไประงับกมลชนก (E05) ที่ใช้บทบาทนั้นอยู่ไปด้วย
+ */
+function ownRoles(id: string, roles: Role[]) {
+  return roles.filter((r) => ROLE_EMPLOYEE[r] === id);
+}
 
 export function createAccount(id: string, user: string, today: string, roles: Role[]) {
   editEmp(id, (e) =>
@@ -269,8 +395,8 @@ export function createAccount(id: string, user: string, today: string, roles: Ro
       ? e
       : { ...e, account: { user, roles, status: "active", mustChange: true, createdAt: today } },
   );
-  /* คนที่เพิ่งได้บัญชี ต้องตั้งรหัสเองตอนเข้าระบบครั้งแรก */
-  requirePasswordReset(id, true);
+  /* บทบาทที่เพิ่งได้บัญชี ต้องตั้งรหัสเองตอนเข้าระบบครั้งแรก */
+  for (const r of ownRoles(id, roles)) requirePasswordReset(r, true);
 }
 
 /** ตั้งรหัสใหม่ให้พนักงาน — เปลี่ยนชื่อผู้ใช้ไปพร้อมกันได้ และบังคับตั้งรหัสเองตอนเข้าระบบ */
@@ -278,48 +404,7 @@ export function resetAccount(id: string, user: string, roles: Role[]) {
   editEmp(id, (e) =>
     e.account ? { ...e, account: { ...e.account, user, roles, mustChange: true } } : e,
   );
-  requirePasswordReset(id, true);
-}
-
-/**
- * ลบบัญชีผู้ใช้ของพนักงานคนนี้ (เจ้าของถาม 30 ก.ย. 2569)
- * ลบแค่ "บัญชี" ไม่ใช่ลบคน — พนักงานยังอยู่ในทะเบียน เวลาทำงานและเงินเดือนไม่หาย (BR-02)
- * ใช้ตอนสร้างบัญชีผิดคนหรือคนนั้นไม่ต้องใช้ระบบแล้ว · สร้างใหม่ได้เสมอ
- * คืนสิทธิ์ให้บทบาทที่เคยถูกระงับด้วย ไม่งั้นบัญชีใหม่ของบทบาทนั้นจะเข้าไม่ได้
- */
-export function deleteAccount(id: string) {
-  restoreAccount(id);
-  editEmp(id, (e) => {
-    if (!e.account) return e;
-    const next = { ...e };
-    delete next.account;
-    return next;
-  });
-}
-
-/**
- * ตั้งตำแหน่งที่คนนี้ทำอยู่ทั้งหมด (เจ้าของกำหนด 30 ก.ย. 2569 — "บทบาทคือตำแหน่งงาน")
- * ตำแหน่งหลักคงเดิมถ้ายังอยู่ในรายการที่เลือก เพราะเงินเดือนและประวัติผูกกับตำแหน่งหลัก
- * ไม่งั้นย้ายตำแหน่งหลักไปเป็นอันแรกที่เลือก · ที่เหลือเป็นตำแหน่งควบ
- */
-export function setEmpPositions(id: string, positions: PosKey[]) {
-  if (!positions.length) return;
-  editEmp(id, (e) => {
-    const main = positions.includes(e.pos) ? e.pos : positions[0];
-    return { ...e, pos: main, posMore: positions.filter((v) => v !== main) };
-  });
-}
-
-/*
- * สิทธิ์วันลาเฉพาะคน (ผู้ใช้สั่ง 8 ต.ค. 2569) — ส่งเฉพาะประเภทที่ต่างจากค่ากลาง
- * ค่าว่างหรือเท่ากับค่ากลางให้ลบทิ้ง จะได้ไม่ต้องตามแก้ทุกคนเวลาค่ากลางเปลี่ยน
- */
-export function setEmpLeaveDays(id: string, days: Record<string, number>) {
-  const clean: Record<string, number> = {};
-  for (const [type, n] of Object.entries(days)) {
-    if (Number.isFinite(n) && n >= 0) clean[type] = n;
-  }
-  editEmp(id, (e) => ({ ...e, leaveDays: Object.keys(clean).length ? clean : undefined }));
+  for (const r of ownRoles(id, roles)) requirePasswordReset(r, true);
 }
 
 /** เปลี่ยนบทบาทที่บัญชีนี้เข้าใช้ได้ (คนควบสองตำแหน่งได้สองบทบาท) */
@@ -330,43 +415,31 @@ export function setAccountRoles(id: string, roles: Role[]) {
 export function setAccountStatus(id: string, status: "active" | "suspended", at = "") {
   const emp = store.get().emp.find((e) => e.id === id);
   editEmp(id, (e) => (e.account ? { ...e, account: { ...e.account, status } } : e));
-  /* ระงับบัญชีต้องมีผลที่หน้าเข้าสู่ระบบด้วย — เก็บตามคน คนอื่นในบทบาทเดียวกันไม่โดนด้วย */
-  if (status === "suspended") suspendAccount(id, `ฝ่ายบุคคลระงับบัญชีของ ${emp?.name ?? id}`, at);
-  else restoreAccount(id);
+  /* ระงับบัญชีต้องมีผลที่หน้าเข้าสู่ระบบด้วย — ระงับทุกบทบาทที่บัญชีนี้ควบอยู่ */
+  for (const r of ownRoles(id, accountRoles(emp?.account))) {
+    if (status === "suspended") suspendAccount(r, `ฝ่ายบุคคลระงับบัญชีของ ${emp?.name ?? id}`, at);
+    else restoreAccount(r);
+  }
 }
 
 export type EmpProfile = Pick<
   Employee,
-  "name" | "nick" | "sex" | "birth" | "edu" | "exp" | "phone" | "email" | "address" | "sos" | "boss" | "docs"
+  "name" | "nick" | "sex" | "birth" | "edu" | "exp" | "phone" | "email" | "address" | "sos" | "boss" | "docs" | "bankName" | "bankNo"
 > & {
-  /* ชื่อ-นามสกุลกรอกแยกช่อง ทั้งไทยและอังกฤษ (เจ้าของสั่ง 29 ก.ย. 2569)
-     ภาษาอังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี */
-  first?: string;
-  last?: string;
-  firstEn?: string;
-  lastEn?: string;
   /* ตำแหน่งควบ — แก้พร้อมข้อมูลพนักงานได้เลย ไม่ต้องลงประวัติเงินเดือนเหมือนการปรับตำแหน่งหลัก */
   posMore?: PosKey[];
 };
 
 /** by = ชื่อผู้แก้ (ฝ่ายบุคคล) · ประทับเวลาไว้ที่ตัวพนักงานเป็น "แก้ไขล่าสุด" */
+/** ลบพนักงานออกจากทะเบียน (ผู้ใช้สั่ง 13 ต.ค. 2569) — ยืนยันก่อนลบที่หน้าพนักงาน */
+export function deleteEmployee(id: string) {
+  store.update((s) => ({ ...s, emp: s.emp.filter((e) => e.id !== id) }));
+}
+
 export function updateEmpProfile(id: string, profile: EmpProfile, by: string) {
   store.update((s) => ({
     ...s,
-    emp: s.emp.map((e) => {
-      if (e.id !== id) return e;
-      const next = { ...e, ...profile, edited: { by, at: bkkStamp() } };
-      /*
-       * ฝ่ายบุคคลติ๊กควบตำแหน่งเพิ่ม → บัญชีของคนนั้นต้องได้เมนูของตำแหน่งใหม่ด้วย
-       * (เจ้าของถาม 29 ก.ย. 2569 "ฝ่ายบุคคลปรับควบ 2 ตำแหน่งไม่ได้หรอ")
-       * เติมบทบาทที่ยังขาด ไม่ถอดของที่ผู้ดูแลระบบตั้งเองไว้ และไม่เกินจำนวนที่ควบได้
-       */
-      if (!next.account) return next;
-      const has = accountRoles(next.account);
-      const add = rolesOfEmployee(next).filter((r) => !has.includes(r));
-      if (!add.length) return next;
-      return { ...next, account: { ...next.account, roles: [...has, ...add].slice(0, HR_MAX_ROLES) } };
-    }),
+    emp: s.emp.map((e) => (e.id === id ? { ...e, ...profile, edited: { by, at: bkkStamp() } } : e)),
   }));
 }
 
@@ -377,21 +450,6 @@ export function updateEmpProfile(id: string, profile: EmpProfile, by: string) {
 export function lockedUntil(s: HrState) {
   return s.payruns
     .filter((p) => p.closed)
-    .map((p) => hrCycle(p.month).to)
-    .sort()
-    .pop();
-}
-
-/*
- * วันสุดท้ายของรอบ "เวลาทำงาน" ล่าสุดที่ปิดแล้ว — คนละอย่างกับ lockedUntil ที่ดูรอบเงินเดือน
- * (พบตอนไล่หาบั๊ก 12 ต.ค. 2569) ฝ่ายบุคคลปิดตารางเวลาก่อน แล้วค่อยคำนวณและปิดเงินเดือน
- * ช่วงคั่นกลางนั้นรอบเงินเดือนยังไม่ปิด lockedUntil จึงยังว่าง ถ้าผู้อนุมัติย้อนใบในช่วงนี้
- * ยอดที่ฝ่ายบุคคลปิดไปแล้วจะเปลี่ยนเงียบ ๆ ทั้งที่กติกาบอกว่าปิดแล้วต้องเปิดรอบก่อนถึงแก้ได้
- * ดูทั้งสองกลุ่ม รายเดือนและทดลองงานจ่ายรายวัน เพราะปิดแยกกัน
- */
-export function timesheetLockedUntil(s: HrState) {
-  return s.periods
-    .filter((p) => p.closed || p.dayClosed)
     .map((p) => hrCycle(p.month).to)
     .sort()
     .pop();
@@ -442,12 +500,33 @@ export function setEmpLeft(id: string, leftAt: string, leftWhy: string) {
   /* พ้นสภาพแล้วต้องเข้าระบบไม่ได้ — ระงับบัญชีให้ทันทีเมื่อวันพ้นสภาพมาถึงแล้ว
      ลาออกล่วงหน้ายังใช้ระบบได้จนถึงวันนั้น · ยกเลิกการพ้นสภาพไม่คืนสิทธิ์เอง ให้ฝ่ายบุคคลตัดสินที่หน้าบัญชีผู้ใช้ */
   const e = store.get().emp.find((x) => x.id === id);
-  if (leftAt && leftAt <= todayIso() && e?.status === "left" && e.account?.status === "active") {
+  /* พ้นสภาพแล้วระงับบัญชีให้ทันที · ยกเลิกพ้นสภาพแล้วเปิดบัญชีคืน — HR ไม่ต้องไปทำซ้ำที่หน้าบัญชี (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  if (leftAt && e?.status === "left" && e.account?.status === "active") {
     setAccountStatus(id, "suspended", bkkStamp());
+  } else if (!leftAt && e?.status === "active" && e.account?.status === "suspended") {
+    setAccountStatus(id, "active");
   }
 }
 
 // ─── เวลาทำงาน ────────────────────────────────────────────────────
+
+/**
+ * บันทึกเวลาเข้า-ออกงานที่ฝ่ายบุคคลแก้ทั้งรอบ (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ * วันที่มีรายการผิดปกติค้างอยู่และกรอกเวลาครบ ถือว่าตรวจแล้ว — ปิดรอบได้
+ */
+export function saveDayFixes(id: string, rows: { d: string; in: string; out: string }[]) {
+  editTime(id, (r) => {
+    const fix = [...(r.fix ?? []).filter((x) => !rows.some((y) => y.d === x.d)), ...rows].sort((a, b) =>
+      a.d.localeCompare(b.d),
+    );
+    const issues = r.issues.map((x) => {
+      const row = rows.find((y) => y.d === x.d);
+      if (x.note || !row || !row.in || !row.out) return x;
+      return { ...x, in: row.in, out: row.out, note: `เข้า ${row.in} น. · ออก ${row.out} น.` };
+    });
+    return { ...r, fix, issues };
+  });
+}
 
 function editTime(id: string, fn: (r: TimeRec) => TimeRec) {
   store.update((s) => {
@@ -484,12 +563,32 @@ export function setOtHours(id: string, day: string, hours: number) {
  * ระบุด้วยวันที่ ไม่ใช่ลำดับในอาเรย์ เพราะรายการที่แสดงถูกกรองตามรอบมาแล้ว
  * ลำดับที่เห็นบนจอกับลำดับจริงในข้อมูลจึงไม่ตรงกัน
  */
-export function noteIssue(id: string, day: string, note: string, absent = false) {
+/**
+ * เคลียร์วันที่ผิดปกติ — ฝ่ายบุคคลแก้ได้แค่เวลาเข้า-ออกงาน กรณีพนักงานลืมกด (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ * note เก็บข้อความสรุป "เข้า 08:30 น. · ออก 17:30 น. · หมายเหตุ" — มีค่าแปลว่าเคลียร์แล้ว
+ */
+export function noteIssue(id: string, day: string, note: string, time: { in?: string; out?: string } = {}) {
+  const text = [time.in && `เข้า ${time.in} น.`, time.out && `ออก ${time.out} น.`, note]
+    .filter(Boolean)
+    .join(" · ");
   editTime(id, (r) => ({
     ...r,
-    issues: r.issues.map((x) => (x.d === day ? { ...x, note, absent } : x)),
+    issues: r.issues.map((x) => (x.d === day ? { ...x, ...time, note: text } : x)),
   }));
 }
+
+/**
+ * HR ยืนยันวันที่ลาแล้วแต่มีเช็คอิน (ผู้ใช้สั่ง 15 ต.ค. 2569) — เก็บผู้ยืนยัน เวลา และหมายเหตุ
+ * ยืนยันแล้วไม่นับเป็นรายการที่ต้องตรวจ · ไม่แตะเวลาเข้า-ออกและใบลา
+ */
+export function confirmClash(id: string, day: string, note: string, by = HR_ME) {
+  store.update((s) => ({
+    ...s,
+    clashOk: { ...(s.clashOk ?? {}), [`${id}|${day}`]: { by, at: bkkStamp(), note: note.trim() } },
+  }));
+}
+
+/* ไม่มีการยกเลิกการยืนยัน — ยืนยันแล้วถือเป็นที่สิ้นสุด ข้อมูลส่งต่อถึง CEO (ผู้ใช้สั่ง 15 ต.ค. 2569) */
 
 // ─── ใบลาของนักศึกษาฝึกงาน ───────────────────────────────────────
 
@@ -529,30 +628,48 @@ export function decideInternLeave(id: string, ok: boolean, now: string, by = HR_
   });
 }
 
-// ─── CEO อนุมัติยอดเงินเดือน ─────────────────────────────────────
+// ─── CEO อนุมัติยอดเงินเดือน — กลับมาใช้ (ผู้ใช้สั่ง 19 ต.ค. 2569 · ยกเลิกคำสั่ง 13–14 ต.ค.) ─────────
+// HR คำนวณ → ส่ง CEO → CEO อนุมัติหรือไม่อนุมัติพร้อมเหตุผล → ไม่อนุมัติ HR แก้แล้วส่งใหม่
+// → อนุมัติแล้ว HR ปิดรอบเงินเดือน แล้วสร้างและเผยแพร่สลิป
+// แก้ยอดหลังส่ง (รอ CEO / อนุมัติแล้ว / ไม่อนุมัติ) = ระบบส่งใหม่ให้เอง "แก้ไขแล้ว รออนุมัติใหม่" (ผู้ใช้สั่ง 19 ต.ค. 2569)
+//   แบบเดียวกับงานที่ PM ตรวจ · นับครั้งที่ส่งใหม่ (ver) และเก็บสิ่งที่เปลี่ยนรายคนไว้ให้ CEO ดู (usePayrollAutoResubmit)
+// คีย์ "รอบ|กลุ่ม" — รอบเดือน "yyyy-mm|month" · รอบรายสัปดาห์ของทดลองงาน "จาก~ถึง|day"
 
-/** ฝ่ายบุคคลส่งยอดของกลุ่มหนึ่งให้ CEO อนุมัติ — ส่งซ้ำได้หลังถูกตีกลับ */
-export function sendPayrollToCeo(
-  month: string,
-  group: PayGroup,
-  snap: { people: number; net: number; ss: number },
-  now: string,
-  by = HR_ME,
-) {
-  store.update((s) => ({
-    ...s,
-    payApprove: {
-      ...s.payApprove,
-      [payApproveKey(month, group)]: { status: "waiting", ...snap, sentBy: by, sentAt: now },
-    },
-  }));
+/** ยอดที่ส่ง — รวมทั้งกลุ่ม + ยอดรายคน (lines) และชื่อรายคนไว้ทำรายการสิ่งที่เปลี่ยน */
+export type PaySend = { people: number; net: number; ss: number; lines?: PaySnap; names?: Record<string, string> };
+
+/** ยอดส่งชุดใหม่ทับของเดิม — เคยส่งแล้วนับเป็น "ส่งใหม่ครั้งที่ n" พร้อมสิ่งที่เปลี่ยนจากครั้งก่อน */
+function resend(cur: PayApproval | undefined, snap: PaySend, now: string, by: string, auto: boolean): PayApproval {
+  const { names, ...nums } = snap;
+  const sent = Boolean(cur && (cur.sentAt || cur.status !== "draft" || cur.reason));
+  if (!sent || !cur) return { status: "waiting", ...nums, sentBy: by, sentAt: now };
+  return {
+    status: "waiting",
+    ...nums,
+    sentBy: by,
+    sentAt: now,
+    ver: (cur.ver ?? 0) + 1,
+    auto,
+    prev: cur.status,
+    prevNet: cur.net,
+    changes: cur.lines && snap.lines ? payChanges(cur.lines, snap.lines, names) : [],
+    /* ร่างที่ถูกยกเลิกการอนุมัติแบบเก่า — ไม่มียอดรายคนให้เทียบ เก็บเหตุผลเดิม (ยอดเก่า → ใหม่) ไว้ให้ CEO อ่าน */
+    ...(cur.status === "draft" && cur.reason ? { reason: cur.reason } : {}),
+  };
+}
+
+/** ฝ่ายบุคคลส่งยอดของกลุ่มหนึ่งให้ CEO อนุมัติ — กด "ส่งใหม่" ได้หลังถูกตีกลับ (นับเป็นการส่งใหม่ครั้งถัดไป) */
+export function sendPayrollToCeo(month: string, group: PayGroup, snap: PaySend, now: string, by = HR_ME) {
+  store.update((s) => {
+    const key = payApproveKey(month, group);
+    if (isPayClosed(s, month, group)) return s;
+    return { ...s, payApprove: { ...s.payApprove, [key]: resend(s.payApprove[key], snap, now, by, false) } };
+  });
 }
 
 /**
- * CEO อนุมัติหรือตีกลับยอดที่ส่งมา — ตีกลับต้องมีเหตุผล ฝ่ายบุคคลจะเห็นบนป้ายสถานะ
- *
- * snap = ยอดที่ CEO เห็นบนจอตอนกด (อ่านจากผลคำนวณของรอบ ไม่ใช่ยอดที่เก็บไว้เอง)
- * บันทึกทับไว้ด้วย เพราะสิ่งที่อนุมัติคือเลขที่เห็น ถ้าเลขขยับทีหลังต้องรู้ได้ว่าขยับจากอะไร
+ * CEO อนุมัติหรือไม่อนุมัติยอดที่ส่งมา — ไม่อนุมัติต้องมีเหตุผล ฝ่ายบุคคลเห็นบนป้ายสถานะและกระดิ่ง
+ * snap = ยอดที่ CEO เห็นบนจอตอนกด (อ่านจากผลคำนวณของรอบ) บันทึกทับไว้ เพราะสิ่งที่อนุมัติคือเลขที่เห็น
  */
 export function decidePayroll(
   month: string,
@@ -561,19 +678,20 @@ export function decidePayroll(
   reason: string,
   now: string,
   by = "CEO",
-  snap?: { people: number; net: number; ss: number },
+  snap?: PaySend,
 ) {
   store.update((s) => {
     const key = payApproveKey(month, group);
     const cur = s.payApprove[key];
     if (!cur || cur.status !== "waiting") return s;
+    const nums = snap ? { people: snap.people, net: snap.net, ss: snap.ss, ...(snap.lines ? { lines: snap.lines } : {}) } : {};
     return {
       ...s,
       payApprove: {
         ...s.payApprove,
         [key]: {
           ...cur,
-          ...(ok && snap ? snap : {}),
+          ...(ok ? nums : {}),
           status: ok ? "approved" : "rejected",
           by,
           at: now,
@@ -585,22 +703,38 @@ export function decidePayroll(
 }
 
 /**
- * ยกเลิกการอนุมัติเอง เพราะยอดที่คิดได้ไม่ใช่ยอดที่ส่งไปแล้ว (ผู้ใช้กำหนด 23 ก.ย. 2569)
- *
- * CEO อนุมัติเลขหนึ่ง แล้วจ่ายอีกเลขหนึ่งไม่ได้ ตัวเลขขยับเมื่อไรการอนุมัติเดิมเป็นโมฆะทันที
- * กลับไปเป็นร่างพร้อมเหตุผล ไม่ใช่ "ตีกลับ" เพราะ CEO ไม่ได้เป็นคนสั่ง — ฝ่ายบุคคลต้องส่งใหม่
- * ยอดที่บันทึกไว้ล้างทิ้งด้วย ไม่งั้นรอบต่อไปจะเทียบกับเลขเก่าที่ไม่มีความหมายแล้ว
+ * HR แก้ยอดหลังส่ง → ส่งให้ CEO อนุมัติใหม่เอง ไม่ต้องกดส่งซ้ำ (ผู้ใช้สั่ง 19 ต.ค. 2569 · แทนการยกเลิกการอนุมัติกลับเป็นร่าง)
+ * ใช้กับรอบที่รอ CEO / อนุมัติแล้ว / ไม่อนุมัติ และรอบที่เคยถูกยกเลิกการอนุมัติแบบเก่า (ร่างที่มีเหตุผล)
+ * รอบที่ปิดเงินเดือนแล้วไม่ถูกแตะ (ยอดปิดไว้แล้ว)
  */
-export function voidPayApproval(month: string, group: PayGroup, why: string) {
+export function resubmitPayApproval(month: string, group: PayGroup, snap: PaySend, now: string) {
   store.update((s) => {
     const key = payApproveKey(month, group);
     const cur = s.payApprove[key];
-    if (!cur || (cur.status !== "waiting" && cur.status !== "approved")) return s;
-    return { ...s, payApprove: { ...s.payApprove, [key]: { status: "draft", reason: why } } };
+    if (!cur) return s;
+    if (cur.status === "draft" && !cur.reason) return s;
+    if (isPayClosed(s, month, group)) return s;
+    /* ตัวเฝ้าหลายตัวบนหน้าเดียวกันเรียกซ้ำได้ — ยอดชุดนี้ส่งไปแล้วไม่นับเป็นการส่งใหม่อีกครั้ง */
+    if (cur.status !== "draft" && cur.lines && snap.lines && payChanges(cur.lines, snap.lines).length === 0) return s;
+    return {
+      ...s,
+      payApprove: { ...s.payApprove, [key]: resend(cur, snap, now, cur.sentBy || HR_ME, true) },
+    };
   });
 }
 
-// ─── ปิดรอบและเปิดรอบใหม่ ─────────────────────────────────────────
+/** รอบเงินเดือนของกลุ่มนี้ปิดแล้วหรือยัง — รอบเดือนดู payruns · รอบทดลองงานดู payClosedAt ของรอบ */
+function isPayClosed(s: HrState, key: string, group: PayGroup) {
+  if (group === "day" && key.includes("~")) return Boolean(s.dailyRounds.find((r) => r.id === key)?.payClosedAt);
+  return closedIn(s.payruns.find((p) => p.month === key), group);
+}
+
+/** CEO อนุมัติยอดของรอบนี้แล้วหรือยัง — ด่านปิดรอบเงินเดือนที่ชั้นสโตร์ */
+function payApproved(s: HrState, key: string, group: PayGroup) {
+  return s.payApprove[payApproveKey(key, group)]?.status === "approved";
+}
+
+// ─── ปิดรอบ ─────────────────────────────────────────
 
 const BLANK_PERIOD: Omit<Period, "month"> = {
   closed: false,
@@ -638,47 +772,9 @@ function closeIn(
   );
 }
 
-function reopenIn(
-  list: Period[],
-  month: string,
-  today: string,
-  by: string,
-  why: string,
-  group: PayGroup,
-) {
-  return editPeriod(list, month, (p) =>
-    group === "day"
-      ? {
-          ...p,
-          dayClosed: false,
-          dayClosedAt: "",
-          dayClosedBy: "",
-          dayReopened: [...p.dayReopened, { at: today, by, why }],
-        }
-      : {
-          ...p,
-          closed: false,
-          closedAt: "",
-          closedBy: "",
-          reopened: [...p.reopened, { at: today, by, why }],
-        },
-  );
-}
-
 /** ปิดรอบเวลาทำงานของกลุ่มหนึ่ง — หน้าจอกันไว้แล้วว่าต้องไม่มีรายการค้างตรวจ */
 export function closePeriod(month: string, today: string, group: PayGroup, by = HR_ME) {
   store.update((s) => ({ ...s, periods: closeIn(s.periods, month, today, by, group, null) }));
-}
-
-/** เปิดรอบเวลาทำงานใหม่ — ต้องมีเหตุผลเสมอ ระบบเก็บเป็นประวัติ */
-export function reopenPeriod(
-  month: string,
-  today: string,
-  why: string,
-  group: PayGroup,
-  by = HR_ME,
-) {
-  store.update((s) => ({ ...s, periods: reopenIn(s.periods, month, today, by, why, group) }));
 }
 
 /**
@@ -691,97 +787,94 @@ export function closePayrun(
   group: PayGroup,
   sum: CycleSum,
   by = HR_ME,
-) {
+): boolean {
+  let done = false;
   store.update((s) => {
     /*
      * ห้ามข้ามขั้น — ปิดรอบเงินเดือนได้ก็ต่อเมื่อปิดรอบเวลาทำงานของกลุ่มนั้นแล้ว
-     * (ลำดับที่เจ้าของกำหนด: ปิดรอบเวลา → CEO อนุมัติ → ปิดเงินเดือน → ออกสลิป)
+     * (ลำดับ: ปิดรอบเวลา → คำนวณและปิดรอบเงินเดือน → ออกสลิป/เผยแพร่ · ไม่มีขั้น CEO แล้ว ผู้ใช้สั่ง 13 ต.ค. 2569)
      * กันที่ชั้นสโตร์ ไม่ใช่เชื่อว่าหน้าจอซ่อนปุ่มให้แล้ว — เงินเดือนที่ปิดจากเวลาที่ยังแก้ได้
      * คือยอดที่เปลี่ยนได้ทีหลังทั้งที่สลิปออกไปแล้ว
      */
     const period = s.periods.find((x) => x.month === month);
     if (!closedIn(period, group)) return s;
+    /* ต้องให้ CEO อนุมัติยอดก่อน (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+    if (!payApproved(s, month, group)) return s;
+    done = true;
     return { ...s, payruns: closeIn(s.payruns, month, today, by, group, sum) };
   });
+  /* ปิดไม่สำเร็จ (ยังไม่อนุมัติ) — ผู้เรียกต้องไม่บันทึกใบเบิกว่าจ่ายแล้ว (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  return done;
 }
 
-export function reopenPayrun(
-  month: string,
-  today: string,
-  why: string,
-  group: PayGroup,
-  by = HR_ME,
-) {
-  store.update((s) => ({ ...s, payruns: reopenIn(s.payruns, month, today, by, why, group) }));
+// ─── รอบจ่ายรายวันของพนักงานทดลองงาน (ผู้ใช้สั่ง 6 ต.ค. 2569) ─────────
+
+function editRound(id: string, fn: (r: DailyRound) => DailyRound) {
+  store.update((s) => ({ ...s, dailyRounds: s.dailyRounds.map((r) => (r.id === id ? fn(r) : r)) }));
 }
 
 /**
- * เปิดรอบเงินเดือนกลับ (ผู้ใช้กำหนด 23 ก.ย. 2569)
- *
- * รอบที่ปิดและ CEO อนุมัติแล้วแก้เงียบ ๆ ไม่ได้ (HR-BR-03) ถ้าจำเป็นต้องแก้จริง
- * ต้องเป็นการเปิดรอบกลับที่ทำสามอย่างพร้อมกันในครั้งเดียว ไม่ใช่ทยอยทำทีละอย่าง
- *   1. เปิดรอบกลับพร้อมเหตุผล ใคร และเมื่อไร (เก็บใน reopened ของรอบ)
- *   2. ยกเลิกการอนุมัติของ CEO — ยอดต้องถูกส่งให้อนุมัติใหม่
- *   3. เพิกถอนสลิปที่เผยแพร่ไปแล้ว และล้างวันที่สร้าง เพื่อบังคับให้สร้างใหม่จากตัวเลขชุดใหม่
- * ทำในการอัปเดตเดียว ไม่งั้นจะมีจังหวะที่รอบเปิดแล้วแต่สลิปเก่ายังเผยแพร่อยู่
- *
- * ยอดที่ปิดไว้ (sum) ไม่ลบทิ้ง — ประวัติรอบต้องยังอ่านได้ว่าตอนปิดครั้งก่อนปิดไปเท่าไร
+ * ปิดรอบเวลาทำงานของช่วงวันหนึ่ง — รอบรายวันเกิดขึ้นตรงนี้
+ * กันที่สโตร์อีกชั้น: ช่วงเดียวกันปิดซ้ำไม่ได้ และช่วงที่ทับรอบเดิมไม่ได้ (วันเดียวกันจ่ายสองครั้ง)
  */
-export function reopenPayrunWithReason(
-  month: string,
-  today: string,
-  why: string,
-  group: PayGroup,
-  by = HR_ME,
-) {
-  const reason = why.trim();
-  if (!reason) return false;
-  const day = group === "day";
+export function closeDailyTime(c: Cycle, today: string, by = HR_ME) {
   store.update((s) => {
-    const run = s.payruns.find((p) => p.month === month);
-    if (!run || !(day ? run.dayClosed : run.closed)) return s;
-    const key = payApproveKey(month, group);
-    const ap = s.payApprove[key];
-    return {
-      ...s,
-      payruns: reopenIn(s.payruns, month, today, by, reason, group),
-      /* กลับไปเป็นร่าง ไม่ใช่ "ตีกลับ" เพราะ CEO ไม่ได้เป็นคนสั่ง — เก็บเหตุผลไว้ให้เห็นบนป้ายสถานะ */
-      payApprove: ap
-        ? { ...s.payApprove, [key]: { status: "draft" as const, reason: `เปิดรอบกลับ · ${reason}` } }
-        : s.payApprove,
-      slips: s.slips.map((sp) =>
-        sp.month !== month
-          ? sp
-          : day
-            ? {
-                ...sp,
-                dayMadeAt: "",
-                dayPublished: false,
-                dayPublishedAt: "",
-                dayBy: "",
-                dayUnpublished: sp.dayPublished
-                  ? [...sp.dayUnpublished, { at: today, by, why: `เปิดรอบกลับ · ${reason}` }]
-                  : sp.dayUnpublished,
-              }
-            : {
-                ...sp,
-                madeAt: "",
-                published: false,
-                publishedAt: "",
-                by: "",
-                unpublished: sp.published
-                  ? [...sp.unpublished, { at: today, by, why: `เปิดรอบกลับ · ${reason}` }]
-                  : sp.unpublished,
-              },
-      ),
-    };
+    if (s.dailyRounds.some((r) => r.id === dailyRoundId(c)) || overlapRound(s.dailyRounds, c)) return s;
+    /* รอบใหม่ต้องเป็นรอบรายสัปดาห์ (จันทร์–อาทิตย์ ตัดวันที่รอบรายวันเก่าจ่ายแล้ว) (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+    const w = weekRangeFor(c.from, s.dailyRounds);
+    if (w.from !== c.from || w.to !== c.to) return s;
+    const dailyRounds = [...s.dailyRounds, newDailyRound(c, today, by)].sort((a, b) => a.from.localeCompare(b.from));
+    return { ...s, dailyRounds };
   });
+}
+
+/** ปิดรอบเงินเดือนของรอบรายวัน พร้อมยอดที่บันทึกไว้ — ต้องปิดรอบเวลาแล้ว (มีรอบอยู่) */
+export function closeDailyPay(id: string, today: string, sum: CycleSum, by = HR_ME): boolean {
+  /* ต้องให้ CEO อนุมัติยอดของรอบรายสัปดาห์ก่อน (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  if (!payApproved(store.get(), id, "day")) return false;
+  const r = store.get().dailyRounds.find((x) => x.id === id);
+  if (!r?.closedAt || r.payClosedAt) return false;
+  editRound(id, (r) => (r.closedAt && !r.payClosedAt ? { ...r, payClosedAt: today, payClosedBy: by, sum } : r));
   return true;
 }
 
+export function makeDailySlips(id: string, today: string) {
+  editRound(id, (r) => (r.payClosedAt && !r.slipsMadeAt ? { ...r, slipsMadeAt: today } : r));
+}
+
+export function publishDailySlips(id: string, today: string, by = HR_ME) {
+  editRound(id, (r) => (r.payClosedAt ? { ...r, published: true, publishedAt: today, publishedBy: by } : r));
+}
+
+export function unpublishDailySlips(id: string, today: string, why: string, by = HR_ME) {
+  editRound(id, (r) => ({
+    ...r,
+    published: false,
+    publishedAt: "",
+    publishedBy: "",
+    unpublished: [...r.unpublished, { at: today, by, why }],
+  }));
+}
+
+/** นับครั้งเปิดดู/ดาวน์โหลดสลิปของรอบรายวัน — นับเฉพาะรอบที่ส่งแล้ว เหตุผลเดียวกับ countView */
+export function countDailyView(id: string, emp: string) {
+  editRound(id, (r) => (r.published ? { ...r, views: { ...r.views, [emp]: (r.views[emp] ?? 0) + 1 } } : r));
+}
+
+export function countDailyDownload(id: string, emp: string) {
+  editRound(id, (r) =>
+    r.published ? { ...r, downloads: { ...r.downloads, [emp]: (r.downloads[emp] ?? 0) + 1 } } : r,
+  );
+}
+
+/*
+ * ปิดแล้วปิดเลย — ไม่มีฟังก์ชันย้อนสถานะรอบ (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ * ช่อง reopened / dayReopened ของรอบยังเก็บไว้เพื่อให้ข้อมูลเก่าอ่านได้ หน้าจอไม่อ่านแล้ว
+ */
+
 // ─── ค่าที่ไม่มีสูตร ──────────────────────────────────────────────
 
-/** บันทึก Incentive ค่าตำแหน่ง และรายการปรับปรุงของคนหนึ่งในรอบหนึ่ง */
+/** บันทึกรายการเงินได้/รายการหักที่กรอกเองของคนหนึ่งในรอบหนึ่ง (ผู้ใช้สั่ง 16 ต.ค. 2569) */
 export function saveExtra(month: string, id: string, extra: Extra) {
   store.update((s) => ({
     ...s,

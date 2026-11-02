@@ -4,8 +4,9 @@ import type { PunchGeo } from "./work-area";
 import {
   expectedInMinutes,
   expectedOutMinutes,
+  companySchedule,
   minutesOfDay,
-  WORK_SCHEDULE,
+  type DaySchedule,
   type LeaveWindow,
 } from "./work-schedule";
 
@@ -45,7 +46,46 @@ function readAll(): ByRole {
 
 export function loadRecords(role: Role): PunchRecord[] {
   const list = readAll()[role];
-  return Array.isArray(list) ? list.filter(isPunchRecord) : [];
+  const have = Array.isArray(list) ? list.filter(isPunchRecord) : [];
+  /* ตัวอย่างการตอกบัตรรอบปัจจุบัน — เติมเฉพาะรหัสที่ยังไม่มี ของที่ผู้ใช้ตอกเองไม่ถูกแตะ */
+  const ids = new Set(have.map((r) => r.id));
+  const add = samplePunches(role).filter((r) => !ids.has(r.id));
+  return add.length ? [...add, ...have].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()) : have;
+}
+
+/*
+ * ตัวอย่างการตอกบัตร 28 ก.ย. – 7 ต.ค. 2569 (วันทำงาน) ของทุกบทบาทที่ลงเวลา (เจ้าของสั่ง 8 ต.ค. 2569)
+ * หน้าบันทึกเวลาของฉันและสรุปเวลาทำงานรอบปัจจุบันจะได้มีข้อมูลให้ดูตอนสาธิต
+ * ไม่ใส่วันนี้ ปุ่มตอกบัตรของวันนี้จึงยังเป็นของผู้ใช้ · ข้ามวันที่มีใบลาตัวอย่างที่อนุมัติแล้ว
+ * CEO ไม่ลงเวลา จึงไม่มีตัวอย่าง
+ */
+const SAMPLE_DAYS = ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06", "2026-10-07"];
+const SAMPLE_SKIP: Partial<Record<Role, string[]>> = {
+  sales: ["2026-10-02"],
+  staff: ["2026-09-29"],
+  intern: ["2026-09-28"],
+};
+/* ลำดับบทบาทเลื่อนนาทีให้แต่ละคนไม่ตรงกันเป๊ะ — วันที่สามของบางคนมาสายเล็กน้อย */
+const SAMPLE_ROLES: Role[] = ["sales", "ps", "pm", "acc", "hr", "staff", "gm", "intern", "maid"];
+
+function samplePunches(role: Role): PunchRecord[] {
+  const n = SAMPLE_ROLES.indexOf(role);
+  if (n < 0) return [];
+  const pad = (v: number) => String(v).padStart(2, "0");
+  /* บัญชีกับบุคคลเป็นคนเดียวกัน — เวลาเดียวกันทั้งสองบทบาท */
+  const k = role === "hr" ? SAMPLE_ROLES.indexOf("acc") : n;
+  return SAMPLE_DAYS.filter((d) => !(SAMPLE_SKIP[role] ?? []).includes(d)).flatMap((d, i) => {
+    const late = (i + k) % 7 === 3;
+    /* แม่บ้านเข้า 08:00 เลิก 17:00 — ตัวอย่างเลื่อนเร็วขึ้นหนึ่งชั่วโมง (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+    const shift = role === "maid" ? -60 : 0;
+    const inMin = shift + (late ? 9 * 60 + 5 + ((k * 3) % 12) : 8 * 60 + 35 + ((i * 7 + k * 5) % 22));
+    const outMin = shift + 18 * 60 + 2 + ((i * 11 + k * 3) % 40);
+    const at = (m: number) => `${d}T${pad(Math.floor(m / 60))}:${pad(m % 60)}:00+07:00`;
+    return [
+      { id: `sample-${role}-${d}-in`, type: "in" as const, at: at(inMin), note: "" },
+      { id: `sample-${role}-${d}-out`, type: "out" as const, at: at(outMin), note: "" },
+    ];
+  });
 }
 
 export function saveRecords(role: Role, records: PunchRecord[]) {
@@ -105,6 +145,7 @@ export function countableMs(
   /** ชั่วขณะจริงที่นับถึง เป็น epoch ms */
   until: number,
   leave: LeaveWindow = null,
+  sch: DaySchedule = companySchedule(),
 ) {
   /* กะ 09:00–18:00 เป็นหน้าปัดไทย จึงย้ายทั้งคู่ไปคิดบนหน้าปัดไทยก่อน
      ผลลัพธ์เป็นผลต่างของเวลา ส่วนที่เลื่อนไปจึงหักล้างกันเอง */
@@ -115,10 +156,10 @@ export function countableMs(
   midnight.setHours(0, 0, 0, 0);
   const at = (min: number) => midnight.getTime() + min * 60_000;
 
-  const dayStart = at(expectedInMinutes(leave));
-  const dayEnd = at(expectedOutMinutes(leave));
-  const lunchStart = at(minutesOfDay(WORK_SCHEDULE.lunchStart));
-  const lunchEnd = at(minutesOfDay(WORK_SCHEDULE.lunchEnd));
+  const dayStart = at(expectedInMinutes(leave, sch));
+  const dayEnd = at(expectedOutMinutes(leave, sch));
+  const lunchStart = at(minutesOfDay(sch.lunchStart));
+  const lunchEnd = at(minutesOfDay(sch.lunchEnd));
 
   const begin = Math.max(fromWall.getTime(), dayStart);
   const finish = Math.min(untilWall, dayEnd);
@@ -135,6 +176,7 @@ export function workedMsOfDay(
   dayRecords: PunchRecord[],
   now: number,
   leave: LeaveWindow = null,
+  sch: DaySchedule = companySchedule(),
 ) {
   let total = 0;
   let openedAt: Date | null = null;
@@ -143,11 +185,11 @@ export function workedMsOfDay(
     if (r.type === "in") {
       openedAt = at;
     } else if (openedAt !== null) {
-      total += countableMs(openedAt, at.getTime(), leave);
+      total += countableMs(openedAt, at.getTime(), leave, sch);
       openedAt = null;
     }
   }
-  if (openedAt !== null) total += countableMs(openedAt, now, leave);
+  if (openedAt !== null) total += countableMs(openedAt, now, leave, sch);
   return total;
 }
 
@@ -155,15 +197,15 @@ export function workedMsOfDay(
  * ชั่วโมงที่อยู่จริงของวัน (ไม่ตัดตามกะ) — ใช้แสดงผล ไม่ใช้คิดเงิน
  * now = ชั่วขณะจริงเป็น epoch ms · ข้างในย้ายไปคิดบนหน้าปัดไทย เพราะพักเที่ยงเป็นเวลาไทย
  */
-export function actualMsOfDay(dayRecords: PunchRecord[], now: number) {
+export function actualMsOfDay(dayRecords: PunchRecord[], now: number, sch: DaySchedule = companySchedule()) {
   let total = 0;
   let openedAt: number | null = null;
   /* a, b, day เป็นเวลาไทยแล้วทั้งหมด — setHours จึงได้เที่ยงคืนของไทย */
   const lunch = (a: number, b: number, day: Date) => {
     const m = new Date(day);
     m.setHours(0, 0, 0, 0);
-    const ls = m.getTime() + minutesOfDay(WORK_SCHEDULE.lunchStart) * 60_000;
-    const le = m.getTime() + minutesOfDay(WORK_SCHEDULE.lunchEnd) * 60_000;
+    const ls = m.getTime() + minutesOfDay(sch.lunchStart) * 60_000;
+    const le = m.getTime() + minutesOfDay(sch.lunchEnd) * 60_000;
     return Math.max(0, Math.min(b, le) - Math.max(a, ls));
   };
   const add = (a: number, b: number) => {

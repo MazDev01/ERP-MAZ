@@ -1,7 +1,7 @@
 "use client";
 
 /*
- * ปฏิทินของหน้า "ตารางงาน" ทุกบทบาท — PM · GM · SA/BD · พนักงาน ใช้กระดานนี้ร่วมกัน
+ * ปฏิทินของหน้า "ตารางงาน" ทุกบทบาท — PM · GM · SA/BD · ทีมงาน ใช้กระดานนี้ร่วมกัน
  *
  * โครงชุด 24 ก.ย. 2569 เคยแยกเป็นสองแบบ (ปฏิทินเต็มของ PM กับปฏิทินสรุปของคนอื่น)
  * เจ้าของสั่งกลับมาเป็นแบบเดียวกันทุกหน้า — คนเดียวกันสวมหลายบทบาทและสลับหน้าไปมา
@@ -22,7 +22,7 @@ import Link from "next/link";
 import { useState, type CSSProperties } from "react";
 import { bkkNow, thaiDate, toIsoDate, todayIso } from "@/lib/format";
 import { holidays, holidaysBetween } from "@/lib/holidays";
-import { dayDiff } from "@/lib/pm-schedule-data";
+import { PM_COLORS, colorOf, dayDiff, type EventColor } from "@/lib/pm-schedule-data";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
@@ -34,15 +34,11 @@ const VIEWS: { key: View; label: string }[] = [
 ];
 
 /** แถบในหนึ่งสัปดาห์ซ้อนกันได้กี่ชั้นก่อนยุบเป็น "อีก N นัด" — มุมมองสัปดาห์มีที่มากกว่า */
-const MAX_LANES = { month: 3, week: 12 };
+/* เดือนละ 2 ชั้น ปฏิทินทั้งเดือนจะพอดีหนึ่งหน้าจอไม่ต้องเลื่อน (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+const MAX_LANES = { month: 2, week: 12 };
 
 
 const DW = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
-const DW_FULL = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
-/* เส้นเวลาของมุมมองสัปดาห์บนมือถือ 08:00–19:00 ชั่วโมงละ 64px (ต้นแบบ ms-mobile) */
-const H0 = 8;
-const H1 = 19;
-const HPX = 64;
 const MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const MON_FULL = [
   "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -113,6 +109,35 @@ export function tintPaint(color: string): BoardEvent["paint"] {
   return { style: { background: `color-mix(in srgb, ${color} 15%, transparent)`, color } };
 }
 
+/** จุดและแถบจากสีที่เลือกเองของนัด — สีเดียวกับตารางงาน PM (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+export function colPaint(c: EventColor): { dot: string; paint: BoardEvent["paint"] } {
+  const x = colorOf(c);
+  return { dot: x.fg, paint: { style: { background: x.bg, color: x.fg } } };
+}
+
+/** ช่องเลือกสีของนัด แทนช่องประเภท — ชุดเดียวกับฟอร์มของ PM (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+export function ColorPick({ value, onChange }: { value: EventColor; onChange: (c: EventColor) => void }) {
+  return (
+    <div>
+      <p className="mb-2 block text-[0.8rem] font-medium">สีของนัด</p>
+      <span className="flex flex-wrap gap-[9px] pt-1 pl-1">
+        {PM_COLORS.map((c) => (
+          <button
+            key={c.c}
+            type="button"
+            className="cpick"
+            aria-pressed={value === c.c}
+            aria-label={`สี${c.name}`}
+            title={c.name}
+            style={{ background: c.bg, color: c.fg }}
+            onClick={() => onChange(c.c)}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 /**
  * สถานะของปฏิทิน — มุมมอง เดือนที่ดู และวันที่เลือก
  * แยกเป็นฮุกให้หน้าที่เรียกถือไว้ จะสั่งย้ายวันเองได้ (เช่น หลังบันทึกนัด)
@@ -167,67 +192,6 @@ export function boardOn<T>(all: BoardEvent<T>[], day: string) {
     .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
 }
 
-/** นาที จาก HH:mm */
-function minOf(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + (m || 0);
-}
-
-/** หนึ่งรายการในรายการนัดของวัน (มือถือ) — ไอคอนกลมสีของประเภท ชื่อ และช่วงเวลา */
-function PhoneRow<T>({
-  e,
-  kind,
-  onOpen,
-}: {
-  e: BoardEvent<T>;
-  kind?: BoardKind;
-  onOpen?: (e: BoardEvent<T>) => void;
-}) {
-  const inner = (
-    <>
-      <span
-        className="grid size-[34px] flex-none place-items-center rounded-full"
-        style={{ color: e.dot, background: `color-mix(in srgb, ${e.dot} 10%, transparent)` }}
-        aria-hidden="true"
-      >
-        <CalGlyph />
-      </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <small className="text-[11.5px] text-muted-foreground">{kind?.label}</small>
-        <b className={`text-[14.5px] leading-snug font-bold ${e.cancelled ? "text-muted-foreground line-through" : ""}`}>
-          {e.title}
-        </b>
-        <span className="num text-[12.5px] text-muted-foreground">
-          {e.time ? `${e.time}${e.timeEnd ? ` – ${e.timeEnd}` : ""} น.` : "ทั้งวัน"}
-        </span>
-      </span>
-    </>
-  );
-  const cls = "flex w-full items-start gap-3 py-3.5 text-left";
-  if (e.href) {
-    return (
-      <Link href={e.href} className={cls}>
-        {inner}
-      </Link>
-    );
-  }
-  if (e.inert || !onOpen) return <div className={cls}>{inner}</div>;
-  return (
-    <button type="button" className={cls} onClick={() => onOpen(e)}>
-      {inner}
-    </button>
-  );
-}
-
-function CalGlyph() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="16" rx="2.5" />
-      <path d="M3 10h18M8 3v4M16 3v4" />
-    </svg>
-  );
-}
-
 export function ScheduleBoard<T>({
   nav,
   events,
@@ -235,17 +199,24 @@ export function ScheduleBoard<T>({
   hint,
   onOpen,
   onAdd,
+  noToday = true,
+  noKinds = false,
 }: {
   nav: BoardNav;
   /** นัดทั้งหมดของหน้านี้ (ยังไม่กรองประเภท) — จำนวนบนป้ายประเภทนับจากชุดนี้ */
   events: BoardEvent<T>[];
   kinds: BoardKind[];
   /** คำแนะนำใต้หัวข้อประเภท */
-  hint: string;
+  /** ไม่แสดงแล้ว (ผู้ใช้สั่ง 5 ต.ค. 2569) — เก็บไว้ให้หน้าที่ส่งมายังคอมไพล์ผ่าน */
+  hint?: string;
   /** กดที่รายการ (ที่ไม่มี href และไม่ใช่ inert) */
   onOpen?: (e: BoardEvent<T>) => void;
   /** ไม่ส่งมา = เพิ่มนัดไม่ได้ ช่องวันกดได้แค่เลือกวัน */
   onAdd?: (day: string) => void;
+  /** ไม่มีปุ่ม "วันนี้" — ทุกตารางงาน (ผู้ใช้สั่ง 5 และ 8 ต.ค. 2569) */
+  noToday?: boolean;
+  /** ไม่ใช้ประเภทนัด — สีที่เลือกเองแยกนัดแทน ไม่มีกล่องประเภทและป้ายประเภท (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+  noKinds?: boolean;
 }) {
   const { view, cursor, sel, todayKey } = nav;
   /* ประเภทที่ถูกปิดไว้ด้วยตัวกรอง — เก็บเฉพาะที่ปิด จะได้ไม่ต้องตั้งค่าตั้งต้นครบทุกประเภท */
@@ -262,36 +233,6 @@ export function ScheduleBoard<T>({
   const phone = () => window.matchMedia("(max-width: 1099.98px)").matches;
   /* นัดที่ยกเลิกแล้วไม่ลงปฏิทิน แต่ยังอยู่ในรายการของวันที่เลือก */
   const liveRows = rows.filter((e) => !e.cancelled);
-  /*
-   * วันที่เลือกว่าง — บอกว่ารายการถัดไปคือวันไหนเรื่องอะไร กดแล้วกระโดดไปวันนั้นเลย
-   * ไม่งั้นคนใช้ต้องกดไล่ทีละวันหาเองว่ามีอะไรรออยู่ (ตามต้นแบบ presales-schedule.html)
-   */
-  const nextUp = (() => {
-    const later = liveRows.filter((e) => e.start > sel).sort((a, b) => a.start.localeCompare(b.start))[0];
-    return later ? { day: later.start, title: later.title } : null;
-  })();
-  /*
-   * รายการข้าง ๆ ปฏิทินของจอกว้าง — ห้านัดถัดไปนับจากวันที่เลือก
-   * เดือนไหนไม่มีนัดข้างหน้าแล้ว แสดงนัดล่าสุดของเดือนนั้นแทน จะได้ไม่เหลือช่องว่างยาวข้างปฏิทิน
-   */
-  const ahead = liveRows.filter((e) => e.start >= sel).sort((a, b) => a.start.localeCompare(b.start));
-  const past = liveRows.filter((e) => e.start < sel).sort((a, b) => b.start.localeCompare(a.start));
-  const upcoming = [...ahead.slice(0, 5), ...past.slice(0, Math.max(0, 5 - ahead.length))];
-  const upcomingTitle = ahead.length ? "นัดที่กำลังจะถึง" : "นัดหมายล่าสุด";
-
-  const nextHint = nextUp && (
-    <>
-      {" · ถัดไป "}
-      <button
-        type="button"
-        onClick={() => nav.jumpTo(nextUp.day)}
-        /* ขยายพื้นที่กดบนมือถือด้วย padding ติดลบ — ตัวอักษรยังอยู่ในบรรทัดเดิม */
-        className="font-semibold text-primary hover:underline max-sm:-my-2 max-sm:py-2"
-      >
-        {thaiDate(nextUp.day)} · {nextUp.title}
-      </button>
-    </>
-  );
   const dotOf = Object.fromEntries(kinds.map((k) => [k.key, k])) as Record<string, BoardKind>;
 
   /* วันหยุดของเดือนที่กำลังดู — แสดงเหนือปฏิทินเสมอ นัดลูกค้าต้องรู้ก่อนว่าวันไหนเขาไม่อยู่ */
@@ -342,7 +283,7 @@ export function ScheduleBoard<T>({
   const dayList = (
     <>
     {dayRows.length === 0 ? (
-      <p className="py-1.5 text-[12.5px] text-muted-foreground">ไม่มีนัดหมายในวันนี้{nextHint}</p>
+      <p className="py-1.5 text-[12.5px] text-muted-foreground">ไม่มีนัดหมายในวันนี้</p>
     ) : (
       <ul className="flex flex-col">
         {dayRows.map((e) => {
@@ -370,8 +311,8 @@ export function ScheduleBoard<T>({
                 </b>
                 <em className="mt-0.5 block text-[11px] text-muted-foreground not-italic">
                   {e.cancelled ? `ยกเลิกแล้ว${e.cancelWhy ? ` (${e.cancelWhy})` : ""} · ` : ""}
-                  {dotOf[e.kind]?.label}
-                  {e.sub ? ` · ${e.sub}` : ""}
+                  {noKinds ? "" : dotOf[e.kind]?.label}
+                  {e.sub ? `${noKinds ? "" : " · "}${e.sub}` : ""}
                   {multi && ` · ${thaiDate(e.start)} – ${thaiDate(e.end)} (${dayDiff(e.start, e.end) + 1} วัน)`}
                 </em>
               </span>
@@ -387,7 +328,7 @@ export function ScheduleBoard<T>({
               ) : e.inert || !onOpen ? (
                 <div className={cls}>{inner}</div>
               ) : (
-                <button type="button" onClick={() => onOpen(e)} className={cls}>
+                <button type="button" onDoubleClick={() => onOpen(e)} title="ดับเบิลคลิกเพื่อเปิดนัด" className={cls}>
                   {inner}
                 </button>
               )}
@@ -401,13 +342,14 @@ export function ScheduleBoard<T>({
 
   return (
     /* โครงสองคอลัมน์ 290px / ปฏิทิน — จอ ≤1100px เหลือคอลัมน์เดียว ปฏิทินขึ้นก่อน (โครง 24 ก.ย. 2569) */
-    <div className="grid items-start gap-4 min-[1100px]:grid-cols-[290px_minmax(0,1fr)]">
-      <aside className="order-2 flex min-w-0 flex-col gap-3.5 min-[1100px]:order-none">
+    <div className="grid items-start gap-4 min-[1100px]:grid-cols-[minmax(0,1fr)_290px]">
+      {/* ปฏิทินอยู่ซ้าย รายการนัดอยู่ขวา (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+      <aside className="order-2 flex min-w-0 flex-col gap-3.5 min-[1100px]:order-2">
         {/* จอแคบ: กดวันแล้วต้องเห็นรายการของวันนั้นทันที ป้ายอธิบายประเภทจึงลงไปอยู่ล่างสุด
             (เจ้าของแจ้ง 25 ก.ย. 2569 ว่ากดในปฏิทินแล้วไม่เห็นรายละเอียด) */}
-        <section className="glass order-2 rounded-[16px] p-[16px_18px] min-[1100px]:order-none">
+        {!noKinds && <section className="glass order-2 rounded-[16px] p-[16px_18px] min-[1100px]:order-none">
           <h2 className="mb-2.5 text-[13.5px] font-bold">ประเภทนัดหมาย</h2>
-          <p className="mb-2.5 text-[11.5px] leading-[1.6] text-muted-foreground">{hint}</p>
+          {/* คำอธิบายการทำงานของระบบไม่โชว์ให้ผู้ใช้เห็นทุกหน้าตารางงาน (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
           <div className="flex flex-wrap gap-[7px]">
             {kinds.map((k) => {
               const n = events.filter((e) => e.kind === k.key && !e.cancelled).length;
@@ -418,7 +360,7 @@ export function ScheduleBoard<T>({
                   type="button"
                   aria-pressed={!hidden}
                   onClick={() => setOff((v) => ({ ...v, [k.key]: !v[k.key] }))}
-                  className={`inline-flex items-center gap-1.5 rounded-[20px] border border-border bg-card px-[11px] py-[5px] text-[11.5px] font-semibold text-muted-foreground hover:border-primary max-sm:min-h-9 max-sm:px-3.5 ${
+                  className={`inline-flex items-center gap-1.5 rounded-[20px] border border-border bg-card px-[11px] py-[5px] text-[11.5px] font-semibold text-muted-foreground hover:border-primary ${
                     hidden ? "opacity-45" : ""
                   }`}
                 >
@@ -429,7 +371,7 @@ export function ScheduleBoard<T>({
               );
             })}
           </div>
-        </section>
+        </section>}
 
         {/* จอแคบใช้ป็อปอัพแทน การ์ดนี้จึงขึ้นเฉพาะจอกว้างที่มีคอลัมน์ซ้าย */}
         <section
@@ -456,52 +398,7 @@ export function ScheduleBoard<T>({
           </div>
           {dayList}
         </section>
-
-        {/* นัดที่กำลังจะถึง — เติมคอลัมน์ซ้ายที่เคยว่างยาวข้างปฏิทิน และช่วยให้เห็นงานข้างหน้าโดยไม่ต้องกดไล่วัน
-           (ผู้ใช้สั่งจัดเลย์เอาต์ไม่ให้มีช่องว่าง 8 ต.ค. 2569) */}
-        <section className="glass order-3 rounded-[16px] p-[16px_18px] max-[1099px]:hidden min-[1100px]:order-none">
-          <h2 className="mb-2.5 text-[13.5px] font-bold">{upcomingTitle}</h2>
-          {upcoming.length === 0 ? (
-            <p className="text-[12.5px] text-muted-foreground">
-              ยังไม่มีนัดหมายในระบบ กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {upcoming.map((e, i) => (
-                <li key={`${e.start}-${i}`}>
-                  <button
-                    type="button"
-                    onClick={() => nav.jumpTo(e.start)}
-                    className="flex w-full items-start gap-2.5 py-2.5 text-left hover:text-primary"
-                  >
-                    <span className="num mt-[2px] w-[58px] flex-none text-[11.5px] font-semibold text-muted-foreground">
-                      {thaiDate(e.start)}
-                    </span>
-                    <span className="min-w-0">
-                      <b className="block truncate text-[12.5px] font-semibold">{e.title}</b>
-                      {e.sub && <em className="block truncate text-[11.5px] text-muted-foreground not-italic">{e.sub}</em>}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </aside>
-
-      {/* มือถือ: ปุ่มกลมเพิ่มนัดของวันที่เลือก มุมขวาล่าง (ต้นแบบ ms-fab) */}
-      {onAdd && (
-        <button
-          type="button"
-          aria-label="เพิ่มนัดหมาย"
-          onClick={() => onAdd(sel)}
-          className="fixed right-[18px] bottom-[calc(var(--botbar,86px)+22px)] z-40 grid size-[58px] place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_14px_24px_-10px_rgb(200_16_46/0.9)] sm:hidden"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
-      )}
 
       {/* ป็อปอัพรายการนัดของวันที่เลือก — เฉพาะจอแคบ */}
       {daySheet && (
@@ -533,46 +430,17 @@ export function ScheduleBoard<T>({
         </Sheet>
       )}
 
-      <section className="glass order-1 min-w-0 rounded-[16px] p-[18px_20px] max-sm:p-[14px_12px] min-[1100px]:order-none">
-        {/* มือถือ: หัวแบบแอปปฏิทิน — วันที่ที่เลือกตัวใหญ่ ปุ่มกลมเลื่อนช่วง และเมนูเลือกมุมมอง
-            (ต้นแบบ pm-schedule.html บล็อก ms-mobile · ms-red 1 ต.ค. 2569) */}
-        <div className="mb-3 flex items-center gap-2.5 sm:hidden">
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-muted-foreground">ตารางงาน</p>
-            <h2 className="num mt-0.5 text-[20px] font-bold">
-              {thaiDate(sel)}
-              <span className="ml-1.5 text-[15px] font-medium text-muted-foreground">
-                วัน{DW_FULL[new Date(`${sel}T00:00:00`).getDay()]}
-              </span>
-            </h2>
-          </div>
-          <button type="button" className="iconbtn glass-thin size-9 rounded-full" aria-label="ก่อนหน้า" onClick={() => nav.step(-1)}>
-            <ChevronLeftIcon className="size-4" strokeWidth={2.4} />
-          </button>
-          <button type="button" className="iconbtn glass-thin size-9 rounded-full" aria-label="ถัดไป" onClick={() => nav.step(1)}>
-            <ChevronRightIcon className="size-4" strokeWidth={2.4} />
-          </button>
-        </div>
-
-        {/* มือถือ: ปุ่มสลับมุมมองโชว์ทั้งสองปุ่มตามต้นแบบ pm-schedule.html (เทียบต้นแบบ 12 ต.ค. 2569)
-            เดิมซ่อนไว้หลังปุ่มสามขีด ต้องกดสองครั้งกว่าจะเปลี่ยนมุมมอง */}
-        <div className="mb-3 flex justify-end gap-1.5 sm:hidden" role="group" aria-label="มุมมองปฏิทิน">
-          {VIEWS.map((v) => (
-            <button
-              key={v.key}
-              type="button"
-              aria-pressed={view === v.key}
-              onClick={() => nav.setView(v.key)}
-              className={`h-9 rounded-full px-3.5 text-[12.5px] font-semibold ${
-                view === v.key ? "bg-primary text-primary-foreground" : "glass-thin text-muted-foreground"
-              }`}
-            >
-              {v.key === "month" ? "รายเดือน" : "รายสัปดาห์"}
-            </button>
-          ))}
-        </div>
-
-        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5 max-sm:hidden">
+      <section className="glass order-1 min-w-0 rounded-[16px] p-[18px_20px] max-sm:p-[14px_12px] min-[1100px]:order-1">
+        {/* ชื่อเดือนอยู่กลางปฏิทิน ปุ่มวันนี้ชิดซ้าย มุมมองชิดขวา (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5 sm:grid sm:grid-cols-[1fr_auto_1fr]">
+          {/* สูง 34px เท่า .seg และ .iconbtn ในแถวเดียวกัน (.btn ปกติ 36px จะสูงกว่าเพื่อน) */}
+          <span className="justify-self-start">
+            {!noToday && (
+              <button type="button" className="btn glass-thin" style={{ height: 34 }} onClick={nav.goToday}>
+                วันนี้
+              </button>
+            )}
+          </span>
           <div className="flex items-center gap-2.5">
             <button type="button" className="iconbtn glass-thin" aria-label="ก่อนหน้า" onClick={() => nav.step(-1)}>
               <ChevronLeftIcon className="size-3.5" strokeWidth={2.4} />
@@ -583,12 +451,8 @@ export function ScheduleBoard<T>({
             <button type="button" className="iconbtn glass-thin" aria-label="ถัดไป" onClick={() => nav.step(1)}>
               <ChevronRightIcon className="size-3.5" strokeWidth={2.4} />
             </button>
-            {/* สูง 34px เท่า .seg และ .iconbtn ในแถวเดียวกัน (.btn ปกติ 36px จะสูงกว่าเพื่อน) */}
-            <button type="button" className="btn glass-thin" style={{ height: 34 }} onClick={nav.goToday}>
-              วันนี้
-            </button>
           </div>
-          <div className="seg" role="tablist" aria-label="มุมมองปฏิทิน">
+          <div className="seg justify-self-end" role="tablist" aria-label="มุมมองปฏิทิน">
             {VIEWS.map((v) => (
               <button
                 key={v.key}
@@ -604,7 +468,7 @@ export function ScheduleBoard<T>({
           </div>
         </div>
 
-        <div className="holstrip max-sm:hidden!">
+        <div className="holstrip">
           <b>วันหยุดเดือนนี้</b>
           {monthHols.length === 0 ? (
             <span className="none">ไม่มีวันหยุดบริษัท</span>
@@ -623,122 +487,9 @@ export function ScheduleBoard<T>({
           )}
         </div>
 
-        {/* ── มือถือ: ปฏิทินการ์ดแดง แตะวันแล้วรายการของวันนั้นขึ้นใต้ปฏิทินทันที
-             มุมมองสัปดาห์เป็นเส้นเวลารายชั่วโมง (ต้นแบบ pm-schedule.html บล็อก ms-mobile · ms-red) ── */}
-        <div className="sm:hidden">
-          <div className="overflow-hidden rounded-[22px] bg-primary px-2 pt-3 pb-3 text-white shadow-[0_14px_26px_-18px_rgb(200_16_46/0.9)]">
-            <div className="grid grid-cols-7 text-center text-[12px] text-white/75">
-              {DW.map((d) => (
-                <span key={d} className="py-1">{d}</span>
-              ))}
-            </div>
-            <div className="grid grid-cols-7">
-              {(view === "week" ? [weekStart] : weeks)
-                .flatMap((ws) => Array.from({ length: 7 }, (_, i) => shift(ws, i)))
-                .map((d) => {
-                  const day = toIsoDate(d);
-                  const outside = view === "month" && d.getMonth() !== cursor.getMonth();
-                  /* จุดสีบอกว่าวันนั้นมีรายการ ไม่เกินสามจุด เกินกว่านั้นดูในรายการข้างล่าง */
-                  const dots = [
-                    ...new Set(liveRows.filter((e) => e.start <= day && e.end >= day).map((e) => e.dot)),
-                  ].slice(0, 3);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => nav.pickDay(day)}
-                      aria-pressed={day === sel}
-                      className="flex h-[52px] flex-col items-center justify-center gap-1"
-                      aria-label={`ดูนัดหมายวันที่ ${thaiDate(day)}`}
-                    >
-                      <b
-                        className={`grid size-[34px] place-items-center rounded-full text-[14px] font-semibold ${
-                          day === sel
-                            ? "bg-white text-primary shadow-[0_6px_12px_-6px_rgb(60_0_10/0.6)]"
-                            : day === todayKey
-                              ? "ring-[1.5px] ring-white/80 ring-inset"
-                              : outside
-                                ? "text-white/45"
-                                : ""
-                        }`}
-                      >
-                        {d.getDate()}
-                      </b>
-                      <span className="flex h-[5px] items-center gap-[3px]">
-                        {dots.map((c) => (
-                          <i key={c} className="size-[5px] rounded-full bg-white/90" />
-                        ))}
-                      </span>
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-
-          {view === "month" ? (
-            /* รายการนัดของวันที่เลือก — อยู่ใต้ปฏิทินเลย ไม่ต้องเปิดแผ่นซ้อน */
-            <>
-              <div className="mt-4 flex items-center justify-between">
-                <h3 className="text-[17px] font-bold">
-                  {sel === todayKey ? "นัดหมายวันนี้" : `นัดหมาย ${thaiDate(sel)}`}
-                </h3>
-                {dayRows.length > 0 && (
-                  <span className="num text-[12.5px] text-muted-foreground">{dayRows.length} รายการ</span>
-                )}
-              </div>
-              <ul className="mt-1 border-t border-border">
-                {dayRows.length === 0 ? (
-        <li className="py-7 text-center text-[13.5px] text-muted-foreground">ไม่มีนัดหมาย{nextHint}</li>
-                ) : (
-                  dayRows.map((e) => (
-                    <li key={e.id} className="border-b border-border">
-                      <PhoneRow e={e} kind={dotOf[e.kind]} onOpen={onOpen} />
-                    </li>
-                  ))
-                )}
-              </ul>
-            </>
-          ) : (
-            /* มุมมองสัปดาห์: เส้นเวลารายชั่วโมงของวันที่เลือก */
-            <div className="relative mt-4">
-              {Array.from({ length: H1 - H0 + 1 }, (_, i) => (
-                <div key={i} className="grid h-16 grid-cols-[44px_1fr]">
-                  <span className="num -translate-y-1.5 text-[11.5px] leading-none text-muted-foreground">
-                    {String(H0 + i).padStart(2, "0")}:00
-                  </span>
-                  <i className="border-t border-border" />
-                </div>
-              ))}
-              {dayRows.map((e) => {
-                const from = Math.max(minOf(e.time ?? `${H0}:00`), H0 * 60);
-                const to = Math.min(minOf(e.timeEnd ?? `${H1}:00`), (H1 + 1) * 60);
-                const top = ((from - H0 * 60) / 60) * HPX;
-                const h = Math.max(46, ((to - from) / 60) * HPX - 4);
-                return (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => onOpen?.(e)}
-                    style={{ top, height: h, background: `color-mix(in srgb, ${e.dot} 12%, transparent)` }}
-                    className="absolute right-0 left-[52px] flex flex-col gap-0.5 overflow-hidden rounded-[14px] px-3 py-2 text-left shadow-[0_6px_14px_-10px_rgb(40_20_25/0.4)]"
-                  >
-                    <b className="text-[13.5px] leading-tight font-bold">{e.title}</b>
-                    <small className="text-[11.5px] text-muted-foreground">{dotOf[e.kind]?.label}</small>
-                    {h > 70 && e.time && (
-                      <span className="num mt-auto text-[11.5px] text-muted-foreground">
-                        {e.time}
-                        {e.timeEnd ? ` – ${e.timeEnd}` : ""} น.
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* จอกว้าง: ตารางแถบเต็มรูปแบบเหมือนเดิม */}
-        <div className="overflow-x-auto max-sm:hidden">
+        {/* จอแคบให้ปฏิทินหดพอดีจอ ไม่ต้องเลื่อนข้าง — ของเดิมบังคับ 640px
+            ทำให้บนมือถือเห็นแค่ 4 วันจาก 7 วัน มองไม่เห็นทั้งเดือน */}
+        <div className="overflow-x-auto">
           <div className="sm:min-w-[640px]">
             <div className="grid grid-cols-7">
               {DW.map((d) => (
@@ -904,12 +655,14 @@ function WeekRow<T>({
             <button
               key={day}
               type="button"
-              onClick={() => (onAdd ? onAdd(day) : onPickDay(day))}
+              /* คลิกเดียว = เลือกวันดูนัด · ดับเบิลคลิก = เพิ่มนัดวันนั้น (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+              onClick={() => onPickDay(day)}
+              onDoubleClick={onAdd ? () => onAdd(day) : undefined}
               className={[month !== null && d.getMonth() !== month ? "off" : "", day === sel ? "on" : ""]
                 .filter(Boolean)
                 .join(" ")}
               aria-label={onAdd ? `เพิ่มนัดหมายวันที่ ${thaiDate(day)}` : `เลือกวันที่ ${thaiDate(day)}`}
-              title={onAdd ? `กดเพื่อเพิ่มนัดหมายวันที่ ${thaiDate(day)}` : `กดเพื่อดูนัดหมายของวันที่ ${thaiDate(day)}`}
+              title={onAdd ? `ดับเบิลคลิกเพื่อเพิ่มนัดหมายวันที่ ${thaiDate(day)}` : `กดเพื่อดูนัดหมายของวันที่ ${thaiDate(day)}`}
             />
           );
         })}
@@ -931,7 +684,9 @@ function WeekRow<T>({
             key={day}
             type="button"
             /* ตัวเลขวันที่ทำงานเหมือนพื้นหลังของช่อง จะได้ไม่งงว่ากดตรงไหนได้ตรงไหนไม่ได้ */
-            onClick={() => (onAdd ? onAdd(day) : onPickDay(day))}
+            /* คลิกเดียว = เลือกวันดูนัด · ดับเบิลคลิก = เพิ่มนัดวันนั้น (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+              onClick={() => onPickDay(day)}
+              onDoubleClick={onAdd ? () => onAdd(day) : undefined}
             aria-label={onAdd ? `เพิ่มนัดหมายวันที่ ${thaiDate(day)}` : `ดูนัดหมายวันที่ ${thaiDate(day)}`}
             className={cls}
             /* ไม่ใส่กรอบรอบตัวเลขซ้ำ — ช่องที่เลือกมีกรอบอยู่แล้วที่พื้นหลังช่อง (.lines button.on)
@@ -982,7 +737,9 @@ function WeekRow<T>({
           <button
             key={s.key}
             type="button"
-            onClick={() => (e.inert || !onOpen ? onPickDay(toIsoDate(shift(start, c1))) : onOpen(e))}
+            /* คลิกเดียว = เลือกวันของนัดนั้น · ดับเบิลคลิก = เปิดนัด (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+            onClick={() => onPickDay(toIsoDate(shift(start, c1)))}
+            onDoubleClick={e.inert || !onOpen ? undefined : () => onOpen(e)}
             title={tip}
             style={style}
             className={cls}

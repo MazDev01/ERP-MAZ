@@ -11,13 +11,14 @@
  * (E11 ขึ้นไปเป็นคนละคนกัน เพราะสองชุดนี้เดินเลขต่อกันคนละที)
  */
 
-import { ROLES, type Role } from "./role";
-import { daysBetween, thaiDate, toIsoDate } from "./format";
+import type { Role } from "./role";
+import { daysBetween, thaiDate, thaiMonth, toIsoDate, todayIso } from "./format";
 import { ratesOn, settings } from "./system-settings";
 import { merged } from "./catalog";
 import { holidays } from "./holidays";
 import { otKindOf } from "./ot-data";
-import { WORK_SCHEDULE, minutesOfDay } from "./work-schedule";
+import { WORK_SCHEDULE, minutesOfDay, scheduleFor, targetWorkMs, type DaySchedule } from "./work-schedule";
+import { LEAVE_DAY_HOURS, entitlementDays, halfHours, leavePeriodOf, leaveYearOf, periodRange } from "./leave-data";
 
 /** สายงาน — ใช้จัดกลุ่มในรายงานและตัวกรอง */
 /** รหัสแผนก — ชุดตั้งต้นด้านล่าง + ที่ผู้ดูแลระบบเพิ่ม (hrDepts()) */
@@ -39,10 +40,8 @@ export const BUILTIN_HR_DEPT: { v: DeptKey; label: string }[] = [
 /** รหัสตำแหน่ง — ชุดตั้งต้นด้านล่าง + ที่ผู้ดูแลระบบเพิ่ม (hrPositions()) */
 export type PosKey = string;
 
-export const BUILTIN_HR_POSITION: { v: PosKey; label: string; dept: DeptKey; off?: boolean; roles?: string[] }[] = [
-  /* เจ้าของสั่ง 29 ก.ย. 2569 — อย่าควบให้เอง แยกเป็นสองตำแหน่ง ใครทำทั้งสองอย่างให้ฝ่ายบุคคลติ๊กควบเอง */
-  { v: "acc", label: "บัญชี", dept: "backoffice" },
-  { v: "hr", label: "ฝ่ายบุคคล", dept: "backoffice" },
+export const BUILTIN_HR_POSITION: { v: PosKey; label: string; dept: DeptKey }[] = [
+  { v: "account_hr", label: "บัญชีและบุคคล", dept: "backoffice" },
   { v: "maid", label: "แม่บ้าน", dept: "backoffice" },
   { v: "graphic", label: "Graphic", dept: "marketing" },
   { v: "pm", label: "PM", dept: "marketing" },
@@ -193,15 +192,15 @@ export const ROLE_EMPLOYEE: Partial<Record<Role, string>> = {
   /* ทีมก่อนการขาย = ปิยะวัฒน์ (SA) ตามต้นแบบ presales-work.html */
   ps: "E01",
   pm: "E10",
-  /* บัญชีกับฝ่ายบุคคลเป็นคนละคนแล้ว (เจ้าของสั่ง 29 ก.ย. 2569) */
-  acc: "E19",
+  acc: "E12",
   hr: "E12",
-  /* พนักงานอยู่ในทะเบียนมาตั้งแต่ต้นอยู่แล้ว (Website) ไม่ต้องเพิ่มคนสมมติ */
+  /* ทีมงานอยู่ในทะเบียนมาตั้งแต่ต้นอยู่แล้ว (Website) ไม่ต้องเพิ่มคนสมมติ */
   staff: "E05",
   /* GM อยู่ในทะเบียนอยู่แล้ว (ประเสริฐ) */
   gm: "E11",
-  /* ฝึกงานและแม่บ้านอยู่ในทะเบียนอยู่แล้ว (ณัฐริกา · บุญเรือน) */
+  /* นักศึกษาฝึกงาน (ผู้ใช้สั่ง 2 ต.ค. 2569) — ณัฐริกา ฝึกงานตำแหน่ง Graphic */
   intern: "E14",
+  /* แม่บ้าน (ผู้ใช้สั่ง 2 ต.ค. 2569) — บุญเรือน หัวหน้าสายคืออรอนงค์ (E12) */
   maid: "E15",
 };
 
@@ -215,11 +214,25 @@ export function withLoginAccounts(emp: Employee[]): Employee[] {
   const taken = emp.flatMap((e) => (e.account ? [e.account.user] : []));
   return emp.map((e) => {
     const role = roleOf.get(e.id);
-    /* พนักงานหนึ่งคนมีบัญชีหนึ่งบัญชีเสมอ สร้างพร้อมข้อมูลพนักงาน (ต้นแบบ hr-accounts 6 ต.ค. 2569)
-       คนที่ยังไม่ได้ผูกกับบทบาทไหน ใช้บทบาทตามตำแหน่งงานของตัวเอง */
-    const roles = ACCOUNT_ROLE_SEED[e.id] ?? (role ? [role] : rolesOfEmployee(e));
+    /* พนักงาน 1 คนมีบัญชี 1 บัญชี (ต้นแบบ AC-01 · ผู้ใช้สั่ง 6 ต.ค. 2569) — คนเดิมที่ยังไม่มีบัญชีได้บัญชีตั้งต้น
+       ยังไม่มีบทบาท ฝ่ายบุคคลเลือกเมนูที่ใช้ได้เองที่หน้าจัดการบัญชีผู้ใช้ */
+    if (!role) {
+      if (e.account) return e;
+      const user = suggestUser(e.name, taken);
+      taken.push(user);
+      return {
+        ...e,
+        account: {
+          user,
+          roles: [],
+          status: e.status === "left" ? "suspended" : "active",
+          mustChange: false,
+          createdAt: e.startedAt,
+        },
+      };
+    }
+    const roles = ACCOUNT_ROLE_SEED[e.id] ?? [role];
     if (e.account) {
-      if (!role) return e;
       if (!e.account.roles?.length)
         return { ...e, account: { ...e.account, roles, seeded: ROLE_SEED_VERSION } };
       /* ชุดตั้งต้นใส่ให้รุ่นละครั้ง — ผู้ดูแลระบบเอาบทบาทออกแล้วต้องไม่เด้งกลับมาทุกครั้งที่โหลด */
@@ -227,19 +240,11 @@ export function withLoginAccounts(emp: Employee[]): Employee[] {
         return { ...e, account: { ...e.account, roles, seeded: ROLE_SEED_VERSION } };
       return e;
     }
-    const user = suggestUserOf(e, taken);
+    const user = suggestUser(e.name, taken);
     taken.push(user);
     return {
       ...e,
-      account: {
-        user,
-        roles,
-        seeded: ROLE_SEED_VERSION,
-        /* คนที่พ้นสภาพไปแล้วต้องเข้าระบบไม่ได้ */
-        status: e.status === "left" ? "suspended" : "active",
-        mustChange: false,
-        createdAt: e.startedAt,
-      },
+      account: { user, roles, seeded: ROLE_SEED_VERSION, status: "active", mustChange: false, createdAt: e.startedAt },
     };
   });
 }
@@ -249,70 +254,12 @@ export function withLoginAccounts(emp: Employee[]): Employee[] {
  * จึงถือทั้งฝ่ายบุคคลและบัญชี · ล็อกอินแล้วแถบซ้ายจะมีเมนูของทุกบทบาทที่ถืออยู่
  *
  * ⚠️ 25 ก.ย. 2569 เอา "ผู้ดูแลระบบ" ออกจากบัญชีนี้ (เจ้าของสั่งให้แยกออกไปเป็นบัญชีของตัวเอง)
- * ผู้ดูแลระบบยังเพิ่มให้บัญชีไหนก็ได้ที่ /admin/roles แต่ไม่ได้ติดมากับใครตั้งแต่ต้นอีกแล้ว
+ * ผู้ดูแลระบบยังเพิ่มให้บัญชีไหนก็ได้ที่ /admin/settings?s=positions&t=accounts แต่ไม่ได้ติดมากับใครตั้งแต่ต้นอีกแล้ว
  */
 const ACCOUNT_ROLE_SEED: Record<string, Role[]> = {};
 
 /** ขึ้นรุ่นเมื่อ ACCOUNT_ROLE_SEED เปลี่ยน — 3 = เอาผู้ดูแลระบบออกจากฝ่ายบุคคล (25 ก.ย. 2569) */
 const ROLE_SEED_VERSION = 3;
-
-/*
- * ตำแหน่ง → บทบาทที่ใช้เข้าระบบ (เจ้าของสั่ง 29 ก.ย. 2569)
- * "ทุกบทบาทคือพนักงาน มีการทำงานที่ต่างกันตำแหน่งต่างกัน" — ตำแหน่งในทะเบียนจึงบอกได้เลย
- * ว่าคนนี้ควรเข้าระบบเป็นบทบาทอะไร ไม่ต้องให้ฝ่ายบุคคลเดาเองตอนสร้างบัญชี
- *
- * อ้างอิงเอกสารตำแหน่งของบริษัทที่เจ้าของส่งมา 29 ก.ย. 2569 (docs/ตำแหน่งและหน้าที่.md)
- *   GM      — อาวุโสกว่า PM ทำงาน PM ด้วยและเป็นผู้อนุมัติ
- *   PM (AE) — รับงานจากฝ่ายขาย วางแผน มอบหมาย ตรวจงาน
- *   SA, BD  — ทำข้อเสนอในขั้นคำขอก่อนการขาย และรับงานโปรเจคด้วย จึงได้สองบทบาท
- *   แม่บ้าน — ใช้เฉพาะส่วน "ของฉัน" (ลงเวลา ลา เบิก) ไม่รับงานโปรเจค จึงเป็นพนักงานเหมือนกัน
- *   CEO     — ไม่ใช่พนักงานในทะเบียน ไม่มีตำแหน่งในรายการนี้
- * ตำแหน่งที่ผู้ดูแลระบบเพิ่มเองทีหลังถือเป็น "พนักงาน" ไว้ก่อน
- *
- * ตารางนี้เป็นแค่ "ค่าตั้งต้น" — ฝ่ายบุคคลตั้งทับได้รายตำแหน่งที่หน้าตำแหน่งและสายอนุมัติ
- * (catalog.positions[].roles) ตำแหน่งที่เพิ่มใหม่จึงเลือกบทบาทเองได้ ไม่ต้องแก้โค้ด
- */
-const POSITION_ROLES: Record<string, Role[]> = {
-  acc: ["acc"],
-  hr: ["hr"],
-  /* ตำแหน่งเดิมที่รวมสองงานไว้ — เหลือไว้อ่านข้อมูลเก่า ไม่มีในดรอปดาวน์แล้ว */
-  account_hr: ["acc", "hr"],
-  pm: ["pm"],
-  gm: ["gm"],
-  sales: ["sales"],
-  sa: ["ps", "staff"],
-  bd: ["ps", "staff"],
-  /* แม่บ้านมีบทบาทของตัวเอง — เมนูและเวลาทำงาน (08:00–17:00) ไม่เหมือนทีมงาน */
-  maid: ["maid"],
-  graphic: ["staff"],
-  content: ["staff"],
-  website: ["staff"],
-  dev: ["staff"],
-  media: ["staff"],
-};
-
-export function rolesOfPosition(pos: PosKey): Role[] {
-  /* ที่ฝ่ายบุคคลตั้งไว้มาก่อนเสมอ · ไม่ได้ตั้ง (หรือตั้งเป็นว่าง) ค่อยใช้ค่าตั้งต้นของระบบ */
-  const own = hrPositions().find((p) => p.v === pos)?.roles;
-  if (own?.length) return own.filter(isRoleKey).slice(0, HR_MAX_ROLES);
-  return POSITION_ROLES[pos] ?? ["staff"];
-}
-
-/** ค่าตั้งต้นของระบบสำหรับตำแหน่งนี้ — หน้าตั้งค่าใช้บอกว่า "ไม่ตั้งเอง" แล้วจะได้บทบาทอะไร */
-export function defaultRolesOfPosition(pos: PosKey): Role[] {
-  return POSITION_ROLES[pos] ?? ["staff"];
-}
-
-function isRoleKey(v: string): v is Role {
-  return ROLES.some((r) => r.key === v);
-}
-
-/** บทบาทของคนนี้ตามตำแหน่งทั้งหมดที่ถืออยู่ (รวมตำแหน่งควบ) — ไม่เกินจำนวนที่ควบได้ */
-export function rolesOfEmployee(e: { pos: PosKey; posMore?: PosKey[] }): Role[] {
-  const out: Role[] = [];
-  for (const p of posOf(e)) for (const r of rolesOfPosition(p)) if (!out.includes(r)) out.push(r);
-  return out.slice(0, HR_MAX_ROLES);
-}
 
 /** ควบได้มากสุดกี่บทบาทต่อบัญชี — 2 ตามคนที่ควบบัญชีและบุคคล */
 export const HR_MAX_ROLES = 2;
@@ -328,14 +275,7 @@ export const HR_ACC_STATUS: Record<EmpAccount["status"], { label: string; cls: s
 
 export type Employee = {
   id: string;
-  /** ชื่อ-นามสกุลภาษาไทยรวมกัน — ใช้แสดงทั้งระบบ (ประกอบจาก first + last ตอนบันทึก) */
   name: string;
-  /* กรอกแยกช่อง ชื่อกับนามสกุล และมีภาษาอังกฤษด้วย (เจ้าของสั่ง 29 ก.ย. 2569)
-     ภาษาอังกฤษใช้ตั้งชื่อผู้ใช้ตอนสร้างบัญชี · คนเก่าที่ยังไม่มีสี่ช่องนี้ยังอ่าน name ได้เหมือนเดิม */
-  first?: string;
-  last?: string;
-  firstEn?: string;
-  lastEn?: string;
   nick: string;
   sex: string;
   birth: string;
@@ -361,36 +301,37 @@ export type Employee = {
   history: SalaryStep[];
   /** บัญชีเข้าระบบของคนนี้ — ไม่มีคีย์นี้คือยังไม่ได้สร้างบัญชี */
   account?: EmpAccount;
+  /**
+   * ผ่านทดลองงานกลางรอบ (ผู้ใช้สั่ง 13 ต.ค. 2569) — at = วันที่มีผล (ประเภทเป็นพนักงานประจำทันที)
+   * payFrom = วันแรกของรอบเงินเดือนถัดไป จ่ายแบบทดลองงาน (รายวัน) ถึงวันก่อนหน้านี้ แล้วค่อยจ่ายรายเดือน
+   */
+  probPass?: { at: string; payFrom: string };
   /** ใครแก้ข้อมูลล่าสุด — พนักงานแก้ข้อมูลตัวเองไม่ได้ ต้องแจ้ง HR (เอกสารสัมภาษณ์) ระบบจึงเก็บผู้แก้ไว้ตรวจย้อน */
   edited?: { by: string; at: string };
-  /*
-   * สิทธิ์วันลาเฉพาะคนนี้ (ผู้ใช้สั่ง 8 ต.ค. 2569) — คีย์เป็นชื่อประเภทการลา
-   * ประเภทไหนไม่มีในนี้ใช้จำนวนวันกลางที่ตั้งไว้ในตั้งค่าระบบ
-   * มีไว้สำหรับคนที่ตกลงกันไว้ต่างจากคนอื่น เช่นคนเก่าแก่ได้ลาพักร้อนมากกว่า
+  /**
+   * บัญชีรับเงินเดือน — ใช้ในตารางสรุปเงินเดือนที่ CEO ใช้โอน (ผู้ใช้สั่ง 16 ต.ค. 2569)
+   * ข้อมูลเก่าไม่มี สโตร์เติมเป็นค่าว่าง · ว่าง = แสดง "—"
    */
-  leaveDays?: Record<string, number>;
+  bankName?: string;
+  bankNo?: string;
 };
+
+/** "ธนาคาร · เลขบัญชี" — ไม่มีทั้งคู่ = "—" (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+export function bankText(e: Pick<Employee, "bankName" | "bankNo">) {
+  const t = [e.bankName?.trim(), e.bankNo?.trim()].filter(Boolean).join(" ");
+  return t || "—";
+}
 
 /**
  * ชื่อผู้ใช้ที่ระบบเสนอจากชื่อจริง — ชื่อ + จุด + อักษรแรกของนามสกุล ซ้ำแล้วเติมเลข
  * เก็บสระและวรรณยุกต์ไว้ ตัดเฉพาะอักขระที่ใช้เป็นชื่อผู้ใช้ไม่ได้
  */
-/**
- * ชื่อผู้ใช้ที่แนะนำ — ใช้ชื่ออังกฤษก่อนเสมอ (เจ้าของสั่ง 29 ก.ย. 2569)
- * ไม่มีชื่ออังกฤษค่อยใช้ชื่อไทย เพื่อให้คนเก่าที่ยังไม่ได้กรอกยังสร้างบัญชีได้
- */
-export function suggestUserOf(e: { name: string; firstEn?: string; lastEn?: string }, taken: string[]) {
-  const en = [e.firstEn, e.lastEn].filter(Boolean).join(" ").trim();
-  return suggestUser(en || e.name, taken);
-}
-
 export function suggestUser(name: string, taken: string[]) {
   const parts = name.trim().split(/\s+/);
   const clean = (x: string) => (x ?? "").replace(/[^\u0E00-\u0E7Fa-zA-Z0-9]/g, "");
-  /* ใช้แค่ชื่อต้น ไม่ต่อท้ายด้วยอักษรแรกของนามสกุล (เจ้าของสั่ง 30 ก.ย. 2569)
-     ชื่อผู้ใช้เป็นตัวพิมพ์เล็กเสมอ — พิมพ์ตอนเข้าระบบง่ายกว่า และกันชื่อซ้ำที่ต่างกันแค่ตัวใหญ่เล็ก
-     ชื่อซ้ำกันจะถูกไล่เลขต่อท้ายให้เองด้านล่าง */
-  const base = (clean(parts[0]) || "user").toLowerCase();
+  const first = clean(parts[0]) || "user";
+  const last = clean(parts[1] ?? "");
+  const base = last ? `${first}.${last.charAt(0)}` : first;
   if (!taken.includes(base)) return base;
   /* ชนกับของเดิมก็ไล่เลขขึ้นจนกว่าจะว่าง */
   for (let n = 2; n < 100; n++) {
@@ -531,32 +472,17 @@ export const HR_EMP: Employee[] = [
    history:[{at:"2019-05-01", pos:"gm", salary:45000, note:"เริ่มงาน"},
             {at:"2024-01-01", pos:"gm", salary:52000, note:"ปรับประจำปี"}]},
 
-  /* เจ้าของสั่ง 29 ก.ย. 2569 — อรอนงค์เป็นแค่ฝ่ายบุคคล งานบัญชีเป็นของ E19 */
   {id:"E12", name:"อรอนงค์ พรหมมา", nick:"อร", sex:"หญิง", birth:"1990-06-28",
-   pos:"hr", type:"full", status:"active", startedAt:"2020-09-01", boss:"E11",
+   pos:"account_hr", type:"full", status:"active", startedAt:"2020-09-01", boss:"E11",
    edu:"บช.บ. การบัญชี มหาวิทยาลัยพายัพ",
    exp:["เจ้าหน้าที่บัญชี สำนักงานบัญชี 3 ปี"],
    phone:"088-224-3390", email:"ornanong.p@example.com",
    address:"33 ต.วัดเกต อ.เมือง จ.เชียงใหม่ 50000",
    sos:{name:"บุญส่ง พรหมมา", rel:"บิดา", phone:"081-330-2214"},
    docs:["idcard","house","degree","photo","resume","cert"],
-   history:[{at:"2020-09-01", pos:"acc", salary:22000, note:"เริ่มงาน ทดลองงาน"},
-            {at:"2020-12-01", pos:"acc", salary:24000, note:"ผ่านทดลองงาน"},
-            {at:"2025-01-01", pos:"hr", salary:29000, note:"ปรับประจำปี"}]},
-
-  /* พนักงานบัญชีของบริษัท — วางบิล ออกใบเสร็จ ยื่นภาษีหัก ณ ที่จ่าย
-     TODO: ⚠️ ชื่อและข้อมูลส่วนตัวเป็นข้อมูลสมมติ ต้องเปลี่ยนเป็นคนจริงก่อนใช้งาน */
-  {id:"E19", name:"สุนิสา ทรัพย์มั่น", nick:"นิด", sex:"หญิง", birth:"1992-02-09",
-   pos:"acc", type:"full", status:"active", startedAt:"2021-07-01", boss:"E11",
-   edu:"บช.บ. การบัญชี มหาวิทยาลัยเชียงใหม่",
-   exp:["เจ้าหน้าที่บัญชี สำนักงานบัญชี 4 ปี"],
-   phone:"086-551-7742", email:"sunisa.s@example.com",
-   address:"58/4 ต.ป่าแดด อ.เมือง จ.เชียงใหม่ 50100",
-   sos:{name:"สมบัติ ทรัพย์มั่น", rel:"บิดา", phone:"081-993-2210"},
-   docs:["idcard","house","degree","photo","resume"],
-   history:[{at:"2021-07-01", pos:"acc", salary:21000, note:"เริ่มงาน ทดลองงาน"},
-            {at:"2021-10-01", pos:"acc", salary:23000, note:"ผ่านทดลองงาน"},
-            {at:"2025-01-01", pos:"acc", salary:28000, note:"ปรับประจำปี"}]},
+   history:[{at:"2020-09-01", pos:"account_hr", salary:22000, note:"เริ่มงาน ทดลองงาน"},
+            {at:"2020-12-01", pos:"account_hr", salary:24000, note:"ผ่านทดลองงาน"},
+            {at:"2025-01-01", pos:"account_hr", salary:29000, note:"ปรับประจำปี"}]},
 
   /* พนักงานขายคนเดียวของบริษัท (ต้นแบบ dose-erp-maz/hr-employees.html) — ผู้ใช้บทบาทฝ่ายขาย */
   {id:"E18", name:"ชนัญชิดา ใจดี", nick:"ชญ", sex:"หญิง", birth:"1995-06-12",
@@ -639,16 +565,10 @@ export const HR_EMP: Employee[] = [
  *
  * อ่านผ่านฟังก์ชันทุกครั้ง ห้ามเก็บเป็นค่าคงที่ระดับไฟล์ — ผู้ดูแลแก้แล้วต้องมีผลทันทีทั้งระบบ
  *
- * วันจ่ายเงินเดือนคือ "สิ้นเดือน" ของเดือนนั้น (เจ้าของตัดสิน 6 ต.ค. 2569)
+ * TODO: ⚠️ วันจ่ายเงินเดือนคือสิ้นเดือนหรือวันที่ 1 ของเดือนถัดไป ยังไม่ยืนยัน
  */
 export function hrCutDay() {
   return settings().schedule.payCutDay;
-}
-
-/** วันจ่ายเงินเดือนของรอบหนึ่ง — สิ้นเดือนของเดือนรอบนั้น เช่น รอบ "2026-08" จ่าย 31 ส.ค. 2569 */
-export function paydayOf(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  return isoOf(new Date(y, m, 0));
 }
 
 function pad2(n: number) {
@@ -672,7 +592,7 @@ export function hrCycle(month: string): Cycle {
   };
 }
 
-/** ประวัติการเปิดรอบใหม่ — เก็บไว้ให้ตรวจย้อนได้ว่าใครเปิดและเพราะอะไร */
+/** บันทึกเก่า (ใคร เมื่อไร เพราะอะไร) — เก็บไว้ให้ข้อมูลเดิมอ่านได้ หน้าจอรอบเงินเดือนไม่อ่านแล้ว (ผู้ใช้สั่ง 6 ต.ค. 2569) */
 export type Reopen = { at: string; by: string; why: string };
 
 /* พนักงานรายเดือนกับทดลองงานจ่ายรายวันคิดคนละฐาน ปิดรอบจึงแยกกลุ่มกัน */
@@ -681,7 +601,8 @@ export type PayGroup = "month" | "day";
 /** ชื่อกลุ่มการจ่าย ใช้ในหัวกล่องและป้ายสถานะของทุกหน้าในสายรอบเงินเดือน */
 export const GROUP_LABEL: Record<PayGroup, string> = {
   month: "พนักงานรายเดือน",
-  day: "ทดลองงาน จ่ายรายวัน",
+  /* ทดลองงานจ่ายรายสัปดาห์ (ผู้ใช้สั่ง 19 ต.ค. 2569 · เดิมรายวัน) */
+  day: "ทดลองงาน จ่ายรายสัปดาห์",
 };
 
 /** ยอดของคนหนึ่งที่บันทึกไว้ตอนปิดรอบ — ย้อนดูได้แม้เงินเดือนเปลี่ยนภายหลัง */
@@ -696,16 +617,19 @@ export type CycleLine = {
   com?: number;
   inc?: number;
   allow?: number;
+  /** รายได้รายการอื่นที่กรอกเอง (นอกจาก Incentive/ค่าตำแหน่ง) รวมกัน — รอบเก่าไม่มี = 0 (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  more?: number;
   gross?: number;
+  /** รายการปรับปรุงด้วยมือแบบเก่า — รอบที่ปิดก่อน 16 ต.ค. 2569 เท่านั้น รอบใหม่เก็บ items */
   adjust?: Adjust[];
+  /** รายการเงินได้/รายการหักที่กรอกเองตามแบบสลิป ณ วันปิดรอบ (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  items?: PayItems;
+  /** = −(รวมรายการหักที่กรอกเอง) · รอบเก่าคือยอดปรับปรุงรวม (บวกได้) */
   adj: number;
   ss: number;
   late: number;
-  /** หักขาดงานและลาไม่รับค่าจ้าง — รอบที่ปิดก่อนมีช่องนี้ไม่มีเก็บไว้ ถือเป็น 0 */
-  absentDays?: number;
-  absent?: number;
-  unpaidDays?: number;
-  unpaid?: number;
+  /** ภาษีหัก ณ ที่จ่าย 3% ของทดลองงานจ่ายรายวัน — รอบที่ปิดก่อนมีช่องนี้ไม่มี = สลิปเว้นว่าง ไม่คิดย้อน (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  wht?: number;
   /** ค่าใช้จ่ายคืน (ใบเบิกที่อนุมัติแล้ว) — ไม่ใช่รายได้ ไม่คิดประกันสังคม บวกเข้ายอดสุทธิ · รอบเก่าไม่มี */
   reimb?: number;
   net: number;
@@ -722,6 +646,9 @@ export type CycleSum = {
   com: number;
   inc: number;
   allow: number;
+  /** รายได้อื่นที่กรอกเอง · ภาษีหัก ณ ที่จ่าย — รอบเก่าไม่มี (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  more?: number;
+  wht?: number;
   adj: number;
   ss: number;
   late: number;
@@ -781,15 +708,122 @@ export function fillPeriod(p: Period): Period {
   };
 }
 
+/*
+ * รอบเดือนให้เลือกตั้งแต่ ม.ค. 2569 ถึงรอบปัจจุบัน (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ * รอบก่อน ก.ค. 2569 เป็นประวัติที่ปิดไปแล้ว ไม่มีข้อมูลเวลาพิเศษ (แบบเดียวกับ ก.ค.)
+ * ส่วนรอบที่ยังไม่มีในข้อมูลที่เก็บไว้ สโตร์เติมให้เองด้วย ensurePeriods
+ */
+export const HR_FIRST_MONTH = "2026-01";
+/** รอบแรกที่มีข้อมูลจริง — รอบก่อนหน้านี้ที่เติมให้ถือว่าปิดไปแล้ว */
+const HR_LIVE_MONTH = "2026-07";
+
+/** รอบเก่าก่อน ก.ค. 2569 ที่ปิดครบทุกขั้นแล้ว (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+export const HR_PAST_MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"];
+
+/**
+ * วันที่ของแต่ละขั้นในรอบเก่า ตามแบบรอบ ก.ค. (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ * ปิดรอบเวลา ~28 → ปิดรอบเงินเดือนวันถัดไป → สร้างสลิป → เผยแพร่ภายในสิ้นเดือน
+ * (approved = วันที่ CEO อนุมัติของรอบเก่า เก็บไว้เป็นประวัติ · เลิกขั้นนี้แล้ว ผู้ใช้สั่ง 13 ต.ค. 2569)
+ * เดือนสั้น (ก.พ.) เลื่อนให้ทุกขั้นยังอยู่ในเดือนเดียวกัน
+ */
+export function pastStepDates(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  const base = Math.min(28, last - 2);
+  const at = (d: number) => `${month}-${pad2(Math.min(d, last))}`;
+  return {
+    timeClosed: at(base),
+    approved: at(base + 1),
+    payClosed: at(base + 1),
+    made: at(base + 2),
+    published: at(base + 3),
+  };
+}
+
+/** รอบเงินเดือนเก่าที่ปิดแล้วทั้งสองกลุ่ม — ไม่มียอดบันทึกไว้ (แบบเดียวกับ ก.ค.) หน้าจอคิดจากประวัติเงินเดือน */
+export function pastPayrun(month: string): Period {
+  const at = pastStepDates(month).payClosed;
+  return {
+    month, closed: true, closedAt: at, closedBy: "E12", reopened: [],
+    dayClosed: true, dayClosedAt: at, dayClosedBy: "E12", dayReopened: [], sum: null, daySum: null,
+  };
+}
+
+/** รอบเก่าที่ปิดไปแล้ว ไม่มีข้อมูลพิเศษ — ปิดรอบเวลาวันที่ ~28 ตามแบบรอบ ก.ค. */
+function pastPeriod(month: string): Period {
+  const at = pastStepDates(month).timeClosed;
+  return {
+    month, closed: true, closedAt: at, closedBy: "E12", reopened: [],
+    dayClosed: true, dayClosedAt: at, dayClosedBy: "E12", dayReopened: [], sum: null, daySum: null,
+  };
+}
+
+function openPeriod(month: string): Period {
+  return {
+    month, closed: false, closedAt: "", closedBy: "", reopened: [],
+    dayClosed: false, dayClosedAt: "", dayClosedBy: "", dayReopened: [], sum: null, daySum: null,
+  };
+}
+
+/** รอบเดือนที่วันหนึ่งตกอยู่ — ตัดรอบวันที่ 25: "2026-10-06" → "2026-10", "2026-10-26" → "2026-11" */
+export function cycleMonthOfDay(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const next = d > hrCutDay();
+  const mo = next ? (m === 12 ? 1 : m + 1) : m;
+  const yr = next && m === 12 ? y + 1 : y;
+  return `${yr}-${pad2(mo)}`;
+}
+
+/** ทุกเดือนตั้งแต่ first ถึง last (รวมทั้งสองฝั่ง) เป็น "yyyy-mm" */
+export function monthsBetween(first: string, last: string) {
+  const out: string[] = [];
+  let [y, m] = first.split("-").map(Number);
+  while (`${y}-${pad2(m)}` <= last) {
+    out.push(`${y}-${pad2(m)}`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * เติมรอบที่ขาด ตั้งแต่ ม.ค. 2569 ถึงรอบของวันนี้ (ผู้ใช้สั่ง 6 ต.ค. 2569) — เดินตามวันจริง เดือนใหม่มาก็เพิ่มเอง
+ * รอบที่มีอยู่แล้วไม่ถูกแตะ · รอบก่อน ก.ค. 2569 ที่เติมถือว่าปิดแล้ว · ตั้งแต่ ก.ค. เป็นต้นไปเติมเป็นรอบเปิด
+ * เรียงตามเดือนเสมอ เพราะหลายหน้าถือว่าตัวท้ายคือรอบล่าสุด
+ */
+export function ensurePeriods(list: Period[], today: string): Period[] {
+  const have = new Set(list.map((p) => p.month));
+  const add = monthsBetween(HR_FIRST_MONTH, cycleMonthOfDay(today))
+    .filter((m) => !have.has(m))
+    .map((m) => (m < HR_LIVE_MONTH ? pastPeriod(m) : openPeriod(m)));
+  const sorted = list.every((p, i) => i === 0 || list[i - 1].month <= p.month);
+  if (!add.length && sorted) return list;
+  return [...list, ...add].sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/**
+ * เดือนที่เปิดมาเป็นค่าตั้งต้น — รอบล่าสุดที่จบไปแล้ว (วันตัดรอบผ่านไปแล้ว) ซึ่งเป็นรอบที่ฝ่ายบุคคลกำลังปิด
+ * รอบปัจจุบันที่ยังเดินอยู่ไม่ใช่ค่าตั้งต้น ยังเลือกดูได้จากตัวเลื่อนเดือน (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ */
+export function defaultHrMonth(months: string[], today: string) {
+  const ended = months.filter((m) => hrCycle(m).to < today);
+  return ended[ended.length - 1] ?? months[months.length - 1];
+}
+
 export const HR_PERIOD: Period[] = [
+  ...HR_PAST_MONTHS.map(pastPeriod),
   {month:"2026-07", closed:true,  closedAt:"2026-07-28", closedBy:"E12", reopened:[],
    dayClosed:true, dayClosedAt:"2026-07-28", dayClosedBy:"E12", dayReopened:[], sum:null, daySum:null},
-  /* ปิดรอบเวลาแล้ว ยอดเงินเดือนจึงส่ง CEO อนุมัติได้ (ลำดับ ปิดรอบเวลา → คำนวณ → CEO อนุมัติ → ปิดรอบเงินเดือน)
+  /* ปิดรอบเวลาแล้ว ปิดรอบเงินเดือนได้เลย (ลำดับ ปิดรอบเวลา → คำนวณและปิดรอบเงินเดือน → ออกสลิป · ไม่มีขั้น CEO ผู้ใช้สั่ง 13 ต.ค. 2569)
      รายการผิดปกติของรอบนี้ HR ตรวจและบันทึกผลครบทุกรายการก่อนปิด */
   {month:"2026-08", closed:true, closedAt:"2026-08-27", closedBy:"E12", reopened:[],
    dayClosed:true, dayClosedAt:"2026-08-27", dayClosedBy:"E12", dayReopened:[], sum:null, daySum:null},
   {month:"2026-09", closed:false, closedAt:"", closedBy:"", reopened:[],
-   dayClosed:false, dayClosedAt:"", dayClosedBy:"", dayReopened:[], sum:null, daySum:null}
+   dayClosed:false, dayClosedAt:"", dayClosedBy:"", dayReopened:[], sum:null, daySum:null},
+  openPeriod("2026-10"),
 ];
 
 export type LeaveKind = "personal" | "vacation" | "sick";
@@ -804,14 +838,15 @@ export type OtKind = "after_work" | "holiday" | "public";
 
 export const HR_OT_LABEL: Record<OtKind, string> = {
   after_work: "วันธรรมดา",
-  holiday: "วันหยุดเสาร์อาทิตย์",
-  public: "วันหยุดนักขัตฤกษ์",
+  /* นักขัตฤกษ์อื่นคิดอัตราเดียวกับเสาร์อาทิตย์ · public = วันแรงงานเท่านั้น (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  holiday: "วันหยุดเสาร์อาทิตย์/นักขัตฤกษ์",
+  public: "วันแรงงาน",
 };
 
 /**
  * ประเภทโอทีที่ใช้คิดเงิน — ระบบเลือกอัตราจากวันที่เอง ผู้ยื่นไม่ต้องเลือก กันกรอกผิดอัตรา (ต้นแบบ otKindOf)
- * วันหยุดนักขัตฤกษ์ตามปฏิทินบริษัท 3 เท่า · เสาร์อาทิตย์ 2 เท่า · วันทำงาน 1.5 เท่า
- * วันทำงานธรรมดาใช้ประเภทที่บันทึกไว้ ยกเว้นบันทึกว่านักขัตฤกษ์แต่ปฏิทินไม่ใช่ → ลดเป็นวันหยุด (ตามต้นแบบ)
+ * วันแรงงาน (1 พ.ค.) 3 เท่า · เสาร์อาทิตย์และนักขัตฤกษ์อื่น 2 เท่า · วันทำงาน 1.5 เท่า (ผู้ใช้สั่ง 13 ต.ค. 2569)
+ * วันทำงานธรรมดาใช้ประเภทที่บันทึกไว้ ยกเว้นบันทึกว่าวันแรงงานแต่ปฏิทินไม่ใช่ → ลดเป็นวันหยุด (ตามต้นแบบ)
  */
 export function otKindAt(o: { d: string; kind: OtKind }): OtKind {
   const k = otKindOf(o.d);
@@ -832,25 +867,43 @@ export const HR_ISSUE_LABEL: Record<IssueKind, string> = {
          (สโตร์ของบทบาท และคิวคำขอรายรหัส) ต้องนับครั้งเดียว จึงต้องเทียบเลขที่ก่อน
          ข้อมูลตั้งต้นของฝ่ายบุคคลไม่มีเลขที่ จึงเป็นช่องที่ว่างได้ */
 export type LateRow = { d: string; min: number; was?: number };
+/* half = ลาครึ่งวันช่วงไหน (am เช้า · pm บ่าย) ไม่มีค่า = ไม่รู้ช่วง — ใช้ตรวจลาแล้วแต่มีเช็คอิน (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+/* h = ชั่วโมงที่ลาจริงของวันที่ลาไม่เต็มวัน (span "half" = ไม่เต็มวัน รวมลารายชั่วโมง) (ผู้ใช้สั่ง 19 ต.ค. 2569)
+   แถวเก่าไม่มี h คิดจากช่วงเช้า/บ่ายตามเวลาทำงาน (เช้า 09–12 = 3 ชม.) ไม่รู้ช่วงคิด 4 ชม. */
+export type LeaveRow = { d: string; type: LeaveKind; span: "full" | "half"; half?: "am" | "pm"; no?: string; h?: number };
+
+/** ชั่วโมงลาของแถวหนึ่ง — เต็มวัน = 8 ชม. (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+export function leaveRowHours(x: LeaveRow, sch?: DaySchedule) {
+  if (x.span !== "half") return LEAVE_DAY_HOURS;
+  if (x.h != null) return x.h;
+  if (x.half) return halfHours(x.half === "am" ? "morning" : "afternoon", sch);
+  return LEAVE_DAY_HOURS / 2;
+}
+
+/** วันลาของแถวหนึ่ง (หน่วยวัน = ชั่วโมง ÷ 8) */
+export function leaveRowDays(x: LeaveRow, sch?: DaySchedule) {
+  return leaveRowHours(x, sch) / LEAVE_DAY_HOURS;
+}
 /*
- * วันลาหนึ่งวันของคนหนึ่ง
- * hours = ชั่วโมงที่ลาจริงของวันนั้น (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1 — ลาไม่เต็มวันนับตามชั่วโมง)
- * ไม่มีค่า = ใช้ span เหมือนเดิม (เต็มวัน หรือครึ่งวัน)
+ * HR ยืนยันวันที่ลาแล้วแต่มีเช็คอิน (ผู้ใช้สั่ง 15 ต.ค. 2569) — คีย์ "รหัสพนักงาน|วันที่"
+ * by = ผู้ยืนยัน · at = เวลาที่ยืนยัน · note = หมายเหตุ (ว่างได้) เช่น มาทำงานจริง ยกเลิกใบลาภายหลัง
+ * ยืนยันแล้วไม่ฟ้องแดงและไม่นับเป็นรายการที่ต้องตรวจ
  */
-/* unpaid = วันลาที่ไม่ได้ค่าจ้าง — ลาเกินสิทธิ์ และลาคลอดส่วนที่เกินวันที่บริษัทจ่าย
-   (เจ้าของตัดสิน 6 ต.ค. 2569 — ลาคลอดบริษัทจ่าย 45 วันแรก ที่เหลือประกันสังคมจ่าย) */
-export type LeaveRow = { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no?: string; unpaid?: boolean };
+export type ClashOk = { by: string; at: string; note: string };
 export type OtRow = { d: string; h: number; kind: OtKind; was?: number; no?: string };
-/* absent = ฝ่ายบุคคลตรวจแล้วสรุปว่า "ขาดงานจริง" → หักเต็มวัน (เจ้าของตัดสิน 6 ต.ค. 2569)
-   ไม่ติดธง = ตรวจแล้วมาทำงานจริง (ลืมตอกบัตร) ไม่หักเงิน */
-export type IssueRow = { d: string; kind: IssueKind; note: string; absent?: boolean };
+/* in / out = เวลาเข้า-ออกงานที่ฝ่ายบุคคลแก้ให้ (พนักงานลืมกด) · note = ข้อความสรุปที่บันทึกไว้ มีค่าเมื่อเคลียร์แล้ว */
+export type IssueRow = { d: string; kind: IssueKind; note: string; in?: string; out?: string };
 
 export type TimeRec = {
   late: LateRow[];
   leave: LeaveRow[];
   ot: OtRow[];
   issues: IssueRow[];
+  /** เวลาเข้า-ออกงานที่ฝ่ายบุคคลแก้ให้ รายวัน (ผู้ใช้สั่ง 6 ต.ค. 2569) — ไม่มี = ตามที่ลงเวลาไว้ */
+  fix?: DayFix[];
 };
+
+export type DayFix = { d: string; in: string; out: string };
 
 /*
  * เวลาทำงานเก็บเป็นรายคน กรองตามช่วงวันของรอบ
@@ -858,7 +911,7 @@ export type TimeRec = {
  *
  * E16 พ้นสภาพ 31 พ.ค. 2569 จึงไม่มีข้อมูล ระบบต้องไม่พังเมื่อไม่มีคีย์
  */
-export const HR_TIME: Record<string, TimeRec> = {
+const HR_TIME_BASE: Record<string, TimeRec> = {
   E01:{late:[{d:"2026-08-05",min:18}], leave:[],
        ot:[{d:"2026-07-16",h:4,kind:"after_work"},{d:"2026-08-18",h:3,kind:"after_work"}], issues:[]},
   E02:{late:[{d:"2026-07-07",min:15},{d:"2026-08-04",min:25},{d:"2026-08-20",min:12}],
@@ -871,7 +924,7 @@ export const HR_TIME: Record<string, TimeRec> = {
        ot:[{d:"2026-07-11",h:7,kind:"holiday"},{d:"2026-07-23",h:3,kind:"after_work"},{d:"2026-07-28",h:5,kind:"public"},
            {d:"2026-08-15",h:8,kind:"holiday"},{d:"2026-08-26",h:2,kind:"after_work"}],
        issues:[]},
-  E05:{late:[{d:"2026-07-02",min:10}], leave:[{d:"2026-08-21",type:"personal",span:"half"}],
+  E05:{late:[{d:"2026-07-02",min:10}], leave:[{d:"2026-08-21",type:"personal",span:"half",half:"pm"}],
        ot:[], issues:[]},
   E06:{late:[{d:"2026-08-06",min:31}], leave:[{d:"2026-07-27",type:"sick",span:"full"}],
        ot:[{d:"2026-07-14",h:2.5,kind:"after_work"},{d:"2026-08-29",h:6,kind:"holiday"}],
@@ -892,6 +945,74 @@ export const HR_TIME: Record<string, TimeRec> = {
   E17:{late:[{d:"2026-08-12",min:0}], leave:[],
        ot:[], issues:[{d:"2026-08-20",kind:"norecord",note:"HR ตรวจแล้ว ลืมตอกบัตร หัวหน้ายืนยันว่ามาทำงาน"}]}
 };
+/*
+ * ตัวอย่างเวลาทำงานรอบ ต.ค. 2569 (26 ก.ย. – 25 ต.ค.) ของทีมงานที่ยังไม่มีบัญชีเข้าระบบ (เจ้าของสั่ง 8 ต.ค. 2569)
+ * หน้าสรุปเวลาทำงานรอบปัจจุบันจะได้มีมาสาย โอที และรายการที่ต้องตรวจให้ดู
+ * คนที่ผูกบทบาทไว้ (ROLE_EMPLOYEE) อ่านใบลา/โอทีจากใบจริง จึงไม่ใส่ตรงนี้
+ * เครื่องที่เก็บข้อมูลไว้แล้วได้แถวเหล่านี้ผ่าน addTimeSample (เติมเฉพาะวันที่ที่ยังไม่มีแถว)
+ */
+const HR_TIME_OCT_2569: Record<string, Partial<TimeRec>> = {
+  E02: { late: [{ d: "2026-09-29", min: 12 }, { d: "2026-10-06", min: 22 }] },
+  E03: { ot: [{ d: "2026-10-01", h: 2, kind: "after_work" }], issues: [{ d: "2026-10-02", kind: "nopair", note: "" }] },
+  E04: { late: [{ d: "2026-10-05", min: 8 }], ot: [{ d: "2026-09-26", h: 6, kind: "holiday" }] },
+  E06: { late: [{ d: "2026-10-01", min: 35 }], issues: [{ d: "2026-10-05", kind: "norecord", note: "" }] },
+  E07: { ot: [{ d: "2026-09-30", h: 2, kind: "after_work" }] },
+  E08: { late: [{ d: "2026-09-28", min: 5 }], leave: [{ d: "2026-10-07", type: "personal", span: "half", half: "am" }] },
+  E13: { late: [{ d: "2026-10-01", min: 18 }] },
+  E17: {
+    late: [{ d: "2026-10-07", min: 10 }],
+    issues: [{ d: "2026-09-30", kind: "nopair", note: "HR ตรวจแล้ว ลืมกดออก หัวหน้ายืนยันว่าอยู่ทำงานถึง 18:00" }],
+  },
+};
+
+/** เติมแถวตัวอย่างรอบ ต.ค. 2569 — วันที่ที่มีแถวอยู่แล้วในรายการชนิดเดียวกันไม่ถูกแตะ */
+export function addTimeSample(time: Record<string, TimeRec>): Record<string, TimeRec> {
+  let out = time;
+  for (const [id, add] of Object.entries(HR_TIME_OCT_2569)) {
+    const cur = out[id] ?? { late: [], leave: [], ot: [], issues: [] };
+    const merge = <R extends { d: string }>(have: R[], extra: R[] = []) => {
+      const days = new Set(have.map((x) => x.d));
+      const miss = extra.filter((x) => !days.has(x.d));
+      return miss.length ? [...have, ...miss] : have;
+    };
+    const next: TimeRec = {
+      ...cur,
+      late: merge(cur.late, add.late),
+      leave: merge(cur.leave, add.leave),
+      ot: merge(cur.ot, add.ot),
+      issues: merge(cur.issues, add.issues),
+    };
+    if (next.late !== cur.late || next.leave !== cur.leave || next.ot !== cur.ot || next.issues !== cur.issues)
+      out = { ...out, [id]: next };
+  }
+  return out;
+}
+
+export const HR_TIME: Record<string, TimeRec> = addTimeSample(HR_TIME_BASE);
+
+/*
+ * ลาครึ่งวันของข้อมูลตั้งต้นเดิมไม่มีช่วงเช้า/บ่าย (ผู้ใช้สั่ง 15 ต.ค. 2569)
+ * ข้อมูลที่เครื่องเก็บไว้แล้วเติมช่วงให้เฉพาะแถวที่ตรงกับข้อมูลตั้งต้น (วันที่ ชนิดลา ไม่มีเลขที่ใบ)
+ * แถวที่ผู้ใช้สร้างเองแล้วไม่มีช่วง ปล่อยไว้ — หน้าจอแสดง "ครึ่งวัน" ตามเดิม
+ */
+export function fillSeedLeaveHalf(time: Record<string, TimeRec>): Record<string, TimeRec> {
+  let out = time;
+  for (const [id, seed] of Object.entries(HR_TIME)) {
+    const cur = out[id];
+    if (!cur?.leave?.length) continue;
+    let hit = false;
+    const leave = cur.leave.map((x) => {
+      if (x.span !== "half" || x.half || x.no) return x;
+      const m = seed.leave.find((y) => y.d === x.d && y.type === x.type && y.span === "half" && y.half && !y.no);
+      if (!m) return x;
+      hit = true;
+      return { ...x, half: m.half };
+    });
+    if (hit) out = { ...out, [id]: { ...cur, leave } };
+  }
+  return out;
+}
+
 
 /*
  * ฐานการคำนวณเงินเดือน
@@ -969,7 +1090,10 @@ export type ComSource = {
 export function reimbItems(e: Employee, c: Cycle, src?: ComSource) {
   const month = monthKeyOf(c);
   return (src?.reimb ?? []).filter(
-    (x) => x.emp === e.id && (x.paidIn ? x.paidIn === month : x.date <= c.to),
+    /* รอบรายวันของทดลองงานบันทึก paidIn เป็นคีย์ "จาก~ถึง" (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+    (x) =>
+      x.emp === e.id &&
+      (x.paidIn ? x.paidIn === month || x.paidIn === `${c.from}~${c.to}` : x.date <= c.to),
   );
 }
 
@@ -994,28 +1118,129 @@ export function commissionBase(e: Employee, c: Cycle, src?: ComSource) {
 /** รายการปรับปรุงด้วยมือ — ต้องมีเหตุผลกำกับทุกครั้ง (BR-03) */
 export type Adjust = { amt: number; why: string };
 
-export type Extra = { incentive: number; allowance: number; adjust: Adjust[] };
+/*
+ * ─── รายการเงินได้/รายการหักที่กรอกเองตามแบบสลิป (ผู้ใช้สั่ง 16 ต.ค. 2569) ───
+ * แทน Incentive + ค่าตำแหน่ง + "รายการปรับปรุงด้วยมือ" แบบพิมพ์เหตุผลเอง
+ * สลิปลงบรรทัดตามคีย์ตรง ๆ ไม่ต้องเดาจากชื่อ · ว่าง = 0
+ * มาสาย ประกันสังคม ค่าล่วงเวลา ภาษีหัก ณ ที่จ่าย ยังคิดจากสูตรเหมือนเดิม
+ */
+export type PayItemKey =
+  | "position" | "fuel" | "living" | "phone" | "food" | "diligence" | "commission" | "incentive" | "otherInc"
+  | "absent" | "sick" | "personal" | "otherCut" | "welfare" | "advance" | "otherPay" | "guarantee" | "studentLoan";
+
+export const PAY_INCOME_ITEMS: { k: PayItemKey; label: string }[] = [
+  { k: "position", label: "ค่าตำแหน่ง" },
+  { k: "fuel", label: "ค่าน้ำมัน" },
+  { k: "living", label: "ค่าครองชีพ" },
+  { k: "phone", label: "ค่าโทรศัพท์" },
+  { k: "food", label: "ค่าอาหาร" },
+  { k: "diligence", label: "เบี้ยขยัน" },
+  { k: "commission", label: "ค่า commission" },
+  { k: "incentive", label: "ค่า Incentive" },
+  /* รายได้ที่ไม่ตรงบรรทัดใด (ย้ายมาจากรายการปรับปรุงเก่า) — ต่อท้าย ค่า Incentive บนสลิป */
+  { k: "otherInc", label: "รายได้อื่นๆ" },
+];
+
+export const PAY_CUT_ITEMS: { k: PayItemKey; label: string }[] = [
+  { k: "absent", label: "หัก ขาดงาน" },
+  { k: "sick", label: "หัก ลาป่วย" },
+  { k: "personal", label: "หัก ลากิจ" },
+  { k: "otherCut", label: "หัก อื่นๆ" },
+  { k: "welfare", label: "หัก สวัสดิการ" },
+  { k: "advance", label: "หัก เบิกล่วงหน้า" },
+  { k: "otherPay", label: "หัก จ่ายอื่นๆ" },
+  { k: "guarantee", label: "หัก ประกันผลงาน" },
+  { k: "studentLoan", label: "หัก กยศ" },
+];
+
+export type PayItems = Partial<Record<PayItemKey, number>>;
+
+export type Extra = { items: PayItems };
+
+/** อัตราภาษีหัก ณ ที่จ่ายของค่าจ้างทดลองงานรายวัน (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+export const DAILY_WHT_RATE = 0.03;
+
+/** รวมยอดของรายการชุดหนึ่ง (รายได้หรือรายการหัก) */
+export function itemSum(items: PayItems, list: { k: PayItemKey }[]) {
+  return round2(list.reduce((a, x) => a + (items[x.k] ?? 0), 0));
+}
+
+/* รายการปรับปรุงเก่า → คีย์ที่ชื่อตรง (ย้ายข้อมูลครั้งเดียว ไม่ใช้กับข้อมูลใหม่) */
+const LEGACY_INCOME: [RegExp, PayItemKey][] = [
+  [/ตำแหน่ง/, "position"],
+  [/น้ำมัน/, "fuel"],
+  [/ครองชีพ/, "living"],
+  [/โทรศัพท์|มือถือ/, "phone"],
+  [/อาหาร/, "food"],
+  [/ขยัน/, "diligence"],
+  [/คอม|commission/i, "commission"],
+  [/incentive|อินเซน/i, "incentive"],
+];
+const LEGACY_CUT: [RegExp, PayItemKey][] = [
+  [/ขาดงาน/, "absent"],
+  [/ลาป่วย/, "sick"],
+  [/ลากิจ/, "personal"],
+  [/สวัสดิการ/, "welfare"],
+  [/เบิกล่วงหน้า|เบิกเงินล่วงหน้า|advance/i, "advance"],
+  [/ประกันผลงาน/, "guarantee"],
+  [/กยศ|กองทุนเงินให้กู้ยืม/, "studentLoan"],
+];
+
+/**
+ * ค่าตอบแทนรุ่นเก่า {incentive, allowance, adjust} → รายการตามแบบสลิป (ผู้ใช้สั่ง 16 ต.ค. 2569)
+ * ค่าตำแหน่ง/Incentive ลงช่องเดิม · ปรับปรุงที่ชื่อตรงลงช่องนั้น · ไม่ตรง: บวก → รายได้อื่นๆ ลบ → หัก อื่นๆ
+ * รอบเก่าที่มีแต่ยอดรวม (adj) ไม่มีรายการ ลงช่องอื่นๆ ตามเครื่องหมาย
+ */
+export function itemsOfLegacy(x: { incentive?: number; allowance?: number; adjust?: Adjust[]; adj?: number }): PayItems {
+  const out: PayItems = {};
+  const add = (k: PayItemKey, v: number) => {
+    if (v) out[k] = round2((out[k] ?? 0) + v);
+  };
+  add("incentive", x.incentive ?? 0);
+  add("position", x.allowance ?? 0);
+  const list = x.adjust ?? [];
+  for (const a of list) {
+    if (!a.amt) continue;
+    if (a.amt > 0) add(LEGACY_INCOME.find(([re]) => re.test(a.why))?.[1] ?? "otherInc", a.amt);
+    else add(LEGACY_CUT.find(([re]) => re.test(a.why))?.[1] ?? "otherCut", -a.amt);
+  }
+  if (!list.length && x.adj) add(x.adj > 0 ? "otherInc" : "otherCut", Math.abs(x.adj));
+  return out;
+}
+
+/** ข้อมูลที่เก็บไว้ทุกรุ่น → รูปแบบปัจจุบัน — รุ่นใหม่ (มี items) ผ่านไปเลย ทิ้งค่าที่ไม่ใช่ตัวเลข */
+export function normalizeExtra(raw: unknown): Extra {
+  const o = (raw ?? {}) as { items?: unknown; incentive?: number; allowance?: number; adjust?: Adjust[] };
+  if (o.items && typeof o.items === "object") {
+    const items: PayItems = {};
+    for (const [k, v] of Object.entries(o.items as Record<string, unknown>))
+      if (typeof v === "number" && Number.isFinite(v) && v) items[k as PayItemKey] = v;
+    return { items };
+  }
+  return { items: itemsOfLegacy(o) };
+}
 
 /*
- * ค่าที่ไม่มีสูตร — CEO เป็นผู้พิจารณา HR กรอกตาม
- * รายการปรับปรุงด้วยมือต้องมีเหตุผลกำกับ เพื่อให้ตรวจย้อนได้ว่าไม่ใช่การพิมพ์ผิด
+ * ค่าที่ไม่มีสูตร — CEO เป็นผู้พิจารณา HR กรอกตาม (รูปแบบรายการตามแบบสลิป ผู้ใช้สั่ง 16 ต.ค. 2569)
  */
 export const HR_EXTRA: Record<string, Record<string, Extra>> = {
   "2026-07": {
-    E11:{incentive:8000,  allowance:5000, adjust:[]},
-    E10:{incentive:4000,  allowance:3000, adjust:[]},
-    E12:{incentive:2000,  allowance:2000, adjust:[]},
-    E01:{incentive:0,     allowance:1500, adjust:[]},
-    E04:{incentive:3000,  allowance:0,    adjust:[]}
+    E11:{items:{incentive:8000, position:5000}},
+    E10:{items:{incentive:4000, position:3000}},
+    E12:{items:{incentive:2000, position:2000}},
+    E01:{items:{position:1500}},
+    E04:{items:{incentive:3000}}
   },
   "2026-08": {
-    E11:{incentive:8000,  allowance:5000, adjust:[]},
-    E10:{incentive:5000,  allowance:3000, adjust:[]},
-    E12:{incentive:2000,  allowance:2000, adjust:[]}
+    E11:{items:{incentive:8000, position:5000}},
+    E10:{items:{incentive:5000, position:3000}},
+    E12:{items:{incentive:2000, position:2000}}
   }
 };
 
+/* รอบ ม.ค.–มิ.ย. 2569 ปิดรอบเงินเดือนแล้วแบบเดียวกับ ก.ค. (ผู้ใช้สั่ง 6 ต.ค. 2569) */
 export const HR_PAYRUN: Period[] = [
+  ...HR_PAST_MONTHS.map(pastPayrun),
   {month:"2026-07", closed:true, closedAt:"2026-07-29", closedBy:"E12", reopened:[],
    dayClosed:true, dayClosedAt:"2026-07-29", dayClosedBy:"E12", dayReopened:[], sum:null, daySum:null}
 ];
@@ -1039,11 +1264,23 @@ export type Slip = {
 };
 
 /* รอบ ก.ค. 2569 ปิดและเผยแพร่ไว้แล้วตามต้นแบบ พนักงานจึงมีสลิปให้เปิดดูตั้งแต่แรก */
+/* รอบ ม.ค.–มิ.ย. 2569 เผยแพร่สลิปแล้วแบบเดียวกับ ก.ค. (ผู้ใช้สั่ง 6 ต.ค. 2569) */
 export const HR_PAYSLIP: Slip[] = [
+  ...HR_PAST_MONTHS.map(pastSlip),
   {month:"2026-07", published:true, madeAt:"2026-07-30", publishedAt:"2026-07-31", by:"E12",
    dayMadeAt:"2026-07-30", dayPublished:true, dayPublishedAt:"2026-07-31", dayBy:"E12",
    dayUnpublished:[], views:{}, downloads:{}, unpublished:[]}
 ];
+
+/** สลิปของรอบเก่า — สร้างและเผยแพร่แล้วทั้งสองกลุ่ม (แบบเดียวกับ ก.ค.) (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+export function pastSlip(month: string): Slip {
+  const d = pastStepDates(month);
+  return {
+    month, published: true, madeAt: d.made, publishedAt: d.published, by: "E12",
+    dayMadeAt: d.made, dayPublished: true, dayPublishedAt: d.published, dayBy: "E12",
+    dayUnpublished: [], views: {}, downloads: {}, unpublished: [],
+  };
+}
 
 /** เติมค่าที่ขาดให้สลิปที่เก็บไว้ก่อนแยกกลุ่ม (ข้อมูลเก่าใน localStorage) */
 export function fillSlip(sp: Slip): Slip {
@@ -1082,10 +1319,16 @@ export const HR_INTERN_LEAVE: InternLeave[] = [
    note:"ไปสอบที่มหาวิทยาลัย", at:"2026-09-08 09:15", status:"pending"},
   {id:"LV-2569-0017", emp:"E14", lt:"sick", from:"2026-09-02", to:"2026-09-02", days:1,
    note:"เป็นไข้", at:"2026-09-02 08:05", status:"approved", by:"E12", decidedAt:"2026-09-02 08:40"},
+  /* ตัวอย่างรอบปัจจุบัน (เจ้าของสั่ง 8 ต.ค. 2569) — เติมเข้าเครื่องเดิมผ่าน hr-store (เฉพาะเลขที่ที่ยังไม่มี) */
+  {id:"LV-2569-0066", emp:"E14", lt:"personal", from:"2026-10-15", to:"2026-10-15", days:1,
+   note:"สอบกลางภาคที่มหาวิทยาลัย", at:"2026-10-06 10:30", status:"pending"},
 ];
 
 /*
- * CEO อนุมัติยอดเงินเดือนก่อน ฝ่ายบุคคลจึงปิดรอบได้ (ต้นแบบ hr-payroll.html / ceo-approvals.html)
+ * ⚠️ เลิกขั้น CEO อนุมัติยอดเงินเดือนแล้ว — ปิดรอบตอนคำนวณเงินเดือนแล้วออกสลิป/เผยแพร่ได้เลย (ผู้ใช้สั่ง 13 ต.ค. 2569)
+ * ชนิดและข้อมูลด้านล่างเหลือไว้อ่านประวัติการอนุมัติของรอบเก่าเท่านั้น ไม่มีหน้าไหนใช้เป็นด่านแล้ว
+ *
+ * (เดิม) CEO อนุมัติยอดเงินเดือนก่อน ฝ่ายบุคคลจึงปิดรอบได้ (ต้นแบบ hr-payroll.html / ceo-approvals.html)
  * แยกตามรอบและกลุ่มการจ่าย — draft ยังไม่ส่ง · waiting รอ CEO · approved อนุมัติแล้ว · rejected ตีกลับ
  * ยอดที่ส่ง (คน / สุทธิ / ประกันสังคม) เก็บไว้ ณ ตอนส่ง CEO จะได้เห็นตัวเลขเดียวกับที่ฝ่ายบุคคลส่งมา
  * TODO: ของจริงอยู่ที่ payroll_approval (month, group, status, decided_by, decided_at, reason)
@@ -1101,7 +1344,117 @@ export type PayApproval = {
   by?: string;
   at?: string;
   reason?: string;
+  /** ยอดรายคน ณ ตอนส่งล่าสุด (หรือตอน CEO อนุมัติ) — ไว้เทียบหาว่าอะไรเปลี่ยน (ผู้ใช้สั่ง 19 ต.ค. 2569) · รอบเก่าไม่มี */
+  lines?: PaySnap;
+  /** แก้ไขแล้วส่งใหม่ครั้งที่เท่าไร — ไม่มี/0 = ส่งครั้งแรก (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  ver?: number;
+  /** ระบบส่งใหม่ให้เองเพราะ HR แก้ยอดหลังส่ง (ไม่ได้กดส่งเอง) */
+  auto?: boolean;
+  /** สถานะก่อนส่งใหม่ — "approved" = แก้หลัง CEO อนุมัติไปแล้ว */
+  prev?: "waiting" | "approved" | "rejected" | "draft";
+  /** ยอดสุทธิรวมของการส่งครั้งก่อน */
+  prevNet?: number;
+  /** สิ่งที่เปลี่ยนจากการส่งครั้งก่อน — รายคน ช่อง ก่อน → หลัง */
+  changes?: PayChange[];
 };
+
+/*
+ * ─── ยอดรายคน ณ ตอนส่ง และสิ่งที่เปลี่ยน (ผู้ใช้สั่ง 19 ต.ค. 2569) ───
+ * แก้ยอดหลังส่ง CEO = ระบบส่งใหม่ให้เอง (แบบเดียวกับงานที่ PM ตรวจ) พร้อมรายการ "สิ่งที่เปลี่ยน"
+ * เก็บแค่ตัวเลขรายช่องของแต่ละคน (คีย์ = รหัสพนักงาน · ช่อง = PAY_SNAP_FIELDS หรือ "i.<รายการ>")
+ */
+export type PaySnap = Record<string, Record<string, number>>;
+export type PayChange = {
+  emp: string;
+  /** ชื่อ ณ ตอนส่ง — สำรองไว้เผื่อคนนั้นออกจากทะเบียนแล้ว (โชว์ผ่าน emp-name) */
+  name: string;
+  field: string;
+  was: number;
+  now: number;
+  /** add = เพิ่งเข้ารอบ · drop = ออกจากรอบ */
+  kind?: "add" | "drop";
+};
+
+const PAY_SNAP_FIELDS: { k: string; label: string; get: (x: CycleLine) => number }[] = [
+  { k: "days", label: "วันทำงาน", get: (x) => x.days },
+  { k: "base", label: "เงินเดือน/ค่าจ้าง", get: (x) => x.base },
+  { k: "ot", label: "ค่าล่วงเวลา", get: (x) => x.ot },
+  { k: "com", label: "ค่าคอมมิชชั่น (คำนวณ)", get: (x) => (x.com ?? 0) - (x.items?.commission ?? 0) },
+  { k: "late", label: "หักมาสาย", get: (x) => x.late },
+  { k: "ss", label: "ประกันสังคม", get: (x) => x.ss },
+  { k: "wht", label: "ภาษีหัก ณ ที่จ่าย", get: (x) => x.wht ?? 0 },
+  { k: "reimb", label: "ค่าใช้จ่ายคืน", get: (x) => x.reimb ?? 0 },
+];
+
+/** ชื่อช่องของสิ่งที่เปลี่ยน — "net" = ยอดสุทธิ */
+export function payFieldLabel(k: string) {
+  if (k === "net") return "ยอดสุทธิ";
+  if (k.startsWith("i.")) {
+    const key = k.slice(2);
+    return [...PAY_INCOME_ITEMS, ...PAY_CUT_ITEMS].find((x) => x.k === key)?.label ?? key;
+  }
+  return PAY_SNAP_FIELDS.find((x) => x.k === k)?.label ?? k;
+}
+
+/** ยอดรายคนของรอบ ณ ตอนนี้ → เก็บกับการส่ง/การอนุมัติ */
+export function paySnapOf(sum: CycleSum): PaySnap {
+  const out: PaySnap = {};
+  for (const x of sum.lines) {
+    const f: Record<string, number> = { net: round2(x.net) };
+    for (const d of PAY_SNAP_FIELDS) {
+      const v = round2(d.get(x));
+      if (v !== 0) f[d.k] = v;
+    }
+    for (const [k, v] of Object.entries(x.items ?? {})) if (v) f[`i.${k}`] = round2(v);
+    out[x.id] = f;
+  }
+  return out;
+}
+
+/** ชื่อรายคนของรอบ ณ ตอนนี้ — ใช้ตอนสร้างรายการสิ่งที่เปลี่ยน */
+export function payNamesOf(sum: CycleSum): Record<string, string> {
+  return Object.fromEntries(sum.lines.map((x) => [x.id, x.name]));
+}
+
+/**
+ * สิ่งที่เปลี่ยนระหว่างยอดที่ส่งครั้งก่อนกับตอนนี้ — รายคน: ยอดสุทธิก่อน แล้วตามด้วยช่องที่ขยับ
+ * คนที่เพิ่งเข้ารอบ/ออกจากรอบขึ้นแถวเดียว (ยอดสุทธิ 0 → x หรือ x → 0)
+ */
+export function payChanges(
+  was: PaySnap,
+  now: PaySnap,
+  names: Record<string, string> = {},
+  wasNames: Record<string, string> = {},
+): PayChange[] {
+  const out: PayChange[] = [];
+  const diff = (a: number, b: number) => Math.abs(a - b) > 0.005;
+  for (const id of new Set([...Object.keys(was), ...Object.keys(now)])) {
+    const a = was[id];
+    const b = now[id];
+    const name = names[id] ?? wasNames[id] ?? id;
+    if (!a && b) {
+      out.push({ emp: id, name, field: "net", was: 0, now: b.net ?? 0, kind: "add" });
+      continue;
+    }
+    if (a && !b) {
+      out.push({ emp: id, name, field: "net", was: a.net ?? 0, now: 0, kind: "drop" });
+      continue;
+    }
+    if (!a || !b) continue;
+    const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => k !== "net");
+    const moved = keys.filter((k) => diff(a[k] ?? 0, b[k] ?? 0));
+    if (moved.length === 0 && !diff(a.net ?? 0, b.net ?? 0)) continue;
+    out.push({ emp: id, name, field: "net", was: a.net ?? 0, now: b.net ?? 0 });
+    for (const k of moved) out.push({ emp: id, name, field: k, was: a[k] ?? 0, now: b[k] ?? 0 });
+  }
+  return out;
+}
+
+/** ยอดตอนนี้ไม่ตรงกับที่ส่งไว้ — มียอดรายคนเทียบรายคน · รอบเก่าไม่มีรายคนเทียบยอดสุทธิรวม */
+export function payDrifted(ap: PayApproval, sum: CycleSum) {
+  if (ap.lines) return payChanges(ap.lines, paySnapOf(sum)).length > 0;
+  return ap.net !== undefined && Math.abs(sum.net - ap.net) > 0.005;
+}
 
 export const payApproveKey = (month: string, group: PayGroup) => `${month}|${group}`;
 
@@ -1113,14 +1466,23 @@ export const payApproveKey = (month: string, group: PayGroup) => `${month}|${gro
  * ช่อง people/net/ss ที่นี่เป็น "ยอด ณ ตอนที่ฝ่ายบุคคลกดส่ง" ไว้ตรวจว่าตัวเลขขยับหลังส่งหรือยังเท่านั้น
  */
 export const HR_PAYAPPROVE: Record<string, PayApproval> = {
+  /* รอบ ม.ค.–มิ.ย. 2569 CEO อนุมัติแล้วแบบเดียวกับ ก.ค. (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+  ...Object.fromEntries(HR_PAST_MONTHS.flatMap((m) => Object.entries(pastApprovals(m)))),
   "2026-07|month": {status:"approved", by:"CEO", at:"2026-07-29 09:10"},
   "2026-07|day": {status:"approved", by:"CEO", at:"2026-07-29 09:10"},
-  /* ต้นแบบ ceo-approvals.html CEO_PAYROLL — รอ CEO อนุมัติ (ยอดอ่านจากรอบ ไม่เก็บไว้ที่นี่) */
-  "2026-08|month": {status:"waiting", sentBy:"E12", sentAt:"2026-09-08 16:20"},
-  "2026-08|day": {status:"waiting", sentBy:"E12", sentAt:"2026-09-08 16:22"},
+  /* รอบ ส.ค. 2569 เคยรอ CEO อนุมัติ — เลิกขั้นนี้แล้ว รอบนี้คำนวณแล้วปิดรอบเงินเดือนได้เลย (ผู้ใช้สั่ง 13 ต.ค. 2569) */
 };
 
-export function payApproval(all: Record<string, PayApproval>, month: string, group: PayGroup) {
+/** CEO อนุมัติยอดของรอบเก่าแล้วทั้งสองกลุ่ม (แบบเดียวกับ ก.ค.) (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+export function pastApprovals(month: string): Record<string, PayApproval> {
+  const at = `${pastStepDates(month).approved} 09:10`;
+  return {
+    [payApproveKey(month, "month")]: { status: "approved", by: "CEO", at },
+    [payApproveKey(month, "day")]: { status: "approved", by: "CEO", at },
+  };
+}
+
+export function payApproval(all:Record<string, PayApproval>, month: string, group: PayGroup) {
   return all[payApproveKey(month, group)] ?? { status: "draft" as const };
 }
 
@@ -1166,9 +1528,12 @@ export function workdays(month: string) {
  * เข้าใหม่กลางรอบหรือลาออกกลางรอบ นับเฉพาะช่วงที่ยังอยู่ (HR-05 S-3)
  */
 export function daysOfIn(e: Employee, c: Cycle) {
+  /* ผ่านทดลองงานกลางรอบ — ช่วงที่ยังจ่ายรายวันนับถึงวันก่อนเริ่มเงินเดือนเท่านั้น (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  const payFrom = e.type === "full" && isDaily(e, c) ? e.probPass?.payFrom : undefined;
   return workdaysIn(c).filter((d) => {
     if (d < e.startedAt) return false;
     if (e.leftAt && d > e.leftAt) return false;
+    if (payFrom && d >= payFrom) return false;
     return true;
   });
 }
@@ -1182,14 +1547,6 @@ export function inRange(e: Employee, c: Cycle) {
   if (e.startedAt > c.to) return false;
   if (e.leftAt && e.leftAt < c.from) return false;
   return true;
-}
-
-/**
- * คนที่มีค่าจ้างในระบบ — นักศึกษาฝึกงานไม่มีค่าจ้างและไม่มีสลิป
- * (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 · เจ้าของยืนยัน) ยังอยู่ในทะเบียนและต้องลงเวลาตามปกติ
- */
-export function isPaid(e: Employee) {
-  return e.type !== "intern";
 }
 
 export function inPeriod(e: Employee, month: string) {
@@ -1220,9 +1577,10 @@ export function lateMin(r: TimeRec) {
   return r.late.reduce((a, x) => a + x.min, 0);
 }
 
-/** ลาครึ่งวันนับเป็น 0.5 วัน */
-export function leaveDays(r: TimeRec) {
-  return r.leave.reduce((a, x) => a + (x.span === "half" ? 0.5 : 1), 0);
+/** วันลารวม — ลาไม่เต็มวันนับตามชั่วโมงจริง ÷ 8 (ผู้ใช้สั่ง 19 ต.ค. 2569 · เดิมครึ่งวัน = 0.5) */
+/* วันหยุด/เสาร์–อาทิตย์ไม่นับเป็นวันลา — แถวเก่าที่กางทุกวันในปฏิทินไว้ก็ไม่ถูกนับ (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+export function leaveDays(r: TimeRec, sch?: DaySchedule) {
+  return r.leave.filter((x) => isWorkIso(x.d)).reduce((a, x) => a + leaveRowDays(x, sch), 0);
 }
 
 export function otHours(r: TimeRec, kind?: OtKind) {
@@ -1275,8 +1633,10 @@ export function ssCeilings() {
   return [...(list.length ? list : HR_SS_CEILING)].sort((a, b) => a.from - b.from);
 }
 
-export function extraOf(all: Record<string, Record<string, Extra>>, id: string, month: string) {
-  return all[month]?.[id] ?? { incentive: 0, allowance: 0, adjust: [] };
+export function extraOf(all: Record<string, Record<string, Extra>>, id: string, month: string): Extra {
+  /* ผ่าน normalizeExtra เสมอ — กันข้อมูลรุ่นเก่าที่หลุดการย้ายมา (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  const v = all[month]?.[id];
+  return v ? normalizeExtra(v) : { items: {} };
 }
 
 function round2(v: number) {
@@ -1284,17 +1644,49 @@ function round2(v: number) {
 }
 
 /** พนักงานทดลองงานจ่ายค่าจ้างรายวันตามวันที่มาทำงานจริง ไม่ใช่เงินเดือนหารสัดส่วน (ตามต้นแบบ) */
-export function isDaily(e: Employee) {
-  return e.type === "probat";
+export function isDaily(e: Employee, at?: Cycle | string) {
+  if (e.type === "probat") return true;
+  /*
+   * ผ่านทดลองงานกลางรอบ (ผู้ใช้สั่ง 13 ต.ค. 2569) — ประเภทเป็นพนักงานประจำแล้ว แต่ยังจ่ายแบบทดลองงานจนจบรอบ
+   * ตัดสินจากวันแรกของช่วง (รอบเดือน/รอบรายวัน) เทียบ payFrom · ไม่ส่งช่วงมา = ดูจากวันนี้
+   */
+  const payFrom = e.probPass?.payFrom;
+  if (!payFrom) return false;
+  const d = at === undefined ? todayIso() : typeof at === "string" ? at : at.from;
+  return d < payFrom;
 }
 
 /**
- * อัตราค่าจ้างรายวันของพนักงานทดลองงาน
- * = ฐานเงินเดือน ÷ จำนวนวันทำงานต่อเดือน (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 1.2 — หารด้วย 22 วัน)
- * ตัวหารตั้งได้ที่ตั้งค่าระบบ ไม่ใช่ค่าตายตัวในโปรแกรม
+ * วันเริ่มจ่ายรายเดือนหลังผ่านทดลองงาน = วันแรกของรอบเงินเดือนถัดไปหลังวันที่มีผล
+ * วันที่มีผลตรงกับวันแรกของรอบพอดี = เริ่มรอบนั้นเลย (ผู้ใช้สั่ง 13 ต.ค. 2569)
+ */
+export function payFromAfterPass(at: string) {
+  const c = hrCycle(cycleMonthOfDay(at));
+  return at === c.from ? at : addDay(c.to, 1);
+}
+
+/**
+ * "จ่ายแบบทดลองงานถึงรอบ … · เริ่มเงินเดือนรอบ …" — null = ไม่ได้บันทึกผ่านทดลองงานผ่านกล่องผ่านทดลองงาน
+ * (ผู้ใช้สั่ง 13 ต.ค. 2569)
+ */
+export function probPayNote(e: Employee) {
+  const p = e.probPass;
+  if (!p || e.type !== "full") return null;
+  const start = `เริ่มเงินเดือนรอบ ${thaiMonth(cycleMonthOfDay(p.payFrom))}`;
+  /* ผ่านตรงวันแรกของรอบ = ไม่มีช่วงจ่ายแบบทดลองงานต่อ */
+  if (p.at >= p.payFrom) return start;
+  return `จ่ายแบบทดลองงานถึงรอบ ${thaiDate(addDay(p.payFrom, -1))} · ${start}`;
+}
+
+/** ตัวหารค่าจ้างรายวันของทดลองงาน — เงินเดือน ÷ 22 วันทำงาน (ผู้ใช้สั่ง 19 ต.ค. 2569 · เดิม ÷ 30) */
+export const PROB_DAY_DIVISOR = 22;
+
+/**
+ * อัตราค่าจ้างรายวันของทดลองงาน = เงินเดือนตามสัญญา ÷ 22 (ผู้ใช้สั่ง 19 ต.ค. 2569)
+ * มาสายหักนาทีละ อัตรารายวัน ÷ 8 ÷ 60 (lateDeduction ใช้อัตรานี้อยู่แล้ว)
  */
 export function dailyRateIn(e: Employee, c: Cycle) {
-  return baseSalaryIn(e, c) / (ratesOn(c.to).workDaysPerMonth || 22);
+  return baseSalaryIn(e, c) / PROB_DAY_DIVISOR;
 }
 
 /**
@@ -1309,19 +1701,15 @@ export function workedDaysIn(
   today?: string,
 ) {
   const upTo = (d: string) => !today || d <= today;
-  const days = daysOfIn(e, c).filter(upTo).length;
-  /*
-   * ลาไม่เต็มวันหักตามชั่วโมงจริง (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1)
-   * เช่น ลากิจ 09:00–12:00 = 3 ชั่วโมง = 3/8 ของวัน ไม่ใช่ครึ่งวันเหมาะ ๆ
-   * ใบเก่าที่ไม่ได้เก็บชั่วโมงไว้ ยังใช้ครึ่งวัน = 0.5 เหมือนเดิม
-   */
+  const work = daysOfIn(e, c).filter(upTo);
+  /* หักเฉพาะวันลาที่ตรงวันทำงานของคนนั้นในรอบ — วันหยุด/เสาร์–อาทิตย์/วันก่อนเริ่มงานไม่หัก (ผู้ใช้สั่ง 19 ต.ค. 2569)
+     เดิมหักทุกแถว ใบลาหลายวันที่คร่อมเสาร์–อาทิตย์ทำให้ทดลองงานได้ค่าจ้างขาด */
+  const workSet = new Set(work);
+  const days = work.length;
   const leave = recInRange(time, e.id, c)
-    .leave.filter((x) => upTo(x.d))
-    .reduce(
-      (a, x) => a + (x.hours != null ? Math.min(1, x.hours / HR_OT_DIVISOR.hours) : x.span === "half" ? 0.5 : 1),
-      0,
-    );
-  return round2(days - leave);
+    .leave.filter((x) => workSet.has(x.d))
+    .reduce((a, x) => a + leaveRowDays(x, scheduleFor(e)), 0);
+  return days - leave;
 }
 
 export type PaySlipCalc = {
@@ -1330,23 +1718,26 @@ export type PaySlipCalc = {
   com: number;
   inc: number;
   allow: number;
+  /** รายได้รายการอื่นที่กรอกเอง (ค่าน้ำมัน ค่าครองชีพ … รายได้อื่นๆ) รวมกัน (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  more: number;
+  /** = −(รวมรายการหักที่กรอกเอง) — ติดลบหรือศูนย์ · รอบเก่าคือยอดปรับปรุงรวม */
   adj: number;
+  /** รายการเงินได้/รายการหักตามแบบสลิป — สลิปอ่านตรงนี้ทีละช่อง */
+  items: PayItems;
   ss: number;
+  /** ภาษีหัก ณ ที่จ่าย 3% — ทดลองงานจ่ายรายวันเท่านั้น รายเดือน = 0 (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  wht: number;
   /** นาทีสายรวมในรอบ และนาทีที่ถูกหักจริง (หลังหักนาทีที่อนุโลม) */
   lateMin: number;
   lateChargedMin: number;
   /** เงินที่หักเพราะมาสาย — 0 ถ้าผู้ดูแลระบบปิดการหัก */
   late: number;
-  /** วันที่ขาดงานโดยไม่มีใบลา และเงินที่หัก (เจ้าของตัดสิน 6 ต.ค. 2569 — หักเต็มวันตามค่าจ้างรายวัน) */
-  absentDays: number;
-  absent: number;
-  /** วันลาที่ไม่ได้ค่าจ้าง (เกินสิทธิ์ · ลาคลอดเกินที่บริษัทจ่าย) และเงินที่หัก */
-  unpaidDays: number;
-  unpaid: number;
   gross: number;
   /** ค่าใช้จ่ายคืน — อยู่นอกรายได้ (ไม่รวมใน gross ไม่คิดประกันสังคม) แต่รวมในยอดสุทธิ */
   reimb: number;
   net: number;
+  /** ลาเกินสิทธิ์ที่ระบบหักให้ (รวมอยู่ใน items แล้ว) — ยอดที่ปิดรอบไว้ไม่มีช่องนี้ (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  leaveOver?: LeaveOver[];
 };
 
 /**
@@ -1361,22 +1752,24 @@ export function calcOfLine(x: CycleLine): PaySlipCalc {
   const com = x.com ?? 0;
   const inc = x.inc ?? 0;
   const allow = x.allow ?? 0;
+  const more = x.more ?? 0;
   return {
     base: x.base,
     ot: x.ot,
     com,
     inc,
     allow,
+    more,
     adj: x.adj,
+    /* รอบที่ปิดก่อนมีรายการตามแบบสลิป — แปลงจาก Incentive/ค่าตำแหน่ง/รายการปรับปรุงที่บันทึกไว้ (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+    items: x.items ?? itemsOfLegacy({ incentive: inc, allowance: allow, adjust: x.adjust, adj: x.adj }),
     ss: x.ss,
+    /* รอบเก่าไม่มีภาษีที่บันทึกไว้ = 0 · ไม่คิดย้อนหลัง ยอดสุทธิที่บันทึกไว้ไม่เปลี่ยน */
+    wht: x.wht ?? 0,
     lateMin: 0,
     lateChargedMin: 0,
     late: x.late,
-    absentDays: x.absentDays ?? 0,
-    absent: x.absent ?? 0,
-    unpaidDays: x.unpaidDays ?? 0,
-    unpaid: x.unpaid ?? 0,
-    gross: x.gross ?? round2(x.base + x.ot + com + inc + allow + x.adj),
+    gross: x.gross ?? round2(x.base + x.ot + com + inc + allow + more + x.adj),
     reimb: x.reimb ?? 0,
     net: x.net,
   };
@@ -1394,20 +1787,20 @@ export function calcOfLine(x: CycleLine): PaySlipCalc {
  * บวกลบแล้วต้องได้ยอดสุทธิเสมอ: รวมรายได้ − รวมรายการหัก + ค่าใช้จ่ายคืน = สุทธิ
  */
 
-/** รวมรายได้ของสลิป — ไม่รวมรายการปรับปรุง เพราะปรับปรุงไปอยู่ฝั่งรายการหัก */
+/** รวมรายได้ของสลิป — ไม่รวมรายการหัก (adj) เพราะอยู่ฝั่งรายการหัก */
 export function earnOf(gross: number, adj: number) {
   return round2(gross - adj);
 }
 
-/** รวมรายการหักทั้งสามช่อง — ปรับปรุงเข้ามาด้วยเครื่องหมายกลับข้าง */
-export function cutOf(p: { ss: number; late: number; adj: number }) {
-  return round2(p.ss + p.late - p.adj);
+/** รวมรายการหัก — ประกันสังคม + มาสาย + รายการหักที่กรอกเอง (adj กลับเครื่องหมาย) + ภาษีหัก ณ ที่จ่าย */
+export function cutOf(p: { ss: number; late: number; adj: number; wht?: number }) {
+  return round2(p.ss + p.late - p.adj + (p.wht ?? 0));
 }
 
 /**
  * เงินที่หักเพราะมาสาย — หักทุกนาที ไม่มีผ่อนผันและไม่มีอนุโลม (ผู้ใช้กำหนด 18 ก.ย. 2569)
  * ผู้ดูแลระบบเลือกที่ /admin/schedule:
- *   ตามฐานเงินเดือน — นาทีละ เงินเดือน ÷ 30 ÷ 8 ÷ 60 (ทดลองงานใช้อัตรารายวัน ÷ 8 ÷ 60 ซึ่งเท่ากัน)
+ *   ตามฐานเงินเดือน — นาทีละ เงินเดือน ÷ 30 ÷ 8 ÷ 60 · ทดลองงานนาทีละ (เงินเดือน ÷ 22) ÷ 8 ÷ 60 (ผู้ใช้สั่ง 19 ต.ค. 2569)
  *   กำหนดเอง       — นาทีละกี่บาทตามที่กรอก (latePerMinute)
  * ใช้ตัวหารเดียวกับค่าล่วงเวลา (HR_OT_DIVISOR) ตัวเลขสองฝั่งจะได้ไปทางเดียวกัน
  */
@@ -1415,38 +1808,101 @@ export function lateDeduction(e: Employee, c: Cycle, minutes: number) {
   /* อัตราหักมาสายของรอบนั้น — รอบเก่าคิดด้วยอัตราที่ใช้อยู่ตอนนั้น ไม่ใช่อัตราวันนี้ */
   const r = ratesOn(c.to);
   const charged = Math.max(0, minutes);
-  const perDay = isDaily(e) ? dailyRateIn(e, c) : baseSalaryIn(e, c) / HR_OT_DIVISOR.days;
-  const perMin = r.lateMode === "fixed" ? r.latePerMinute : perDay / HR_OT_DIVISOR.hours / 60;
+  const perDay = isDaily(e, c) ? dailyRateIn(e, c) : baseSalaryIn(e, c) / HR_OT_DIVISOR.days;
+  /* ชั่วโมงต่อวันตามเวลาทำงานของคนนั้น (แม่บ้าน 08:00–17:00 ก็ 8 ชม.) (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+  const ownMs = targetWorkMs(scheduleFor(e));
+  const hoursPerDay = ownMs > 0 ? ownMs / 3_600_000 : HR_OT_DIVISOR.hours;
+  const perMin = r.lateMode === "fixed" ? r.latePerMinute : perDay / hoursPerDay / 60;
   return { charged, perMin, amount: round2(charged * perMin) };
 }
 
-/** ค่าจ้างต่อวันที่ใช้หักเงิน — รายวันใช้อัตราของตัวเอง รายเดือนใช้เงินเดือน ÷ 30 */
-function perDayOf(e: Employee, c: Cycle) {
-  return isDaily(e) ? dailyRateIn(e, c) : baseSalaryIn(e, c) / HR_OT_DIVISOR.days;
+/*
+ * ─── ลาเกินสิทธิ์ของพนักงานรายเดือน (ผู้ใช้สั่ง 19 ต.ค. 2569) ───
+ * หัก = (เงินเดือน ÷ 30) × วันที่เกิน · วันที่เกิน = ชั่วโมงที่เกิน ÷ 8
+ * ไล่ใบลาที่อนุมัติแล้วของปีการลาตามวันที่ ส่วนที่เลยสิทธิ์ของประเภทนั้น (รวมพักร้อนยกมา) และตกในรอบนี้ถูกหักในรอบนี้
+ * นับเฉพาะวันทำงาน (ใบหลายวันที่คร่อมเสาร์-อาทิตย์ไม่ถูกนับวันหยุด)
+ * ลงบรรทัดหักตามแบบสลิป: ลาป่วย → "หัก ลาป่วย" · ลากิจ → "หัก ลากิจ" · ลาพักร้อน → "หัก อื่นๆ"
+ * ทดลองงานไม่ใช้สูตรนี้ — จ่ายตามวันที่มาทำงานจริงอยู่แล้ว
+ */
+export type LeaveOver = { kind: LeaveKind; hours: number; amt: number };
+
+export const LEAVE_CUT_KEY: Record<LeaveKind, PayItemKey> = { sick: "sick", personal: "personal", vacation: "otherCut" };
+
+/** วันทำงานของบริษัท — จันทร์–ศุกร์ ไม่ใช่วันหยุดบริษัท (ชุดเดียวกับ workdaysIn) */
+export function isWorkIso(iso: string) {
+  const w = parseDate(iso).getDay();
+  return w !== 0 && w !== 6 && !holidays()[iso];
 }
 
-/*
- * ขาดงานโดยไม่มีใบลา — หักเต็มวันตามค่าจ้างรายวัน (เจ้าของตัดสิน 6 ต.ค. 2569)
- *
- * หักเฉพาะวันที่ฝ่ายบุคคลตรวจแล้วสรุปว่าขาดงานจริง ไม่ใช่ทุกวันที่ไม่มีบันทึกเวลา
- * วันที่ไม่มีบันทึกเวลาเกิดจากลืมตอกบัตรก็ได้ ซึ่งมาทำงานจริงและต้องไม่ถูกหักเงิน
- * คนจ่ายรายวันไม่ต้องหักซ้ำ เพราะจ่ายตามวันที่มาทำงานอยู่แล้ว
+/**
+ * วันที่ของใบลาหนึ่งใบ (ผู้ใช้สั่ง 19 ต.ค. 2569 — แก้บั๊กทดลองงานได้เงินขาด)
+ * ใบหลายวันกางเฉพาะวันทำงาน (จันทร์–ศุกร์ ไม่ใช่วันหยุดบริษัท) — เดิมกางทุกวันในปฏิทิน
+ * เสาร์–อาทิตย์/วันหยุดที่อยู่กลางใบจึงถูกหักเป็นวันลา ค่าจ้างทดลองงานหายเกินจริง
+ * ใบวันเดียวคงวันนั้นไว้ตามที่ขอ (หน้าเวลาเห็นใบ) แต่การนับวันลา/วันทำงานไม่นับวันหยุดอยู่ดี
  */
-export function absentDeduction(e: Employee, c: Cycle, r: TimeRec) {
-  if (isDaily(e)) return { days: 0, amount: 0 };
-  const days = r.issues.filter((x) => x.absent).length;
-  return { days, amount: round2(days * perDayOf(e, c)) };
+export function leaveDatesOf(from: string, to: string = from) {
+  if (to <= from) return [from];
+  const out: string[] = [];
+  for (let d = parseDate(from); isoOf(d) <= to; d.setDate(d.getDate() + 1)) {
+    const iso = isoOf(d);
+    if (isWorkIso(iso)) out.push(iso);
+    /* กันวนไม่รู้จบ */
+    if (out.length > 90) break;
+  }
+  return out;
 }
 
-/*
- * วันลาที่ไม่ได้ค่าจ้าง — ลาเกินสิทธิ์ และลาคลอดส่วนที่เกินวันที่บริษัทจ่าย
- * วันที่ถูกทำเครื่องหมายไว้ตั้งแต่ตอนรวมใบลาเข้าเวลาทำงาน (hr-link) ที่นี่แค่คิดเป็นเงิน
- * คนจ่ายรายวันไม่ต้องหัก เพราะจ่ายตามวันที่มาทำงานอยู่แล้ว
- */
-export function unpaidLeaveDeduction(e: Employee, c: Cycle, r: TimeRec) {
-  if (isDaily(e)) return { days: 0, amount: 0 };
-  const days = r.leave.filter((x) => x.unpaid).reduce((a, x) => a + (x.span === "half" ? 0.5 : 1), 0);
-  return { days, amount: round2(days * perDayOf(e, c)) };
+/** ชั่วโมงลาเกินสิทธิ์ที่ตกในช่วงนี้ แยกประเภท */
+export function leaveOverIn(e: Employee, c: Cycle, time: Record<string, TimeRec>): Record<LeaveKind, number> {
+  const out: Record<LeaveKind, number> = { personal: 0, vacation: 0, sick: 0 };
+  const sch = scheduleFor(e);
+  const rows = (time[e.id]?.leave ?? []).filter((x) => isWorkIso(x.d));
+  const sumH = (kind: LeaveKind, from: string, to: string) =>
+    rows.filter((x) => x.type === kind && x.d >= from && x.d <= to).reduce((a, x) => a + leaveRowHours(x, sch), 0);
+  const years = [...new Set([leaveYearOf(c.from), leaveYearOf(c.to)])];
+  for (const y of years) {
+    const period = leavePeriodOf(y);
+    const [yf, yt] = periodRange(period);
+    for (const kind of Object.keys(out) as LeaveKind[]) {
+      const label = HR_LEAVE_LABEL[kind];
+      let ent = entitlementDays(label, period) * LEAVE_DAY_HOURS;
+      /* พักร้อนยกมาจากปีก่อน (ส่วนที่ไม่ได้ใช้ ไม่เกินเพดาน) — สูตรเดียวกับ carriedDays ของหน้าการลา */
+      const max = settings().rates.vacationCarryMax;
+      if (kind === "vacation" && max > 0) {
+        const prev = leavePeriodOf(y - 1);
+        const [pf, pt] = periodRange(prev);
+        const base = entitlementDays(label, prev);
+        if (base) ent += Math.min(max, Math.max(0, base - sumH(kind, pf, pt) / LEAVE_DAY_HOURS)) * LEAVE_DAY_HOURS;
+      }
+      const list = rows.filter((x) => x.type === kind && x.d >= yf && x.d <= yt).sort((a, b) => a.d.localeCompare(b.d));
+      let cum = 0;
+      for (const x of list) {
+        const before = cum;
+        cum += leaveRowHours(x, sch);
+        const over = Math.max(0, cum - Math.max(ent, before));
+        if (over > 0 && x.d >= c.from && x.d <= c.to) out[kind] += over;
+      }
+    }
+  }
+  return out;
+}
+
+/** เงินที่หักเพราะลาเกินสิทธิ์ — รายเดือนเท่านั้น */
+export function leaveOverCut(e: Employee, c: Cycle, time: Record<string, TimeRec>): LeaveOver[] {
+  if (isDaily(e, c)) return [];
+  const perDay = baseSalaryIn(e, c) / HR_OT_DIVISOR.days;
+  const over = leaveOverIn(e, c, time);
+  return (Object.keys(over) as LeaveKind[])
+    .filter((k) => over[k] > 0)
+    .map((k) => ({ kind: k, hours: over[k], amt: round2(perDay * (over[k] / LEAVE_DAY_HOURS)) }));
+}
+
+/** รายการหักที่กรอกเอง + หักลาเกินสิทธิ์ที่ระบบคิดให้ (บวกเข้าบรรทัดเดียวกันของสลิป) */
+function withLeaveCut(items: PayItems, cuts: LeaveOver[]): PayItems {
+  if (!cuts.length) return items;
+  const out: PayItems = { ...items };
+  for (const x of cuts) out[LEAVE_CUT_KEY[x.kind]] = round2((out[LEAVE_CUT_KEY[x.kind]] ?? 0) + x.amt);
+  return out;
 }
 
 /**
@@ -1464,44 +1920,52 @@ export function payIn(
   src?: ComSource,
 ): PaySlipCalc {
   const full = baseSalaryIn(e, c);
-  const base = isDaily(e)
+  const base = isDaily(e, c)
     ? round2(dailyRateIn(e, c) * workedDaysIn(e, c, time, today))
     : round2(full * prorateIn(e, c).ratio);
   const r = recInRange(time, e.id, c);
   const ot = round2(
     r.ot.reduce((a, o) => a + hourly(full) * hrOtRate(c.to)[otKindAt(o)] * o.h, 0),
   );
-  /* ค่าตอบแทนพิเศษผูกกับ "รอบเดือน" ไม่ใช่ช่วงวัน
-     ใช้เดือนของวันสุดท้ายเป็นตัวแทน เพราะรอบตัดวันที่ 25 จบในเดือนนั้น */
-  const key = monthKeyOf(c);
   const com = round2(commissionBase(e, c, src) * (hrCommission(c.to)[e.pos] ?? 0));
-  const x = extraOf(extras, e.id, key);
-  const adj = x.adjust.reduce((a, y) => a + y.amt, 0);
-  /* BR-04 ประกันสังคมคิดจากเงินเดือนฐาน ไม่รวมค่าล่วงเวลาและไม่เกินเพดาน */
-  const ss = round2(Math.min(base, ceilingOf(c.to).ceiling) * hrSsRate(c.to));
-  const gross = round2(base + ot + com + x.incentive + x.allowance + adj);
+  /* รายการตามแบบสลิป (ผู้ใช้สั่ง 16 ต.ค. 2569) — Incentive/ค่าตำแหน่งยังแยกช่องไว้ให้หน้าที่รวมยอดเดิมอ่านได้ */
+  /* หักลาเกินสิทธิ์ของรายเดือนบวกเข้าบรรทัดหักลาของสลิป (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  const leaveOver = leaveOverCut(e, c, time);
+  const items = withLeaveCut(extraOf(extras, e.id, extraKeyOf(e, c)).items, leaveOver);
+  const inc = items.incentive ?? 0;
+  const allow = items.position ?? 0;
+  const more = round2(itemSum(items, PAY_INCOME_ITEMS) - inc - allow);
+  const adj = -itemSum(items, PAY_CUT_ITEMS);
+  /* BR-04 ประกันสังคมคิดจากเงินเดือนฐาน ไม่รวมค่าล่วงเวลาและไม่เกินเพดาน
+     พนักงานทดลองงานไม่หักประกันสังคม (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+  const ss = isDaily(e, c) ? 0 : round2(Math.min(base, ceilingOf(c.to).ceiling) * hrSsRate(c.to));
+  const gross = round2(base + ot + com + inc + allow + more + adj);
   const lateTotal = lateMin(r);
   const lateCut = lateDeduction(e, c, lateTotal);
-  const absent = absentDeduction(e, c, r);
-  const unpaid = unpaidLeaveDeduction(e, c, r);
+  /* ภาษีหัก ณ ที่จ่าย 3% ของทดลองงานจ่ายรายวัน = 3% ของ (รวมเงินได้ − รายการหักก่อนภาษี) ปัด 2 ตำแหน่ง
+     ย้ายมาคิดในการคำนวณเงินเดือน บันทึกพร้อมรอบตอนปิด สลิปอ่านค่าที่บันทึกไว้ (ผู้ใช้สั่ง 16 ต.ค. 2569)
+     รายเดือนไม่มีบรรทัดนี้ (เว้นว่าง) */
+  const pre = round2(gross - ss - lateCut.amount);
+  const wht = isDaily(e, c) ? Math.max(0, round2(pre * DAILY_WHT_RATE)) : 0;
+  const reimb = round2(reimbIn(e, c, src));
   return {
     base,
     ot,
     com,
-    inc: x.incentive,
-    allow: x.allowance,
+    inc,
+    allow,
+    more,
     adj,
+    items,
     ss,
+    wht,
     lateMin: lateTotal,
     lateChargedMin: lateCut.charged,
     late: lateCut.amount,
-    absentDays: absent.days,
-    absent: absent.amount,
-    unpaidDays: unpaid.days,
-    unpaid: unpaid.amount,
     gross,
-    reimb: round2(reimbIn(e, c, src)),
-    net: round2(gross - ss - lateCut.amount - absent.amount - unpaid.amount + reimbIn(e, c, src)),
+    reimb,
+    net: round2(pre - wht + reimb),
+    leaveOver,
   };
 }
 
@@ -1520,6 +1984,16 @@ export function monthKeyOf(c: Cycle) {
   return c.to.slice(0, 7);
 }
 
+/**
+ * คีย์ของค่าตอบแทนที่ไม่มีสูตร (Incentive ค่าตำแหน่ง ปรับปรุง)
+ * รายเดือนผูกกับรอบเดือน — ใช้เดือนของวันสุดท้าย เพราะรอบตัดวันที่ 25 จบในเดือนนั้น
+ * ทดลองงานผูกกับรอบจ่ายรายช่วง "จาก~ถึง" (ผู้ใช้สั่ง 6 ต.ค. 2569)
+ * ถ้าผูกกับเดือน รอบรายช่วงหลายรอบในเดือนเดียวกันจะได้ก้อนเดียวกันซ้ำทุกรอบ
+ */
+export function extraKeyOf(e: Employee, c: Cycle) {
+  return isDaily(e, c) ? dailyRoundId(c) : monthKeyOf(c);
+}
+
 /** ช่วงวันนี้ตรงกับรอบเดือนไหนพอดีไหม — ไม่ตรงคือช่วงที่กำหนดเอง ปิดรอบไม่ได้ */
 export function cycleMonthOf(c: Cycle, months: string[]) {
   return months.find((m) => {
@@ -1531,7 +2005,7 @@ export function cycleMonthOf(c: Cycle, months: string[]) {
 /*
  * ─── ผลการคำนวณของรอบ — แหล่งเดียวของทุกหน้า ───────────────────
  *
- * หน้าคำนวณเงินเดือนกับหน้าอนุมัติของ CEO ต้องได้ตัวเลขชุดเดียวกันเสมอ
+ * หน้าคำนวณเงินเดือน สลิป และประวัติรอบต้องได้ตัวเลขชุดเดียวกันเสมอ (ไม่มีหน้าอนุมัติของ CEO แล้ว ผู้ใช้สั่ง 13 ต.ค. 2569)
  * (ผู้ใช้กำหนด 23 ก.ย. 2569 — CEO อนุมัติเลขหนึ่งแล้วจ่ายอีกเลขหนึ่งไม่ได้)
  * จึงต้องคิดด้วยฟังก์ชันเดียวกันตรงนี้ ห้ามหน้าไหนคิดเอง
  */
@@ -1561,10 +2035,9 @@ export function payLines(
   month: string | null | undefined,
 ): PayLine[] {
   return emp
-    /* ฝึกงานไม่มีค่าจ้าง จึงไม่มีบรรทัดในรอบเงินเดือนและไม่มีสลิป */
-    .filter((e) => inRange(e, range) && isPaid(e))
+    .filter((e) => inRange(e, range))
     .map((e) => {
-      const g: PayGroup = isDaily(e) ? "day" : "month";
+      const g: PayGroup = isDaily(e, range) ? "day" : "month";
       const saved = month ? lineIn(payrun, g, e.id) : null;
       return {
         e,
@@ -1577,8 +2050,9 @@ export function payLines(
 }
 
 /** บรรทัดของกลุ่มเดียว — รายเดือนกับจ่ายรายวันปิดรอบแยกกัน */
-export function linesOfGroup(lines: PayLine[], group: PayGroup) {
-  return lines.filter((x) => (isDaily(x.e) ? "day" : "month") === group);
+/* range = ช่วงของบรรทัดชุดนี้ — คนผ่านทดลองงานกลางรอบอยู่กลุ่มไหนขึ้นกับรอบ (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+export function linesOfGroup(lines: PayLine[], group: PayGroup, range?: Cycle) {
+  return lines.filter((x) => (isDaily(x.e, range) ? "day" : "month") === group);
 }
 
 /**
@@ -1594,7 +2068,7 @@ export function sumOfGroup(
   const day = group === "day";
   const out: CycleSum = {
     n: lines.length,
-    base: 0, ot: 0, com: 0, inc: 0, allow: 0, adj: 0, ss: 0, late: 0, net: 0, days: 0,
+    base: 0, ot: 0, com: 0, inc: 0, allow: 0, more: 0, wht: 0, adj: 0, ss: 0, late: 0, net: 0, days: 0,
     lines: [],
   };
   for (const { e, c, days: worked, rate } of lines) {
@@ -1604,6 +2078,8 @@ export function sumOfGroup(
     out.com += c.com;
     out.inc += c.inc;
     out.allow += c.allow;
+    out.more = (out.more ?? 0) + c.more;
+    out.wht = (out.wht ?? 0) + c.wht;
     out.adj += c.adj;
     out.ss += c.ss;
     out.late += c.late;
@@ -1619,16 +2095,14 @@ export function sumOfGroup(
       com: c.com,
       inc: c.inc,
       allow: c.allow,
+      more: c.more,
       gross: c.gross,
-      /* เก็บรายการปรับปรุงพร้อมเหตุผลไว้ด้วย สลิปย้อนหลังจะได้แสดงได้แม้ข้อมูลเดือนนั้นถูกแก้ภายหลัง */
-      adjust: extraOf(extras, e.id, monthKeyOf(range)).adjust.map((y) => ({ ...y })),
+      /* เก็บรายการตามแบบสลิปไว้ด้วย สลิปย้อนหลังจะได้แสดงได้แม้ข้อมูลรอบนั้นถูกแก้ภายหลัง (ผู้ใช้สั่ง 16 ต.ค. 2569) */
+      items: { ...c.items },
       adj: c.adj,
       ss: c.ss,
       late: c.late,
-      absentDays: c.absentDays,
-      absent: c.absent,
-      unpaidDays: c.unpaidDays,
-      unpaid: c.unpaid,
+      wht: c.wht,
       reimb: c.reimb,
       net: c.net,
       days,
@@ -1653,7 +2127,7 @@ function seedSum(month: string, day: boolean): CycleSum {
     lines: [],
   };
   for (const e of HR_EMP) {
-    if (!inPeriod(e, month) || isDaily(e) !== day) continue;
+    if (!inPeriod(e, month) || isDaily(e, hrCycle(month)) !== day) continue;
     const x = payIn(e, c, HR_TIME, HR_EXTRA, c.to);
     const days = day ? workedDaysIn(e, c, HR_TIME, c.to) : 0;
     out.n += 1;
@@ -1662,6 +2136,8 @@ function seedSum(month: string, day: boolean): CycleSum {
     out.com += x.com;
     out.inc += x.inc;
     out.allow += x.allow;
+    out.more = (out.more ?? 0) + x.more;
+    out.wht = (out.wht ?? 0) + x.wht;
     out.adj += x.adj;
     out.ss += x.ss;
     out.late += x.late;
@@ -1670,9 +2146,9 @@ function seedSum(month: string, day: boolean): CycleSum {
     out.days += days;
     out.lines.push({
       id: e.id, name: e.name, pos: e.pos,
-      base: x.base, ot: x.ot, com: x.com, inc: x.inc, allow: x.allow, gross: x.gross,
-      adjust: extraOf(HR_EXTRA, e.id, monthKeyOf(c)).adjust.map((y) => ({ ...y })),
-      adj: x.adj, ss: x.ss, late: x.late, reimb: x.reimb, net: x.net,
+      base: x.base, ot: x.ot, com: x.com, inc: x.inc, allow: x.allow, more: x.more, gross: x.gross,
+      items: { ...x.items },
+      adj: x.adj, ss: x.ss, late: x.late, wht: x.wht, reimb: x.reimb, net: x.net,
       days, rate: day ? dailyRateIn(e, c) : 0,
     });
   }
@@ -1682,6 +2158,281 @@ function seedSum(month: string, day: boolean): CycleSum {
 for (const p of HR_PAYRUN) {
   if (p.closed && !p.sum) p.sum = seedSum(p.month, false);
   if (p.dayClosed && !p.daySum) p.daySum = seedSum(p.month, true);
+}
+
+/*
+ * ═══ รอบจ่ายรายวันของพนักงานทดลองงาน (ผู้ใช้สั่ง 6 ต.ค. 2569) ═══════════
+ *
+ * ทดลองงานไม่ได้จ่ายตามรอบเดือน — หนึ่งรอบคือช่วงวันที่ใดก็ได้ วันเดียวหรือหลายวัน (เช่น 6 – 8 ต.ค.)
+ * ปิดรอบเวลา → คำนวณและปิดรอบเงินเดือน → ส่งสลิป เดินครบเหมือนรอบเดือน แต่ทีละช่วงวัน
+ * ไม่มีขั้น CEO อนุมัติแล้ว (ผู้ใช้สั่ง 13 ต.ค. 2569) · ประวัติการอนุมัติเก่าอยู่ใน payApprove คีย์ `${id}|day`
+ * ช่อง dayClosed / daySum ของรอบเดือนเป็นข้อมูลเก่า หน้าในสายรอบเงินเดือนไม่อ่านแล้ว
+ */
+export type DailyRound = {
+  /** "yyyy-mm-dd~yyyy-mm-dd" — ช่วงวันเดียวกันมีได้รอบเดียว */
+  id: string;
+  from: string;
+  to: string;
+  /** ปิดรอบเวลาทำงาน — รอบเกิดขึ้นตอนกดปิดนี้ */
+  closedAt: string;
+  closedBy: string;
+  /** ปิดรอบเงินเดือน พร้อมยอดที่บันทึกไว้ ณ ตอนปิด */
+  payClosedAt: string;
+  payClosedBy: string;
+  sum: CycleSum | null;
+  /** สลิป */
+  slipsMadeAt: string;
+  published: boolean;
+  publishedAt: string;
+  publishedBy: string;
+  unpublished: Reopen[];
+  views: Record<string, number>;
+  downloads: Record<string, number>;
+};
+
+export function dailyRoundId(c: Cycle) {
+  return `${c.from}~${c.to}`;
+}
+
+/** คีย์ของรอบรายวัน (มี "~") — คีย์รอบเดือนเป็น "yyyy-mm" */
+export function isDailyRoundKey(key: string) {
+  return /^\d{4}-\d{2}-\d{2}~\d{4}-\d{2}-\d{2}$/.test(key);
+}
+
+export function dailyRoundRange(key: string): Cycle {
+  const [from, to] = key.split("~");
+  return { from, to };
+}
+
+/**
+ * ชื่อรอบตามช่วงวันจริง — "6 ต.ค. 2569" · "6 – 8 ต.ค. 2569" · "28 ก.ย. – 3 ต.ค. 2569"
+ * ข้ามปีพิมพ์ปีทั้งสองฝั่ง
+ */
+export function rangeLabel(c: Cycle) {
+  if (c.from === c.to) return thaiDate(c.from);
+  const [y1, m1, d1] = c.from.split("-").map(Number);
+  const [y2, m2] = c.to.split("-").map(Number);
+  if (y1 !== y2) return `${thaiDate(c.from)} – ${thaiDate(c.to)}`;
+  const tail = thaiDate(c.to);
+  if (m1 === m2) return `${d1} – ${tail}`;
+  return `${thaiDate(c.from).replace(/ \d{4}$/, "")} – ${tail}`;
+}
+
+/** ชื่อรอบจากคีย์ของ payApprove — รอบเดือน "กันยายน 2569" · รอบรายวัน "6 – 8 ต.ค. 2569" */
+export function payKeyLabel(key: string, monthLabel: (m: string) => string) {
+  /* รอบรายสัปดาห์ขึ้นต้นว่า "สัปดาห์" (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  return isDailyRoundKey(key) ? probRoundLabel(dailyRoundRange(key)) : monthLabel(key);
+}
+
+/** รอบที่ทับช่วงนี้แต่ไม่ใช่ช่วงเดียวกัน — ปิดซ้อนกันไม่ได้ ไม่งั้นวันเดียวกันจ่ายสองครั้ง */
+export function overlapRound(rounds: DailyRound[], c: Cycle) {
+  return rounds.find((r) => r.id !== dailyRoundId(c) && r.from <= c.to && r.to >= c.from);
+}
+
+/**
+ * รอบจ่ายรายวันที่นับเป็นของรอบเดือนนี้ — วันสุดท้ายของรอบตกในช่วงรอบเดือน (hrCycle) เรียงเก่าไปใหม่
+ * หน้ายอดเงินเดือนของ CEO กับต้นทุนแรงงานบนแดชบอร์ดใช้ตัวนี้ตัวเดียว ยอดจึงตรงกัน (ผู้ใช้สั่ง 14 ต.ค. 2569)
+ */
+export function dailyRoundsOfMonth(rounds: DailyRound[], month: string) {
+  const c = hrCycle(month);
+  return rounds.filter((r) => r.to >= c.from && r.to <= c.to).sort((a, b) => a.from.localeCompare(b.from));
+}
+
+function addDay(iso: string, n: number) {
+  const d = parseDate(iso);
+  d.setDate(d.getDate() + n);
+  return isoOf(d);
+}
+
+/**
+ * ช่วงวันที่เปิดมาเป็นค่าตั้งต้นของกลุ่มทดลองงาน
+ * รอบที่ยังเดินไม่จบ (ตาม pick) ล่าสุดก่อน · ไม่มีก็ต่อจากรอบล่าสุดถึงวันนี้ · ไม่มีรอบเลยคือวันนี้วันเดียว
+ */
+export function defaultDailyRange(
+  rounds: DailyRound[],
+  today: string,
+  pick: (r: DailyRound) => boolean = (r) => !r.published,
+): Cycle {
+  const sorted = [...rounds].sort((a, b) => b.to.localeCompare(a.to));
+  const open = sorted.find(pick);
+  if (open) return { from: open.from, to: open.to };
+  /* ไม่มีรอบค้าง — สัปดาห์ถัดจากรอบล่าสุด (ถ้าเริ่มแล้ว) ไม่งั้นสัปดาห์ของวันนี้ (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  const last = sorted[0];
+  if (last) {
+    const next = addDay(last.to, 1);
+    if (next <= today) return weekRangeFor(next, rounds);
+  }
+  return weekRangeFor(today, rounds);
+}
+
+/*
+ * ═══ รอบจ่ายรายสัปดาห์ของทดลองงาน (ผู้ใช้สั่ง 19 ต.ค. 2569) ═══
+ * แทนรอบรายวันแบบเลือกช่วงเอง — หนึ่งรอบ = หนึ่งสัปดาห์ จันทร์–อาทิตย์
+ * โครงข้อมูลเดิม (DailyRound, คีย์ "จาก~ถึง") ใช้ต่อ รอบรายวันเก่าที่มีอยู่แล้วคงไว้ตามเดิม อ่านอย่างเดียว
+ * สัปดาห์ที่คร่อมรอบรายวันเก่า ตัดวันที่รอบเก่าจ่ายไปแล้วออก (วันเดียวกันจ่ายสองครั้งไม่ได้)
+ */
+export const PROB_ROUND_LABEL = "รายสัปดาห์";
+
+/** สัปดาห์ (จันทร์–อาทิตย์) ที่วันนี้ตกอยู่ */
+export function weekOf(iso: string): Cycle {
+  const d = parseDate(iso);
+  const back = (d.getDay() + 6) % 7;
+  const from = addDay(iso, -back);
+  return { from, to: addDay(from, 6) };
+}
+
+/** ช่วงเป็นสัปดาห์จันทร์–อาทิตย์เต็มพอดีไหม */
+export function isWeekRange(c: Cycle) {
+  const w = weekOf(c.from);
+  return w.from === c.from && w.to === c.to;
+}
+
+/**
+ * รอบรายสัปดาห์ของวันที่เลือก — สัปดาห์ของวันนั้น ตัดวันที่รอบเก่า (ไม่ใช่สัปดาห์เต็ม) ครอบไว้แล้วออก
+ * วันที่เลือกตกในรอบเก่าพอดี = คืนรอบเก่านั้น (เปิดดูได้อย่างเดียว)
+ */
+export function weekRangeFor(iso: string, rounds: DailyRound[] = []): Cycle {
+  const hit = rounds.find((r) => r.from <= iso && iso <= r.to);
+  if (hit) return { from: hit.from, to: hit.to };
+  const w = weekOf(iso);
+  const covered = (d: string) => rounds.some((r) => r.from <= d && d <= r.to);
+  let from = iso;
+  while (from > w.from && !covered(addDay(from, -1))) from = addDay(from, -1);
+  let to = iso;
+  while (to < w.to && !covered(addDay(to, 1))) to = addDay(to, 1);
+  return { from, to };
+}
+
+/** ชื่อรอบของทดลองงาน — "สัปดาห์ 13 – 19 ต.ค. 2569" · รอบรายวันเก่าใช้ช่วงวันตามเดิม */
+export function probRoundLabel(c: Cycle) {
+  return isWeekRange(c) ? `สัปดาห์ ${rangeLabel(c)}` : rangeLabel(c);
+}
+
+/**
+ * บรรทัดเงินของกลุ่มทดลองงานในช่วงวันหนึ่ง — รอบที่ปิดเงินเดือนแล้วอ่านยอดที่บันทึกไว้ (HR-BR-03)
+ * ค่าตอบแทนที่ไม่มีสูตรอ่านตามรหัสรอบรายช่วง (extraKeyOf) ไม่ใช่รอบเดือน
+ */
+export function dailyPayLines(
+  emp: Employee[],
+  range: Cycle,
+  time: Record<string, TimeRec>,
+  extras: Record<string, Record<string, Extra>>,
+  today: string,
+  src: ComSource | undefined,
+  round: DailyRound | undefined,
+): PayLine[] {
+  return emp
+    .filter((e) => isDaily(e, range) && inRange(e, range))
+    .map((e) => {
+      const saved = round?.payClosedAt ? round.sum?.lines.find((x) => x.id === e.id) ?? null : null;
+      return {
+        e,
+        c: saved ? calcOfLine(saved) : payIn(e, range, time, extras, today, src),
+        days: saved ? saved.days : workedDaysIn(e, range, time, today),
+        rate: saved ? saved.rate : dailyRateIn(e, range),
+        snapped: Boolean(saved),
+      };
+    });
+}
+
+/** ยอดของรอบรายวันที่จะบันทึกตอนปิด — สูตรเดียวกับรอบเดือน */
+export function dailySumOf(
+  lines: PayLine[],
+  range: Cycle,
+  extras: Record<string, Record<string, Extra>>,
+) {
+  return sumOfGroup(lines, "day", range, extras);
+}
+
+function blankRound(c: Cycle): DailyRound {
+  return {
+    id: dailyRoundId(c), from: c.from, to: c.to,
+    closedAt: "", closedBy: "", payClosedAt: "", payClosedBy: "", sum: null,
+    slipsMadeAt: "", published: false, publishedAt: "", publishedBy: "", unpublished: [],
+    views: {}, downloads: {},
+  };
+}
+
+export function newDailyRound(c: Cycle, closedAt: string, closedBy: string): DailyRound {
+  return { ...blankRound(c), closedAt, closedBy };
+}
+
+/** รอบรายวันที่เดินครบทุกขั้นแล้ว — ใช้กับข้อมูลตั้งต้นและข้อมูลเก่าที่ย้ายมา */
+function doneRound(
+  c: Cycle,
+  emp: Employee[],
+  time: Record<string, TimeRec>,
+  at: { closed: string; paid: string; made: string; published: string; by: string },
+): DailyRound {
+  const lines = dailyPayLines(emp, c, time, {}, c.to, undefined, undefined);
+  return {
+    ...blankRound(c),
+    closedAt: at.closed, closedBy: at.by,
+    payClosedAt: at.paid, payClosedBy: at.by, sum: dailySumOf(lines, c, {}),
+    slipsMadeAt: at.made, published: Boolean(at.published), publishedAt: at.published, publishedBy: at.published ? at.by : "",
+  };
+}
+
+/** รอบเดือนที่ข้อมูลตั้งต้นแบ่งงานรายวันออกเป็นหลายรอบ (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+export const HR_DAILY_SPLIT_MONTH = "2026-07";
+
+/**
+ * รอบรายวันตั้งต้นของรอบ ก.ค. 2569 — แบ่งงานรายวันทั้งรอบเป็นสามรอบจ่าย ปิดและส่งสลิปครบแล้ว
+ * วันที่ของแต่ละขั้นอยู่หลังวันสุดท้ายของรอบนั้นเสมอ
+ */
+export function seedSplitRounds(emp: Employee[], time: Record<string, TimeRec>): DailyRound[] {
+  const c = hrCycle(HR_DAILY_SPLIT_MONTH);
+  /* เริ่มนับจากวันที่คนทดลองงานคนแรกเข้างานในรอบ — รอบที่ไม่มีใครเลยไม่ต้องมี */
+  const starts = emp.filter((e) => isDaily(e, c) && inRange(e, c)).map((e) => (e.startedAt > c.from ? e.startedAt : c.from));
+  if (!starts.length) return [];
+  const start = starts.sort()[0];
+  const total = daysApart(start, c.to) + 1;
+  const size = Math.max(1, Math.ceil(total / 3));
+  const parts: Cycle[] = [];
+  for (let from = start; from <= c.to; from = addDay(from, size)) {
+    const to = addDay(from, size - 1);
+    parts.push({ from, to: to < c.to ? to : c.to });
+  }
+  return parts.map((p) =>
+    doneRound(p, emp, time, {
+      closed: addDay(p.to, 1),
+      paid: addDay(p.to, 1),
+      made: addDay(p.to, 2),
+      published: addDay(p.to, 2),
+      by: "E12",
+    }),
+  );
+}
+
+/**
+ * ย้ายรอบรายวันแบบรายเดือนเดิม (dayClosed / daySum / dayPublished) มาเป็นรอบรายวันหนึ่งรอบต่อรอบเดือน
+ * เฉพาะรอบเดือนที่ปิดรอบเวลาของกลุ่มรายวันแล้ว และมีพนักงานทดลองงานอยู่ในช่วงนั้น
+ * รอบ ก.ค. 2569 ใช้รอบตั้งต้นที่แบ่งเป็นสามรอบแทน
+ */
+export function legacyDailyRound(
+  p: Period,
+  run: Period | undefined,
+  slip: Slip | undefined,
+  emp: Employee[],
+  time: Record<string, TimeRec>,
+): DailyRound | null {
+  if (!p.dayClosed) return null;
+  const c = hrCycle(p.month);
+  if (!emp.some((e) => isDaily(e, c) && inRange(e, c))) return null;
+  const r: DailyRound = { ...blankRound(c), closedAt: p.dayClosedAt, closedBy: p.dayClosedBy };
+  if (!run?.dayClosed) return r;
+  const lines = dailyPayLines(emp, c, time, {}, c.to, undefined, undefined);
+  return {
+    ...r,
+    payClosedAt: run.dayClosedAt,
+    payClosedBy: run.dayClosedBy,
+    sum: run.daySum ?? dailySumOf(lines, c, {}),
+    slipsMadeAt: slip?.dayMadeAt ?? "",
+    published: slip?.dayPublished ?? false,
+    publishedAt: slip?.dayPublishedAt ?? "",
+    publishedBy: slip?.dayBy ?? "",
+    unpublished: slip?.dayUnpublished ?? [],
+  };
 }
 
 /*

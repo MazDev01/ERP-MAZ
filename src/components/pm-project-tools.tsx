@@ -12,9 +12,9 @@ import { bkkStamp, thaiStamp } from "@/lib/format";
 import type { ProjectDoc } from "@/lib/pm-data";
 import { addProjectDocs, removeProjectDoc, renameProject } from "@/lib/pm-store";
 import { useProfile } from "@/lib/profile-data";
+import { nameOf } from "@/lib/emp-name";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FileDrop, fileSize, type PickedFile } from "./file-drop";
-import { openStoredFile, removeStoredFile } from "@/lib/file-store";
 import { CloseIcon, FileIcon, LinkIcon, PencilIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
@@ -97,7 +97,7 @@ export function RenameButton({ onClick }: { onClick: () => void }) {
 // ─── เอกสารแนบของโปรเจค ───────────────────────────────────────────
 
 /** ปุ่ม "+" ข้างเอกสาร — เปิดกล่องแนบเอกสาร */
-export function AddDocButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
+export function AddDocButton({ onClick, className = "", label }: { onClick: () => void; className?: string; label?: string }) {
   return (
     <button
       type="button"
@@ -108,6 +108,7 @@ export function AddDocButton({ onClick, className = "" }: { onClick: () => void;
       className={`btn glass-thin ${className}`}
     >
       <PlusIcon className="size-[15px]" strokeWidth={2.2} />
+      {label}
     </button>
   );
 }
@@ -124,7 +125,7 @@ export function AddDocsDialog({ pj, onClose }: { pj: string; onClose: () => void
     const at = bkkStamp();
     const docs: ProjectDoc[] = files.map((f) => {
       const url = f.url && /^https?:\/\//i.test(f.url) ? f.url : undefined;
-      return { n: f.name, sz: url ? "ลิงก์" : fileSize(f.size), by: me.name, at, url, fileId: f.fileId };
+      return { n: f.name, sz: url ? "ลิงก์" : fileSize(f.size), by: me.name, at, url };
     });
     addProjectDocs(pj, docs);
     onClose();
@@ -157,7 +158,6 @@ export function AddDocsDialog({ pj, onClose }: { pj: string; onClose: () => void
         hint="เอกสารที่ทีมควรเห็น เช่น บรีฟ คู่มือแบรนด์ ไฟล์จากลูกค้า"
         linkPlaceholder="หรือวางลิงก์ เช่น Google Drive, Canva, Figma"
       />
-      <p className="mt-2.5 text-[12px] text-muted-foreground">ทีมที่ได้รับงานในโปรเจคนี้จะเห็นเอกสารเหล่านี้</p>
     </Sheet>
   );
 }
@@ -166,13 +166,10 @@ export function AddDocsDialog({ pj, onClose }: { pj: string; onClose: () => void
 export function RemoveDocDialog({
   pj,
   name,
-  fileId,
   onClose,
 }: {
   pj: string;
   name: string | null;
-  /** รหัสไฟล์จริงของเอกสารที่กำลังจะเอาออก — ลบออกจากที่เก็บด้วย จะได้ไม่มีไฟล์ค้างในเครื่อง */
-  fileId?: string;
   onClose: () => void;
 }) {
   return (
@@ -185,7 +182,6 @@ export function RemoveDocDialog({
       tone="destructive"
       onConfirm={() => {
         if (name) removeProjectDoc(pj, name);
-        if (fileId) void removeStoredFile(fileId);
         onClose();
       }}
       onCancel={onClose}
@@ -195,12 +191,12 @@ export function RemoveDocDialog({
 
 /** คำอธิบายใต้ชื่อเอกสาร — ขนาด · ใครแนบ · เมื่อไร */
 export function docSub(d: ProjectDoc) {
-  return `${d.sz} · แนบโดย ${d.by || "—"} · ${thaiStamp(d.at)} น.`;
+  return `${d.sz} · แนบโดย ${d.by ? nameOf(d.by) : "—"} · ${thaiStamp(d.at)} น.`;
 }
 
 /*
  * ชิปเอกสารแนบ วางต่อจากปุ่มใบเสนอราคา/Proposal ในหน้าจัดคิวงาน
- * ลิงก์เปิดได้จริง · ไฟล์ที่แนบเก็บไว้ในเครื่อง (file-store) จึงกดเปิดดูได้เหมือนกัน
+ * ลิงก์เปิดได้จริง · ไฟล์ยังไม่มีที่เก็บ จึงโชว์แค่ชื่อกับรายละเอียดใน title
  */
 export function DocChips({
   pj,
@@ -232,16 +228,6 @@ export function DocChips({
               <a href={d.url} target="_blank" rel="noreferrer" title={docSub(d)} className="btn glass-thin pl-docbtn">
                 {inner}
               </a>
-            ) : d.fileId ? (
-              /* ไฟล์ที่แนบไว้เปิดดูได้จริง — เก็บไบต์ไว้ในเครื่องตั้งแต่ตอนแนบ (file-store) */
-              <button
-                type="button"
-                title={`เปิด ${d.n} · ${docSub(d)}`}
-                onClick={() => void openStoredFile(d.fileId!)}
-                className="btn glass-thin pl-docbtn"
-              >
-                {inner}
-              </button>
             ) : (
               <span title={docSub(d)} className="btn glass-thin pl-docbtn cursor-default">
                 {inner}
@@ -262,12 +248,7 @@ export function DocChips({
           </span>
         );
       })}
-      <RemoveDocDialog
-        pj={pj}
-        name={removing}
-        fileId={docs.find((d) => d.n === removing)?.fileId}
-        onClose={() => setRemoving(null)}
-      />
+      <RemoveDocDialog pj={pj} name={removing} onClose={() => setRemoving(null)} />
     </>
   );
 }

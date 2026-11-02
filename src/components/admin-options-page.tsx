@@ -21,9 +21,8 @@ import { BUILTIN_SERVICES, BUILTIN_TEAM_ROLES } from "@/lib/pm-data";
 import { PM_EVENT_KIND } from "@/lib/pm-schedule-data";
 import { BUILTIN_HR_DEPT, BUILTIN_HR_DOCS, BUILTIN_HR_POSITION, holdsPos } from "@/lib/hr-data";
 import { BUILTIN_WHT_TYPES } from "@/lib/acc-data";
-import { AdminHead, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
-import { GripIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
-import { ConfirmDialog } from "./confirm-dialog";
+import { AdminHead, IconBtn, Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
+import { GripIcon, PencilIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { DateField } from "./thai-date-picker";
 import { thaiDate, todayIso } from "@/lib/format";
@@ -179,7 +178,18 @@ function describeCat(a: Catalog, b: Catalog) {
  *   ไม่ส่ง only = ข้อมูลหลักทั้งหน้า (แท็บตามบทบาท)
  *   ส่ง only    = การ์ดเดียวของหมวดนั้น ไม่มีแท็บและไม่มีตัวเลือกในดรอปดาวน์
  */
-export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
+export function AdminOptionsPage({
+  only,
+  keys,
+  topTabs,
+}: {
+  /** รายการเดียว — หมวดที่มีรหัส หรือตัวเลือกธรรมดา (ตัวเลือกธรรมดาเพิ่ม ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  only?: CatKey | OptionKey;
+  /** หลายรายการในแท็บเดียว สลับด้วยแถบแท็บในการ์ด ตามลำดับที่ส่ง (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  keys?: (CatKey | OptionKey)[];
+  /** แถบแท็บของหน้าที่ฝังหมวดนี้ไว้ (เช่น แผนกในตำแหน่งและสายอนุมัติ) — วางบนสุดของการ์ด */
+  topTabs?: React.ReactNode;
+} = {}) {
   const d = useSectionDraft("options", "ตัวเลือกในรายการ", describe);
   const cat = useSectionDraft("catalog", "ตัวเลือกในรายการ", describeCat);
   /* อัตราหัก ณ ที่จ่ายเก็บวันเริ่มใช้แยกจากตัวรายการ (Full Proposal · M5) */
@@ -197,11 +207,12 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
     return "";
   }
   /* หมวดที่กำลังดูอยู่ทางขวา — เริ่มที่หมวดแรกของฝั่งขาย */
-  const [sel, setSel] = useState<{ kind: "cat" | "opt"; key: string }>({ kind: "cat", key: "depts" });
+  const [sel, setSel] = useState<{ kind: "cat" | "opt"; key: string }>({ kind: "cat", key: "services" });
   /* กล่องเพิ่ม/แก้ — index -1 = เพิ่มใหม่ */
   const [editing, setEditing] = useState<{ key: OptionKey; index: number } | null>(null);
 
   const onlySpec = only ? CAT_SPECS.find((c) => c.key === only) : undefined;
+  const onlyOpt = only && !onlySpec ? OPTION_GROUPS.find((g) => g.key === only) : undefined;
   const setList = (key: OptionKey, list: string[]) => d.setDraft({ ...d.draft, [key]: list });
 
   const editGroup = editing ? OPTION_GROUPS.find((g) => g.key === editing.key) : undefined;
@@ -214,14 +225,18 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
    * เหลือสามหมวด: แผนก · ประเภทนัดหมาย · ประเภทค่าใช้จ่าย
    * รายการอื่น (แหล่งที่มา เพศ ระดับการศึกษา ฯลฯ) ยังมีอยู่ในระบบและเพิ่มจากหน้างานได้เหมือนเดิม
    */
-  const tabs = only
+  const allTabs = only
     ? []
     : [
-        ...(["depts", "eventKinds"] as const).flatMap((k) => {
+        /* แผนกย้ายไปเป็นแท็บแรกของ ตำแหน่งและสายอนุมัติ · บริการย้ายมาจากเมนูย่อยเป็นแท็บแรก (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+        /* ข้อมูลหลักครบทุกรายการ — ดรอปดาวน์เพิ่มตัวเลือกเองไม่ได้แล้ว จึงต้องเพิ่มได้ที่นี่ทุกรายการ
+           ไม่มีประเภทนัดหมาย (เอาออกจากตารางงานแล้ว) · แผนก/ตำแหน่งอยู่หน้าตำแหน่งและสายอนุมัติ (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+        ...(["services", "whtTypes", "docs"] as const).flatMap((k) => {
           const c = CAT_SPECS.find((x) => x.key === k);
           return c ? [{ kind: "cat" as const, key: c.key as string, label: c.label, where: c.where, count: toItems(cat.draft, c.key).length }] : [];
         }),
-        ...OPTION_GROUPS.filter((g) => g.key === "expenseKind").map((g) => ({
+        /* เหตุผลต่าง ๆ พิมพ์เองในกล่อง ไม่ใช่ข้อมูลหลัก · ไม่มีตำแหน่งในทีม ใช้ตำแหน่งพนักงานแทน (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+        ...OPTION_GROUPS.filter((g) => !["leadClose", "leadTakeover", "quoteReject"].includes(g.key)).map((g) => ({
           kind: "opt" as const,
           key: g.key as string,
           label: g.label,
@@ -229,9 +244,14 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
           count: d.draft[g.key].length,
         })),
       ];
+  /* เฉพาะรายการที่หมวดของตั้งค่าระบบขอ เรียงตามที่ส่งมา (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  const tabs = keys
+    ? keys.flatMap((k) => allTabs.filter((t) => t.key === k))
+    : allTabs;
   const curTab = tabs.find((t) => t.kind === sel.kind && t.key === sel.key) ?? tabs[0];
   const spec = onlySpec ?? (curTab && curTab.kind === "cat" ? CAT_SPECS.find((c) => c.key === curTab.key) : undefined);
-  const optGroup = !onlySpec && curTab && curTab.kind === "opt" ? OPTION_GROUPS.find((g) => g.key === curTab.key) : undefined;
+  const optGroup =
+    onlyOpt ?? (!onlySpec && !only && curTab && curTab.kind === "opt" ? OPTION_GROUPS.find((g) => g.key === curTab.key) : undefined);
 
   /* รายการในแท็บที่เลือก — แปลงเป็นรูปแบบเดียวกันก่อนวาด ตารางจะได้ใช้โค้ดชุดเดียว */
   type Row = { id: string; label: string; extra: string; off: boolean; used: string; block: string };
@@ -300,9 +320,6 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
     });
   }
 
-  /* ลบตัวเลือกแล้วกู้คืนไม่ได้ ต้องถามยืนยันก่อนทุกครั้ง (พบจากการทดสอบ 6 ต.ค. 2569) */
-  const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
-
   function removeRow(id: string) {
     if (spec) {
       setCat(
@@ -331,10 +348,10 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
   return (
     <div className="space-y-4">
       <AdminHead
-        title={onlySpec ? onlySpec.label : "ข้อมูลหลัก"}
+        title={(onlySpec ?? onlyOpt)?.label ?? "ข้อมูลหลัก"}
         desc={
-          onlySpec
-            ? `เพิ่ม แก้ชื่อ และปิดใช้งานรายการ — ใช้ที่ ${onlySpec.where}`
+          onlySpec ?? onlyOpt
+            ? `เพิ่ม แก้ชื่อ และปิดใช้งานรายการ — ใช้ที่ ${(onlySpec ?? onlyOpt)?.where}`
             : "รายการตัวเลือกที่ใช้ทั่วระบบ ลากเพื่อเรียงลำดับ"
         }
       >
@@ -345,6 +362,7 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
       </AdminHead>
 
       <section className="glass overflow-hidden rounded-[18px]">
+        {topTabs && <div className="border-b border-border px-3">{topTabs}</div>}
         {!only && (
           /* แท็บหมวดพร้อมจำนวนรายการ ตามต้นแบบ
              ขึ้นบรรทัดใหม่แทนการเลื่อนข้าง (กติกาเดียวกับมือถือ 25 ก.ย. 2569)
@@ -352,7 +370,7 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
           <div
             className="tabs wrap border-b border-border px-3 whitespace-nowrap"
             role="tablist"
-            aria-label="หมวดข้อมูลหลัก"
+            aria-label="หมวด"
           >
             {tabs.map((t) => {
               const on = curTab && t.kind === curTab.kind && t.key === curTab.key;
@@ -374,29 +392,25 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
         )}
 
         <div className="px-4 pt-3.5 pb-4 sm:px-5">
-          <p className="mb-3 text-[12.5px] text-muted-foreground">
-            ใช้ใน: {onlySpec ? onlySpec.where : (curTab?.where ?? "")}
-          </p>
-
           {/* หัวตาราง — จอแคบซ่อน เหลือแต่แถวรายการ */}
           <div
             className={`grid grid-cols-[26px_minmax(0,1fr)_58px_84px] items-center gap-2 border-b border-border pb-2 text-[11.5px] font-bold text-muted-foreground ${
               extraHead
-                ? "sm:grid-cols-[28px_26px_minmax(0,1fr)_110px_120px_58px_84px]"
-                : "sm:grid-cols-[28px_26px_minmax(0,1fr)_120px_58px_84px]"
+                ? "sm:grid-cols-[28px_26px_minmax(0,1fr)_110px_58px_84px]"
+                : "sm:grid-cols-[28px_26px_minmax(0,1fr)_58px_84px]"
             }`}
           >
             <span className="max-sm:hidden" />
             <span className="text-center max-sm:hidden">#</span>
             <span className="max-sm:col-start-2">ชื่อ</span>
             {extraHead && <span className="max-sm:hidden">{extraHead}</span>}
-            <span className="max-sm:hidden">การใช้งาน</span>
+            {/* ไม่มีคอลัมน์การใช้งาน (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
             <span className="text-center">เปิดใช้</span>
             <span />
           </div>
 
           {rows.length === 0 ? (
-            <p className="py-8 text-center text-[13px] text-muted-foreground">ยังไม่มีรายการ กดเพิ่มรายการเพื่อเริ่มต้น</p>
+            <p className="py-8 text-center text-[13px] text-muted-foreground">ยังไม่มีรายการ</p>
           ) : (
             rows.map((r, i) => (
               <div
@@ -415,9 +429,9 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
                 onDragEnd={() => setDrag("")}
                 className={`grid grid-cols-[26px_minmax(0,1fr)_58px_84px] items-center gap-2 border-b border-border py-2 last:border-b-0 hover:bg-muted/40 ${
                   extraHead
-                    ? "sm:grid-cols-[28px_26px_minmax(0,1fr)_110px_120px_58px_84px]"
-                    : "sm:grid-cols-[28px_26px_minmax(0,1fr)_120px_58px_84px]"
-                } ${drag === r.id ? "opacity-40" : ""}`}
+                    ? "sm:grid-cols-[28px_26px_minmax(0,1fr)_110px_58px_84px]"
+                    : "sm:grid-cols-[28px_26px_minmax(0,1fr)_58px_84px]"
+                } ${drag === r.id ? "opacity-40" : r.off ? "opacity-50" : ""}`}
               >
                 <button
                   type="button"
@@ -436,22 +450,13 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
                 </button>
                 <span className="num text-center text-[12px] text-muted-foreground max-sm:hidden">{i + 1}</span>
                 <span className="min-w-0 max-sm:col-start-2">
-                  <b className={`block truncate text-[13.5px] ${r.off ? "font-medium text-muted-foreground" : "font-semibold"}`}>
-                    {r.label}
-                    {r.off && (
-                      <em className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground not-italic">
-                        ปิดใช้งาน
-                      </em>
-                    )}
-                  </b>
+                  {/* ปิดใช้แล้วแค่จางทั้งแถว ไม่มีป้าย "ปิดใช้งาน" (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+                  <b className="block truncate text-[13.5px] font-semibold">{r.label}</b>
                   <small className="block text-[11.5px] text-muted-foreground sm:hidden">
-                    {[r.extra, r.used || "ยังไม่ถูกใช้"].filter(Boolean).join(" · ")}
+                    {r.extra}
                   </small>
                 </span>
                 {extraHead && <span className="num text-[13px] max-sm:hidden">{r.extra}</span>}
-                <span className={`text-[12px] max-sm:hidden ${r.used ? "text-muted-foreground" : "text-muted-foreground/60"}`}>
-                  {r.used || "ยังไม่ถูกใช้"}
-                </span>
                 <span className="flex justify-center">
                   <Switch on={!r.off} onToggle={() => toggleRow(r.id)} label={`เปิดหรือปิดใช้งาน ${r.label}`} />
                 </span>
@@ -459,15 +464,7 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
                   <IconBtn label={`แก้ไข ${r.label}`} onClick={() => editRow(r.id)}>
                     <PencilIcon className="size-3.5" strokeWidth={1.9} />
                   </IconBtn>
-                  <IconBtn
-                    label={`ลบ ${r.label}`}
-                    danger
-                    disabled={Boolean(r.block)}
-                    title={r.block || undefined}
-                    onClick={() => setRemoving({ id: r.id, label: r.label })}
-                  >
-                    <TrashIcon className="size-3.5" strokeWidth={1.9} />
-                  </IconBtn>
+                  {/* ไม่มีปุ่มลบในตารางข้อมูลหลัก — เลิกใช้ให้ปิดสวิตช์เปิดใช้แทน (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
                 </span>
               </div>
             ))
@@ -476,7 +473,8 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
       </section>
 
       {/* ตัวอย่างการหักตามต้นแบบ HR-17 — เห็นทันทีว่าอัตราที่ตั้งไว้คิดเป็นเงินเท่าไร */}
-      {spec?.key === "whtTypes" && (
+      {/* แท็บภาษีของตั้งค่าระบบแสดงแค่รายการและอัตรา ไม่มีตัวอย่างการหัก (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
+      {spec?.key === "whtTypes" && !only && (
         <section className="glass rounded-[18px] px-4 py-4 sm:px-5">
           <h2 className="text-[14.5px] font-bold">ตัวอย่างการหัก (ฐาน 10,000 บาท ก่อน VAT)</h2>
           <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
@@ -493,20 +491,6 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
           </div>
         </section>
       )}
-
-      <ConfirmDialog
-        open={Boolean(removing)}
-        tone="destructive"
-        title="ลบตัวเลือกนี้"
-        description={removing ? `ลบ "${removing.label}" ออกจากรายการ` : ""}
-        detail="ข้อมูลเก่าที่เคยเลือกไว้ยังเก็บข้อความเดิม แต่ตัวเลือกนี้จะไม่ขึ้นในดรอปดาวน์อีก และต้องกดบันทึกเพื่อให้มีผล"
-        confirmLabel="ลบ"
-        onConfirm={() => {
-          if (removing) removeRow(removing.id);
-          setRemoving(null);
-        }}
-        onCancel={() => setRemoving(null)}
-      />
 
       {editing && editGroup && (
         <OptionDialog
@@ -579,39 +563,6 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
   );
 }
 
-function IconBtn({
-  label,
-  title,
-  disabled,
-  danger,
-  onClick,
-  children,
-}: {
-  label: string;
-  title?: string;
-  disabled?: boolean;
-  danger?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      /* มือถือ: ปุ่มโตขึ้นให้นิ้วกดถูก (inline style กว้าง 30 ต้องใช้ ! ถึงจะชนะ) */
-      className={`iconbtn glass-thin shrink-0 text-muted-foreground disabled:opacity-30 max-sm:!size-[38px] ${
-        danger ? "hover:text-destructive" : "hover:text-primary"
-      }`}
-      style={{ width: 30, height: 30 }}
-    >
-      {children}
-    </button>
-  );
-}
-
 function OptionDialog({
   group,
   initial,
@@ -659,11 +610,6 @@ function OptionDialog({
           className={inputCls}
         />
       </Input2>
-      <p className="mt-3 rounded-[11px] bg-muted/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
-        {initial
-          ? "แก้ชื่อแล้ว ข้อมูลที่เคยเลือกตัวเลือกนี้ไว้ยังแสดงข้อความเดิม"
-          : `ขึ้นให้เลือกใน${group.where} ทันทีที่กดบันทึกที่แถบล่าง`}
-      </p>
     </Sheet>
   );
 }
@@ -765,7 +711,6 @@ function CatDialog({
             </Input2>
             <Input2
               label="เริ่มใช้อัตรานี้"
-              hint={at > todayIso() ? "ตั้งล่วงหน้า ระบบสลับให้เองเมื่อถึงวัน" : "มีผลกับเอกสารที่คิดยอดหลังจากนี้"}
             >
               <DateField
                 value={at}
@@ -804,15 +749,10 @@ function CatDialog({
         {spec.extra === "req" && (
           <label className="flex cursor-pointer items-center gap-2.5 text-[13.5px]">
             <input type="checkbox" checked={req} onChange={(e) => setReq(e.target.checked)} className="size-4 accent-[var(--primary)]" />
-            ต้องมี — ขาดแล้วขึ้นเตือนว่าเอกสารไม่ครบ
+            ต้องมี
           </label>
         )}
       </div>
-      <p className="mt-3.5 rounded-[11px] bg-muted/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
-        {initial
-          ? "แก้ชื่อแล้ว ข้อมูลเก่าที่ใช้รายการนี้จะแสดงชื่อใหม่ด้วย (อ้างรหัสเดียวกัน)"
-          : `ขึ้นให้เลือกใน${spec.where} ทันทีที่กดบันทึกที่แถบล่าง`}
-      </p>
     </Sheet>
   );
 }

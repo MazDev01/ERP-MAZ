@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useHydrated } from "@/lib/pwa";
 import { useRole } from "@/lib/role";
+import { useCrumb } from "@/lib/crumb";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   BUYER_TYPE,
-  canBillQuotation,
+  canRejectQuotation,
+  quotationValidUntil,
   issuerOf,
   issuers,
   quotationTotals,
@@ -20,13 +22,14 @@ import {
   type Quotation,
 } from "@/lib/crm-data";
 import { NO_WHT_NOTE } from "@/lib/acc-data";
-import { addQuotation, useCrm, type CrmState } from "@/lib/crm-store";
+import { addQuotation, updateCustomer, useCrm, type CrmState } from "@/lib/crm-store";
 import { services, type ServiceKey } from "@/lib/pm-data";
 import { addDays, baht, commaInput, round2, thaiDate, todayIso } from "@/lib/format";
 import { cleanHtml, htmlToText } from "@/lib/rich-text";
 import { CustomerCombo } from "./customer-combo";
-import { CheckIcon, ChevronLeftIcon, CloseIcon, EyeIcon } from "./icons";
+import { CheckIcon, ChevronRightIcon, CloseIcon, EyeIcon } from "./icons";
 import { Field } from "./lead-dialogs";
+import { IssueNumberDialog, RejectQuotationDialog } from "./quotation-dialogs";
 import { QuotationPaper } from "./quotation-paper";
 import { RichEditor } from "./rich-editor";
 import { ADD_VALUE, useAddOption } from "./add-option";
@@ -35,12 +38,12 @@ import { IssuerAddDialog } from "./issuer-add";
 /*
  * หน้าสร้างใบเสนอราคา — ตามต้นแบบ quotation-new.html (หน้าเต็ม ไม่ใช่กล่องเด้ง)
  *
- *   ?customer=<รหัส>  เปิดจากหน้าผู้สนใจ เลือกลูกค้าไว้ให้
+ *   ?customer=<รหัส>  เปิดจากหน้าผู้สนใจ เลือกลูกค้าไว้ให้ (รับ ?cus= ของต้นแบบด้วย)
  *   ?ps=<เลขที่คำขอ>   ออกจากคำขอก่อนการขาย — ใบที่ออกผูกกับคำขอนั้น เอกสารของคำขอจึงตามไปถึง PM
- *   ?from= / ?replace=<เลขที่>  ออกใบใหม่แทนใบเดิม คัดลอกเฉพาะเนื้อหา เลขที่ วันที่ และภาษีคิดใหม่เสมอ
+ *   ?from=<เลขที่>     ออกใบใหม่จากใบเดิม คัดลอกเฉพาะเนื้อหา เลขที่ วันที่ และภาษีคิดใหม่เสมอ
  *
- * บันทึกทางเดียว (เจ้าของแจ้ง 5 ต.ค. 2569) — กด "ออกใบเสนอราคา" แล้วออกเลขที่ทันที
- * ไม่มีร่าง ไม่มีการแก้ใบเดิม จะเปลี่ยนอะไรต้องออกใบใหม่แทนใบเดิม
+ * บันทึกทางเดียว — "ออกเลขที่เอกสาร" ออกเลขทันที ย้อนไม่ได้ จึงถามยืนยันก่อนเสมอ
+ * ผู้ใช้สั่ง 5 ต.ค. 2569: ไม่มีร่าง ออกแล้วแก้ไม่ได้ ต้องออกใบใหม่ (?from= ออกใบใหม่แทนใบเดิม ใบเดิมเก็บเป็นประวัติ)
  */
 
 type Mode = { kind: "new" } | { kind: "from"; src: Quotation };
@@ -64,7 +67,7 @@ function initialOf(crm: CrmState, mode: Mode, presetCustomer?: string, ps?: stri
     validDays: String(src?.validDays ?? 30),
     body: src?.body ?? "",
     amount: !src ? "" : commaInput(String(round2(src.amount - src.discount))),
-    /* ต้นแบบคัดลอกยอดก่อนภาษีมาเป็นจำนวนเงิน ส่วนลดเริ่มว่าง · ร่างแก้ของเดิมต่อ จึงเก็บส่วนลดไว้ */
+    /* ต้นแบบคัดลอกยอดก่อนภาษีมาเป็นจำนวนเงิน ส่วนลดเริ่มว่าง */
     discount: "",
     terms: src?.terms ?? "",
     wht: src?.wht ?? false,
@@ -73,26 +76,23 @@ function initialOf(crm: CrmState, mode: Mode, presetCustomer?: string, ps?: stri
   };
 }
 
-/** acc = ฝั่งบัญชี เลือกได้เฉพาะลูกค้าที่ปิดการขายแล้ว ห้ามมีผู้สนใจปน และลิงก์อยู่ในหน้าของบัญชี */
-export function QuotationNewPage({ acc = false }: { acc?: boolean }) {
-  /* รอ hydrate ก่อน — ร่างและใบที่สร้างในเครื่องอยู่ใน localStorage ตอนเรนเดอร์ฝั่งเซิร์ฟเวอร์ยังหาไม่เจอ
+/** base = หน้ารายการที่เปิดมา — ฝ่ายขาย /quotations · บัญชี /acc/quotations (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+export function QuotationNewPage({ base = "/quotations" }: { base?: string }) {
+  /* รอ hydrate ก่อน — ใบที่สร้างในเครื่องอยู่ใน localStorage ตอนเรนเดอร์ฝั่งเซิร์ฟเวอร์ยังหาไม่เจอ
      แล้วโหมด/ค่าตั้งต้นของฟอร์มจะถูกจำเป็นค่าว่างไปตลอด */
   const hydrated = useHydrated();
-  return hydrated ? <NewPageBody acc={acc} /> : null;
+  return hydrated ? <NewPageBody base={base} /> : null;
 }
 
-function NewPageBody({ acc }: { acc: boolean }) {
-  const home = acc ? "/acc/quotations" : "/quotations";
-  const who = acc ? "ลูกค้า" : "ผู้สนใจ";
+function NewPageBody({ base }: { base: string }) {
   const crm = useCrm();
   const params = useSearchParams();
   const router = useRouter();
   const today = todayIso();
 
-  /* ?replace= มาจากปุ่ม "ออกใบใหม่แทนใบนี้" ในหน้ารายการ (ชื่อเดียวกับต้นแบบ) · ?from= คือลิงก์เดิม */
-  const fromNo = params.get("replace") ?? params.get("from") ?? "";
+  const fromNo = params.get("from") ?? "";
   const ps = params.get("ps") ?? "";
-  const presetCustomer = params.get("customer") ?? undefined;
+  const presetCustomer = params.get("customer") ?? params.get("cus") ?? undefined;
 
   const mode: Mode = useMemo(() => {
     const from = fromNo ? crm.quotations.find((q) => q.no === fromNo) : undefined;
@@ -108,16 +108,22 @@ function NewPageBody({ acc }: { acc: boolean }) {
   const [done, setDone] = useState<ReactNode>(null);
 
   const effective: Mode = fresh ? { kind: "new" } : mode;
+  /* เส้นทางอยู่บนแถบบนแล้ว (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+  useCrumb("สร้างใบเสนอราคา");
 
   return (
     <div className="space-y-4">
       <div className="bar">
         <div className="min-w-0">
-          <Link href={home} className="btn glass-thin btn-mini mb-1.5">
-            <ChevronLeftIcon className="size-3.5" strokeWidth={2.4} />
-            ใบเสนอราคา
-          </Link>
-          <p>กดบันทึกแล้วออกเลขที่เอกสารทันที แก้ไม่ได้อีก ถ้าต้องเปลี่ยนให้ออกใบใหม่</p>
+          {/* เส้นทางแทนปุ่มย้อนกลับ (ต้นแบบ quotation-new.html · ผู้ใช้สั่ง 5 ต.ค. 2569) · จอคอมย้ายไปแถบบนแล้ว เหลือเฉพาะมือถือ (ผู้ใช้สั่ง 12 ต.ค. 2569) */}
+          <nav aria-label="เส้นทาง" className="mb-2 flex items-center gap-2 text-[14px] text-muted-foreground md:hidden">
+            <Link href={base} className="hover:text-foreground hover:underline underline-offset-4">
+              ใบเสนอราคา
+            </Link>
+            <ChevronRightIcon className="size-3.5" strokeWidth={2.2} />
+            <span aria-current="page">สร้างใหม่</span>
+          </nav>
+          <h1>สร้างใบเสนอราคา</h1>
           {!fresh && <FromLine mode={mode} ps={ps} />}
         </div>
       </div>
@@ -135,25 +141,21 @@ function NewPageBody({ acc }: { acc: boolean }) {
       <QuotationForm
         key={formKey}
         crm={crm}
-        acc={acc}
-        home={home}
-        who={who}
         today={today}
         mode={effective}
         ps={fresh ? "" : ps}
         presetCustomer={fresh ? undefined : presetCustomer}
-        onSaved={(msg, keep) => {
+        base={base}
+        onSaved={(msg) => {
           setDone(msg);
           window.scrollTo({ top: 0, behavior: "smooth" });
-          /* ออกใบแล้วล้างฟอร์ม กันบันทึกซ้ำเป็นอีกเลขที่ */
-          if (!keep) {
-            setFresh(true);
-            setFormKey((k) => k + 1);
-          }
+          /* ออกเลขแล้วล้างฟอร์ม กันบันทึกซ้ำเป็นอีกเลขที่ */
+          setFresh(true);
+          setFormKey((k) => k + 1);
         }}
         /* ยกเลิก = ออกจากฟอร์ม กลับไปหน้ารายการใบเสนอราคา (เจ้าของแจ้ง 25 ก.ย. 2569)
            เดิมล้างฟอร์มให้ว่างเฉย ๆ ฟอร์มที่ยังไม่ได้กรอกอะไรกดแล้วจึงเหมือนปุ่มเสีย */
-        onReset={() => router.push(home)}
+        onReset={() => router.push(base)}
       />
     </div>
   );
@@ -164,9 +166,9 @@ function FromLine({ mode, ps }: { mode: Mode; ps: string }) {
   const lines: string[] = [];
   if (mode.kind === "from")
     lines.push(
-      `ออกแทนใบ ${mode.src.no} ลงวันที่ ${thaiDate(mode.src.issued)} ยอด ${baht(quotationTotals(mode.src).grand)} บาท`,
+      `คัดลอกจากใบ ${mode.src.no} ลงวันที่ ${thaiDate(mode.src.issued)} ยอด ${baht(quotationTotals(mode.src).grand)} บาท`,
     );
-  if (ps) lines.push(`ออกจากคำขอก่อนการขาย ${ps}`);
+  if (ps) lines.push("ออกจากคำขอก่อนการขาย");
   return (
     <>
       {lines.map((l) => (
@@ -179,32 +181,32 @@ function FromLine({ mode, ps }: { mode: Mode; ps: string }) {
 }
 
 function QuotationForm({
-  acc,
-  home,
-  who,
   crm,
   today,
   mode,
   ps,
   presetCustomer,
+  base,
   onSaved,
   onReset,
 }: {
   crm: CrmState;
   today: string;
-  acc: boolean;
-  /** หน้ารายการของบทบาทที่เปิดฟอร์มนี้ */
-  home: string;
-  /** คำเรียกคู่ค้าในหน้านี้ — ฝั่งขายคือผู้สนใจ ฝั่งบัญชีคือลูกค้า */
-  who: string;
   mode: Mode;
   ps: string;
   presetCustomer?: string;
-  onSaved: (msg: ReactNode, keep: boolean) => void;
+  base: string;
+  onSaved: (msg: ReactNode) => void;
   onReset: () => void;
 }) {
+  /* ฝ่ายขายเรียก "ผู้สนใจ" · ฝ่ายบัญชีเรียก "ลูกค้า" ห้ามปนกัน (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+  const acc = base.startsWith("/acc");
+  const who = acc ? "ลูกค้า" : "ผู้สนใจ";
   const init = useMemo(() => initialOf(crm, mode, presetCustomer, ps), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [customer, setCustomer] = useState<Customer | null>(init.customer);
+  /* เลขประจำตัวผู้เสียภาษี — ย้ายมากรอกตอนสร้างใบเสนอราคา (ผู้ใช้สั่ง 5 ต.ค. 2569)
+     เติมจากผู้สนใจที่เลือก · ออกเลขแล้วบันทึกกลับเข้าข้อมูลผู้สนใจ เอกสารทุกใบอ่านจากที่เดียวกัน */
+  const [taxId, setTaxId] = useState(init.customer?.taxId ?? "");
   const [service, setService] = useState<ServiceKey | "">(init.service);
   const addService = useAddOption({ catalog: "services" }, setService);
   const [issuer, setIssuer] = useState<IssuerCode | "">(init.issuer);
@@ -224,6 +226,8 @@ function QuotationForm({
   const [rep, setRep] = useState<string | null>(mode.kind === "from" ? mode.src.no : null);
   const [touched, setTouched] = useState(false);
   const [preview, setPreview] = useState(false);
+  /* ยืนยันก่อนออกเลขที่ — ขั้นนี้ย้อนไม่ได้ */
+  const [confirming, setConfirming] = useState(false);
   const summaryRef = useRef<HTMLParagraphElement>(null);
 
   const days = Number(validDays.replace(/\D/g, "")) || 0;
@@ -244,47 +248,55 @@ function QuotationForm({
   }, [amount, discount, issuer, buyer, wht, whtPct]);
 
   /*
-   * ใบของลูกค้ารายนี้ที่ส่งแล้วและยังรอคำตอบ (ยังไม่มีดีล ไม่ถูกแทน ไม่ถูกปฏิเสธ ไม่หมดอายุ)
-   * มีเมื่อไรต้องเลือกว่าออกเป็นใบใหม่แยก หรือออกแทนใบเดิม · ใบต้นทางของ ?from= อยู่ในรายการเสมอถ้ายังแทนได้
+   * ผู้ใช้สั่ง 5 ต.ค. 2569 — จะออกใบใหม่ให้ลูกค้ารายนี้ ต้องปฏิเสธใบเดิมที่ยังค้างก่อน
+   * ไม่ว่าจะออกเป็นใบแก้ หรือลูกค้าไม่เอาจริง ๆ
+   *   pending = ใบที่ยังไม่ได้ตัดสิน (รอดำเนินการ/หมดอายุ) → ต้องกดปฏิเสธก่อนถึงออกเลขได้
+   *   waiting = ใบที่ปฏิเสธแล้ว ยังไม่มีใบใหม่แทน → เลือกได้ว่าออกเป็นใบแก้ของใบนั้น หรือใบใหม่แยก
    */
-  const waiting = useMemo(() => {
+  const pending = useMemo(() => {
     if (!customer) return [];
-    const hasDeal = (q: Quotation) => crm.deals.some((d) => d.quotationNo === q.no);
     return crm.quotations.filter(
       (q) =>
         q.customerCode === customer.code &&
-        (canBillQuotation(q, hasDeal(q), today) ||
-          /* ใบที่กด "ออกใบใหม่แทนใบนี้" มาต้องเลือกแทนได้เสมอ แม้ตอบรับหรือมีดีลแล้ว ขอแค่ยังไม่ถูกแทน */
-          (mode.kind === "from" && q.id === mode.src.id && Boolean(q.no) && !q.replacedBy)),
+        canRejectQuotation(q, crm.deals.some((d) => d.quotationNo === q.no)),
     );
-  }, [crm.quotations, crm.deals, customer, mode, today]);
+  }, [crm.quotations, crm.deals, customer]);
+  const waiting = useMemo(() => {
+    if (!customer) return [];
+    return crm.quotations.filter(
+      (q) =>
+        q.customerCode === customer.code &&
+        Boolean(q.no) &&
+        Boolean(q.rejectedAt) &&
+        !q.replacedBy &&
+        !crm.deals.some((d) => d.quotationNo === q.no),
+    );
+  }, [crm.quotations, crm.deals, customer]);
+  const [rejecting, setRejecting] = useState<Quotation | null>(null);
   const repValue = rep && (rep === "new" || waiting.some((q) => q.no === rep)) ? rep : null;
 
   const problems = {
     customer: !customer,
     service: !service,
+    pending: pending.length > 0,
     rep: waiting.length > 0 && !repValue,
     issuer: !issuer,
     days: days <= 0,
+    taxId: taxId.length > 0 && taxId.length !== 13,
     items: !htmlToText(body) || totals.gross <= 0,
-    /*
-     * ส่วนลดกินจำนวนเงินจนหมด — ยอดสุทธิเหลือ 0 (ไล่ทดสอบสายงาน 12 ต.ค. 2569)
-     * เดิมตรวจแค่ยอดก่อนหักส่วนลด จึงออกใบเสนอราคา 0 บาทได้ และใบนั้นแก้ไม่ได้อีก
-     * แถมส่งไปวางบิลต่อได้ด้วย ต้องกันตั้งแต่ตอนออกใบ
-     */
-    discount: totals.gross > 0 && totals.base <= 0,
   };
   const miss = [
     problems.customer && who,
     problems.service && "บริการ",
+    problems.pending && "ปฏิเสธใบเดิมที่ค้างอยู่",
     problems.rep && "ออกแทนใบเดิม",
     problems.issuer && "ออกในนาม",
     problems.days && "จำนวนวันยืนราคา",
+    problems.taxId && "เลขประจำตัวผู้เสียภาษี",
     problems.items && "รายละเอียดและจำนวนเงิน",
-    problems.discount && "ส่วนลด",
   ].filter((x): x is string => Boolean(x));
 
-  /** ค่าที่จะบันทึกลงใบใหม่ */
+  /** ค่าที่จะบันทึก — กติกาคิดยอดชุดเดียวกับที่เห็นบนจอ */
   function inputOf(c: Customer, iss: IssuerCode, svc: ServiceKey) {
     return {
       customerCode: c.code,
@@ -298,7 +310,7 @@ function QuotationForm({
       whtPct,
       body: cleanHtml(body),
       terms: terms.trim(),
-      ps: ps || (mode.kind === "from" ? mode.src.ps : undefined),
+      ps: ps || (mode.kind === "new" ? undefined : mode.src.ps),
       replaces: repValue && repValue !== "new" ? repValue : undefined,
     };
   }
@@ -311,86 +323,146 @@ function QuotationForm({
     return null;
   }
 
-  /* ออกใบเสนอราคา — ออกเลขที่ทันที แก้ไม่ได้อีก (เจ้าของแจ้ง 5 ต.ค. 2569 จึงไม่มีกล่องยืนยันคั่น) */
+  /* ออกเลขที่เอกสาร — ย้อนไม่ได้ ผ่านกล่องยืนยันมาแล้วเท่านั้น */
   function issueNow() {
     const ok = ready();
     if (!ok) return;
-    const no = addQuotation(inputOf(ok.customer, ok.issuer, ok.service));
+    setConfirming(false);
+    const input = inputOf(ok.customer, ok.issuer, ok.service);
+    if (taxId !== (ok.customer.taxId ?? "")) updateCustomer(ok.customer.code, { taxId });
+    const no = addQuotation(input);
     onSaved(
       <>
-        ออกเลขที่ <b className="num">{no}</b> แล้ว · รวมทั้งสิ้น {baht(totals.grand)} บาท · แก้ไขไม่ได้อีก
-        <Link href={`${home}/${encodeURIComponent(no)}`} className="font-semibold underline">
-          เปิดเอกสารไปส่งลูกค้า
+        ออกเลขที่ <b className="num">{no}</b> แล้ว · รวมทั้งสิ้น {baht(totals.grand)} บาท
+        <Link href={`${base}/${encodeURIComponent(no)}`} className="font-semibold underline">
+          เปิดเอกสารไปส่ง{who}
         </Link>
-        <Link href={home} className="font-semibold underline">
+        <Link href={base} className="font-semibold underline">
           กลับไปรายการใบเสนอราคา
         </Link>
       </>,
-      false,
     );
   }
 
+  /* กด Enter ในช่องกรอกไม่บันทึกอะไร — ออกเลขที่ย้อนไม่ได้ ต้องกดปุ่มและยืนยันเท่านั้น */
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    issueNow();
   }
 
-  const card = "glass rounded-2xl px-4 py-5 sm:px-6";
+  /* มือถือ: การ์ดตามต้นแบบ — มน 20 ไม่มีขอบ (มาจาก .glass บนมือถือ) ระยะใน 14px */
+  const card = "glass rounded-2xl px-4 py-5 sm:px-6 max-md:!p-[14px]";
   const h2 = "mb-4 border-b border-border pb-3 text-[15px] font-semibold";
 
   return (
-    <form onSubmit={submit} noValidate>
+    <form
+      onSubmit={submit}
+      noValidate
+      /* มือถือ: ช่องกรอกสูง 46 มุม 12 ตามต้นแบบ — จอคอมคงเดิม */
+      className="max-md:[&_.field-control]:!h-[46px] max-md:[&_.field-control]:!rounded-xl max-md:[&_.field-control]:!text-[15px]"
+    >
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           <section className={card}>
             <h2 className={h2}>{who}</h2>
-            <Field label={who} required error={touched && problems.customer ? "เลือกลูกค้าก่อน" : undefined}>
+            <Field label={who} required error={touched && problems.customer ? `เลือก${who}ก่อน` : undefined}>
               <CustomerCombo
-                /* ต้นแบบ quotation-new ไม่มีรายที่ปฏิเสธแล้วในรายการ · เลือกแล้วแสดงแค่ชื่อ · มีป้ายไม่มีเลขภาษี
-                   ฝั่งบัญชีออกเอกสารให้ลูกค้าที่ปิดการขายแล้วเท่านั้น (ต้นแบบ acc-quotation-new.html) */
-                customers={crm.customers.filter((c) =>
-                  acc ? c.status === "ปิดงาน" : c.status !== "ปฏิเสธ",
-                )}
+                /* ต้นแบบ quotation-new ไม่มีรายที่ปฏิเสธแล้วในรายการ · เลือกแล้วแสดงแค่ชื่อ · มีป้ายไม่มีเลขภาษี */
+                /* บัญชีเลือกได้เฉพาะลูกค้าที่ปิดการขายแล้ว ไม่มีผู้สนใจปน */
+                customers={crm.customers.filter((c) => c.status !== "ปฏิเสธ" && (!acc || c.status === "ปิดงาน" || Boolean(c.leadCode)))}
                 nameOnly
                 taxFlag
                 value={customer}
                 onChange={(c) => {
                   setCustomer(c);
                   setRep(null);
+                  setTaxId(c?.taxId ?? "");
                   if (c) setBuyer(c.type);
                 }}
                 invalid={touched && problems.customer}
               />
-              {customer && !customer.taxId && (
-                <p className="mt-2.5 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-[12.5px] leading-relaxed text-[var(--warning)]">
-                  {who}รายนี้ยังไม่มีเลขประจำตัวผู้เสียภาษี
-                </p>
-              )}
             </Field>
 
-            {waiting.length > 0 && (
+            <div className="grid gap-x-5 md:grid-cols-2">
+              <Field
+                label="เลขประจำตัวผู้เสียภาษี"
+                error={touched && problems.taxId ? "กรอกให้ครบ 13 หลัก" : undefined}
+                hint={customer && !taxId ? `${who}รายนี้ยังไม่มีเลขประจำตัวผู้เสียภาษี` : undefined}
+              >
+                <input
+                  value={taxId}
+                  inputMode="numeric"
+                  onChange={(e) => setTaxId(e.target.value.replace(/\D/g, "").slice(0, 13))}
+                  placeholder="13 หลัก"
+                  aria-invalid={touched && problems.taxId}
+                  className={`field-control num ${touched && problems.taxId ? "border-destructive" : ""}`}
+                />
+              </Field>
+            </div>
+
+            {pending.length > 0 && (
+              <div
+                className={`mb-[15px] rounded-xl border-[1.4px] bg-[var(--warning-soft)] px-3.5 py-3 ${
+                  touched ? "border-destructive" : "border-transparent"
+                }`}
+              >
+                <p className="text-[13px] font-semibold text-[var(--warning)]">
+                  {who}รายนี้มีใบเสนอราคาที่ยังรอดำเนินการ ต้องกดปฏิเสธใบเดิมก่อนจึงออกใบใหม่ได้
+                </p>
+                <ul className="mt-2.5 grid gap-2">
+                  {pending.map((q) => (
+                    <li
+                      key={q.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white px-3 py-2"
+                    >
+                      <span className="min-w-0">
+                        <b className="num block text-[13.5px] font-semibold">{q.no}</b>
+                        <em className="block text-[11.5px] text-muted-foreground not-italic">
+                          {baht(quotationTotals(q).grand)} บาท · มีผลถึง {thaiDate(quotationValidUntil(q))}
+                        </em>
+                      </span>
+                      <button type="button" className="lnk shrink-0" onClick={() => setRejecting(q)}>
+                        ปฏิเสธ
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {rejecting && (
+              <RejectQuotationDialog
+                quotation={rejecting}
+                customerName={customer?.name ?? "—"}
+                onClose={() => {
+                  /* ปฏิเสธแล้วเลือกใบนั้นเป็นใบที่จะออกแทนให้เลย (ใบแก้) เปลี่ยนเป็นใบใหม่แยกได้ */
+                  if (crm.quotations.some((x) => x.id === rejecting.id)) setRep(rejecting.no);
+                  setRejecting(null);
+                }}
+              />
+            )}
+
+            {pending.length === 0 && waiting.length > 0 && (
               <div className="mb-[15px]" role="radiogroup" aria-labelledby="rep-label">
                 <p id="rep-label" className="mb-1.5 text-[12.5px] font-semibold text-muted-foreground">
-                  ลูกค้ารายนี้มีใบเสนอราคาที่รอคำตอบ
+                  ออกเป็นใบแก้ของใบที่ปฏิเสธไปแล้ว หรือใบใหม่แยก
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <RepOption
-                    checked={repValue === "new"}
-                    onPick={() => setRep("new")}
-                    title="ออกเป็นใบใหม่แยก"
-                    sub="ใบเดิมยังรอคำตอบตามเดิม"
-                    bad={touched && problems.rep}
-                  />
+                <div className="grid gap-2 md:grid-cols-2">
                   {waiting.map((q) => (
                     <RepOption
                       key={q.id}
                       checked={repValue === q.no}
                       onPick={() => setRep(q.no)}
-                      title={`ออกแทนใบ ${q.no}`}
-                      sub={`${baht(quotationTotals(q).grand)} บาท`}
+                      title={`ใบแก้ของ ${q.no}`}
+                      sub={`${baht(quotationTotals(q).grand)} บาท${q.rejectReason ? ` · ${q.rejectReason}` : ""}`}
                       bad={touched && problems.rep}
                     />
                   ))}
+                  <RepOption
+                    checked={repValue === "new"}
+                    onPick={() => setRep("new")}
+                    title="ออกเป็นใบใหม่แยก"
+                    sub="ไม่ผูกกับใบเดิม"
+                    bad={touched && problems.rep}
+                  />
                 </div>
                 {touched && problems.rep && (
                   <p className="mt-1.5 text-[12.5px] text-destructive">เลือกว่าออกเป็นใบใหม่แยก หรือออกแทนใบเดิม</p>
@@ -398,12 +470,11 @@ function QuotationForm({
               </div>
             )}
 
-            <div className="grid gap-x-5 sm:grid-cols-2">
+            <div className="grid gap-x-5 md:grid-cols-2">
               <Field
                 label="บริการ"
                 required
                 error={touched && problems.service ? "เลือกบริการ" : undefined}
-                hint="1 ใบเสนอราคา = 1 บริการ ถ้าลูกค้าซื้อหลายบริการให้ออกคนละใบ"
               >
                 <select
                   value={service}
@@ -424,11 +495,6 @@ function QuotationForm({
                 label="ออกในนาม"
                 required
                 error={touched && problems.issuer ? "เลือกผู้ออกเอกสาร" : undefined}
-                hint={
-                  issuer && !issuerOf(issuer).vat
-                    ? "ผู้ออกรายนี้ไม่ได้จดทะเบียน VAT จึงไม่คิดภาษีมูลค่าเพิ่ม"
-                    : undefined
-                }
               >
                 <select
                   value={issuer}
@@ -513,7 +579,7 @@ function QuotationForm({
         <aside className="space-y-4 xl:sticky xl:top-[88px]">
           <section className={card}>
             <h2 className={h2}>จำนวนเงินและการชำระเงิน</h2>
-            <div className="grid grid-cols-2 gap-x-4">
+            <div className="grid grid-cols-2 gap-x-4 max-md:grid-cols-1">
               <Field label="จำนวนเงิน" required>
                 <input
                   value={amount}
@@ -523,21 +589,13 @@ function QuotationForm({
                   className="field-control num text-right"
                 />
               </Field>
-              <Field
-                label="ส่วนลด"
-                error={
-                  touched && problems.discount
-                    ? "ส่วนลดเท่ากับหรือมากกว่าจำนวนเงิน ยอดสุทธิเป็น 0"
-                    : undefined
-                }
-              >
+              <Field label="ส่วนลด">
                 <input
                   value={discount}
                   inputMode="decimal"
-                  aria-invalid={touched && problems.discount}
                   onChange={(e) => setDiscount(commaInput(e.target.value))}
                   placeholder="0"
-                  className={`field-control num text-right ${touched && problems.discount ? "border-destructive" : ""}`}
+                  className="field-control num text-right"
                 />
               </Field>
             </div>
@@ -587,17 +645,12 @@ function QuotationForm({
                 />
                 <span className="min-w-0 flex-1">
                   หักภาษี ณ ที่จ่าย
-                  <small className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                    {buyer === "individual"
-                      ? "ลูกค้าบุคคลธรรมดาไม่มีหน้าที่หักภาษี ณ ที่จ่าย"
-                      : "อัตราที่เลือกจะติดไปกับใบนี้ทุกหน้าจอ"}
-                  </small>
                 </span>
               </label>
               {/* อัตราติดอยู่กับใบเสนอราคา ไม่ใช่ค่าตั้งค่าของระบบ ใบเก่าจึงไม่เปลี่ยนตามทีหลัง */}
               {wht && buyer !== "individual" && (
                 <div className="mt-2.5 flex items-center gap-2.5">
-                  <span className="text-[12.5px] text-muted-foreground">อัตราที่ลูกค้าหัก</span>
+                  <span className="text-[12.5px] text-muted-foreground">อัตราที่{who}หัก</span>
                   <select
                     value={whtPct}
                     aria-label="อัตราหักภาษี ณ ที่จ่าย"
@@ -614,17 +667,31 @@ function QuotationForm({
               )}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" className="btn glass-thin flex-1 justify-center" onClick={onReset}>
+            {/* มือถือ: ยกเลิก/ดูตัวอย่างคู่กันสูง 44 · ปุ่มบันทึกเต็มแถวสูง 48 มุม 14 ปุ่มหลักแดงทึบ */}
+            <div className="mt-4 flex flex-wrap gap-2 max-md:grid max-md:grid-cols-2 max-md:gap-2.5">
+              <button
+                type="button"
+                className="btn glass-thin flex-1 justify-center max-md:!h-11 max-md:!rounded-[14px]"
+                onClick={onReset}
+              >
                 ยกเลิก
               </button>
-              <button type="button" className="btn glass-thin flex-1 justify-center" onClick={() => setPreview(true)}>
+              <button
+                type="button"
+                className="btn glass-thin flex-1 justify-center max-md:!h-11 max-md:!rounded-[14px]"
+                onClick={() => setPreview(true)}
+              >
                 <EyeIcon className="size-[15px]" strokeWidth={1.9} />
                 ดูตัวอย่างเอกสาร
               </button>
-              {/* ทางที่ย้อนได้อยู่ก่อน — เก็บเป็นร่างไว้ไม่กินเลขที่ */}
-              <button type="submit" className="btn solid btn-solid w-full justify-center">
-                ออกใบเสนอราคา
+              <button
+                type="button"
+                className="btn solid btn-solid w-full justify-center max-md:col-span-2 max-md:!h-12 max-md:!rounded-[14px] max-md:!bg-[#C8102E] max-md:!text-[15px]"
+                onClick={() => {
+                  if (ready()) setConfirming(true);
+                }}
+              >
+                ออกเลขที่เอกสาร
               </button>
             </div>
             {touched && miss.length > 0 && (
@@ -641,26 +708,38 @@ function QuotationForm({
                 ))}
               </p>
             )}
-            <p className="mt-3 text-center text-[11.5px] leading-relaxed text-muted-foreground">
-              กดแล้วออกเลขที่เอกสารทันทีและนับว่าส่งให้ลูกค้าแล้ว แก้ไม่ได้อีก
-              ถ้าต้องเปลี่ยนให้ออกใบใหม่แทนใบเดิม
-            </p>
           </section>
         </aside>
       </div>
 
       {/* มือถือ: แถบยอดรวมติดล่างจอเหนือแถบเมนู เห็นยอดตลอดขณะกรอก และกดบันทึกได้โดยไม่ต้องเลื่อนลงสุด
-          ปุ่มบันทึกเดิมในการ์ดสรุปยอดยังอยู่ — ตัวนี้ส่งฟอร์มเดียวกัน */}
-      <div className="sticky bottom-[calc(var(--botbar)+10px)] z-10 mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-2.5 pl-4 shadow-[0_-6px_16px_-10px_rgb(0_0_0/0.25)] sm:hidden">
+          ปุ่มบันทึกเดิมในการ์ดสรุปยอดยังอยู่ — ตัวนี้เปิดกล่องยืนยันเดียวกัน */}
+      <div className="sticky bottom-[calc(var(--botbar)+10px)] z-10 mt-4 flex items-center gap-3 rounded-[20px] bg-card p-2.5 pl-4 shadow-[0_1px_2px_rgba(120,20,35,.05),0_12px_28px_-18px_rgba(120,20,35,.3),0_-6px_16px_-10px_rgb(0_0_0/0.18)] md:hidden">
         <span className="min-w-0 flex-1">
           <small className="block text-[11.5px] text-muted-foreground">รวมทั้งสิ้น</small>
           <b className="num block truncate text-[17px] font-bold">{baht(totals.grand)}</b>
         </span>
-        {/* มือถือ: ปุ่มเดียว ชุดเดียวกับในการ์ดสรุปยอด */}
-        <button type="submit" className="btn solid btn-solid h-11 shrink-0 justify-center px-4">
-          ออกใบเสนอราคา
+        {/* มือถือ: ปุ่มออกเลขที่ปุ่มเดียว ชุดเดียวกับในการ์ดสรุปยอด */}
+        <button
+          type="button"
+          className="btn solid btn-solid !h-11 shrink-0 justify-center !rounded-[14px] !bg-[#C8102E] px-4"
+          onClick={() => {
+            if (ready()) setConfirming(true);
+          }}
+        >
+          ออกเลขที่
         </button>
       </div>
+
+      {confirming && customer && issuer && (
+        <IssueNumberDialog
+          customerName={customer.name}
+          issuer={issuerOf(issuer).name}
+          total={totals.grand}
+          onGo={issueNow}
+          onClose={() => setConfirming(false)}
+        />
+      )}
 
       {/* ตัวอย่างเอกสาร — ยิงออกไปที่ body เพราะกล่องที่มี backdrop-filter เป็นกรอบอ้างอิงของ position: fixed */}
       {preview &&
@@ -674,14 +753,15 @@ function QuotationForm({
               if (e.target === e.currentTarget) setPreview(false);
             }}
           >
-            <div className="glass-solid mx-auto flex max-h-full w-full max-w-[900px] flex-col overflow-hidden sm:my-6 sm:rounded-[18px]">
-              <div className="flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5">
+            {/* มือถือ: เป็นแผ่นเลื่อนขึ้นจากล่าง มุมบนมน 24 สูงไม่เกิน 92vh ตามต้นแบบ */}
+            <div className="glass-solid mx-auto flex max-h-full w-full max-w-[900px] flex-col overflow-hidden sm:my-6 sm:rounded-[18px] max-md:!mt-auto max-md:!mb-0 max-md:max-h-[92vh] max-md:!rounded-t-[24px] max-md:!rounded-b-none max-md:bg-white">
+              <div className="flex flex-none items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 max-md:border-[#F2EAEC] max-md:!px-[18px] max-md:pt-4 max-md:pb-2.5">
                 <b className="text-[15px] font-bold">ตัวอย่างใบเสนอราคา</b>
                 <button type="button" className="iconbtn glass-thin" aria-label="ปิด" onClick={() => setPreview(false)}>
                   <CloseIcon className="size-[15px]" strokeWidth={2.2} />
                 </button>
               </div>
-              <div className="scroll-stable flex min-h-0 flex-1 flex-col items-center gap-5 overflow-auto bg-[#eef0f4] p-4 sm:p-6">
+              <div className="scroll-stable flex min-h-0 flex-1 flex-col items-center gap-5 overflow-auto bg-[#eef0f4] p-4 sm:p-6 max-md:!pb-[calc(16px+env(safe-area-inset-bottom))]">
                 <QuotationPaper
                   doc={{
                     no: "",
@@ -703,7 +783,7 @@ function QuotationForm({
                     customer: customer
                       ? {
                           name: customer.name,
-                          taxId: customer.taxId,
+                          taxId: taxId || customer.taxId,
                           address: customer.address,
                           contact: customer.contact,
                           phone: customer.phone,

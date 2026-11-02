@@ -7,10 +7,10 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ no: string }>;
-  searchParams: Promise<{ rev?: string }>;
+  searchParams: Promise<{ rev?: string; pdf?: string }>;
 }) {
   const { no } = await params;
-  const { rev } = await searchParams;
+  const { rev, pdf } = await searchParams;
   /* ?rev=n = เปิดฉบับเก่าจากประวัติการแก้ไข */
-  return <QuotationDocPage no={decodeURIComponent(no)} rev={rev ? Number(rev) : undefined} />;
+  return <QuotationDocPage no={decodeURIComponent(no)} rev={rev ? Number(rev) : undefined} pdf={pdf === "1"} />;
 }

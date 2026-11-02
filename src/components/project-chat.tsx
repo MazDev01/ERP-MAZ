@@ -8,7 +8,8 @@
  */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { bkkNow, daysBetween, initials, pad2, thaiDate, toIsoDate, todayIso } from "@/lib/format";
+import { bkkNow, daysBetween, pad2, thaiDate, toIsoDate, todayIso } from "@/lib/format";
+import { initialOf, nameOf } from "@/lib/emp-name";
 import { projectMembers, type ChatMessage, type Project } from "@/lib/pm-data";
 import { memberOf, postChat } from "@/lib/pm-store";
 import { lockScroll } from "@/lib/scroll-lock";
@@ -29,9 +30,6 @@ export function FileNotice({ name, onClose }: { name: string; onClose: () => voi
       }
     >
       <p className="text-[13.5px] font-semibold break-words">{name}</p>
-      <p className="mt-2 text-[12.5px] text-muted-foreground">
-        ยังไม่ได้ต่อที่เก็บไฟล์จริง เปิดตัวไฟล์ได้เมื่อระบบต่อ backend แล้ว
-      </p>
     </Sheet>
   );
 }
@@ -143,7 +141,7 @@ function Chat({
           )}
           {rows.map(({ m, sep, head }, i) => {
             const mine = m.who === me;
-            const name = m.who === "PM" ? project.pm : (memberOf(m.who)?.name ?? m.who);
+            const name = m.who === "PM" ? nameOf(project.pm) : (memberOf(m.who)?.name ?? nameOf(m.who));
             return (
               <div key={`${m.at}-${i}`} className="flex flex-col">
                 {sep && (
@@ -159,7 +157,7 @@ function Chat({
                         head ? "bg-accent text-primary" : "invisible"
                       }`}
                     >
-                      {initials(name)}
+                      {initialOf(name)}
                     </span>
                   )}
                   <div className="flex min-w-0 flex-col">
@@ -325,11 +323,9 @@ export function ProjectChat({
   const others = project.chat.filter((m) => m.who !== me).length;
   const members = projectMembers(project).length;
 
-  /* ตัวปิดล่าสุดเก็บใน ref — เขียนใน effect ไม่ใช่ตอนวาดจอ (ตัวตรวจของระบบนี้เข้มกว่าต้นฉบับ) */
+  /* ตัวปิดล่าสุดเก็บใน ref — effect ไม่ต้องผูกกับฟังก์ชันที่สร้างใหม่ทุกรอบ */
   const closeRef = useRef(() => setOpen(false));
-  useEffect(() => {
-    closeRef.current = () => setOpen(false);
-  });
+  closeRef.current = () => setOpen(false);
   useEffect(() => {
     if (!open) return;
     const unlock = phone ? lockScroll() : () => {};
@@ -352,8 +348,9 @@ export function ProjectChat({
         aria-label={open ? "ปิดแชทโปรเจค" : "เปิดแชทโปรเจค"}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
+        /* เปิดแชทแล้วซ่อนปุ่มลอย ปิดด้วยปุ่ม - ที่หัวแชท (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+        style={open && !phone ? { display: "none" } : undefined}
       >
-        {/* เปิดอยู่แล้วปุ่มเปลี่ยนเป็นกากบาท ใช้ปิดกล่องแบบแชทบอททั่วไป */}
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           {open && !phone ? (
             <path d="M18 6 6 18M6 6l12 12" />

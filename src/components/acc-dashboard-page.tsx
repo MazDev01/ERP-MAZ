@@ -8,15 +8,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { INVOICE_STATUS, whtAmount, type InvoiceStatus } from "@/lib/acc-data";
-import { awaitingReceipt, invoiceDue, invoiceStatus, useAcc } from "@/lib/acc-store";
+import { INVOICE_STATUS, WHT_PAYEE, whtAmount, type InvoiceStatus } from "@/lib/acc-data";
+import { awaitingReceipt, invoiceDue, invoiceLateDays, invoiceStatus, useAcc } from "@/lib/acc-store";
 import { FileIcon, CheckCircleIcon, ClockIcon, BellIcon, TaxIcon } from "./icons";
-import { DashWrap, DashHero, DashChips, DashSection } from "./mobile-dash";
 import {
   TH_MONTHS_FULL,
   baht,
   bkkNow,
-  daysBetween,
   thaiDate,
   toIsoDate,
 } from "@/lib/format";
@@ -69,7 +67,8 @@ export function AccDashboardPage() {
     .reduce((a, p) => a + p.received + p.wht, 0);
   /* ลูกหนี้อ่านจาก awaitingReceipt ชุดเดียวกับหน้าใบเสร็จ หน้าวางบิล และกระดิ่ง ตัวเลขจะได้ตรงกันทุกที่ */
   const openInv = awaitingReceipt(acc);
-  const late = openInv.filter((v) => daysBetween(v.due, today) > 0);
+  /* ใบลงวันที่ล่วงหน้ายังไม่ถึงวันออกไม่นับว่าเกินกำหนด (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  const late = openInv.filter((v) => invoiceLateDays(v, today) > 0);
   const lateSum = late.reduce((a, v) => a + invoiceDue(v), 0);
 
   const slices = (["pending", "partial", "paid"] as const).map((k) => ({
@@ -99,75 +98,7 @@ export function AccDashboardPage() {
 
   return (
     <div className="space-y-3.5">
-      {/* ── มือถือ: แดชบอร์ดแบบแอปเหมือนบทบาทอื่น (เจ้าของแจ้ง 8 ต.ค. 2569 ว่ายังเป็นการ์ดแบบจอคอม) ──
-           ตัวเลขชุดเดียวกับจอคอมทั้งหมด ไม่ได้คิดใหม่ */}
-      <DashWrap>
-        <DashHero
-          chips={
-            <DashChips
-              value={range}
-              items={RANGES.map((r) => ({ key: r.key, label: r.label }))}
-              onPick={setRange}
-            />
-          }
-          label="รับชำระในช่วงนี้"
-          value={`${baht(got)} บาท`}
-          foot={`วางบิล ${baht(billed)} บาท · ลูกหนี้คงเหลือ ${openInv.length} ใบ`}
-          ringPct={billed ? Math.min(100, (got * 100) / billed) : 0}
-          ringLabel="เก็บได้แล้ว"
-        />
-
-        <DashSection
-          title="ลูกหนี้ค้างนานสุด"
-          href="/acc/billing"
-          linkLabel="วางบิล"
-          empty="ไม่มีใบแจ้งหนี้ที่เกินกำหนด"
-          rows={[...late]
-            .sort((x, y) => daysBetween(y.due, today) - daysBetween(x.due, today))
-            .slice(0, 5)
-            .map((v) => ({
-              key: v.no,
-              title: v.cus,
-              meta: `${v.no} · ${baht(invoiceDue(v))} บาท`,
-              metaTint: "grey" as const,
-              end: `เกิน ${daysBetween(v.due, today)}ว`,
-              endTint: "rose" as const,
-            }))}
-        />
-
-        <DashSection
-          title="หัก ณ ที่จ่าย"
-          href="/acc/wht"
-          linkLabel="ยื่นภาษี"
-          empty="ไม่มีรายการหักภาษีในช่วงนี้"
-          rows={whtList.map((r) => ({
-            key: r.id,
-            title: r.name,
-            meta: `${thaiDate(r.date)} · หัก ${baht(whtAmount(r))} บาท`,
-            metaTint: "grey" as const,
-            end: r.kind === "53" ? "53" : "3",
-            endTint: "mint" as const,
-          }))}
-        />
-
-        <DashSection
-          title="รับชำระล่าสุด"
-          href="/acc/receipts"
-          linkLabel="ใบเสร็จ"
-          empty="ยังไม่มีการรับชำระ"
-          rows={[...acc.receipts]
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .slice(0, 4)
-            .map((r) => ({
-              key: r.no,
-              title: `${r.cus} · ${baht(r.base + r.vatAmount)} บาท`,
-              meta: `${thaiDate(r.date)} · ${r.no}`,
-              metaTint: "grey" as const,
-            }))}
-        />
-      </DashWrap>
-
-      <div className="bar max-md:hidden!">
+      <div className="bar">
         <div>
           <h1>แดชบอร์ดบัญชี</h1>
           <p>{rangeNote(range, now)}</p>
@@ -188,20 +119,20 @@ export function AccDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5 max-md:hidden xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
         <Kpi
           icon={<FileIcon className="size-[17px]" />}
           skin="info"
           title="วางบิลในช่วงนี้"
           value={`${baht(billed)} บาท`}
-          meta="ยอดตามใบแจ้งหนี้ที่ออกในช่วงที่เลือก ไม่นับใบที่ยกเลิก"
+          meta=""
         />
         <Kpi
           icon={<CheckCircleIcon className="size-[17px]" />}
           skin="won"
           title="รับชำระในช่วงนี้"
           value={`${baht(got)} บาท`}
-          meta="เงินโอนบวกภาษีที่ลูกค้าหักไว้"
+          meta=""
         />
         <Kpi
           icon={<ClockIcon className="size-[17px]" />}
@@ -220,12 +151,9 @@ export function AccDashboardPage() {
         />
       </div>
 
-      <div className="grid items-start gap-3.5 max-md:hidden xl:grid-cols-[minmax(0,1.34fr)_minmax(0,0.66fr)]">
+      <div className="grid items-start gap-3.5 xl:grid-cols-[minmax(0,1.34fr)_minmax(0,0.66fr)]">
         <section className="glass rounded-[15px] px-5 py-[18px]">
           <h2 className="text-[15px] font-bold">วางบิล เทียบ รับชำระ</h2>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            ยอดตามใบแจ้งหนี้ที่ออก เทียบกับเงินที่รับเข้าจริงในเดือนเดียวกัน
-          </p>
           <p className="mt-2.5 flex gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <i
@@ -272,7 +200,7 @@ export function AccDashboardPage() {
       {/* แถวล่างตามโครง mockup 24 ก.ย. 2569 — สองตารางซ้าย คอลัมน์ขวาเป็นรับชำระล่าสุดและสรุปช่วงนี้ */}
       {/* จอแคบตั้งคอลัมน์เป็น minmax(0,1fr) ไว้ชัด ๆ — ปล่อยเป็นคอลัมน์อัตโนมัติ ช่องจะกว้างตาม
           เนื้อหาที่ยาวที่สุด (ข้อความไทยตัดคำไม่ได้) แล้วดันทั้งแถวล้นออกนอกจอ */}
-      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 max-md:hidden md:grid-cols-6 xl:grid-cols-8">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3.5 md:grid-cols-6 xl:grid-cols-8">
         {/* สองการ์ดนี้เป็นรายการแถวเดียวจบตามโครง mockup ไม่ใช่ตารางกว้าง
             เพราะอยู่คอลัมน์แคบ ตารางสี่คอลัมน์จะถูกตัดจนอ่านยอดไม่ครบ */}
         <section className="glass flex h-full flex-col md:col-span-3 rounded-[14px] px-5 py-[18px]">
@@ -290,7 +218,7 @@ export function AccDashboardPage() {
           ) : (
             <ul className="mt-1.5 min-h-[240px] flex-1 divide-y divide-border overflow-y-auto">
               {[...late]
-                .sort((x, y) => daysBetween(y.due, today) - daysBetween(x.due, today))
+                .sort((x, y) => invoiceLateDays(y, today) - invoiceLateDays(x, today))
                 .slice(0, 5)
                 .map((v, i) => (
                   <li key={v.no} className="flex items-center gap-3 py-[11px]">
@@ -305,7 +233,7 @@ export function AccDashboardPage() {
                     </span>
                     <span className="tag t-late flex-none">
                       <i />
-                      เกิน {daysBetween(v.due, today)} วัน
+                      เกิน {invoiceLateDays(v, today)} วัน
                     </span>
                   </li>
                 ))}
@@ -339,7 +267,7 @@ export function AccDashboardPage() {
                   </span>
                   <span className="tag t-early flex-none">
                     <i />
-                    {r.kind === "53" ? "ภ.ง.ด.53" : "ภ.ง.ด.3"}
+                    {WHT_PAYEE[r.payeeType]}
                   </span>
                 </li>
               ))}
@@ -366,7 +294,7 @@ function RecentReceipts({ acc }: { acc: ReturnType<typeof useAcc> }) {
     <section className="glass flex flex-1 flex-col rounded-[14px] px-5 py-[18px]">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[15px] font-bold">รับชำระล่าสุด</h2>
-        <Link href="/acc/receipts" className="text-[12.5px] font-semibold text-primary">
+        <Link href="/acc/billing?tab=rc" className="text-[12.5px] font-semibold text-primary">
           ใบเสร็จ
         </Link>
       </div>

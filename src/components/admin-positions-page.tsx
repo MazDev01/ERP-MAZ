@@ -3,27 +3,21 @@
 /*
  * ตำแหน่งและสายอนุมัติ (Full Proposal · M5) — หน้าตาตามต้นแบบ "ตั้งค่าระบบ — ERP MAZ.html" (HR-11)
  *
- *   การ์ดพับได้รายแผนก ข้างในเป็นตารางตำแหน่ง: ชื่อ · ผู้อนุมัติ ลา/โอที/เบิก · สวิตช์เปิดใช้ · แก้/ลบ
+ *   ตารางเดียวแบบแท็บแผนก เรียงตามแผนก: ชื่อ · แผนก · ผู้อนุมัติ ลา/โอที/เบิก · สวิตช์เปิดใช้ · แก้/ลบ (ผู้ใช้สั่ง 12 ต.ค. 2569)
  *   ตำแหน่งสังกัดแผนก — เพิ่ม แก้ชื่อ ย้ายแผนก · ตำแหน่งที่มีพนักงานอยู่ลบไม่ได้ (ปิดใช้งานแทน)
- *   เลือกผู้อนุมัติ ลา โอที เบิกค่าใช้จ่าย ต่อตำแหน่งในกล่องแก้ไข — ไม่ตั้ง = ใช้สายตามบทบาท (/admin/roles)
+ *   เลือกผู้อนุมัติ ลา โอที เบิกค่าใช้จ่าย ต่อตำแหน่งในกล่องแก้ไข — ไม่ตั้ง = ใช้สายตั้งต้นของบทบาท (แท็บสายอนุมัติเอาออกแล้ว ผู้ใช้สั่ง 6 ต.ค. 2569)
  *   ผู้อนุมัติอนุมัติคำขอของตนเองไม่ได้ — ตำแหน่งของผู้อนุมัติเองจึงเลือกตัวเองไม่ได้
  *
  * เก็บสองหมวด: catalog (ตำแหน่งและแผนก) และ posRoute (สายอนุมัติรายตำแหน่ง)
  * บันทึกทีเดียวทั้งสองหมวด เพราะผู้ใช้มองว่าเป็นหน้าเดียว
  */
 
+import { nameOf } from "@/lib/emp-name";
+import { AdminOptionsPage } from "./admin-options-page";
 import { useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { DualRolePane, MenuAccessPane, RoutePane } from "./admin-roles-page";
 import type { Catalog, PosRoute } from "@/lib/system-settings";
-import {
-  BUILTIN_HR_DEPT,
-  BUILTIN_HR_POSITION,
-  defaultRolesOfPosition,
-  holdsPos,
-  hrDept,
-  hrPos,
-} from "@/lib/hr-data";
+import { BUILTIN_HR_DEPT, BUILTIN_HR_POSITION, holdsPos, hrDept, hrPos } from "@/lib/hr-data";
 import { merged } from "@/lib/catalog";
 import { useHr } from "@/lib/hr-store";
 import {
@@ -38,8 +32,8 @@ import {
   type RequestKind,
   type Role,
 } from "@/lib/role";
-import { Input2, SaveBar, Switch, inputCls, useSectionDraft } from "./admin-ui";
-import { ChevronDownIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
+import { AdminHead, IconBtn, Input2, SaveBar, Switch, inputCls, thCls, trCls, useSectionDraft } from "./admin-ui";
+import { PencilIcon, PlusIcon, TrashIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
 const KINDS: { key: RequestKind; label: string }[] = [
@@ -49,6 +43,8 @@ const KINDS: { key: RequestKind; label: string }[] = [
 ];
 
 const APPROVER_KEYS: ApproverKey[] = ["pm", "acc", "hr", "gm", "exec"];
+/** ผู้อนุมัติที่เลือกได้ในกล่องแก้ตำแหน่ง — GM กับ CEO เท่านั้น (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+const APPROVER_CHOICES: ApproverKey[] = ["gm", "exec"];
 
 /** ชื่อสั้นของผู้อนุมัติที่ใช้บนป้ายในตาราง (ต้นแบบใช้ GM / CEO / HR) */
 const APPR_SHORT: Record<ApproverKey, string> = {
@@ -58,19 +54,6 @@ const APPR_SHORT: Record<ApproverKey, string> = {
   gm: "GM",
   exec: "CEO",
 };
-
-/*
- * ตำแหน่งงานนี้เข้าระบบได้ในฐานะอะไร
- * ฝ่ายบุคคลตั้งเองได้รายตำแหน่ง (roles) · ไม่ตั้ง = ค่าตั้งต้นของระบบ (ตำแหน่งที่เพิ่มใหม่คือพนักงาน)
- */
-function roleKeysOf(pos: string, roles?: string[]): Role[] {
-  if (roles?.length) return roles.filter((r) => ROLES.some((x) => x.key === r)) as Role[];
-  return defaultRolesOfPosition(pos);
-}
-
-function roleNames(pos: string, roles?: string[]) {
-  return roleKeysOf(pos, roles).map(roleLabel).join(" · ");
-}
 
 /** บทบาทที่นั่งอยู่ในตำแหน่งนี้ — ใช้กันไม่ให้ตั้งผู้อนุมัติเป็นตัวเอง */
 function rolesOfPos(pos: string): Role[] {
@@ -99,8 +82,6 @@ function describePos(a: Catalog, b: Catalog) {
     else if (old.label !== p.label || old.dept !== p.dept)
       out.push(`แก้ตำแหน่ง ${old.label} → ${p.label} (${hrDept(p.dept).label})`);
     else if (isOff(old) !== isOff(p)) out.push(`${isOff(p) ? "ปิด" : "เปิด"}ใช้งานตำแหน่ง ${p.label}`);
-    else if ((old.roles ?? []).join() !== (p.roles ?? []).join())
-      out.push(`ตำแหน่งในระบบของ ${p.label} → ${roleNames(p.v, p.roles)}`);
   }
   for (const p of was) if (!now.some((x) => x.v === p.v)) out.push(`ลบตำแหน่ง ${p.label}`);
 
@@ -162,32 +143,35 @@ function ApprChip({ who, dim }: { who: string; dim?: boolean }) {
   );
 }
 
-
 /*
- * แท็บของหัวข้อนี้ — รวมหน้าบทบาทและสิทธิ์เข้ามาไว้ที่เดียว (ยกมาจากระบบต้นฉบับ)
+ * แท็บของหัวข้อนี้ — รวมหน้าบทบาทและสิทธิ์ (/admin/roles) เข้ามาไว้ที่เดียว (ผู้ใช้สั่ง 5 ต.ค. 2569)
  *   ตำแหน่ง       — สายอนุมัติรายตำแหน่ง (ตั้งในกล่องแก้ตำแหน่ง) มาก่อนเสมอ
  *   สายอนุมัติ     — ค่าตั้งต้นรายบทบาท ใช้เมื่อตำแหน่งไม่ได้ตั้งของตัวเอง + ชื่อผู้อนุมัติ
- *   เมนูที่ใช้ได้ · บทบาทของบัญชีผู้ใช้ — ยกมาจากหน้าบทบาทและสิทธิ์ของระบบต้นฉบับทั้งก้อน
- * แท็บที่เปิดอยู่อยู่ใน ?t= (ไม่มี = ตำแหน่ง) ลิงก์ตรงเข้าแท็บได้ · หน้าที่เรียกมี Suspense คร่อมแล้ว
+ *   เมนูที่ใช้ได้ · บทบาทของบัญชีผู้ใช้ — ยกมาจากหน้าบทบาทและสิทธิ์เดิมทั้งก้อน
+ * แท็บที่เปิดอยู่อยู่ใน ?t= (ไม่มี = ตำแหน่ง) ลิงก์ตรงเข้าแท็บได้ · หน้าที่เรียกต้องมี Suspense คร่อม (page.tsx มีแล้ว)
  */
+/* แผนกอยู่แท็บแรก ย้ายมาจากข้อมูลหลัก (ผู้ใช้สั่ง 6 ต.ค. 2569) */
 const POS_TABS = [
+  { key: "depts", label: "แผนก" },
   { key: "positions", label: "ตำแหน่ง" },
-  { key: "approval", label: "สายอนุมัติ" },
-  { key: "menu", label: "เมนูที่ใช้ได้" },
-  { key: "accounts", label: "บทบาทของบัญชีผู้ใช้" },
 ] as const;
 type PosTab = (typeof POS_TABS)[number]["key"];
+
+/** ตารางตำแหน่งอย่างเดียว ไม่มีแถบแท็บของตัวเอง — แท็บของตั้งค่าระบบแยกแผนกกับตำแหน่งแล้ว (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+export function AdminPositionsPane() {
+  return <PositionsPane tabs={null} />;
+}
 
 export function AdminPositionsPage() {
   const q = useSearchParams();
   const here = usePathname();
   const router = useRouter();
-  const tab: PosTab = POS_TABS.find((x) => x.key === q.get("t"))?.key ?? "positions";
+  const tab: PosTab = POS_TABS.find((x) => x.key === q.get("t"))?.key ?? "depts";
 
   function go(t: PosTab) {
     const next = new URLSearchParams(q.toString());
     next.set("s", "positions");
-    if (t === "positions") next.delete("t");
+    if (t === "depts") next.delete("t");
     else next.set("t", t);
     router.replace(`${here}?${next.toString()}`, { scroll: false });
   }
@@ -209,41 +193,31 @@ export function AdminPositionsPage() {
     </div>
   );
 
-  if (tab === "positions") return <PositionsPane tabs={tabs} />;
-  return (
-    <div className="space-y-4">
-      <h1 className="sr-only">ตำแหน่งและสายอนุมัติ</h1>
-      <section className="panel glass flex flex-col">
-        <div className="strip">{tabs}</div>
-        {tab === "approval" ? <RoutePane /> : tab === "menu" ? <MenuAccessPane /> : <DualRolePane />}
-      </section>
-    </div>
-  );
+  if (tab === "depts") return <AdminOptionsPage only="depts" topTabs={tabs} />;
+  /* แท็บเมนูที่ใช้ได้เอาออก — เมนูกำหนดจาก "งานที่รับผิดชอบ" ของบัญชีแล้ว (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+  return <PositionsPane tabs={tabs} />;
 }
 
 function PositionsPane({ tabs }: { tabs: ReactNode }) {
   const cat = useSectionDraft("catalog", "ตำแหน่งและสายอนุมัติ", describePos);
   const route = useSectionDraft("posRoute", "ตำแหน่งและสายอนุมัติ", describeRoute);
-  /* ชื่อและตำแหน่งของผู้อนุมัติ — ขึ้นบนใบอนุมัติและเอกสาร เดิมแก้ที่หน้าบทบาทที่ยุบทิ้งไปแล้ว */
   const hr = useHr();
   /* สายอนุมัติรายบทบาท — ใช้เป็นค่าที่ตกไปถึงเมื่อตำแหน่งไม่ได้ตั้งของตัวเอง */
   const byRole = useApprovalRoute();
   /* กล่องเพิ่ม/แก้ตำแหน่ง — null = ปิด · "" = เพิ่มใหม่ · รหัสตำแหน่ง = แก้ */
   const [editing, setEditing] = useState<string | null>(null);
   const [deptEditing, setDeptEditing] = useState<{ v: string; label: string } | null>(null);
-  /* แผนกที่พับไว้ — ต้นแบบกางทุกแผนกเป็นค่าตั้งต้น */
-  const [shut, setShut] = useState<string[]>([]);
 
   /* ตำแหน่งและแผนกต้องมาจากร่าง ไม่ใช่ค่าที่บันทึกแล้ว — ไม่งั้นที่เพิ่ม/ลบไว้จะยังไม่ขึ้นก่อนกดบันทึก */
   const list = merged(cat.draft.positions, BUILTIN_HR_POSITION, (p) => p.v);
   const depts = merged(cat.draft.depts, BUILTIN_HR_DEPT, (d) => d.v);
   const names = approvers();
 
-  function savePos(prev: string, label: string, dept: string, roles: string[]) {
+  function savePos(prev: string, label: string, dept: string) {
     const v = prev || label.trim().toLowerCase().replace(/\s+/g, "_");
     const next = prev
-      ? list.map((p) => (p.v === prev ? { ...p, label: label.trim(), dept, roles } : p))
-      : [...list, { v, label: label.trim(), dept, roles }];
+      ? list.map((p) => (p.v === prev ? { ...p, label: label.trim(), dept } : p))
+      : [...list, { v, label: label.trim(), dept }];
     cat.setDraft({ ...cat.draft, positions: next });
     setEditing(null);
   }
@@ -287,134 +261,93 @@ function PositionsPane({ tabs }: { tabs: ReactNode }) {
 
   const cur = editing ? list.find((p) => p.v === editing) : undefined;
 
+  /* ตารางเดียว เรียงตามลำดับแผนกก่อน แล้วตามลำดับตำแหน่งในแผนก — แผนกที่หาไม่เจอไว้ท้าย (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+  const deptIdx = (v: string) => {
+    const i = depts.findIndex((d) => d.v === v);
+    return i < 0 ? depts.length : i;
+  };
+  const rows = list
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => deptIdx(a.p.dept) - deptIdx(b.p.dept) || a.i - b.i)
+    .map((x) => x.p);
+
   return (
     <div className="space-y-4">
-      <h1 className="sr-only">ตำแหน่งและสายอนุมัติ</h1>
+      {/* หัวหน้าแบบเดียวกับแท็บแผนก: ชื่อแท็บซ้าย ปุ่มเพิ่มขวา (ผู้ใช้สั่ง 12 ต.ค. 2569) */}
+      <AdminHead title="ตำแหน่ง" desc="เพิ่ม แก้ชื่อ ย้ายแผนก ตั้งผู้อนุมัติ และปิดใช้งานตำแหน่ง">
+        <button type="button" className="btn solid btn-solid" onClick={() => setEditing("")}>
+          <PlusIcon className="size-4" strokeWidth={2.4} />
+          เพิ่มตำแหน่ง
+        </button>
+      </AdminHead>
 
-      {/* แถบแท็บกับปุ่มเพิ่มตำแหน่งอยู่แถวเดียวกันตามระบบต้นฉบับ (เดิมปุ่มอยู่แถวหัวเรื่องแยกต่างหาก) */}
-      <section className="panel glass">
-        <div className="strip">
-          {tabs}
-          <button type="button" className="btn solid btn-solid my-1.5" onClick={() => setEditing("")}>
-            <PlusIcon className="size-4" strokeWidth={2.4} />
-            เพิ่มตำแหน่ง
-          </button>
+      {/* การ์ดเดียว: แถบแท็บ + ตารางเดียวเรียงตามแผนก แทนการ์ดพับรายแผนก (ผู้ใช้สั่ง 12 ต.ค. 2569) */}
+      <section className="glass overflow-hidden rounded-[18px]">
+        {tabs && <div className="border-b border-border px-3">{tabs}</div>}
+
+        <div className="px-4 pt-3.5 pb-4 sm:px-5">
+          <div className={`grid grid-cols-[minmax(0,1fr)_58px_84px] md:grid-cols-[28px_minmax(0,1.4fr)_minmax(0,1fr)_72px_72px_96px_58px_84px] ${thCls}`}>
+            <span className="text-center max-md:hidden">#</span>
+            <span>ชื่อตำแหน่ง</span>
+            <span className="max-md:hidden">แผนก</span>
+            {KINDS.map((k) => (
+              <span key={k.key} className="text-center max-md:hidden">
+                {k.label}
+              </span>
+            ))}
+            <span className="text-center">เปิดใช้</span>
+            <span />
+          </div>
+
+          {rows.length === 0 ? (
+            <p className="py-8 text-center text-[13px] text-muted-foreground">ยังไม่มีตำแหน่ง</p>
+          ) : (
+            rows.map((p, i) => {
+              const off = isOff(p);
+              const n = hr.emp.filter((e) => holdsPos(e, p.v)).length;
+              const why = blockOf(p.v);
+              const deptName = depts.find((d) => d.v === p.dept)?.label ?? hrDept(p.dept).label;
+              return (
+                <div
+                  key={p.v}
+                  className={`grid grid-cols-[minmax(0,1fr)_58px_84px] md:grid-cols-[28px_minmax(0,1.4fr)_minmax(0,1fr)_72px_72px_96px_58px_84px] ${trCls} ${off ? "opacity-50" : ""}`}
+                >
+                  <span className="num text-center text-[12px] text-muted-foreground max-md:hidden">{i + 1}</span>
+                  <span className="min-w-0">
+                    {/* ปิดใช้แล้วจางทั้งแถว ไม่มีป้าย (ผู้ใช้สั่ง 13 ต.ค. 2569) */}
+                    <b className="block truncate text-[13.5px] font-semibold">{p.label}</b>
+                    {/* จอแคบไม่มีคอลัมน์แผนกและป้าย เอามาไว้ใต้ชื่อแทน */}
+                    <small className="mt-0.5 block text-[11.5px] text-muted-foreground md:hidden">
+                      {deptName} · ลา {apprShort(route.draft, byRole, p.v, "leave")} · โอที{" "}
+                      {apprShort(route.draft, byRole, p.v, "ot")} · เบิก {apprShort(route.draft, byRole, p.v, "expense")}
+                    </small>
+                  </span>
+                  <span className="truncate text-[13px] max-md:hidden">{deptName}</span>
+                  {KINDS.map((k) => (
+                    <span key={k.key} className="text-center max-md:hidden">
+                      <ApprChip who={apprShort(route.draft, byRole, p.v, k.key)} />
+                    </span>
+                  ))}
+                  <span className="flex justify-center">
+                    <Switch on={!off} onToggle={() => togglePos(p.v)} label={`เปิดหรือปิดใช้งานตำแหน่ง ${p.label}`} />
+                  </span>
+                  <span className="flex justify-end gap-1.5">
+                    <IconBtn label={`แก้ไข ${p.label}`} title="แก้ไข" onClick={() => setEditing(p.v)}>
+                      <PencilIcon className="size-3.5" strokeWidth={1.9} />
+                    </IconBtn>
+                    {/* ลบไม่ได้ก็ไม่ต้องมีปุ่มลบ (ผู้ใช้สั่ง 6 ต.ค. 2569) */}
+                    {!why && (
+                      <IconBtn label={`ลบ ${p.label}`} title="ลบ" danger onClick={() => removePos(p.v)}>
+                        <TrashIcon className="size-3.5" strokeWidth={1.9} />
+                      </IconBtn>
+                    )}
+                  </span>
+                </div>
+              );
+            })
+          )}
         </div>
       </section>
-
-      {(
-        <div className="grid gap-3">
-          {depts.map((dp) => {
-            const inDept = list.filter((p) => p.dept === dp.v);
-            const open = !shut.includes(dp.v);
-            return (
-              <section key={dp.v} className="glass overflow-hidden rounded-[16px]">
-                <button
-                  type="button"
-                  aria-expanded={open}
-                  onClick={() => setShut((v) => (open ? [...v, dp.v] : v.filter((x) => x !== dp.v)))}
-                  className="flex w-full items-center gap-2.5 px-5 py-4 text-left hover:bg-muted/40"
-                >
-                  <span className="size-2.5 flex-none rounded-full bg-primary" />
-                  <b className="text-[15px] font-bold">{dp.label}</b>
-                  <span className="text-[13px] text-muted-foreground">({inDept.length} ตำแหน่ง)</span>
-                  <ChevronDownIcon
-                    className={`ml-auto size-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-                    strokeWidth={2.2}
-                  />
-                </button>
-
-                {open && (
-                  <div className="border-t border-border px-5 pt-3 pb-4">
-                    {inDept.length === 0 ? (
-                      <p className="py-5 text-center text-[13px] text-muted-foreground">แผนกนี้ยังไม่มีตำแหน่ง</p>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-[minmax(0,1.5fr)_84px_84px_104px_58px_84px] items-center gap-2 pb-1.5 text-[11.5px] font-bold text-muted-foreground max-md:hidden">
-                          <span>ตำแหน่ง</span>
-                          <span className="text-center">ลา</span>
-                          <span className="text-center">โอที</span>
-                          <span className="text-center">เบิกค่าใช้จ่าย</span>
-                          <span className="text-center">เปิดใช้</span>
-                          <span />
-                        </div>
-                        {inDept.map((p) => {
-                          const off = isOff(p);
-                          const n = hr.emp.filter((e) => holdsPos(e, p.v)).length;
-                          const why = blockOf(p.v);
-                          return (
-                            <div
-                              key={p.v}
-                              className="grid grid-cols-[minmax(0,1fr)_58px_84px] items-center gap-2 border-b border-border py-2.5 last:border-b-0 md:grid-cols-[minmax(0,1.5fr)_84px_84px_104px_58px_84px]"
-                            >
-                              <div className="min-w-0">
-                                <b
-                                  className={`block text-[13.5px] ${
-                                    off ? "font-medium text-muted-foreground" : "font-semibold"
-                                  }`}
-                                >
-                                  {p.label}
-                                  {off && (
-                                    <em className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground not-italic">
-                                      ปิดใช้งาน
-                                    </em>
-                                  )}
-                                </b>
-                                <small className="block text-[11.5px] text-muted-foreground">
-                                  เข้าระบบเป็น {roleNames(p.v, p.roles)}
-                                  {" · "}
-                                  {n ? `พนักงานอยู่ ${n} คน` : "ยังไม่มีพนักงาน"}
-                                </small>
-                                {/* จอแคบไม่มีคอลัมน์ป้าย เอาสายอนุมัติมาไว้ใต้ชื่อแทน */}
-                                <small className="mt-0.5 block text-[11.5px] text-muted-foreground md:hidden">
-                                  ลา {apprShort(route.draft, byRole, p.v, "leave")} · โอที {apprShort(route.draft, byRole, p.v, "ot")} ·
-                                  เบิก {apprShort(route.draft, byRole, p.v, "expense")}
-                                </small>
-                              </div>
-                              {KINDS.map((k) => (
-                                <span key={k.key} className="text-center max-md:hidden">
-                                  <ApprChip who={apprShort(route.draft, byRole, p.v, k.key)} dim={off} />
-                                </span>
-                              ))}
-                              <span className="flex justify-center">
-                                <Switch
-                                  on={!off}
-                                  onToggle={() => togglePos(p.v)}
-                                  label={`เปิดหรือปิดใช้งานตำแหน่ง ${p.label}`}
-                                />
-                              </span>
-                              <span className="flex justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  aria-label={`แก้ไข ${p.label}`}
-                                  className="btn glass-thin btn-mini"
-                                  onClick={() => setEditing(p.v)}
-                                >
-                                  <PencilIcon className="size-4" strokeWidth={2.2} />
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={`ลบ ${p.label}`}
-                                  title={why}
-                                  disabled={Boolean(why)}
-                                  className="btn glass-thin btn-mini disabled:opacity-40"
-                                  onClick={() => removePos(p.v)}
-                                >
-                                  <TrashIcon className="size-4" strokeWidth={2.2} />
-                                </button>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </>
-                    )}
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </div>
-      )}
 
       <SaveBar
         dirty={cat.dirty || route.dirty}
@@ -448,9 +381,9 @@ function PositionsPane({ tabs }: { tabs: ReactNode }) {
           names={names}
           route={route.draft[editing] ?? {}}
           onClose={() => setEditing(null)}
-          onSave={(label, dept, appr, roles) => {
+          onSave={(label, dept, appr) => {
             const v = editing || label.trim().toLowerCase().replace(/\s+/g, "_");
-            savePos(editing, label, dept, roles);
+            savePos(editing, label, dept);
             setApproversOf(v, appr);
           }}
         />
@@ -469,7 +402,9 @@ function DeptSheet({
   onSave: (label: string) => void;
 }) {
   const [label, setLabel] = useState(initial?.label ?? "");
-  const bad = !label.trim() ? "ใส่ชื่อแผนก" : "";
+  /* ขึ้นเตือนเฉพาะหลังกดบันทึกตอนยังไม่กรอก (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  const [tried, setTried] = useState(false);
+  const bad = tried && !label.trim() ? "ใส่ชื่อแผนก" : "";
   return (
     <Sheet
       title={initial ? "แก้แผนก" : "เพิ่มแผนก"}
@@ -482,8 +417,7 @@ function DeptSheet({
           <button
             type="button"
             className="btn solid btn-solid disabled:opacity-45"
-            disabled={Boolean(bad)}
-            onClick={() => onSave(label)}
+            onClick={() => (label.trim() ? onSave(label) : setTried(true))}
           >
             บันทึก
           </button>
@@ -505,22 +439,27 @@ function PosSheet({
   onClose,
   onSave,
 }: {
-  initial?: { v: string; label: string; dept: string; roles?: string[] };
+  initial?: { v: string; label: string; dept: string };
   depts: { v: string; label: string }[];
   names: ReturnType<typeof approvers>;
   route: Partial<Record<RequestKind, string>>;
   onClose: () => void;
-  onSave: (label: string, dept: string, appr: Partial<Record<RequestKind, string>>, roles: string[]) => void;
+  onSave: (label: string, dept: string, appr: Partial<Record<RequestKind, string>>) => void;
 }) {
   const [label, setLabel] = useState(initial?.label ?? "");
   const [dept, setDept] = useState(initial?.dept ?? depts[0]?.v ?? "");
-  const [appr, setAppr] = useState<Partial<Record<RequestKind, string>>>(route);
-  /* ต้นแบบ: ฟอร์มนี้มีแค่ชื่อตำแหน่ง แผนก และผู้อนุมัติ ไม่มีให้เลือกบทบาท (เจ้าของสั่ง 1 ต.ค. 2569)
-     เมนูที่ตำแหน่งได้จึงใช้ค่าของระบบ · ตำแหน่งที่เพิ่มใหม่ได้เมนูของพนักงาน
-     ค่าที่เคยตั้งไว้ของตำแหน่งเดิมยังเก็บไว้เหมือนเดิม ไม่ถูกล้างตอนบันทึก */
-  const roles = initial?.roles ?? [];
-  const bad = !label.trim() ? "ใส่ชื่อตำแหน่ง" : "";
   const pos = initial?.v ?? "";
+  /* ผู้อนุมัติเลือกได้แค่ GM กับ CEO (ผู้ใช้สั่ง 6 ต.ค. 2569) — อนุมัติคำขอของตนเองไม่ได้ จึงตัดตำแหน่งของตัวเองออก
+     ค่าเดิมที่ไม่ใช่สองตัวนี้ (หรือยังไม่ได้ตั้ง) ตั้งต้นเป็นตัวแรกที่เลือกได้ */
+  const choices = APPROVER_CHOICES.filter((a) => !pos || !isSelf(a, pos));
+  const [appr, setAppr] = useState<Partial<Record<RequestKind, string>>>(() =>
+    Object.fromEntries(
+      KINDS.map((k) => [k.key, choices.includes(route[k.key] as ApproverKey) ? route[k.key] : choices[0]]),
+    ),
+  );
+  /* ขึ้นเตือนเฉพาะหลังกดบันทึกตอนยังไม่กรอก (ผู้ใช้สั่ง 13 ต.ค. 2569) */
+  const [tried, setTried] = useState(false);
+  const bad = tried && !label.trim() ? "ใส่ชื่อตำแหน่ง" : "";
 
   return (
     <Sheet
@@ -534,8 +473,7 @@ function PosSheet({
           <button
             type="button"
             className="btn solid btn-solid disabled:opacity-45"
-            disabled={Boolean(bad)}
-            onClick={() => onSave(label, dept, appr, roles)}
+            onClick={() => (label.trim() ? onSave(label, dept, appr) : setTried(true))}
           >
             บันทึก
           </button>
@@ -568,20 +506,15 @@ function PosSheet({
                 onChange={(e) => setAppr((v) => ({ ...v, [k.key]: e.target.value }))}
                 className={inputCls}
               >
-                <option value="">ตามบทบาท</option>
-                {APPROVER_KEYS.filter((a) => !pos || !isSelf(a, pos)).map((a) => (
+                {choices.map((a) => (
                   <option key={a} value={a}>
-                    {names[a].name} · {names[a].title}
+                    {nameOf(names[a].name)} ({names[a].title})
                   </option>
                 ))}
               </select>
             </Input2>
           ))}
         </div>
-        <p className="text-[12px] leading-relaxed text-muted-foreground">
-          ไม่เลือก = ใช้สายอนุมัติตามบทบาทในหน้าบทบาทและสิทธิ์ · ผู้อนุมัติอนุมัติคำขอของตนเองไม่ได้ จึงไม่ขึ้นให้เลือกในตำแหน่งของตัวเอง
-          {pos && rolesOfPos(pos).length > 0 && ` · ตำแหน่งนี้เข้าระบบด้วยบทบาท ${rolesOfPos(pos).map(roleLabel).join(" · ")}`}
-        </p>
       </div>
     </Sheet>
   );

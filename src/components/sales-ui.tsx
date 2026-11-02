@@ -4,6 +4,7 @@ import { useState } from "react";
 import { initials } from "@/lib/format";
 import { CUSTOMER_STATUS, type ChangeLog } from "@/lib/crm-data";
 import { SearchIcon } from "./icons";
+import { useNameOf } from "@/lib/emp-name";
 
 /* ชิ้นส่วนที่ทุกหน้างานขายใช้ร่วมกัน — แถบค้นหา แท็บ ตัวแบ่งหน้า ชื่อลูกค้า */
 
@@ -11,15 +12,13 @@ export function SearchBox({
   value,
   onChange,
   placeholder,
-  className = "",
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
-  className?: string;
 }) {
   return (
-    <div className={`search glass-thin w-full sm:w-[260px] ${className}`}>
+    <div className="search glass-thin w-full sm:w-[260px]">
       <SearchIcon className="size-[15px] shrink-0" strokeWidth={2} />
       <input
         type="search"
@@ -70,14 +69,12 @@ export function Pager({
 }) {
   return (
     <div className="pages justify-center sm:justify-start">
-      {/* กดไม่ได้ต้องบอกเหตุผล ไม่ปล่อยให้เป็นปุ่มจาง ๆ เฉย ๆ (ตรวจระบบ 5 ต.ค. 2569 · S-01) */}
       <button
         type="button"
         className="glass-thin"
         disabled={page === 1}
         onClick={() => onChange(page - 1)}
-        aria-label={page === 1 ? "ก่อนหน้า (อยู่หน้าแรกแล้ว)" : "ก่อนหน้า"}
-        title={page === 1 ? "อยู่หน้าแรกแล้ว" : "ไปหน้าก่อนหน้า"}
+        aria-label="ก่อนหน้า"
       >
         ‹
       </button>
@@ -96,8 +93,7 @@ export function Pager({
         className="glass-thin"
         disabled={page === maxPage}
         onClick={() => onChange(page + 1)}
-        aria-label={page === maxPage ? "ถัดไป (อยู่หน้าสุดท้ายแล้ว)" : "ถัดไป"}
-        title={page === maxPage ? "อยู่หน้าสุดท้ายแล้ว" : "ไปหน้าถัดไป"}
+        aria-label="ถัดไป"
       >
         ›
       </button>
@@ -142,12 +138,13 @@ export function usePaged<T>(items: T[], perPage: number) {
  * เปลี่ยนสถานะขึ้นเป็นป้ายสี ส่วนรับช่วงดูแลเป็นชื่อคน จึงขึ้นเป็นข้อความธรรมดา
  */
 export function ChangeFromTo({ log }: { log: ChangeLog }) {
+  const empName = useNameOf();
   if (log.kind === "owner") {
     return (
       <>
-        <span className="text-sm">{log.from}</span>
+        <span className="text-sm">{empName(log.from)}</span>
         <span className="muted mx-1.5">→</span>
-        <span className="text-sm font-medium">{log.to}</span>
+        <span className="text-sm font-medium">{empName(log.to)}</span>
       </>
     );
   }

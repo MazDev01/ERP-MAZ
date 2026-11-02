@@ -27,16 +27,15 @@
  *   แท็บที่ต้นแบบซ่อน ยังโผล่ถ้าสายอนุมัติส่งคำขอประเภทนั้นมาจริง (ผู้ดูแลระบบย้ายสายได้) — ไม่ให้คำขอตกหล่น
  */
 
-import { useMemo, useRef, useState } from "react";
-import { decideEmpRequest, empFuelKm, undoEmpDecision, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
-import { claimParts, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
-import { hrPos } from "@/lib/hr-data";
-import { lockedUntil, timesheetLockedUntil, useHr } from "@/lib/hr-store";
-import { logChange } from "@/lib/admin-log";
-import { ConfirmDialog } from "./confirm-dialog";
-import { approveClaim, rejectClaim, undoClaimDecision, useAllClaims } from "@/lib/expense-store";
-import { baht, daysBetween, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
-import { type LeaveRecord } from "@/lib/leave-data";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { decideEmpRequest, empFuelKm, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
+import { claimApproveBlock, claimTotal, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
+import { HR_LEAVE_LABEL, hrPos, type InternLeave } from "@/lib/hr-data";
+import { decideInternLeave, useHr } from "@/lib/hr-store";
+import { approveClaim, rejectClaim, useAllClaims } from "@/lib/expense-store";
+import { baht, bkkStamp, daysBetween, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
+import { fmtLeave, fmtLeaveHours, leaveHoursOf, type LeaveRecord } from "@/lib/leave-data";
+import { empReqLeaveHours } from "@/lib/emp-requests";
 import {
   approveLeave,
   awaySpans,
@@ -44,13 +43,12 @@ import {
   quotaAfterLeave,
   quotaAfterUsed,
   rejectLeave,
-  undoLeaveDecision,
   useAllLeave,
   type AwaySpan,
 } from "@/lib/leave-store";
 import { USERS } from "@/lib/mock-data";
 import { type OtRecord } from "@/lib/ot-data";
-import { approveOt, rejectOt, undoOtDecision, useAllOt } from "@/lib/ot-store";
+import { approveOt, rejectOt, useAllOt } from "@/lib/ot-store";
 import { approvesFor, roleLabel, useApprovalRoute, type Role } from "@/lib/role";
 import { useMyRoles } from "@/lib/hr-link";
 import { useSearchParams } from "next/navigation";
@@ -59,6 +57,8 @@ import { Sheet } from "./lead-dialogs";
 import { OT_MIN_HOURS, OtActualFields, useOtDecision, type OtReq } from "./ot-actual-fields";
 import { SearchBox } from "./sales-ui";
 import { EyeIcon } from "./icons";
+import { stackNo } from "@/lib/stack-no";
+import { nameOf } from "@/lib/emp-name";
 
 type Kind = "leave" | "ot" | "expense";
 type Status = "pending" | "approved" | "rejected";
@@ -69,14 +69,17 @@ export type ApprovalRequest = Request;
 /** คำขอหนึ่งใบ — รวมสามประเภทให้อยู่ในรูปเดียวกัน */
 type Request = {
   kind: Kind;
-  /** role = ใบของบทบาทที่ล็อกอินได้ (leave/ot/expense-store) · emp = คำขอของทีมงานตามรหัสพนักงาน */
-  src: "role" | "emp";
+  /** role = ใบของบทบาทที่ล็อกอินได้ (leave/ot/expense-store) · emp = คำขอของทีมงานตามรหัสพนักงาน
+   *  intern = ใบลานักศึกษาฝึกงานในสโตร์ฝ่ายบุคคล (hr.internLeave) — ชุดเดียวกับการ์ดบนแดชบอร์ดฝ่ายบุคคล */
+  src: "role" | "emp" | "intern";
   /** บทบาทผู้ยื่น — เฉพาะ src = role */
   role?: Role;
   /** ใบนี้มาถึงเราในฐานะบทบาทไหน — คนหนึ่งควบหลายบทบาทได้ ต้องรู้ว่ากำลังตัดสินในฐานะอะไร */
   as: Role;
-  /** ชื่อผู้ยื่นและตำแหน่ง */
+  /** ชื่อผู้ยื่น (ชื่อเล่น) และตำแหน่ง */
   name: string;
+  /** ชื่อเต็มที่เก็บไว้ — ใช้ค้นหาให้เจอทั้งชื่อเล่นและชื่อจริง (ผู้ใช้สั่ง 19 ต.ค. 2569) */
+  full?: string;
   sub: string;
   /** id ของใบลา/โอที หรือเดือนของใบเบิก */
   key: string;
@@ -105,12 +108,12 @@ type Request = {
   quota?: number;
   /** เหตุผลที่ผู้ยื่นเขียนมาเอง — คนละช่องกับเหตุผลของผู้อนุมัติ (why) */
   note?: string;
-  /** คนอื่นที่ไม่อยู่ช่วงวันเดียวกัน — เฉพาะใบลา */
+  /** คนอื่นที่ไม่อยู่ช่วงวันเดียวกัน — เฉพาะใบลา (กล่องรายละเอียดไม่แสดงแล้ว ผู้ใช้สั่ง 19 ต.ค. 2569) */
   away?: { name: string; text: string }[];
-  /** วันสุดท้ายที่ใบนี้ไปตกในรอบเวลา — ใช้ดูว่าอยู่ในรอบที่ปิดไปแล้วหรือยัง (ยกเลิกการอนุมัติ) */
+  /** วันที่ลา (และช่วงเวลาของลาไม่เต็มวัน) — แถว "วันที่" ในกล่องรายละเอียดของใบลา (ผู้ใช้สั่ง 19 ต.ค. 2569) */
   when?: string;
-  /** ใบเบิกที่จ่ายคืนไปแล้วในรอบเงินเดือน — ย้อนไม่ได้ เงินออกไปกับสลิปแล้ว */
-  paid?: boolean;
+  /** เหตุผลที่อนุมัติไม่ได้ (เช่น ใบเบิกมีค่าคอมมิชชั่น/อินเซนทีฟ) — ว่าง = อนุมัติได้ · ไม่อนุมัติยังกดได้ (ผู้ใช้สั่ง 15 ต.ค. 2569) */
+  block?: string;
 };
 
 /** โอทีที่อนุมัติไม่เท่าที่ขอ — คืนชั่วโมงที่อนุมัติ · เท่ากันหรือยังไม่อนุมัติคืน null */
@@ -138,6 +141,8 @@ export const TABS: Tab[] = [
 const ROLE_TABS: Partial<Record<Role, Kind[]>> = {
   gm: ["leave", "ot", "expense"], /* รับคิวโอทีและใบเบิกของ PM เดิมมาด้วย (22 ก.ย. 2569) */
   pm: ["ot", "expense"],
+  /* ฝ่ายบุคคลรับแค่ใบลาของเด็กฝึกงาน — เด็กฝึกงานไม่มีเมนูโอทีและเบิกค่าใช้จ่าย (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+  hr: ["leave"],
 };
 
 const STATUS_OPTS: { value: Status | ""; label: string }[] = [
@@ -205,7 +210,8 @@ export function ApprovalsPage() {
       if (kind === "ot")
         for (const v of ots[from]) if (v.status !== "ยกเลิก") out.push(fromOt(from, v, as));
       if (kind === "expense")
-        for (const v of claims[from]) if (v.status !== "ร่าง") out.push(fromClaim(from, v, as));
+        /* ใบที่ผู้ยื่นยกเลิกเองไม่เข้าคิวอนุมัติ (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+        for (const v of claims[from]) if (v.status !== "ร่าง" && v.status !== "ยกเลิก") out.push(fromClaim(from, v, as));
     }
     /* คิวของ PM / GM — คำขอของทีมงานตามรหัสพนักงาน (ต้นแบบ PM_APPROVALS · gm-approvals) */
     for (const as of myRoles) {
@@ -216,8 +222,16 @@ export function ApprovalsPage() {
         out.push(fromEmp(r, e?.name ?? r.emp, e ? hrPos(e.pos).label : "", as, spans));
       }
     }
+    /* ฝ่ายบุคคล — ใบลานักศึกษาฝึกงานที่อยู่ในสโตร์ฝ่ายบุคคล (ชุดเดียวกับการ์ดบนแดชบอร์ด · ผู้ใช้สั่ง 8 ต.ค. 2569)
+       ตัดสินที่นี่หรือที่การ์ดก็ลงฟังก์ชันเดียวกัน (decideInternLeave) ผลจึงตรงกันทั้งสองที่ */
+    if (myRoles.includes("hr"))
+      for (const r of hr.internLeave) {
+        const e = hr.emp.find((x) => x.id === r.emp);
+        /* ใบที่มาถึงฝ่ายบุคคลมีแต่ของนักศึกษาฝึกงาน — ใต้ชื่อขึ้นว่าฝึกงานเหมือนกันทุกใบ ไม่ใช่ตำแหน่งงาน (ผู้ใช้สั่ง 8 ต.ค. 2569) */
+        out.push(fromIntern(r, e?.name ?? r.emp, "นักศึกษาฝึกงาน"));
+      }
     return out.sort((a, b) => a.at.localeCompare(b.at));
-  }, [duties, leaves, ots, claims, extra, hr.emp, myRoles]);
+  }, [duties, leaves, ots, claims, extra, hr.emp, hr.internLeave, myRoles]);
 
   if (duties.length === 0 && all.length === 0) {
     return (
@@ -237,8 +251,15 @@ export function ApprovalsPage() {
   const tabs = TABS.filter((t) => {
     if (t.key === "all") return true;
     const k = t.key;
-    return myRoles.some((r) => !ROLE_TABS[r] || ROLE_TABS[r]!.includes(k)) || all.some((r) => r.kind === k);
-  });
+    /* บทบาทที่ไม่มีแท็บตามต้นแบบ เห็นเฉพาะประเภทที่สายอนุมัติส่งมาถึงจริง
+       เช่น ฝ่ายบุคคลรับแค่ใบลาของเด็กฝึกงาน จึงไม่มีแท็บโอทีและค่าใช้จ่าย (ผู้ใช้สั่ง 6 ต.ค. 2569) */
+    return (
+      myRoles.some((r) =>
+        ROLE_TABS[r] ? ROLE_TABS[r]!.includes(k) : duties.some((d) => d.as === r && d.kind === k),
+      ) || all.some((r) => r.kind === k)
+    );
+  }).filter((t, _i, list) => t.key !== "all" || list.length > 2);
+  /* มีประเภทเดียว (เช่น ฝ่ายบุคคลมีแค่ลา) ไม่ต้องมีแท็บ "ทั้งหมด" ซ้ำกับแท็บนั้น (ผู้ใช้สั่ง 8 ต.ค. 2569) */
 
   return (
     <div className="space-y-4">
@@ -283,65 +304,34 @@ export function ApprovalsBoard({
   const [mode, setMode] = useState<"view" | "reject" | "approve">("view");
   const today = todayIso();
 
-  /*
-   * ยกเลิกการอนุมัติ (ผู้ใช้สั่ง 12 ต.ค. 2569) — เดิมกดอนุมัติผิดคนแล้วแก้ไม่ได้เลย
-   * ย้อนได้เฉพาะใบที่ยังไม่ไหลไปถึงเงิน: ไม่อยู่ในรอบเวลาที่ปิดแล้ว และใบเบิกต้องยังไม่จ่ายคืน
-   * ทำตามแบบเดียวกับการเปิดรอบเงินเดือน (reopenPayrunWithReason) คือบังคับกรอกเหตุผทุกครั้ง
-   */
-  const hr = useHr();
-  /* ล็อกถึงวันหลังสุดของสองเส้น — รอบเงินเดือนที่ปิดแล้ว และรอบเวลาทำงานที่ปิดแล้ว
-     ฝ่ายบุคคลปิดตารางเวลาก่อนปิดเงินเดือนเสมอ ถ้าดูแค่เส้นเงินเดือนจะมีช่องให้ย้อนของที่ปิดไปแล้ว */
-  const lock = [lockedUntil(hr), timesheetLockedUntil(hr)].filter(Boolean).sort().pop();
-  const [undoing, setUndoing] = useState<Request | null>(null);
-  const [undoWhy, setUndoWhy] = useState("");
-  const [undoErr, setUndoErr] = useState(false);
-
-  /** เหตุผลที่ย้อนไม่ได้ — ว่างคือย้อนได้ */
-  const frozen = (item: Request) => {
-    if (item.paid) return "ใบนี้จ่ายคืนไปแล้วในรอบเงินเดือน ต้องเปิดรอบก่อน";
-    if (lock && item.when && item.when <= lock)
-      return `อยู่ในรอบเวลาที่ปิดแล้วถึง ${thaiDate(lock)} ต้องเปิดรอบก่อน`;
-    return "";
-  };
-
-  function applyUndo(item: Request, why: string) {
-    const ok =
-      item.src === "emp"
-        ? undoEmpDecision(item.key, why)
-        : item.kind === "leave"
-          ? undoLeaveDecision(item.role!, item.key, why)
-          : item.kind === "ot"
-            ? undoOtDecision(item.role!, item.key, why)
-            : undoClaimDecision(item.role!, item.key, why);
-    if (!ok) return false;
-    logChange(
-      "คำขออนุมัติ",
-      `ยกเลิกการอนุมัติ ${KIND[item.kind]} ${item.no} ของ ${item.name} — ${why.trim()}`,
-    );
-    return true;
-  }
-
-  /* ?req= เปิดรายละเอียดของใบนั้นครั้งเดียว — คิวอ่านจาก localStorage จึงรอจนเจอใบก่อน
-     ปรับสถานะระหว่างเรนเดอร์ ไม่ใช่ใน effect (กฎ react-hooks ของโปรเจคนี้ห้าม setState ใน effect) */
-  const [opened, setOpened] = useState("");
-  const hitOpen = openId && opened !== openId ? all.find((r) => sameId(r, openId)) : undefined;
-  if (hitOpen) {
-    setOpened(openId);
+  /* ?req= เปิดรายละเอียดของใบนั้นครั้งเดียว — คิวอ่านจาก localStorage จึงรอจนเจอใบก่อน (ผู้ใช้สั่ง 5 ต.ค. 2569) */
+  const opened = useRef("");
+  useEffect(() => {
+    if (!openId || opened.current === openId) return;
+    const hit = all.find((r) => sameId(r, openId));
+    if (!hit) return;
+    opened.current = openId;
     /* ใบที่ตัดสินแล้วต้องเห็นในรายการด้วย — ขยายตัวกรองเป็นทุกสถานะ */
-    if (hitOpen.status !== "pending") setStatus("");
+    if (hit.status !== "pending") setStatus("");
     setMode("view");
-    setViewing(hitOpen);
-  }
+    setViewing(hit);
+  }, [openId, all]);
 
   /* ?kind= ชี้ไปแท็บที่บทบาทนี้ไม่มี — กลับไปแท็บทั้งหมด */
-  const cur = tabs.some((t) => t.key === tab) ? tab : "all";
+  const cur = tabs.some((t) => t.key === tab) ? tab : (tabs[0]?.key ?? "all");
+  /*
+   * ลำดับแบบกองซ้อน — นับจากคำขอทั้งหมดก่อนกรองสถานะ/แท็บ/ค้นหา ตามเวลาที่ส่ง ใบล่าสุดเลขมากสุด (ผู้ใช้สั่ง 12 ต.ค. 2569)
+   * คิวยังเรียงเก่าสุดขึ้นก่อนตามเดิม เพราะรอมานานกว่า
+   */
+  const rowKey = (r: Request) => `${r.kind}-${r.src}-${r.role ?? ""}-${r.key}`;
+  const noOf = stackNo(all, (r) => r.at, rowKey);
   const byStatus = all.filter((r) => !status || r.status === status);
   const count = (k: "all" | Kind) => byStatus.filter((r) => k === "all" || r.kind === k).length;
   const term = q.trim().toLowerCase();
   const rows = byStatus.filter(
     (r) =>
       (cur === "all" || r.kind === cur) &&
-      (!term || `${r.no} ${r.name} ${r.topic} ${r.line}`.toLowerCase().includes(term)),
+      (!term || `${r.no} ${r.name} ${r.full ?? ""} ${r.topic} ${r.line}`.toLowerCase().includes(term)),
   );
 
   /* ปุ่มตัดสินในรายการ — ใช้กติกาเดียวกับกล่องรายละเอียด (ผู้ใช้สั่ง 5 ต.ค. 2569)
@@ -350,30 +340,15 @@ export function ApprovalsBoard({
     setMode(m);
     setViewing(item);
   };
-  /*
-   * กันอนุมัติซ้อนจากการกดรัว (พบตอนทดสอบ 8 ต.ค. 2569)
-   * พออนุมัติใบแรก แถวนั้นหายจากคิว แถวถัดไปเลื่อนขึ้นมาอยู่ใต้เมาส์พอดี
-   * คลิกครั้งที่สองของดับเบิลคลิกจึงไปอนุมัติใบของคนอื่นทันที และอนุมัติแล้วย้อนไม่ได้
-   * จึงไม่รับคำสั่งอนุมัติซ้ำภายในครึ่งวินาทีหลังเพิ่งตัดสินไป
-   */
-  const justDecided = useRef(false);
-  const tooSoon = () => {
-    if (justDecided.current) return true;
-    justDecided.current = true;
-    setTimeout(() => {
-      justDecided.current = false;
-    }, 600);
-    return false;
-  };
   const quickApprove = (item: Request) => {
-    if (tooSoon()) return;
     /* CEO แก้ชั่วโมงโอทีไม่ได้ — อนุมัติเท่าที่ขอทันที ไม่ผ่านขั้นยืนยันชั่วโมง (ผู้ใช้สั่ง 5 ต.ค. 2569) */
     if (item.kind === "ot" && fixedOt) return applyDecision(item, true, "", item.hours ?? 0);
     if (item.kind === "ot" && item.ot) return open(item, "approve");
     applyDecision(item, true, "");
   };
   /* ชั่วโมงที่ขอต่ำกว่าขั้นต่ำ — อนุมัติเท่าที่ขอไม่ได้ ต้องไม่อนุมัติ (กติกาเดิมของหน้า CEO) */
-  const cannotApprove = (item: Request) => fixedOt && item.kind === "ot" && (item.hours ?? 0) < OT_MIN_HOURS;
+  const cannotApprove = (item: Request) =>
+    Boolean(item.block) || (fixedOt && item.kind === "ot" && (item.hours ?? 0) < OT_MIN_HOURS);
   const decide = (item: Request, big: boolean) => (
     <>
       <button
@@ -381,7 +356,6 @@ export function ApprovalsBoard({
         className={`btn justify-center border border-[rgba(192,18,31,.35)] bg-transparent !text-destructive hover:!border-destructive hover:bg-[var(--destructive-soft)] ${big ? "h-10 w-full rounded-[10px]" : "h-[30px] px-3"}`}
         onClick={(e) => {
           e.stopPropagation();
-          if (tooSoon()) return;
           open(item, "reject");
         }}
       >
@@ -392,7 +366,9 @@ export function ApprovalsBoard({
         className={`btn solid justify-center !bg-[#14875A] !text-white hover:!bg-[#0F7049] disabled:opacity-40 ${big ? "h-10 w-full rounded-[10px]" : "h-[30px] px-3"}`}
         disabled={cannotApprove(item)}
         title={
-          cannotApprove(item)
+          item.block
+            ? item.block
+            : cannotApprove(item)
             ? `ชั่วโมงที่ขอต่ำกว่าขั้นต่ำ ${OT_MIN_HOURS.toFixed(2)} ชม. — อนุมัติไม่ได้`
             : item.kind === "ot" && item.ot && !fixedOt
               ? "เปิดรายละเอียดเพื่อยืนยันชั่วโมงโอทีก่อนอนุมัติ"
@@ -477,9 +453,13 @@ export function ApprovalsBoard({
                             มาถึงคุณในฐานะ {roleLabel(item.as)}
                           </span>
                         )}
+                        {/* ใบเบิกที่มีค่าคอมมิชชั่น/อินเซนทีฟ — บอกเหตุผลที่อนุมัติไม่ได้ (ผู้ใช้สั่ง 15 ต.ค. 2569) */}
+                        {item.status === "pending" && item.block && (
+                          <span className="block text-[11.5px] font-medium text-destructive">{item.block}</span>
+                        )}
                         {/* ไม่แสดงรหัสคำขอในรายการ — ดูได้ในรายละเอียด (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
                         <span className="num block truncate text-[11.5px] text-muted-foreground">
-                          ส่ง {thaiDate(item.at.split(" ")[0])}
+                          #{noOf.get(rowKey(item))} · ส่ง {thaiDate(item.at.split(" ")[0])}
                         </span>
                       </span>
                     </span>
@@ -498,21 +478,6 @@ export function ApprovalsBoard({
                   {item.status === "pending" && (
                     <div className="grid grid-cols-2 gap-2.5 px-4 pb-3">{decide(item, true)}</div>
                   )}
-                  {/* ใบที่ตัดสินแล้วบนมือถือ — ปุ่มย้อนเต็มความกว้างเหมือนปุ่มตัดสิน */}
-                  {item.status !== "pending" && (
-                    <div className="px-4 pb-3">
-                      <UndoButton
-                        item={item}
-                        why={frozen(item)}
-                        wide
-                        onPick={() => {
-                          setUndoWhy("");
-                          setUndoErr(false);
-                          setUndoing(item);
-                        }}
-                      />
-                    </div>
-                  )}
                 </li>
               );
             })}
@@ -522,9 +487,10 @@ export function ApprovalsBoard({
 
       <section className="panel glass flex flex-col max-sm:hidden">
         <div className="scroll-stable min-h-0 flex-1 overflow-auto">
-          <table className="data-table cards-sm min-w-[820px]">
+          <table className="data-table cards-sm min-w-[880px]">
             <thead>
               <tr>
+                <th className="c" style={{ width: 60 }}>ลำดับ</th>
                 <th style={{ width: 210 }}>ผู้ขอ</th>
                 <th>คำขอ</th>
                 {/* วันที่ส่งแยกคอลัมน์ · ไม่แสดงรหัสคำขอ (ผู้ใช้สั่ง 5 ต.ค. 2569) */}
@@ -537,7 +503,7 @@ export function ApprovalsBoard({
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-[30px] text-center text-muted-foreground">
+                  <td colSpan={6} className="py-[30px] text-center text-muted-foreground">
                     ไม่มีคำขอตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
@@ -562,6 +528,7 @@ export function ApprovalsBoard({
                         }
                       }}
                     >
+                      <td data-label="ลำดับ" className="c num muted">{noOf.get(rowKey(item))}</td>
                       <td data-label="ผู้ขอ">
                         <b className="block font-semibold">{item.name}</b>
                         <span className="why">{item.sub}</span>
@@ -572,6 +539,9 @@ export function ApprovalsBoard({
                           <span className="why block">อนุมัติ {cutHours(item)?.toFixed(2)} ชม.</span>
                         )}
                         {multi && <span className="why block">มาถึงคุณในฐานะ {roleLabel(item.as)}</span>}
+                        {item.status === "pending" && item.block && (
+                          <span className="block text-[12px] font-medium text-destructive">{item.block}</span>
+                        )}
                       </td>
                       <td data-label="วันที่ส่ง" className="num text-[12.5px] whitespace-nowrap text-muted-foreground">
                         {thaiDate(item.at.split(" ")[0])}
@@ -600,17 +570,10 @@ export function ApprovalsBoard({
                           {item.status === "pending" ? (
                             decide(item, false)
                           ) : (
-                            <>
-                              <span className={`tag ${item.status === "approved" ? "t-ok" : "t-late"}`}>
-                                <i />
-                                {item.status === "approved" ? "อนุมัติแล้ว" : "ไม่อนุมัติ"}
-                              </span>
-                              <UndoButton item={item} why={frozen(item)} onPick={() => {
-                                setUndoWhy("");
-                                setUndoErr(false);
-                                setUndoing(item);
-                              }} />
-                            </>
+                            <span className={`tag ${item.status === "approved" ? "t-ok" : "t-late"}`}>
+                              <i />
+                              {item.status === "approved" ? "อนุมัติแล้ว" : "ไม่อนุมัติ"}
+                            </span>
                           )}
                         </div>
                       </td>
@@ -626,86 +589,7 @@ export function ApprovalsBoard({
       {viewing && (
         <RequestDialog item={viewing} mode={mode} fixedOt={fixedOt} onClose={() => setViewing(null)} />
       )}
-
-      <ConfirmDialog
-        open={Boolean(undoing)}
-        tone="destructive"
-        title="ยกเลิกการอนุมัติ"
-        description={
-          undoing
-            ? `${KIND[undoing.kind]} ${undoing.no} ของ ${undoing.name} จะกลับไปรออนุมัติใหม่ ผู้ยื่นจะเห็นว่าใบถูกดึงกลับ`
-            : ""
-        }
-        detail={
-          <div className="text-left">
-            <label className="block text-[12.5px] font-semibold" htmlFor="undo-why">
-              เหตุผลที่ย้อน (ต้องกรอก)
-            </label>
-            <textarea
-              id="undo-why"
-              value={undoWhy}
-              onChange={(e) => {
-                setUndoWhy(e.target.value);
-                setUndoErr(false);
-              }}
-              placeholder="เช่น กดอนุมัติผิดใบ หรือผู้ยื่นแจ้งแก้ไขวันลา"
-              className="field-control mt-1.5 h-[72px] resize-y py-2.5 leading-relaxed"
-            />
-            {undoErr && (
-              <p role="alert" className="mt-1.5 text-[12.5px] text-destructive">
-                กรอกเหตุผลก่อนยืนยัน
-              </p>
-            )}
-          </div>
-        }
-        confirmLabel="ยกเลิกการอนุมัติ"
-        onConfirm={() => {
-          if (!undoing) return;
-          if (!undoWhy.trim()) return setUndoErr(true);
-          if (!applyUndo(undoing, undoWhy)) return setUndoErr(true);
-          setUndoing(null);
-          setUndoWhy("");
-        }}
-        onCancel={() => setUndoing(null)}
-      />
     </>
-  );
-}
-
-/*
- * ปุ่มยกเลิกการอนุมัติในแถวที่ตัดสินไปแล้ว
- * ย้อนไม่ได้ก็ยังเห็นปุ่ม แต่กดไม่ลงและบอกเหตุผลไว้ในคำบรรยาย — ซ่อนไปเฉย ๆ คนจะหาไม่เจอ
- * แล้วเข้าใจว่าระบบย้อนไม่ได้เลย
- */
-function UndoButton({
-  item,
-  why,
-  wide,
-  onPick,
-}: {
-  item: Request;
-  why: string;
-  /** เต็มความกว้าง — รายการบนมือถือ */
-  wide?: boolean;
-  onPick: () => void;
-}) {
-  const label = `ยกเลิกการอนุมัติ ${item.no}`;
-  return (
-    <button
-      type="button"
-      disabled={Boolean(why)}
-      title={why || label}
-      aria-label={why ? `${label} — ${why}` : label}
-      className={`rounded-[8px] border border-border text-[12.5px] font-medium text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 ${
-        wide ? "h-10 w-full" : "h-[30px] flex-none px-2.5"
-      }`}
-      onClick={(e) => {
-        e.stopPropagation();
-        onPick();
-      }}
-    >
-      ยกเลิกการอนุมัติ
-    </button>
   );
 }
 
@@ -760,6 +644,7 @@ function RequestDialog({
   }
 
   function approve() {
+    if (item.block) return;
     if (item.kind === "ot" && item.ot && fixedOt) {
       if (ot.tooSmall) return;
       applyDecision(item, true, ot.comment.trim(), item.hours ?? ot.asked);
@@ -797,9 +682,9 @@ function RequestDialog({
             ) : (
             <button
               type="button"
-              className="btn solid h-12 w-full justify-center rounded-[12px] !bg-[#14875A] text-[15px] !text-white hover:!bg-[#0F7049]"
+              className="btn solid h-12 w-full justify-center rounded-[12px] !bg-[#14875A] text-[15px] !text-white hover:!bg-[#0F7049] disabled:opacity-40"
               onClick={approve}
-              disabled={item.kind === "ot" && Boolean(item.ot) && (fixedOt ? ot.tooSmall : !ot.ready)}
+              disabled={Boolean(item.block) || (item.kind === "ot" && Boolean(item.ot) && (fixedOt ? ot.tooSmall : !ot.ready))}
             >
               อนุมัติ
             </button>
@@ -809,9 +694,13 @@ function RequestDialog({
       }
     >
       <dl className="mt-1 grid grid-cols-[104px_minmax(0,1fr)] gap-x-3.5 gap-y-2 text-[13.5px]">
-        <Kv label="เลขที่" value={<span className="num font-semibold">{item.no || "—"}</span>} />
         <Kv label="ผู้ยื่น" value={item.name} />
-        <Kv label="ประเภท" value={KIND[item.kind]} />
+        {/* ใบลา: แถว "วันที่" (ช่วงวันลา + ช่วงเวลาของลาไม่เต็มวัน) แทน "ประเภท: การลา" (ผู้ใช้สั่ง 19 ต.ค. 2569) */}
+        {item.kind === "leave" && item.when ? (
+          <Kv label="วันที่" value={<span className="num">{item.when}</span>} />
+        ) : (
+          <Kv label="ประเภท" value={KIND[item.kind]} />
+        )}
         <Kv
           label="รายการ"
           value={
@@ -824,15 +713,19 @@ function RequestDialog({
             </span>
           }
         />
+        {/* อนุมัติไม่ได้ — ไม่อนุมัติแล้วให้พนักงานลบรายการออก (ผู้ใช้สั่ง 15 ต.ค. 2569) */}
+        {!done && item.block && (
+          <Kv label="อนุมัติไม่ได้" value={<span className="font-medium text-destructive">{item.block}</span>} />
+        )}
         {/* สิทธิ์คงเหลือหลังลา — ตัวเลขชุดเดียวกับที่ CEO เห็น (quotaAfterLeave) */}
         {item.quota !== undefined && (
           <Kv
             label="เหลือสิทธิ์หลังลา"
             value={
               item.quota >= 0 ? (
-                <span className="num font-semibold">{num2(item.quota)} วัน</span>
+                <span className="num font-semibold">{fmtLeave(item.quota)}</span>
               ) : (
-                <span className="num font-semibold text-destructive">เกินสิทธิ์ {num2(-item.quota)} วัน — ส่วนที่เกินเป็นลาไม่รับค่าจ้าง หักเงินเดือน</span>
+                <span className="num font-semibold text-destructive">เกินสิทธิ์ {fmtLeave(-item.quota)} — ส่วนที่เกินเป็นลาไม่รับค่าจ้าง หักเงินเดือน</span>
               )
             }
           />
@@ -843,8 +736,7 @@ function RequestDialog({
           <Kv label="เหตุผลของผู้ยื่น" value={item.note || "ไม่ได้เขียนเหตุผล"} />
         )}
         <Kv label="ยื่นเมื่อ" value={thaiStamp(item.at)} />
-        {/* คนหนึ่งควบหลายบทบาทได้ — บอกให้ชัดว่ากำลังตัดสินใบนี้ในฐานะอะไร จะได้ไม่สับสน */}
-        <Kv label="ถึงคุณในฐานะ" value={roleLabel(item.as)} />
+        {/* ไม่มีแถว "ถึงคุณในฐานะ" แล้ว (ผู้ใช้สั่ง 19 ต.ค. 2569) */}
         {done && (
           <Kv
             label="ผล"
@@ -860,24 +752,7 @@ function RequestDialog({
         {done && item.why && <Kv label="เหตุผล" value={item.why} />}
       </dl>
 
-      {/* ใครไม่อยู่ช่วงเดียวกันบ้าง — ข้อที่การอนุมัติลาตัดสินจากมันจริง ๆ */}
-      {item.away && (
-        <section className="mt-4 border-t border-border pt-3.5">
-          <h3 className="mb-2 text-[12.5px] font-semibold text-muted-foreground">คนอื่นที่ไม่อยู่ช่วงวันเดียวกัน</h3>
-          {item.away.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">ไม่มีใครลาทับช่วงวันนี้</p>
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {item.away.map((a) => (
-                <li key={`${a.name}-${a.text}`} className="rounded-[10px] bg-muted px-3 py-2 text-[13px]">
-                  <b className="font-semibold">{a.name}</b>
-                  <span className="ml-2 text-[12.5px] text-muted-foreground">{a.text}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+      {/* เอากล่อง "คนอื่นที่ไม่อยู่ช่วงวันเดียวกัน" ออก (ผู้ใช้สั่ง 19 ต.ค. 2569) */}
 
       {!done && item.kind === "ot" && item.ot && !rejecting && (
         <div className="mt-4 border-t border-border pt-3.5">
@@ -935,6 +810,7 @@ function NumBold({ text }: { text: string }) {
 function applyDecision(item: Request, approve: boolean, why: string, hours?: number) {
   if (item.src === "emp")
     return decideEmpRequest(item.key, approve, why, item.kind === "ot" ? hours : undefined);
+  if (item.src === "intern") return decideInternLeave(item.key, approve, bkkStamp());
   if (!item.role) return;
   if (approve) {
     if (item.kind === "leave") approveLeave(item.role, item.key);
@@ -959,6 +835,17 @@ function Kv({ label, value }: { label: string; value: React.ReactNode }) {
 
 // ─── แปลงคำขอแต่ละประเภทให้อยู่ในรูปเดียวกัน ────────────────────────
 
+/**
+ * วันที่ของใบลาในกล่องรายละเอียด — "15 ต.ค. 2569" · "15 – 16 ต.ค." แบบช่วง
+ * ลาไม่เต็มวันต่อท้ายช่วงเวลา "· 09:00–12:00 น." (ผู้ใช้สั่ง 19 ต.ค. 2569)
+ */
+export function leaveWhen(from: string, to: string, startMin?: number, endMin?: number) {
+  const range = from === to ? thaiDate(from) : `${thaiDate(from)} – ${thaiDate(to)}`;
+  return startMin != null && endMin != null && from === to
+    ? `${range} · ${formatMinutesOfDay(startMin)}–${formatMinutesOfDay(endMin)} น.`
+    : range;
+}
+
 /** ใบลาเก่าที่ยังไม่มีเวลายื่น ใช้วันที่ลาแทน จะได้เรียงคิวและนับวันที่รอได้เหมือนกัน */
 function stampOf(submittedAt: string, fallbackDate: string) {
   return submittedAt || `${fallbackDate} 00:00`;
@@ -970,14 +857,14 @@ function statusOf(s: string): Status {
 
 /** ชื่อและตำแหน่งของบทบาทที่ล็อกอินได้ */
 function who(role: Role) {
-  return { src: "role" as const, role, name: USERS[role].name, sub: roleLabel(role) };
+  return { src: "role" as const, role, name: nameOf(USERS[role].name), full: USERS[role].name, sub: roleLabel(role) };
 }
 
 /** คำขอของทีมงานตามรหัสพนักงาน (emp-requests) — รูปเดียวกับใบของบทบาท */
 /** แปลงช่วงที่ไม่อยู่เป็นบรรทัดอ่านง่าย — ใช้ทั้งใบลาของบทบาทและคำขอลาของทีมงาน */
 function awayList(spans: AwaySpan[], me: { id: string; who: string; date: string; toDate: string }) {
   return othersAway(spans, me).map((x) => ({
-    name: x.who,
+    name: nameOf(x.who),
     text: `${x.type} ${x.date === x.toDate ? thaiDate(x.date) : `${thaiDate(x.date)} – ${thaiDate(x.toDate)}`}${
       x.pending ? " · ยังรออนุมัติ" : ""
     }`,
@@ -985,11 +872,7 @@ function awayList(spans: AwaySpan[], me: { id: string; who: string; date: string
 }
 
 function fromEmp(r: EmpRequest, name: string, sub: string, as: Role, spans: AwaySpan[]): Request {
-  const base = {
-    src: "emp" as const, as, name, sub, key: r.id, no: r.id, status: r.status, at: r.at, why: r.reason ?? "",
-    /* ใบลาใช้วันสุดท้าย โอทีใช้วันที่ทำ ใบเบิกใช้ต้นเดือนที่เบิก — ไว้เทียบกับรอบที่ปิดแล้ว */
-    when: r.kind === "leave" ? (r.toDate ?? r.from ?? "") : r.kind === "ot" ? (r.date ?? "") : `${(r.month ?? "")}-01`,
-  };
+  const base = { src: "emp" as const, as, name: nameOf(name), full: name, sub, key: r.id, no: r.id, status: r.status, at: r.at, why: r.reason ?? "" };
   if (r.kind === "ot") {
     const lines = [`${thaiDate(r.date ?? "")} เวลา ${r.start}–${r.end}`, `รวม ${(r.hours ?? 0).toFixed(2)} ชม.`];
     const ot: OtReq | undefined =
@@ -1003,12 +886,18 @@ function fromEmp(r: EmpRequest, name: string, sub: string, as: Role, spans: Away
   }
   if (r.kind === "leave") {
     const range = r.from === r.toDate ? thaiDate(r.from ?? "") : `${thaiDate(r.from ?? "")} – ${thaiDate(r.toDate ?? "")}`;
-    const lines = [`${r.leaveType} ${range}`, `รวม ${(r.days ?? 0).toFixed(2)} วัน`];
+    const lines = [r.leaveType ?? "การลา", `รวม ${fmtLeaveHours(empReqLeaveHours(r))}`]; // วันที่อยู่แถว "วันที่" แล้ว (ผู้ใช้สั่ง 19 ต.ค. 2569)
     return {
       ...base,
       kind: "leave",
+      when: leaveWhen(
+        r.from ?? "",
+        r.toDate ?? r.from ?? "",
+        r.span === "half" && r.start ? minutesOfDay(r.start) : undefined,
+        r.span === "half" && r.end ? minutesOfDay(r.end) : undefined,
+      ),
       topic: r.leaveType ?? "การลา",
-      line: `${lines.join(" ")} ${r.note}`,
+      line: `${lines.join(" ")} ${range} ${r.note}`,
       lines,
       /* สูตรเดียวกับหน้าของ CEO สำหรับคำขอของทีมงาน (quota − ที่ใช้ไปก่อนใบนี้ − ใบนี้) */
       quota: quotaAfterUsed(r.leaveType ?? "", r.used ?? 0, r.days ?? 0),
@@ -1026,6 +915,31 @@ function fromEmp(r: EmpRequest, name: string, sub: string, as: Role, spans: Away
   return { ...base, kind: "expense", topic: "ค่าน้ำมัน", line: `${r.id} ${lines.join(" ")}`, lines };
 }
 
+/** ใบลานักศึกษาฝึกงานในสโตร์ฝ่ายบุคคล — รูปเดียวกับใบลาอื่น ผู้อนุมัติคือฝ่ายบุคคล */
+function fromIntern(r: InternLeave, name: string, sub: string): Request {
+  const type = HR_LEAVE_LABEL[r.lt];
+  const range = r.from === r.to ? thaiDate(r.from) : `${thaiDate(r.from)} – ${thaiDate(r.to)}`;
+  const lines = [type, `รวม ${fmtLeave(r.days)}`];
+  return {
+    kind: "leave",
+    when: leaveWhen(r.from, r.to),
+    src: "intern",
+    as: "hr",
+    name: nameOf(name),
+    full: name,
+    sub,
+    key: r.id,
+    no: r.id,
+    status: r.status,
+    at: r.at,
+    topic: type,
+    line: `${lines.join(" ")} ${range} ${r.note}`,
+    lines,
+    note: r.note,
+    why: "",
+  };
+}
+
 /*
  * ใบลาหนึ่งใบ — ผู้อนุมัติต้องได้ข้อมูลชุดเดียวกับที่ CEO เห็น (ผู้ใช้สั่ง 24 ก.ย. 2569)
  * เดิมหน้านี้บอกแค่ประเภท ช่วงวัน และจำนวนวัน คนที่อนุมัติการลามากที่สุดกลับรู้น้อยที่สุด
@@ -1040,9 +954,10 @@ function fromLeave(
 ): Request {
   const range = v.date === v.toDate ? thaiDate(v.date) : `${thaiDate(v.date)} – ${thaiDate(v.toDate)}`;
   const status = statusOf(v.status);
-  const lines = [`${v.type} ${range}`, `รวม ${v.days.toFixed(2)} วัน`];
+  const lines = [v.type, `รวม ${fmtLeaveHours(leaveHoursOf(v))}`];
   const away = awayList(spans, { id: v.id, who: v.employee, date: v.date, toDate: v.toDate });
   return {
+    when: leaveWhen(v.date, v.toDate, v.half || v.hours != null ? v.startMin : undefined, v.half || v.hours != null ? v.endMin : undefined),
     quota: quotaAfterLeave(records, v),
     /* ไม่อนุมัติแล้ว comment ถูกแทนด้วยเหตุผลของผู้อนุมัติ — ไม่ใช่เหตุผลของผู้ยื่นอีกต่อไป */
     note: status === "rejected" ? "" : v.comment,
@@ -1056,11 +971,10 @@ function fromLeave(
     /* ใบใหม่มีเวลายื่นจริง ใบตั้งต้นบางใบไม่มี จึงถอยไปใช้วันลาแทน */
     at: stampOf(v.submittedAt ?? "", v.date),
     topic: v.type,
-    line: `${lines.join(" ")} ${status === "rejected" ? "" : v.comment}`,
+    line: `${lines.join(" ")} ${range} ${status === "rejected" ? "" : v.comment}`,
     lines,
     /* ไม่อนุมัติแล้ว comment ของใบลาถูกแทนด้วยเหตุผลของผู้อนุมัติ */
     why: status === "rejected" ? v.comment : "",
-    when: v.toDate || v.date,
   };
 }
 
@@ -1084,21 +998,12 @@ function fromOt(role: Role, v: OtRecord, as: Role): Request {
     approvedHours: v.approvedHours,
     ot: { date: v.date, startMin: v.startMin, endMin: v.endMin, hours: v.hours, role },
     why: v.comment,
-    when: v.date,
   };
 }
 
 function fromClaim(role: Role, v: ExpenseClaim, as: Role): Request {
   const km = v.fuel.reduce((sum, r) => sum + (Number(String(r.km).replace(/,/g, "")) || 0), 0);
-  /* แยกค่าน้ำมันกับค่าเดินทางให้คนอนุมัติเห็นทีละก้อน (เจ้าของระบบสั่ง 8 ต.ค. 2569) */
-  const part = claimParts(v);
-  const lines = [
-    `ใบเบิก ${thaiMonth(v.month)}`,
-    `ค่าน้ำมัน ${km.toFixed(2)} กม. · ${baht(part.fuel)} บาท`,
-    ...(part.travel ? [`ค่าเดินทาง ${baht(part.travel)} บาท`] : []),
-    ...(part.other ? [`ค่าใช้จ่ายอื่น ${baht(part.other)} บาท`] : []),
-    `รวม ${baht(part.total)} บาท`,
-  ];
+  const lines = [`ค่าน้ำมัน ${thaiMonth(v.month)}`, `รวม ${km.toFixed(2)} กม.`, `เป็นเงิน ${baht(claimTotal(v))} บาท`];
   return {
     kind: "expense",
     ...who(role),
@@ -1107,10 +1012,10 @@ function fromClaim(role: Role, v: ExpenseClaim, as: Role): Request {
     no: v.no ?? "",
     status: statusOf(v.status),
     at: stampOf(v.submittedAt, `${v.month}-01`),
-    topic: part.travel || part.other ? "ใบเบิกค่าใช้จ่าย" : "ค่าน้ำมัน",
+    topic: "ค่าน้ำมัน",
     line: `${v.no ?? ""} ${lines.join(" ")}`,
     lines,
     why: v.comment,
-    paid: Boolean(v.paidIn),
+    block: v.status === "รออนุมัติ" ? claimApproveBlock(v) : "",
   };
 }

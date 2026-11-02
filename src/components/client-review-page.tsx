@@ -36,8 +36,10 @@ import {
   type ReviewRound,
   type ReviewStatus,
 } from "@/lib/client-review-store";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, FileIcon, GridIcon, LinkIcon, MenuIcon } from "./icons";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, FileIcon, GridIcon, LinkIcon, MenuIcon } from "./icons";
 import "@/styles/review.css";
+import { PinBoard } from "./review-pins";
+import { nameOf } from "@/lib/emp-name";
 
 function Wordmark({ className = "h-[22px] w-auto" }: { className?: string }) {
   return (
@@ -157,11 +159,11 @@ function Review({ r, st }: { r: ReviewRound; st: Exclude<ReviewStatus, "expired"
           {r.project} – {r.taskName}
         </h1>
         <p className="rv-meta num">
-          {r.files.length} ไฟล์ · {totalSize(r.files)} · ส่งโดย {r.createdBy} · ลิงก์หมดอายุ {thaiDate(r.expiresAt)}
+          {r.files.length} ไฟล์ · {totalSize(r.files)} · ส่งโดย {nameOf(r.createdBy)} · ลิงก์หมดอายุ {thaiDate(r.expiresAt)}
         </p>
         {r.message && (
           <p className="rv-msg">
-            <b className="mb-0.5 block text-[12px] font-semibold text-muted-foreground">ข้อความจาก {r.createdBy}</b>
+            <b className="mb-0.5 block text-[12px] font-semibold text-muted-foreground">ข้อความจาก {nameOf(r.createdBy)}</b>
             {r.message}
           </p>
         )}
@@ -175,7 +177,7 @@ function Review({ r, st }: { r: ReviewRound; st: Exclude<ReviewStatus, "expired"
         {st === "submitted" && (
           <p className="rv-banner sent">
             <b className="block text-[15px]">ขอบคุณค่ะ — ส่งความเห็นให้ทีมแล้ว</b>
-            คอมเมนต์ {r.comments.length} จุด ส่งเมื่อ {thaiStamp(r.submittedAt ?? "")} น. · ทีมจะแก้แล้วส่งรอบถัดไปให้ตรวจอีกครั้ง
+            คอมเมนต์ {r.comments.length} จุด ส่งเมื่อ {thaiStamp(r.submittedAt ?? "")} น.
           </p>
         )}
 
@@ -221,7 +223,7 @@ function Review({ r, st }: { r: ReviewRound; st: Exclude<ReviewStatus, "expired"
                       {f.approved ? "✓ อนุมัติแล้ว" : "อนุมัติ"}
                     </button>
                     <button type="button" onClick={() => setOpen(i)}>
-                      {readOnly ? "ดูไฟล์" : "คอมเมนต์"}
+                      {readOnly || f.approved ? "ดูไฟล์" : "คอมเมนต์"}
                     </button>
                   </div>
                 </div>
@@ -322,8 +324,10 @@ function Viewer({
   setName: (v: string) => void;
 }) {
   const f = r.files[index];
+  /* ไฟล์ที่ลูกค้าอนุมัติแล้วคอมเมนต์เพิ่มไม่ได้ — ยกเลิกอนุมัติก่อนถึงคอมเมนต์ได้ (ผู้ใช้สั่ง 20 ต.ค. 2569) */
+  const locked = readOnly || !!f.approved;
   const total = r.files.length;
-  const apiRef = useRef<MediaApi | null>(null);
+  const api = useRef<MediaApi | null>(null);
   const [time, setTime] = useState(0);
   const [active, setActive] = useState<string | null>(null);
   const [pending, setPending] = useState<{ x: number; y: number } | null>(null);
@@ -391,9 +395,9 @@ function Viewer({
     const base = { fileId: f.id, author: who, text: v, ...(attach ? { attach } : {}) };
     let c: Omit<ReviewComment, "id" | "at"> = base;
     if (f.kind === "video" && scope === "here") {
-      apiRef.current?.pause();
-      const t = Math.round((apiRef.current?.now() ?? time) * 10) / 10;
-      const frame = apiRef.current?.frame();
+      api.current?.pause();
+      const t = Math.round((api.current?.now() ?? time) * 10) / 10;
+      const frame = api.current?.frame();
       c = { ...base, t, ...(frame ? { frame } : {}) };
     } else if (f.kind === "image" && scope === "here") {
       if (!pending) return setErr("คลิกบนรูปเพื่อปักหมุดก่อน หรือเลือก “ทั้งไฟล์”");
@@ -407,11 +411,18 @@ function Viewer({
     setText("");
     setAttach(null);
     setErr("");
+    return true;
+  }
+
+  /* ปุ่มบันทึกมุมขวาบน — มีข้อความค้างในช่องก็บันทึกเป็นคอมเมนต์ก่อน แล้วปิดตัวดูไฟล์ */
+  function save() {
+    if (text.trim() && send() !== true) return;
+    onClose();
   }
 
   function pickComment(c: ReviewComment) {
     setActive(c.id);
-    if (c.t !== undefined) apiRef.current?.seek(c.t);
+    if (c.t !== undefined) api.current?.seek(c.t);
   }
 
   const hasHere = f.kind === "video" || f.kind === "image";
@@ -429,20 +440,12 @@ function Viewer({
         <span className="ix num">
           {index + 1}/{total}
         </span>
-        <button
-          type="button"
-          disabled={readOnly}
-          onClick={() => setFileApproved(r.token, f.id, !f.approved)}
-          className={`btn flex-none ${f.approved ? "!border-transparent !bg-[var(--success-soft)] !text-[var(--success)]" : "solid !bg-[var(--success)]"}`}
-        >
-          {f.approved ? (
-            <>
-              <CheckIcon className="size-4" /> อนุมัติแล้ว
-            </>
-          ) : (
-            "อนุมัติ"
-          )}
-        </button>
+        {/* อนุมัติทำที่การ์ดไฟล์ ในตัวดูไฟล์เป็นปุ่มบันทึกแทน (ผู้ใช้สั่ง 20 ต.ค. 2569) */}
+        {!locked && (
+          <button type="button" onClick={save} className="btn solid btn-solid flex-none">
+            บันทึก
+          </button>
+        )}
       </div>
 
       <div className="rvv-body">
@@ -458,7 +461,7 @@ function Viewer({
               <VideoStage
                 key={f.id}
                 f={f}
-                api={apiRef}
+                api={api}
                 marks={comments.filter((c) => c.t !== undefined)}
                 active={active}
                 onTime={setTime}
@@ -469,10 +472,10 @@ function Viewer({
                 key={f.id}
                 f={f}
                 pins={comments.filter((c) => c.pin)}
-                pending={here && !readOnly ? pending : null}
+                pending={here && !locked ? pending : null}
                 nextPin={nextPin}
                 active={active}
-                readOnly={readOnly}
+                readOnly={locked}
                 onPick={(p) => {
                   setPending(p);
                   setScope("here");
@@ -495,10 +498,10 @@ function Viewer({
             </h3>
             {comments.length === 0 ? (
               <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                {readOnly
+                {locked
                   ? "ไม่มีคอมเมนต์ในไฟล์นี้"
                   : f.kind === "video"
-                    ? "ยังไม่มีคอมเมนต์ในไฟล์นี้ หยุดวิดีโอตรงจุดที่ต้องการแล้วเขียนด้านล่าง — ระบบเก็บภาพเฟรมไว้กับคอมเมนต์ด้วย"
+                    ? "ยังไม่มีคอมเมนต์ในไฟล์นี้ หยุดวิดีโอตรงจุดที่ต้องการแล้วเขียนด้านล่าง"
                     : f.kind === "image"
                       ? "ยังไม่มีคอมเมนต์ในไฟล์นี้ คลิกบนรูปตรงจุดที่ต้องการเพื่อปักหมุด แล้วเขียนด้านล่าง"
                       : "ยังไม่มีคอมเมนต์ในไฟล์นี้ เขียนความเห็นด้านล่างได้เลย"}
@@ -560,7 +563,7 @@ function Viewer({
                           แนบ {c.attach.name}
                         </p>
                       )}
-                      {!readOnly && editing?.id !== c.id && (
+                      {!locked && editing?.id !== c.id && (
                         <p className="mt-1 flex gap-3 text-[11.5px] font-semibold">
                           <button
                             type="button"
@@ -591,7 +594,7 @@ function Viewer({
             )}
           </div>
 
-          {!readOnly && (
+          {!locked && (
             <div className="rvv-form">
               <div className="rvv-chips" role="group" aria-label="คอมเมนต์ตรงไหน">
                 {f.kind === "video" && (
@@ -643,7 +646,7 @@ function Viewer({
                 rows={3}
                 placeholder={
                   f.kind === "video" && here
-                    ? "เห็นอะไรตรงนี้? ระบบเก็บภาพเฟรมไว้กับคอมเมนต์ด้วย"
+                    ? "เห็นอะไรตรงนี้?"
                     : f.kind === "image" && here
                       ? "ตรงหมุดนี้ต้องปรับอะไร?"
                       : "ความเห็นต่อไฟล์นี้"
@@ -716,7 +719,7 @@ function fakeFrame(t: number) {
 
 function VideoStage({
   f,
-  api: apiRef,
+  api,
   marks,
   active,
   onTime,
@@ -776,7 +779,7 @@ function VideoStage({
   }
 
   useEffect(() => {
-    apiRef.current = {
+    api.current = {
       seek,
       pause: () => {
         vref.current?.pause();
@@ -801,7 +804,7 @@ function VideoStage({
       },
     };
     return () => {
-      apiRef.current = null;
+      api.current = null;
     };
   });
 
@@ -885,13 +888,6 @@ function VideoStage({
           {clock(t)} / {clock(dur)}
         </span>
       </div>
-      {!real && (
-        <p className="rvv-note">
-          {f.local
-            ? "ไฟล์นี้เปิดได้เฉพาะแท็บที่ PM เลือกไฟล์ไว้ (รีโหลดแล้วหาย) — แสดงตัวเล่นจำลองแทน ระบบเก็บไฟล์จริงมากับระบบหลังบ้าน"
-            : "ตัวอย่างวิดีโอ (ยังไม่มีที่เก็บไฟล์จริง) — กดเล่นแล้วหยุดตรงจุดที่ต้องการ คอมเมนต์ตามเวลาได้ตามปกติ"}
-        </p>
-      )}
     </div>
   );
 }
@@ -915,60 +911,18 @@ function ImageStage({
   onPick: (p: { x: number; y: number }) => void;
   onPin: (c: ReviewComment) => void;
 }) {
-  const url = liveUrl(f);
-  function pick(e: React.MouseEvent<HTMLElement>) {
-    if (readOnly) return;
-    const b = e.currentTarget.getBoundingClientRect();
-    if (!b.width || !b.height) return;
-    const x = Math.round(((e.clientX - b.left) / b.width) * 1000) / 10;
-    const y = Math.round(((e.clientY - b.top) / b.height) * 1000) / 10;
-    onPick({ x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) });
-  }
   return (
     <div className="flex w-full flex-col items-center">
-      <div className={`rvv-img ${readOnly ? "ro" : ""}`}>
-        {url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={f.name} onClick={pick} draggable={false} />
-        ) : (
-          <div
-            onClick={pick}
-            className="grid aspect-[3/2] w-[min(640px,80vw)] place-items-center rounded-[8px] bg-card text-center text-[13px] leading-relaxed text-muted-foreground shadow-[var(--shadow-md)]"
-          >
-            <span className="px-6">
-              <FileIcon className="mx-auto mb-2 size-8 text-primary" />
-              {f.local
-                ? "ไฟล์นี้เปิดได้เฉพาะแท็บที่ PM เลือกไฟล์ไว้ (รีโหลดแล้วหาย)"
-                : "ยังไม่มีที่เก็บไฟล์จริง — เห็นได้แค่ชื่อไฟล์"}
-              <br />
-              ปักหมุดบนกรอบนี้หรือคอมเมนต์ทั้งไฟล์ได้
-            </span>
-          </div>
-        )}
-        {pins.map((c) =>
-          c.pin ? (
-            <button
-              key={c.id}
-              type="button"
-              className={`rvv-pin ${active === c.id ? "on" : ""}`}
-              style={{ left: `${c.pin.x}%`, top: `${c.pin.y}%` }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPin(c);
-              }}
-              aria-label={`หมุดที่ ${c.pin.n}`}
-              title={c.text}
-            >
-              <span>{c.pin.n}</span>
-            </button>
-          ) : null,
-        )}
-        {pending && (
-          <span className="rvv-pin pending" style={{ left: `${pending.x}%`, top: `${pending.y}%` }}>
-            <span>{nextPin}</span>
-          </span>
-        )}
-      </div>
+      <PinBoard
+        f={f}
+        pins={pins}
+        active={active}
+        onPin={onPin}
+        onPick={readOnly ? undefined : onPick}
+        pending={pending}
+        nextPin={nextPin}
+        placeholder="ปักหมุดบนกรอบนี้หรือคอมเมนต์ทั้งไฟล์ได้"
+      />
       {!readOnly && <p className="rvv-note">คลิกบนรูปตรงจุดที่ต้องการเพื่อปักหมุด</p>}
     </div>
   );
@@ -983,10 +937,6 @@ function PdfStage({ f }: { f: ReviewFile }) {
         <FileIcon className="size-7" />
       </span>
       <b className="block text-[14px] text-foreground">{f.name}</b>
-      {f.local
-        ? "ไฟล์นี้เปิดได้เฉพาะแท็บที่ PM เลือกไฟล์ไว้ (รีโหลดแล้วหาย)"
-        : "ยังไม่มีที่เก็บไฟล์จริง — เปิดเอกสารได้เมื่อระบบหลังบ้านพร้อม"}
-      <br />
       คอมเมนต์ทั้งไฟล์ หรือระบุเลขหน้าได้ที่ช่องด้านข้าง
     </div>
   );

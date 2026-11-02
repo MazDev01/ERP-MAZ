@@ -4,17 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useProfile } from "@/lib/profile-data";
+import { initialOf, useNameOf } from "@/lib/emp-name";
 import { useMyRoles } from "@/lib/hr-link";
 import { roleLabel, useRole } from "@/lib/role";
 import { useProfilePhoto } from "@/lib/profile-store";
-import { clearSession } from "@/lib/local-data";
 import { ConfirmDialog } from "./confirm-dialog";
 import { DownloadIcon, LockIcon, LogoutIcon, UserIcon } from "./icons";
 
-/** ตัวย่อชื่อสองตัวอักษรแรกของชื่อจริง */
+/** ตัวย่อบนอวาตาร์ — มาจากชื่อเล่นที่โชว์ (ผู้ใช้สั่ง 19 ต.ค. 2569) */
 function initials(name: string) {
-  const [first = "", last = ""] = name.split(" ");
-  return (first.slice(0, 1) + last.slice(0, 1)) || first.slice(0, 2);
+  return initialOf(name);
 }
 
 export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
@@ -24,7 +23,10 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
   const [open, setOpen] = useState(false);
   /* ออกจากระบบแล้วย้อนกลับเองไม่ได้ ต้องถามก่อนเสมอ */
   const [askLogout, setAskLogout] = useState(false);
-  const me = useProfile();
+  const prof = useProfile();
+  const nameOf = useNameOf();
+  /* ชิปผู้ใช้โชว์ชื่อเล่น · ชื่อเต็มอยู่ที่หน้าโปรไฟล์ */
+  const me = { ...prof, name: nameOf(prof.name) };
   /* คนหนึ่งควบได้หลายบทบาท (เช่น บัญชี + บุคคล + ผู้ดูแลระบบ)
      ต้องเห็นว่าตอนนี้ทำงานในบทบาทไหน และตัวเองถือบทบาทอะไรอีกบ้าง
      ไม่งั้นพอคิวอนุมัติหรือเมนูไม่เหมือนที่คิด ก็เดาไม่ออกว่าเพราะสวมหมวกผิดใบ */
@@ -183,9 +185,6 @@ export function UserMenu({ variant = "top" }: { variant?: "top" | "bar" }) {
         onCancel={() => setAskLogout(false)}
         onConfirm={() => {
           setAskLogout(false);
-          /* ลืมว่าใครล็อกอินอยู่ก่อนออก — ไม่งั้นคนที่มาใช้เครื่องต่อเปิดหน้าเดิมแล้วเห็นข้อมูลของคนก่อน
-             (งานที่กรอกไว้ยังอยู่ครบ ล้างเฉพาะตัวบอกว่าใครใช้อยู่) */
-          clearSession();
           router.push("/login");
         }}
       />

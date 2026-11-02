@@ -28,6 +28,7 @@ import {
 } from "./icons";
 import { ApproverNote } from "./approver-note";
 import { OtDialog } from "./ot-dialog";
+import { stackNo } from "@/lib/stack-no";
 
 const PER_PAGE = 10;
 
@@ -62,16 +63,10 @@ export function OtPage() {
   /* ลิงก์จากแจ้งเตือน LINE — /ot?find=OT-2569-0123 เปิดเดือนของคำขอนั้นแล้วไฮไลต์ให้ */
   const findId = useSearchParams().get("find") ?? "";
   const found = records.find((r) => r.id === findId);
-  /* เปิดมาที่เดือนปัจจุบันเสมอ — เดิมฝังเดือนกันยายนไว้ตายตัว พอถึงเดือนใหม่
-     ใบที่เพิ่งยื่นวันนี้จะไม่อยู่ในเดือนที่เปิดมา ผู้ยื่นหาไม่เจอ (ไล่ทดสอบ 12 ต.ค. 2569)
-     หน้าเบิกค่าใช้จ่าย บันทึกเวลา และฝั่งบัญชี ใช้วิธีเดียวกันนี้อยู่แล้ว */
   const [view, setView] = useState(() => {
-    if (found) {
-      const [y, m] = found.date.split("-").map(Number);
-      return new Date(y, m - 1, 1);
-    }
-    const now = bkkNow();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
+    if (!found) return new Date(2026, 8, 1);
+    const [y, m] = found.date.split("-").map(Number);
+    return new Date(y, m - 1, 1);
   });
   const [tab, setTab] = useState<"all" | OtStatus>("all");
   const [page, setPage] = useState(1);
@@ -97,10 +92,13 @@ export function OtPage() {
     return records.filter((r) => r.date.startsWith(prefix));
   }, [records, view]);
 
+  /* ลำดับแบบกองซ้อน — นับจากคำขอโอทีทั้งหมดทุกเดือนตามวันที่ยื่น ใบล่าสุดเลขมากสุดอยู่บน (ผู้ใช้สั่ง 12 ต.ค. 2569) */
+  const noOf = useMemo(() => stackNo(records, (r) => r.submittedAt || r.date, (r) => r.id), [records]);
+
   const scoped = useMemo(() => {
     const list = tab === "all" ? inMonth : inMonth.filter((r) => r.status === tab);
-    return [...list].sort((a, b) => b.date.localeCompare(a.date));
-  }, [inMonth, tab]);
+    return [...list].sort((a, b) => (noOf.get(b.id) ?? 0) - (noOf.get(a.id) ?? 0));
+  }, [inMonth, tab, noOf]);
 
   const maxPage = Math.max(1, Math.ceil(scoped.length / PER_PAGE));
   const safePage = Math.min(page, maxPage);
@@ -114,8 +112,10 @@ export function OtPage() {
     (a, b) => b.date.localeCompare(a.date) || b.submittedAt.localeCompare(a.submittedAt),
   );
 
+  /* โอทีวันแรงงานมีปีละวัน นับทั้งปีของเดือนที่ดู · เรตอื่นนับเดือนเดิม (ผู้ใช้สั่ง 27 ต.ค. 2569) */
   function hoursOfKind(kind: OtKind) {
-    return inMonth
+    const base = kind === "public" ? records.filter((r) => r.date.startsWith(`${view.getFullYear()}-`)) : inMonth;
+    return base
       .filter((r) => otKindOf(r.date) === kind)
       .reduce((sum, r) => sum + paidHours(r), 0);
   }
@@ -192,7 +192,7 @@ export function OtPage() {
               </span>
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              อนุมัติแล้วในเดือนนี้
+              {kind === "public" ? "อนุมัติแล้วในปีนี้" : "อนุมัติแล้วในเดือนนี้"}
             </p>
           </div>
         ))}
@@ -230,9 +230,10 @@ export function OtPage() {
         </div>
 
         <div className="scroll-stable hidden min-h-0 flex-1 overflow-auto md:block">
-          <table className="data-table min-w-[760px]">
+          <table className="data-table min-w-[820px]">
             <thead>
               <tr>
+                <th className="c" style={{ width: 60 }}>ลำดับ</th>
                 <th style={{ width: 150 }}>วันที่ทำล่วงเวลา</th>
                 <th style={{ width: 140 }}>ช่วงเวลา</th>
                 <th className="c" style={{ width: 116 }}>ชั่วโมง</th>
@@ -244,12 +245,12 @@ export function OtPage() {
             <tbody>
               {list.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-[50px] text-center text-muted-foreground">
+                  <td colSpan={7} className="py-[50px] text-center text-muted-foreground">
                     ไม่มีรายการในเดือนนี้
                   </td>
                 </tr>
               ) : (
-                list.map((r) => <Row key={r.id} row={r} hit={r.id === findId} />)
+                list.map((r) => <Row key={r.id} no={noOf.get(r.id) ?? 0} row={r} hit={r.id === findId} />)
               )}
             </tbody>
           </table>
@@ -419,14 +420,15 @@ export function OtPage() {
   );
 }
 
-function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
-  const adjusted =
-    row.status === "อนุมัติแล้ว" &&
-    row.approvedHours != null &&
-    row.approvedHours !== row.hours;
+/* ชั่วโมงช่องเดียว — อนุมัติแล้วใช้ชั่วโมงที่อนุมัติ ไม่มีบรรทัด "อนุมัติ x" ซ้อนใต้อีก (ผู้ใช้สั่ง 9 ต.ค. 2569) */
+function shownHours(row: OtRecord) {
+  return row.status === "อนุมัติแล้ว" && row.approvedHours != null ? row.approvedHours : row.hours;
+}
 
+function Row({ no, row, hit }: { no: number; row: OtRecord; hit?: boolean }) {
   return (
     <tr className={hit ? "ring-2 ring-primary ring-inset" : undefined}>
+      <td className="c num muted">{no}</td>
       <td>
         {/* กดวันที่เพื่อไปดูเวลาทำงานจริงของเดือนนั้น ว่าวันนั้นเข้าออกกี่โมง */}
         <Link
@@ -435,23 +437,19 @@ function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
         >
           {thaiDate(row.date)}
         </Link>
-        {/* เลขที่ใบ — ผู้อนุมัติอ้างเลขนี้ พนักงานจึงต้องเห็นเลขเดียวกันที่ใบของตัวเอง */}
+        {/* ไม่แสดงรหัสใบโอที (ผู้ใช้สั่ง 9 ต.ค. 2569) */}
         <span className="why">
-          {row.id} · โอที{OT_KIND[otKindOf(row.date)].label}
+          โอที{OT_KIND[otKindOf(row.date)].label}
         </span>
       </td>
       <td className="num whitespace-nowrap">
         {hhmm(row.startMin)}–{hhmm(row.endMin)}
       </td>
       <td className="c num">
-        <b className="font-semibold">{row.hours.toFixed(2)}</b>
-        {adjusted && (
-          <span className="adj">อนุมัติ {row.approvedHours?.toFixed(2)}</span>
-        )}
+        <b className="font-semibold">{shownHours(row).toFixed(2)}</b>
       </td>
       <td>
         <span className="clip">{row.reason}</span>
-        {row.comment && <span className="why">หัวหน้า: {row.comment}</span>}
       </td>
       <td>
         <span className={`tag ${STATUS_CLASS[row.status]}`}>
@@ -474,11 +472,6 @@ function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
 
 /** การ์ดคำขอบนมือถือ — กริดตามต้นแบบ (#ot-rows > tr บนจอแคบ) เลขที่ใบซ่อน เหลือเวลายื่นแทน */
 function MobileCard({ row, hit }: { row: OtRecord; hit?: boolean }) {
-  const adjusted =
-    row.status === "อนุมัติแล้ว" &&
-    row.approvedHours != null &&
-    row.approvedHours !== row.hours;
-
   return (
     <li className={`m-ot-card ${hit ? "hit" : ""}`}>
       <i className="ico">
@@ -489,13 +482,11 @@ function MobileCard({ row, hit }: { row: OtRecord; hit?: boolean }) {
         {thaiDate(row.date)}
       </Link>
       <span className="hr num">
-        {row.hours.toFixed(2)} ชม.
-        {adjusted && <span className="adj">อนุมัติ {row.approvedHours?.toFixed(2)} ชม.</span>}
+        {shownHours(row).toFixed(2)} ชม.
       </span>
       {/* ชื่อคลาส rsn ไม่ใช่ wk — .wk ใน globals.css เป็นกริดปฏิทิน 7 ช่อง ทับกันแล้วข้อความแตกเป็นคำ ๆ (แก้ 5 ต.ค. 2569) */}
       <p className="rsn">
         {row.reason}
-        {row.comment && <span className="cm">หัวหน้า: {row.comment}</span>}
       </p>
       <hr className="line" />
       <span className="tm num">

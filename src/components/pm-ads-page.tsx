@@ -29,6 +29,7 @@ import { currentProfile } from "@/lib/profile-data";
 import { memberOf, usePm } from "@/lib/pm-store";
 import { isRef } from "@/lib/pm-data";
 import { useHr } from "@/lib/hr-store";
+import { displayName, useNameOf } from "@/lib/emp-name";
 import { EyeIcon, PencilIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { MonthField, ThaiDatePicker } from "./thai-date-picker";
@@ -156,13 +157,18 @@ export function PmAdsPage() {
 
 function Head({ children }: { children?: React.ReactNode }) {
   return (
-    <div className="bar">
-      <div>
-        <h1>โฆษณาและรายงาน</h1>
-        <p>แผนสื่อ การสั่งรันโฆษณา และผลที่ได้ ของงาน Digital Marketing</p>
-      </div>
-      {children && <div className="tools w-full sm:w-auto">{children}</div>}
-    </div>
+    <>
+      {/* ไม่มีหัวข้อหน้า — แถบบนบอกชื่อหน้าและวันที่อยู่แล้ว ปุ่มเลื่อนขึ้นชิดขวา (ผู้ใช้สั่ง 8 ต.ค. 2569) */}
+      {/* ชื่อหน้ามุมซ้ายบน ปุ่มอยู่ขวาแถวเดียวกัน · มือถือคงเดิม (ผู้ใช้สั่ง 12 ต.ค. 2569) */}
+      {children ? (
+        <div className="bar max-md:justify-end!">
+          <h1 className="page-h1">โฆษณาและรายงาน</h1>
+          <div className="tools w-full sm:w-auto">{children}</div>
+        </div>
+      ) : (
+        <h1 className="page-h1">โฆษณาและรายงาน</h1>
+      )}
+    </>
   );
 }
 
@@ -237,13 +243,6 @@ function PlanTab({ plan }: { plan: (typeof AD_PLANS)[string] | undefined }) {
             </tr>
           </thead>
           <tbody>
-            {plan.rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                  ยังไม่มีช่องทางในแผนสื่อนี้
-                </td>
-              </tr>
-            )}
             {plan.rows.map((r) => (
               <tr key={`${r.channel}-${r.objective}-${r.tool}`}>
                 <td data-label="ช่องทาง">{r.channel}</td>
@@ -624,11 +623,6 @@ function NewRunSheet({
           กรอกเครื่องมือ งบเป็นตัวเลข และช่วงวันให้ครบ
         </p>
       )}
-      <p className="mt-4 rounded-[11px] border border-border bg-card px-3.5 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
-        {ok
-          ? "สั่งแล้วสถานะเริ่มที่ ยังไม่รัน ต้องกลับมากดยืนยันเมื่อรันโฆษณาขึ้นจริง"
-          : "กรอกเครื่องมือ งบเป็นตัวเลข และช่วงวันให้ครบ โดยวันสิ้นสุดต้องไม่ก่อนวันเริ่ม"}
-      </p>
       </div>
     </Sheet>
   );
@@ -640,11 +634,15 @@ function NewRunSheet({
  */
 function useEmpName() {
   const hr = useHr();
-  return (id: string) => memberOf(id)?.name ?? hr.emp.find((e) => e.id === id)?.name ?? id;
+  return (id: string) => {
+    const e = hr.emp.find((x) => x.id === id);
+    return memberOf(id)?.name ?? (e ? displayName(e) : id);
+  };
 }
 
 function RunSheet({ run, onClose }: { run: AdRun; onClose: () => void }) {
   const nameOf = useEmpName();
+  const empName = useNameOf();
   return (
     <Sheet
       title={`${run.channel} · ${run.tool}`}
@@ -678,15 +676,9 @@ function RunSheet({ run, onClose }: { run: AdRun; onClose: () => void }) {
         <Kv label="งบลูกค้า" value={`${baht(run.budget)} บาท`} />
         <Kv label="สถานะ" value={run.ran ? "รันแล้ว" : "ยังไม่รัน"} />
         {/* ผู้ยืนยันและเวลา — ตรวจย้อนได้ (PM-BR-10) · ใบตั้งต้นไม่มีข้อมูลนี้ */}
-        {run.ranBy && <Kv label="ยืนยันโดย" value={`${run.ranBy} · ${thaiStamp(run.ranAt ?? "")}`} />}
+        {run.ranBy && <Kv label="ยืนยันโดย" value={`${empName(run.ranBy)} · ${thaiStamp(run.ranAt ?? "")}`} />}
         <Kv label="หมายเหตุ" value={run.note || "ไม่มี"} />
       </dl>
-
-      {!run.ran && (
-        <p className="mt-4 rounded-[11px] border border-border bg-card px-3.5 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
-          เมื่อรันโฆษณาขึ้นจริงแล้วให้กดยืนยัน ระบบจะบันทึกว่ารันแล้ว
-        </p>
-      )}
     </Sheet>
   );
 }
@@ -714,7 +706,6 @@ function ReportTab({ pj, contents }: { pj: string; contents: AdContent[] }) {
         {contents.length === 0 ? (
           <li className="py-10 text-center text-[13px] leading-relaxed text-muted-foreground">
             ยังไม่มีชิ้นงานของโปรเจคนี้
-            <span className="mt-1 block text-xs">ชิ้นงานจะขึ้นเองเมื่อทีมส่งอาร์ตเวิร์กและแคปชันในเฟสผลิตชิ้นงาน</span>
           </li>
         ) : (
           contents.map((c) => (
@@ -779,9 +770,6 @@ function ReportTab({ pj, contents }: { pj: string; contents: AdContent[] }) {
               <tr>
                 <td colSpan={9} className="py-10 text-center leading-relaxed text-muted-foreground">
                   ยังไม่มีชิ้นงานของโปรเจคนี้
-                  <span className="mt-1 block text-xs">
-                    ชิ้นงานจะขึ้นเองเมื่อทีมส่งอาร์ตเวิร์กและแคปชันในเฟสผลิตชิ้นงาน
-                  </span>
                 </td>
               </tr>
             ) : (
@@ -876,6 +864,7 @@ function MetricSheet({
   onClose: () => void;
 }) {
   const [form, setForm] = useState(() => blankForm(content.m));
+  const empName = useNameOf();
 
   /* ทุกช่องต้องเป็นตัวเลขไม่ติดลบ ผลจากแพลตฟอร์มไม่มีทางติดลบอยู่แล้ว */
   const parsed = useMemo(() => {
@@ -919,7 +908,7 @@ function MetricSheet({
       {/* ตัวเลขคีย์มือ — บอกว่าใครกรอกล่าสุดเมื่อไร ตรวจย้อนได้ (PM-BR-10) */}
       {content.by && (
         <p className="mt-1 text-[12px] text-muted-foreground">
-          กรอกล่าสุดโดย {content.by} · {thaiStamp(content.at ?? "")}
+          กรอกล่าสุดโดย {empName(content.by)} · {thaiStamp(content.at ?? "")}
         </p>
       )}
 
@@ -938,18 +927,14 @@ function MetricSheet({
       </div>
 
       {/* คิดให้ดูสดขณะพิมพ์ จะได้เห็นว่าตัวเลขที่กรอกสมเหตุสมผลไหมก่อนบันทึก */}
-      <p className="mt-4 rounded-[11px] border border-border bg-card px-3.5 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
-        {parsed ? (
-          <>
-            ระบบคำนวณให้ · อัตราการมีส่วนร่วม{" "}
-            <b className="num font-bold text-foreground">{engageRate(parsed).toFixed(2)}%</b> · ต้นทุนต่อการ
-            มีส่วนร่วม{" "}
-            <b className="num font-bold text-foreground">{baht(costPerEngage(parsed))}</b> บาท
-          </>
-        ) : (
-          "กรอกได้เฉพาะตัวเลขจำนวนเต็มไม่ติดลบ · กรอกให้ครบทุกช่องเพื่อดูค่าที่ระบบคำนวณให้"
-        )}
-      </p>
+      {parsed && (
+        <p className="mt-4 rounded-[11px] border border-border bg-card px-3.5 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
+          อัตราการมีส่วนร่วม{" "}
+          <b className="num font-bold text-foreground">{engageRate(parsed).toFixed(2)}%</b> · ต้นทุนต่อการ
+          มีส่วนร่วม{" "}
+          <b className="num font-bold text-foreground">{baht(costPerEngage(parsed))}</b> บาท
+        </p>
+      )}
     </Sheet>
   );
 }
