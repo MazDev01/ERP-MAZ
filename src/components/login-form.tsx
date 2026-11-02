@@ -17,6 +17,7 @@ import { accountRoles } from "@/lib/hr-data";
 import { bkkStamp } from "@/lib/format";
 import { ROLES, setRole, useRole, type Role } from "@/lib/role";
 import { signIn } from "@/lib/local-data";
+import { hasBackend } from "@/lib/supabase/env";
 
 /** ผิดครบกี่ครั้งจึงระงับบัญชี — ยืนยันกับฝ่ายบุคคล (ต้นแบบ login.html MAX_TRIES) */
 const MAX_TRIES = 5;
@@ -159,6 +160,57 @@ export function LoginForm() {
     }
     const demo = DEMO_LOCK[user.toLowerCase()];
     if (demo) return setLocked(demo);
+
+    /*
+     * ต่อฐานข้อมูลแล้ว — ล็อกอินของจริง ให้ฝั่งเซิร์ฟเวอร์เป็นคนตรวจรหัสและนับครั้งที่ผิด
+     * ชื่อผู้ใช้เป็นอักษรไทยได้ จึงหาอีเมลแฝงจากรหัสพนักงานที่ฝั่งนั้น (api/login)
+     * ยังไม่ต่อก็เดินทางเดโมด้านล่างเหมือนเดิม จะได้เปิดดูหน้าจอได้โดยไม่ต้องมีฐานข้อมูล
+     */
+    if (hasBackend) {
+      setBusy(true);
+      void (async () => {
+        let res: { ok?: boolean; reason?: string; roles?: Role[]; mustChange?: boolean } = {};
+        try {
+          const r = await fetch("/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: user, password }),
+          });
+          res = await r.json();
+        } catch {
+          res = { ok: false, reason: "offline" };
+        }
+        setBusy(false);
+
+        if (res.reason === "suspended") return setLocked("admin");
+        if (!res.ok) {
+          const n = fails + 1;
+          setFails(n);
+          setPassword("");
+          setBadUser(true);
+          setBadPass(true);
+          const left = MAX_TRIES - n;
+          setCredError(
+            res.reason === "offline"
+              ? "ต่อฐานข้อมูลไม่ได้ ลองใหม่อีกครั้ง"
+              : `ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง${left > 0 && left <= 2 ? ` — เหลืออีก ${left} ครั้งก่อนบัญชีถูกระงับ` : ""}`,
+          );
+          passRef.current?.focus();
+          return;
+        }
+
+        /* บทบาทมาจากบัญชีในฐานข้อมูล ไม่ใช่การ์ดที่เลือกบนหน้าจอ */
+        const roles = (res.roles ?? []) as Role[];
+        const r: Role = roles.length && !roles.includes(role) ? roles[0] : role;
+        setFails(0);
+        setRole(r);
+        signIn();
+        keepDevice(user);
+        setBusy(true);
+        router.replace(res.mustChange ? "/set-password" : homeAfterLogin(r));
+      })();
+      return;
+    }
 
     setBusy(true);
     setTimeout(() => {

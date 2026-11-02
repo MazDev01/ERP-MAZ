@@ -71,8 +71,15 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  /* ข้ามไฟล์นิ่ง รูป และไฟล์ของ PWA — ไม่งั้นทุกไฟล์ต้องรอถาม auth หนึ่งรอบ */
+  /*
+   * ข้ามไฟล์นิ่ง รูป ไฟล์ของ PWA และเส้นทาง /api
+   *
+   * /api ต้องข้าม เพราะ Route Handler ตรวจสิทธิ์เองอยู่แล้ว และที่สำคัญกว่านั้น
+   * /api/login เป็นเส้นทางของคนที่ยังไม่ล็อกอิน ถ้า proxy ดักไว้ด้วยจะถูกเด้งไป
+   * หน้าล็อกอินตั้งแต่ยังไม่ทันตรวจรหัส แล้วเข้าระบบไม่ได้เลยทั้งระบบ
+   * (เจอตอนทดสอบจริง 2 พ.ย. 2569)
+   */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2?)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2?)$).*)",
   ],
 };
