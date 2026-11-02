@@ -93,6 +93,8 @@ export function OtDialog({
   const [startMin, setStartMin] = useState(() => boundsOf(start).lo);
   const [endMin, setEndMin] = useState(() => boundsOf(start).lo + 60);
   const [reason, setReason] = useState("");
+  /* เหตุที่ยื่นไม่ผ่าน — ขึ้นในรายการปัญหาเดิมของกล่อง ไม่ปิดกล่องทิ้ง */
+  const [failed, setFailed] = useState("");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -210,13 +212,25 @@ export function OtDialog({
 
   function submit() {
     if (!canSubmit) return;
-    /* ออกใบแยกทีละวัน — เรตของแต่ละวันไม่เท่ากัน และผู้อนุมัติต้องตัดสินได้ทีละวัน */
-    for (const d of days) {
-      const { s, e } = timeOf(d);
-      addOtRequest({ date: d, startMin: s, endMin: e, hours: otHours(s, e), reason: reason.trim() });
-    }
-    onSubmitted(totalHours, date);
-    onClose();
+    /* ออกใบแยกทีละวัน — เรตของแต่ละวันไม่เท่ากัน และผู้อนุมัติต้องตัดสินได้ทีละวัน
+       ยื่นเรียงทีละใบ ไม่ใช่ยิงพร้อมกัน เพราะเลขที่ใบต้องเดินต่อกันตามลำดับวัน */
+    void (async () => {
+      for (const d of days) {
+        const { s, e } = timeOf(d);
+        const rec = await addOtRequest({
+          date: d,
+          startMin: s,
+          endMin: e,
+          hours: otHours(s, e),
+          reason: reason.trim(),
+        });
+        /* ใบไหนพลาดก็หยุดทันที ใบที่ยื่นผ่านแล้วยังอยู่ในระบบ
+           ปิดกล่องไปทั้งที่ยื่นไม่ครบจะเข้าใจผิดว่าได้ทุกวัน */
+        if (!rec) return setFailed(`ยื่นใบโอทีของวันที่ ${d} ไม่สำเร็จ ลองใหม่อีกครั้ง`);
+      }
+      onSubmitted(totalHours, date);
+      onClose();
+    })();
   }
 
   if (!hydrated) return null;
@@ -381,9 +395,9 @@ export function OtDialog({
             </p>
           )}
 
-          {problems.length > 0 && (
+          {[...problems, ...(failed ? [failed] : [])].length > 0 && (
             <p className="mt-[9px] rounded-[11px] border border-destructive/20 bg-[var(--destructive-soft)] px-[13px] py-2.5 text-[12.5px] leading-relaxed text-destructive">
-              {problems.map((m) => (
+              {[...problems, ...(failed ? [failed] : [])].map((m) => (
                 <span key={m} className="block">
                   {m}
                 </span>

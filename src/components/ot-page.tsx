@@ -461,7 +461,7 @@ function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
       </td>
       <td className="c">
         {row.status === "รออนุมัติ" ? (
-          <button type="button" className="lnk" onClick={() => cancelOtRequest(row.id)}>
+          <button type="button" className="lnk" onClick={() => void cancelOtRequest(row.id)}>
             ยกเลิก
           </button>
         ) : (
@@ -509,7 +509,7 @@ function MobileCard({ row, hit }: { row: OtRecord; hit?: boolean }) {
       <span className="no num">ยื่น {submittedText(row.submittedAt)}</span>
       {row.status === "รออนุมัติ" && (
         <div className="ac">
-          <button type="button" className="lnk" onClick={() => cancelOtRequest(row.id)}>
+          <button type="button" className="lnk" onClick={() => void cancelOtRequest(row.id)}>
             ยกเลิก
           </button>
         </div>

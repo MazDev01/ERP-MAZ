@@ -314,7 +314,7 @@ export function ApprovalsBoard({
         : item.kind === "leave"
           ? await undoLeaveDecision(item.role!, item.key, why)
           : item.kind === "ot"
-            ? undoOtDecision(item.role!, item.key, why)
+            ? await undoOtDecision(item.role!, item.key, why)
             : undoClaimDecision(item.role!, item.key, why);
     if (!ok) return false;
     logChange(
@@ -981,19 +981,19 @@ async function applyDecision(
   }
   if (!item.role) return { ok: true };
 
-  /* ใบลาต่อฐานข้อมูลแล้ว จึงต้องรอคำตอบ — ที่เหลือยังเขียนลงเครื่องและไม่เคยพลาด */
+  /* ใบลากับใบโอทีต่อฐานข้อมูลแล้ว จึงต้องรอคำตอบ — ใบเบิกยังเขียนลงเครื่อง */
   if (item.kind === "leave") {
     return approve
       ? await approveLeave(item.role, item.key)
       : await rejectLeave(item.role, item.key, why);
   }
-  if (approve) {
-    if (item.kind === "ot") approveOt(item.role, item.key, hours ?? item.hours ?? 0, why);
-    if (item.kind === "expense") approveClaim(item.role, item.key, why);
-  } else {
-    if (item.kind === "ot") rejectOt(item.role, item.key, why);
-    if (item.kind === "expense") rejectClaim(item.role, item.key, why);
+  if (item.kind === "ot") {
+    return approve
+      ? await approveOt(item.role, item.key, hours ?? item.hours ?? 0, why)
+      : await rejectOt(item.role, item.key, why);
   }
+  if (approve) approveClaim(item.role, item.key, why);
+  else rejectClaim(item.role, item.key, why);
   return { ok: true };
 }
 

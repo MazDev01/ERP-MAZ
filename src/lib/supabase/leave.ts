@@ -2,6 +2,7 @@
 
 import { supabase } from "./client";
 import { loadPeople, myId, nameById, roleById } from "./people";
+import { stamp } from "./stamp";
 import type { LeaveRecord, LeaveStatus } from "../leave-data";
 import { ROLES, type Role } from "../role";
 
@@ -51,15 +52,6 @@ const COLS =
   "id, no, employee_id, leave_type, from_date, to_date, days, half, start_min, end_min, hours," +
   " reason, status, decision_note, cancel_why, cancelled_at, undone_at, undone_why," +
   " submitted_at, decided_at, edited_at";
-
-/** timestamptz → "yyyy-mm-dd hh:mm" เวลาไทย (รูปเดียวกับ bkkStamp ใน format.ts) */
-function stamp(v: string | null): string | undefined {
-  if (!v) return undefined;
-  const d = new Date(v);
-  const th = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
-  const p = (n: number) => `${n}`.padStart(2, "0");
-  return `${th.getFullYear()}-${p(th.getMonth() + 1)}-${p(th.getDate())} ${p(th.getHours())}:${p(th.getMinutes())}`;
-}
 
 export function toLeave(row: Row): LeaveRecord {
   const status = TO_TH[row.status] ?? "รอการอนุมัติ";
