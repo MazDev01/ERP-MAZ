@@ -7,8 +7,16 @@ import "./globals.css";
 const notoThai = Noto_Sans_Thai({
   variable: "--font-noto-thai",
   subsets: ["thai", "latin"],
-  /* 800 ใช้กับตัวเลขใหญ่และหัวข้อเด่น (font-extrabold ~25 ที่) — ไม่โหลดไว้ เบราว์เซอร์จะทำตัวหนาปลอมจาก 700 */
-  weight: ["400", "500", "600", "700", "800"],
+  /*
+   * ไม่ระบุ weight — Noto Sans Thai เป็นฟอนต์แบบผันน้ำหนักได้ (variable font)
+   * ไฟล์เดียวครอบคลุมน้ำหนัก 100–900 จึงได้ 800 ที่ใช้กับตัวเลขใหญ่และหัวข้อเด่นอยู่แล้ว
+   *
+   * เดิมระบุเป็นรายการ ["400"…"800"] ซึ่งบังคับให้โหลดไฟล์แยกน้ำหนักละไฟล์
+   * ทางนั้นทำให้ next dev (Turbopack 16.3.4) พังทั้งหน้า ขึ้น
+   * "Can't resolve @vercel/turbopack-next/internal/font/google/font"
+   * ตรวจแล้วสลับกลับไปกลับมาสองรอบ ใส่แล้วพัง 500 ตัดออกแล้วได้ 200 (2 พ.ย. 2569)
+   * ส่วน next build ไม่เป็น จึงไม่เคยเห็นตอนสั่ง build อย่างเดียว
+   */
 });
 
 export const metadata: Metadata = {

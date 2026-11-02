@@ -42,6 +42,16 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
+  /*
+   * ยังไม่บังคับให้ล็อกอินผ่านฐานข้อมูล จนกว่าหน้าล็อกอินจะต่อ Supabase จริง
+   * (ตั้งค่า NEXT_PUBLIC_AUTH_BACKEND=1 เมื่อถึงตอนนั้น)
+   *
+   * ถ้าบังคับตั้งแต่ตอนนี้ เครื่องที่ตั้งค่าฐานข้อมูลไว้แล้วจะเข้าระบบไม่ได้เลย
+   * เพราะหน้าล็อกอินยังสร้าง session ของ Supabase ไม่เป็น ทุกหน้าจะเด้งกลับหน้าล็อกอินวนอยู่อย่างนั้น
+   * (เจอตอนเปิด dev หลังใส่ .env.local · 2 พ.ย. 2569)
+   */
+  if (process.env.NEXT_PUBLIC_AUTH_BACKEND !== "1") return response;
+
   if (!data.user && !isPublic(path)) {
     const to = request.nextUrl.clone();
     to.pathname = "/login";
