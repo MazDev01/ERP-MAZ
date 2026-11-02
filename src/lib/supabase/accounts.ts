@@ -21,8 +21,14 @@ function adminAuth() {
   });
 }
 
-/** อีเมลแฝงจากรหัสพนักงาน — ชื่อผู้ใช้จริงมีอักษรไทยได้ จึงใช้เป็นอีเมลตรง ๆ ไม่ได้ */
-const aliasEmail = (empNo: string) => `${empNo.toLowerCase()}@maz.local`;
+/*
+ * อีเมลแฝงของบัญชี — ชื่อผู้ใช้จริงมีอักษรไทยได้ จึงใช้เป็นอีเมลตรง ๆ ไม่ได้
+ *
+ * ไม่คิดจากรหัสพนักงานอีกแล้ว เพราะบัญชีไม่จำเป็นต้องผูกกับพนักงาน
+ * (ผู้บริหารมีบัญชีแต่ไม่มีแถวในทะเบียน · เจ้าของสั่ง 2 พ.ย. 2569)
+ * ไม่มีใครต้องพิมพ์อีเมลนี้ ขอแค่ไม่ซ้ำกับใคร — ตอนล็อกอินอ่านคืนจากระบบ auth
+ */
+const aliasEmail = () => `acc-${crypto.randomUUID()}@maz.local`;
 
 export type AccountResult = { ok: true; data?: unknown } | { ok: false; reason: string };
 
@@ -74,7 +80,7 @@ export async function createAccount(input: {
   if (found.acc) return { ok: false, reason: "has_account" };
 
   const { data: created, error } = await admin.auth.admin.createUser({
-    email: aliasEmail(found.emp.emp_no ?? found.emp.id),
+    email: aliasEmail(),
     password: input.tempPassword,
     email_confirm: true,
   });

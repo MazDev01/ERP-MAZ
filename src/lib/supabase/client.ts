@@ -20,3 +20,19 @@ export function supabase() {
   cached ??= createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   return cached;
 }
+
+/*
+ * ล็อกอินอยู่หรือยัง — อ่านจาก cookie ของเบราว์เซอร์ ไม่ยิงถามเซิร์ฟเวอร์
+ *
+ * มีไว้ให้ทุกตัวอ่านข้อมูลถามก่อนยิง เพราะสโตร์บางตัวทำงานทุกหน้า
+ * รวมถึงหน้าล็อกอินที่ยังไม่มี session — ยิงไปก็ได้ 401 เปล่า ๆ และคอนโซลรุงรัง
+ *
+ * นี่เป็นแค่การกันคำขอที่รู้อยู่แล้วว่าไม่ผ่าน ไม่ใช่การตรวจสิทธิ์
+ * สิทธิ์จริงตัดสินที่ฐานข้อมูล (RLS) เสมอ
+ */
+export async function signedIn(): Promise<boolean> {
+  const sb = supabase();
+  if (!sb) return false;
+  const { data } = await sb.auth.getSession();
+  return Boolean(data.session);
+}

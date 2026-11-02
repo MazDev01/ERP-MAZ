@@ -58,6 +58,8 @@ import {
   fetchPeriods,
   reopenPeriodRemote,
 } from "./supabase/periods";
+import { fetchEmployees } from "./supabase/employees";
+import { forgetPeople } from "./supabase/people";
 
 export type HrState = {
   emp: Employee[];
@@ -162,8 +164,12 @@ const store = createPersistedStore<HrState>("maz-erp.hr.v3", INITIAL, isHrState,
  */
 const live = hasBackend;
 const BLANK_PERIODS: Period[] = live ? blankPeriods() : [];
+/* ทะเบียนว่างจริงตอนยังอ่านไม่เสร็จ — ห้ามใช้ทะเบียนจำลอง ไม่งั้นหน้าจอจะโชว์คนที่ไม่มีในระบบ */
+const BLANK_EMP: Employee[] = [];
 let remote: Period[] | null = null;
 let loadingPeriods = false;
+let people: Employee[] | null = null;
+let loadingPeople = false;
 const watchers = new Set<() => void>();
 
 function tell() {
@@ -187,6 +193,29 @@ function loadPeriods() {
     });
 }
 
+/*
+ * ทะเบียนพนักงานจากฐานข้อมูล
+ *
+ * เจ้าของสั่ง 2 พ.ย. 2569 ว่าทะเบียนจริงอยู่ที่ฐานข้อมูลที่เดียว
+ * ทะเบียนจำลองที่เคยอยู่ในหน้าจอถูกย้ายไปเป็นข้อมูลทดสอบของฐานข้อมูลแล้ว
+ * (supabase/seed.sql ชุด T01–T19 ติดธง is_demo)
+ */
+function loadPeople() {
+  if (!live || loadingPeople || people !== null) return;
+  loadingPeople = true;
+  void fetchEmployees()
+    .then((list) => {
+      people = list;
+    })
+    .catch(() => {
+      people = BLANK_EMP;
+    })
+    .finally(() => {
+      loadingPeople = false;
+      tell();
+    });
+}
+
 /** สั่งอ่านรอบเวลาทำงานใหม่ — เรียกหลังปิดหรือเปิดรอบ */
 function refreshPeriods() {
   if (!live) return;
@@ -194,21 +223,33 @@ function refreshPeriods() {
   loadPeriods();
 }
 
+/** สั่งอ่านทะเบียนใหม่ — เรียกหลังฝ่ายบุคคลเพิ่มหรือแก้พนักงาน */
+export function refreshEmployees() {
+  if (!live) return;
+  people = null;
+  forgetPeople();
+  loadPeople();
+}
+
 /* ประกอบร่างแล้วจำไว้ — useSyncExternalStore ต้องได้วัตถุอ้างอิงเดิมถ้าข้อมูลไม่เปลี่ยน
    ไม่งั้นจะวาดใหม่ไม่จบ (snapshot ไม่เท่าเดิมทุกครั้งที่อ่าน) */
 let shown: HrState | null = null;
 let fromState: HrState | null = null;
 let fromPeriods: Period[] | null = null;
+let fromPeople: Employee[] | null = null;
 
 function snapshot(): HrState {
   const s = store.get();
   if (!live) return s;
   loadPeriods();
+  loadPeople();
   const periods = remote ?? BLANK_PERIODS;
-  if (shown === null || fromState !== s || fromPeriods !== periods) {
+  const emp = people ?? BLANK_EMP;
+  if (shown === null || fromState !== s || fromPeriods !== periods || fromPeople !== emp) {
     fromState = s;
     fromPeriods = periods;
-    shown = { ...s, periods };
+    fromPeople = emp;
+    shown = { ...s, periods, emp };
   }
   return shown;
 }
@@ -229,7 +270,7 @@ function subscribe(onChange: () => void) {
  * แล้ว ?m= ของเดือนปัจจุบันจะถูกปัดทิ้ง เพราะตอนนั้นยังไม่มีเดือนนี้ในรายการ
  */
 const SERVER_STATE: HrState = live
-  ? { ...store.getServer(), periods: BLANK_PERIODS }
+  ? { ...store.getServer(), periods: BLANK_PERIODS, emp: BLANK_EMP }
   : store.getServer();
 
 const getServerState = () => SERVER_STATE;
@@ -248,6 +289,7 @@ export const subscribeHr = subscribe;
 export function resetHr() {
   store.reset();
   refreshPeriods();
+  refreshEmployees();
 }
 
 /** ผู้ใช้ที่ล็อกอินเป็นฝ่ายบุคคล — ยังไม่มี auth จริงจึงตรึงไว้ที่คนเดียว */

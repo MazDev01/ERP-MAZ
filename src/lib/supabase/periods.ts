@@ -1,6 +1,6 @@
 "use client";
 
-import { supabase } from "./client";
+import { signedIn, supabase } from "./client";
 import { loadPeople, personById } from "./people";
 import { bkkNow, pad2 } from "../format";
 import { fillPeriod, type PayGroup, type Period, type Reopen } from "../hr-data";
@@ -82,7 +82,7 @@ function dayOf(v: string | null): string {
  */
 export async function fetchPeriods(): Promise<Period[]> {
   const sb = supabase();
-  if (!sb) return blankPeriods();
+  if (!sb || !(await signedIn())) return blankPeriods();
   await loadPeople();
 
   const [rows, reopens] = await Promise.all([

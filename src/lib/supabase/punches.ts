@@ -1,6 +1,6 @@
 "use client";
 
-import { supabase } from "./client";
+import { signedIn, supabase } from "./client";
 import { loadPeople, roleById } from "./people";
 import type { PunchRecord, PunchType } from "../attendance";
 import type { PunchGeo } from "../work-area";
@@ -59,7 +59,7 @@ export function toRecord(row: Row): PunchRecord {
  */
 export async function fetchMyPunches(): Promise<PunchRecord[]> {
   const sb = supabase();
-  if (!sb) return [];
+  if (!sb || !(await signedIn())) return [];
   const { data, error } = await sb
     .from("punches")
     .select(COLS)
@@ -82,7 +82,7 @@ export async function fetchAllPunches(): Promise<Record<Role, PunchRecord[]>> {
   ) as Record<Role, PunchRecord[]>;
 
   const sb = supabase();
-  if (!sb) return out;
+  if (!sb || !(await signedIn())) return out;
   await loadPeople();
 
   const { data, error } = await sb

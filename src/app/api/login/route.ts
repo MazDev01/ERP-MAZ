@@ -46,21 +46,22 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, reason: "suspended" }, { status: 403 });
   }
 
-  const { data: emp } = await sv
-    .from("employees")
-    .select("emp_no")
-    .eq("id", acc.employee_id)
-    .maybeSingle();
-  if (!emp?.emp_no) return Response.json({ ok: false, reason: "no_employee" }, { status: 400 });
+  /*
+   * อีเมลแฝงของบัญชีอยู่ในระบบ auth ไม่ได้คิดจากรหัสพนักงาน
+   *
+   * เมื่อก่อนประกอบเป็น "<รหัสพนักงาน>@maz.local" ซึ่งใช้ไม่ได้แล้ว
+   * เพราะบัญชีของผู้บริหารไม่มีแถวในทะเบียนพนักงาน (เจ้าของสั่ง 2 พ.ย. 2569)
+   * ถามจากบัญชีผู้ใช้ตรง ๆ จึงใช้ได้กับทั้งสองแบบ
+   */
+  const { data: user } = await sv.auth.admin.getUserById(acc.user_id);
+  const email = user?.user?.email ?? "";
+  if (!email) return Response.json({ ok: false, reason: "no_login" }, { status: 400 });
 
   /* เข้าระบบผ่านตัวต่อฝั่งเซิร์ฟเวอร์ เพื่อให้ cookie ของ session ถูกตั้งให้เบราว์เซอร์ */
   const sb = await serverSupabase();
   if (!sb) return Response.json({ ok: false, reason: "no_backend" }, { status: 400 });
 
-  const { error } = await sb.auth.signInWithPassword({
-    email: `${emp.emp_no.toLowerCase()}@maz.local`,
-    password,
-  });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
 
   if (error) {
     const { data: fail } = await sv.rpc("register_login_failure", { p_username: username });

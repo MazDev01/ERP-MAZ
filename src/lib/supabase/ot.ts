@@ -1,6 +1,6 @@
 "use client";
 
-import { supabase } from "./client";
+import { signedIn, supabase } from "./client";
 import { loadPeople, myId, nameById, roleById } from "./people";
 import { stamp } from "./stamp";
 import type { OtRecord, OtStatus } from "../ot-data";
@@ -71,7 +71,7 @@ export async function fetchOt(): Promise<{
   byRole: Record<Role, OtRecord[]>;
 }> {
   const sb = supabase();
-  if (!sb) return { mine: [], byRole: EMPTY_BY_ROLE };
+  if (!sb || !(await signedIn())) return { mine: [], byRole: EMPTY_BY_ROLE };
   await loadPeople();
 
   const { data } = await sb
