@@ -1,8 +1,10 @@
 "use client";
 
 import { supabase } from "./client";
+import { loadPeople, roleById } from "./people";
 import type { PunchRecord, PunchType } from "../attendance";
 import type { PunchGeo } from "../work-area";
+import { ROLES, type Role } from "../role";
 
 /*
  * การตอกบัตรจากฐานข้อมูล — แปลงไปเป็นรูปเดียวกับที่หน้าจอใช้อยู่เดิม (PunchRecord)
@@ -65,6 +67,36 @@ export async function fetchMyPunches(): Promise<PunchRecord[]> {
     .limit(2000);
   if (error || !data) return [];
   return (data as unknown as Row[]).map(toRecord);
+}
+
+/**
+ * การตอกบัตรของทุกคนที่มีสิทธิ์เห็น — ฝ่ายบุคคลเห็นทุกคน คนอื่นเห็นแต่ของตัวเอง
+ * (RLS punches_read คัดให้) แล้วหั่นเข้ารูป Record<Role, …> ที่สะพานฝ่ายบุคคลใช้อยู่
+ *
+ * ใครยังไม่ผูกบทบาท (พนักงานที่ไม่มีบัญชีเข้าระบบ) ก็ตกไป — เวลาทำงานของคนกลุ่มนั้น
+ * ยังมาจากทะเบียนของฝ่ายบุคคลเหมือนเดิม
+ */
+export async function fetchAllPunches(): Promise<Record<Role, PunchRecord[]>> {
+  const out = Object.fromEntries(
+    ROLES.map((r) => [r.key, [] as PunchRecord[]]),
+  ) as Record<Role, PunchRecord[]>;
+
+  const sb = supabase();
+  if (!sb) return out;
+  await loadPeople();
+
+  const { data, error } = await sb
+    .from("punches")
+    .select(COLS + ", employee_id")
+    .order("at", { ascending: true })
+    .limit(5000);
+  if (error || !data) return out;
+
+  for (const row of data as unknown as (Row & { employee_id: string })[]) {
+    const role = roleById(row.employee_id);
+    if (role && out[role]) out[role].push(toRecord(row));
+  }
+  return out;
 }
 
 export type PunchResult =

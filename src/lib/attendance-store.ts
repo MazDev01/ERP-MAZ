@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { loadRecords, saveRecords, type PunchRecord } from "./attendance";
 import { currentRole, ROLES, subscribeRole, type Role } from "./role";
 import { hasBackend } from "./supabase/env";
-import { PUNCH_REASON, fetchMyPunches, sendPunch } from "./supabase/punches";
+import { PUNCH_REASON, fetchAllPunches, fetchMyPunches, sendPunch } from "./supabase/punches";
 
 /*
  * localStorage และนาฬิกาเป็น "external store" ในสายตา React
@@ -68,7 +68,9 @@ function loadRemote() {
 export function refreshRecords() {
   if (!hasBackend) return;
   remote = null;
+  remoteAll = null;
   loadRemote();
+  loadRemoteAll();
 }
 
 export function getRecordsSnapshot(): PunchRecord[] {
@@ -145,6 +147,9 @@ export async function addRecord(record: PunchRecord): Promise<SaveResult> {
 
   /* เวลาที่แสดงต้องเป็นของฐานข้อมูล ไม่ใช่ของเครื่องผู้ใช้ จึงแทนแถวที่ใส่ไว้ก่อน */
   remote = (remote ?? EMPTY).map((r) => (r.id === record.id ? res.record : r));
+  /* ตารางของฝ่ายบุคคลอ่านคนละชุด ต้องสั่งอ่านใหม่ด้วย ไม่งั้นเวลาที่เพิ่งตอกไม่ขึ้น */
+  remoteAll = null;
+  loadRemoteAll();
   bump();
   return { ok: true };
 }
@@ -159,7 +164,37 @@ export async function addRecord(record: PunchRecord): Promise<SaveResult> {
 let allCache: Record<Role, PunchRecord[]> | null = null;
 let allStamp = -1;
 
+const EMPTY_ALL = Object.fromEntries(ROLES.map((r) => [r.key, EMPTY])) as Record<
+  Role,
+  PunchRecord[]
+>;
+
+/* ของทุกคนจากฐานข้อมูล — ฝ่ายบุคคลเท่านั้นที่ได้ครบ คนอื่นได้แต่ของตัวเอง (RLS) */
+let remoteAll: Record<Role, PunchRecord[]> | null = null;
+let loadingAll = false;
+
+function loadRemoteAll() {
+  if (loadingAll || remoteAll !== null) return;
+  loadingAll = true;
+  void fetchAllPunches()
+    .then((all) => {
+      remoteAll = all;
+    })
+    .catch(() => {
+      /* อ่านไม่ได้ — ให้เป็นค่าว่างไว้ก่อน ไม่ปล่อยเป็น null ไม่งั้นจะวนยิงใหม่ไม่จบ */
+      remoteAll = EMPTY_ALL;
+    })
+    .finally(() => {
+      loadingAll = false;
+      bump();
+    });
+}
+
 function getAllSnapshot(): Record<Role, PunchRecord[]> {
+  if (hasBackend) {
+    loadRemoteAll();
+    return remoteAll ?? EMPTY_ALL;
+  }
   /* อ่านใหม่เมื่อมีคนตอกบัตรเพิ่มเท่านั้น จะได้คืนวัตถุอ้างอิงเดิมให้ useMemo ใช้ต่อได้ */
   if (allCache === null || allStamp !== version) {
     allStamp = version;
@@ -169,11 +204,6 @@ function getAllSnapshot(): Record<Role, PunchRecord[]> {
   }
   return allCache;
 }
-
-const EMPTY_ALL = Object.fromEntries(ROLES.map((r) => [r.key, EMPTY])) as Record<
-  Role,
-  PunchRecord[]
->;
 
 export function useAllPunches() {
   return useSyncExternalStore(subscribeRecords, getAllSnapshot, () => EMPTY_ALL);
