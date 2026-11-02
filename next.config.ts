@@ -1,5 +1,23 @@
 import type { NextConfig } from "next";
 
+/*
+ * ต้นทางของฐานข้อมูล — ต้องใส่ใน connect-src ไม่งั้นเบราว์เซอร์บล็อกทุกคำขอ
+ * (เจอตอนย้ายการตอกบัตรมา Supabase · 2 พ.ย. 2569 — CSP ปิดไว้แน่น หน้าจอจึงบันทึกไม่สำเร็จ)
+ *
+ * อ่านจากค่าตั้งค่าแทนการเขียนที่อยู่ไว้ตรง ๆ เพื่อให้ย้ายขึ้นคลาวด์แล้วไม่ต้องมาแก้ไฟล์นี้
+ * wss:// ด้วย เพราะ Supabase ใช้ WebSocket ส่งการเปลี่ยนแปลงแบบสด
+ */
+const SB = (() => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  if (!url) return [];
+  try {
+    const { origin, host } = new URL(url);
+    return [origin, `${origin.startsWith("https") ? "wss" : "ws"}://${host}`];
+  } catch {
+    return [];
+  }
+})();
+
 const nextConfig: NextConfig = {
   // เปิดผ่าน IP เครือข่ายได้ (HMR ไม่ถูกบล็อก) ตอน dev
   allowedDevOrigins: ["26.224.66.120"],
@@ -35,7 +53,7 @@ const nextConfig: NextConfig = {
               /* แผนที่จุดลงเวลาใช้ภาพ tile ของ OpenStreetMap — ไม่อนุญาตไว้ แผนที่จะขึ้นเป็นรูปแตก */
               "img-src 'self' data: blob: https://tile.openstreetmap.org",
               "font-src 'self' data:",
-              "connect-src 'self'",
+              ["connect-src 'self'", ...SB].join(" "),
               "worker-src 'self' blob:",
               "object-src 'none'",
               "base-uri 'self'",

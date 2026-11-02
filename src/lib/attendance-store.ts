@@ -3,11 +3,18 @@
 import { useSyncExternalStore } from "react";
 import { loadRecords, saveRecords, type PunchRecord } from "./attendance";
 import { currentRole, ROLES, subscribeRole, type Role } from "./role";
+import { hasBackend } from "./supabase/env";
+import { PUNCH_REASON, fetchMyPunches, sendPunch } from "./supabase/punches";
 
 /*
  * localStorage และนาฬิกาเป็น "external store" ในสายตา React
  * จึงอ่านผ่าน useSyncExternalStore แทนการ setState ใน useEffect
  * (React 19 ห้าม setState ใน effect body — ทำให้ render ซ้อนกัน)
+ *
+ * ต่อฐานข้อมูลแล้ว (hasBackend) การตอกบัตรของตัวเองอ่านจากตาราง punches
+ * แทน localStorage — แต่คืนค่าแบบ "มีแล้วค่อยว่ากัน" เพราะ useSyncExternalStore
+ * ต้องได้คำตอบทันที รอ await ไม่ได้ ครั้งแรกจึงคืนลิสต์ว่างและสั่งโหลดไว้
+ * พอข้อมูลมาถึงก็ bump() ให้ทุกหน้าวาดใหม่เอง
  */
 
 // ─── รายการตอกบัตร ────────────────────────────────────────────────
@@ -33,7 +40,49 @@ export function subscribeRecords(onChange: () => void) {
   };
 }
 
+/* ─── ที่มาจากฐานข้อมูล ───────────────────────────────────────────
+ * remote = null คือยังไม่เคยโหลด · loading กันยิงซ้อนตอนหลายหน้าถามพร้อมกัน
+ */
+let remote: PunchRecord[] | null = null;
+let loading = false;
+
+function loadRemote() {
+  if (loading || remote !== null) return;
+  loading = true;
+  void fetchMyPunches()
+    .then((list) => {
+      remote = list;
+    })
+    .catch(() => {
+      /* อ่านไม่ได้ (เน็ตหลุด / session หมดอายุ) — ให้เป็นลิสต์ว่างไว้ก่อน
+         ไม่ปล่อยเป็น null ไม่งั้นจะวนยิงใหม่ทุกครั้งที่ React อ่าน snapshot */
+      remote = EMPTY;
+    })
+    .finally(() => {
+      loading = false;
+      bump();
+    });
+}
+
+/** สั่งอ่านจากฐานข้อมูลใหม่ — ใช้หลังตอกบัตรหรือหลังฝ่ายบุคคลแก้เวลา */
+export function refreshRecords() {
+  if (!hasBackend) return;
+  remote = null;
+  loadRemote();
+}
+
 export function getRecordsSnapshot(): PunchRecord[] {
+  if (hasBackend) {
+    /* สลับบทบาท = เปลี่ยนคน ต้องอ่านของคนใหม่ ไม่ใช้ของเดิมค้าง
+       ปกติบทบาทมาจากบัญชีที่ล็อกอิน แต่ตัวสลับบทบาทสำหรับทดสอบยังมีอยู่ */
+    const role = currentRole();
+    if (cachedRole !== role) {
+      cachedRole = role;
+      remote = null;
+    }
+    loadRemote();
+    return remote ?? EMPTY;
+  }
   const role = currentRole();
   if (recordsCache === null || cachedRole !== role) {
     cachedRole = role;
@@ -47,7 +96,11 @@ export function getRecordsServerSnapshot(): PunchRecord[] {
   return EMPTY;
 }
 
-/** ล้างการตอกบัตรทั้งหมด — ใช้ตอนทดสอบ กู้คืนไม่ได้ */
+/**
+ * ล้างการตอกบัตรทั้งหมด — ใช้ตอนทดสอบ กู้คืนไม่ได้
+ * ต่อฐานข้อมูลแล้วตัวนี้ล้างได้แค่ของในเครื่อง เพราะ punches ไม่มีสิทธิ์ลบให้ใคร
+ * นอกจากฝ่ายบุคคลผ่าน hr_remove_punch ที่ต้องระบุเหตุผลและลงบันทึกไว้
+ */
 export function clearRecords() {
   recordsCache = EMPTY;
   cachedRole = currentRole();
@@ -55,11 +108,45 @@ export function clearRecords() {
   bump();
 }
 
-export function addRecord(record: PunchRecord) {
-  recordsCache = [...getRecordsSnapshot(), record];
-  cachedRole = currentRole();
-  saveRecords(cachedRole, recordsCache);
+export type SaveResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * บันทึกการตอกบัตร
+ *
+ * ยังไม่ต่อฐานข้อมูล: เขียนลงเครื่องแล้วถือว่าสำเร็จทันทีเหมือนเดิม
+ * ต่อแล้ว: ส่งให้ฐานข้อมูลตัดสิน (เวลา พื้นที่ และลำดับเข้า–ออก) แล้วเก็บแถวที่ได้กลับมา
+ *          ใส่ไว้ก่อนให้หน้าจอขยับทันที ถ้าฐานข้อมูลไม่รับก็ถอนออกและบอกเหตุผล
+ */
+export async function addRecord(record: PunchRecord): Promise<SaveResult> {
+  if (!hasBackend) {
+    recordsCache = [...getRecordsSnapshot(), record];
+    cachedRole = currentRole();
+    saveRecords(cachedRole, recordsCache);
+    bump();
+    return { ok: true };
+  }
+
+  const before = remote ?? EMPTY;
+  remote = [...before, record];
   bump();
+
+  const res = await sendPunch(record.type, record.geo, record.note).catch(() => ({
+    ok: false as const,
+    reason: "network",
+  }));
+
+  if (!res.ok) {
+    remote = (remote ?? EMPTY).filter((r) => r.id !== record.id);
+    bump();
+    const detail = PUNCH_REASON[res.reason] ?? "บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง";
+    const dist = "dist" in res && res.dist !== undefined ? ` · ห่าง ${res.dist} ม.` : "";
+    return { ok: false, message: `${detail}${dist}` };
+  }
+
+  /* เวลาที่แสดงต้องเป็นของฐานข้อมูล ไม่ใช่ของเครื่องผู้ใช้ จึงแทนแถวที่ใส่ไว้ก่อน */
+  remote = (remote ?? EMPTY).map((r) => (r.id === record.id ? res.record : r));
+  bump();
+  return { ok: true };
 }
 
 /*

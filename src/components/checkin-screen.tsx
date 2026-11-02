@@ -42,7 +42,9 @@ const DOW_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 type Check =
   | { phase: "locating" }
   /* อยู่นอกพื้นที่ หรือหาพิกัดไม่ได้ — error มีค่าเมื่อหาพิกัดไม่ได้ */
-  | { phase: "outside"; geo: PunchGeo; error?: string };
+  /* title/hint ใส่เมื่ออยากใช้กล่องเดียวกันบอกเหตุอื่นที่ไม่ใช่เรื่องพื้นที่
+     เช่นฐานข้อมูลไม่รับการตอกบัตร (เข้างานไว้แล้ว / รอบเวลาปิด) */
+  | { phase: "outside"; geo: PunchGeo; error?: string; title?: string; hint?: string };
 
 export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {}) {
   const records = useSyncExternalStore(
@@ -277,13 +279,13 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
     const geo = judge(got.fix, rules);
     if (geo.status === "inside") {
       setCheck(null);
-      confirm(geo);
+      void confirm(geo);
       return;
     }
     setCheck({ phase: "outside", geo });
   }
 
-  function confirm(geo?: PunchGeo) {
+  async function confirm(geo?: PunchGeo) {
     /* ตอนรอพิกัดนาฬิกาเดินไปแล้ว — ใช้เวลาตอนที่บันทึกจริง ไม่ใช่ตอนกดปุ่ม */
     const at = geo ? new Date() : popAt;
     if (!at) return;
@@ -295,7 +297,19 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
       note: geo?.why ?? "",
       ...(geo ? { geo } : {}),
     };
-    addRecord(record);
+    /* ต่อฐานข้อมูลแล้วต้องรอให้บันทึกผ่านก่อนจะบอกว่าสำเร็จ
+       ไม่ขึ้นเครื่องหมายถูกทั้งที่ยังไม่ได้ลงฐานข้อมูล */
+    const saved = await addRecord(record);
+    if (!saved.ok) {
+      setCheck({
+        phase: "outside",
+        geo: geo ?? { status: "off" },
+        error: saved.message,
+        title: "บันทึกไม่สำเร็จ",
+        hint: "ลองใหม่อีกครั้ง · ถ้ายังไม่ได้ให้แจ้งฝ่ายบุคคล",
+      });
+      return;
+    }
     setCheck(null);
 
     const t = `${formatClock(at)} น.`;
@@ -742,7 +756,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
                   </button>
                   <button
                     type="button"
-                    onClick={() => confirm()}
+                    onClick={() => void confirm()}
                     className="btn-solid h-[54px] flex-1 rounded-[27px] text-base font-semibold transition-transform active:scale-95"
                   >
                     เช็คเอาท์
@@ -815,16 +829,18 @@ function OutsidePanel({
   onRetry,
   onCancel,
 }: {
-  check: { geo: PunchGeo; error?: string };
+  check: { geo: PunchGeo; error?: string; title?: string; hint?: string };
   onRetry: () => void;
   onCancel: () => void;
 }) {
   const { geo, error } = check;
-  const title = error
-    ? "หาตำแหน่งไม่ได้"
-    : geo.status === "weak"
-      ? "สัญญาณ GPS ไม่แม่นพอ"
-      : "อยู่นอกพื้นที่ทำงาน";
+  const title =
+    check.title ??
+    (error
+      ? "หาตำแหน่งไม่ได้"
+      : geo.status === "weak"
+        ? "สัญญาณ GPS ไม่แม่นพอ"
+        : "อยู่นอกพื้นที่ทำงาน");
   const detail = error
     ? error
     : geo.status === "weak"
@@ -842,7 +858,7 @@ function OutsidePanel({
       <p className="mt-2 text-center text-[14px] leading-relaxed text-muted-foreground">{detail}</p>
 
       <p className="mt-4 rounded-[12px] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-center text-[13px] text-destructive">
-        ต้องอยู่ในพื้นที่ทำงานจึงจะเข้างานได้ · ติดต่อหัวหน้าหากทำงานนอกสถานที่
+        {check.hint ?? "ต้องอยู่ในพื้นที่ทำงานจึงจะเข้างานได้ · ติดต่อหัวหน้าหากทำงานนอกสถานที่"}
       </p>
 
       <div className="mt-5 flex gap-2.5">
