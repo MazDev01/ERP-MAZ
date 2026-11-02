@@ -1,0 +1,68 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { SUPABASE_ANON_KEY, SUPABASE_URL, hasBackend } from "@/lib/supabase/env";
+
+/*
+ * ต่ออายุ session ให้ทุกคำขอ (Next.js 16 เรียกไฟล์นี้ว่า proxy เดิมชื่อ middleware)
+ *
+ * token ของ Supabase มีอายุสั้นและต้องต่ออายุด้วยการเขียน cookie ใหม่
+ * Server Component เขียน cookie ไม่ได้ ที่นี่จึงเป็นที่เดียวที่ต่ออายุได้จริง
+ * ถ้าไม่ทำ ผู้ใช้จะหลุดออกจากระบบเองเมื่อเปิดทิ้งไว้สักพัก
+ *
+ * ที่นี่ไม่ตัดสินสิทธิ์ว่าใครเปิดหน้าไหนได้ — คู่มือ Next บอกเองว่า proxy
+ * ไม่ใช่ที่สำหรับตรวจสิทธิ์จริง และกติกาของระบบนี้คือ RLS ในฐานข้อมูล
+ * เป็นคนตัดสิน ที่นี่แค่พาคนที่ยังไม่เข้าระบบไปหน้าล็อกอินให้ไวขึ้นเท่านั้น
+ */
+
+/** หน้าที่เปิดได้โดยยังไม่เข้าระบบ */
+const PUBLIC = ["/login", "/set-password", "/install", "/offline", "/review"];
+
+const isPublic = (path: string) =>
+  PUBLIC.some((x) => path === x || path.startsWith(`${x}/`));
+
+export async function proxy(request: NextRequest) {
+  /* ยังไม่ได้ต่อหลังบ้าน — ระบบเดินด้วยข้อมูลในเครื่องเหมือนเดิม ไม่ต้องยุ่งอะไร */
+  if (!hasBackend) return NextResponse.next();
+
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll: () => request.cookies.getAll(),
+      setAll: (list) => {
+        for (const c of list) request.cookies.set(c.name, c.value);
+        response = NextResponse.next({ request });
+        for (const c of list) response.cookies.set(c.name, c.value, c.options);
+      },
+    },
+  });
+
+  /* ต้องเป็น getUser ไม่ใช่ getSession — getUser ถามเซิร์ฟเวอร์จริงว่า token ยังใช้ได้
+     ส่วน getSession อ่านจาก cookie ที่ผู้ใช้แก้เองได้ เชื่อไม่ได้ */
+  const { data } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
+
+  if (!data.user && !isPublic(path)) {
+    const to = request.nextUrl.clone();
+    to.pathname = "/login";
+    return NextResponse.redirect(to);
+  }
+
+  /* บัญชีใหม่และบัญชีที่ฝ่ายบุคคลรีเซ็ตรหัส ต้องตั้งรหัสใหม่ก่อนใช้งาน
+     ค่านี้มาจาก custom_access_token_hook ในฐานข้อมูล ใช้นำทางเท่านั้น */
+  const app = (data.user?.app_metadata ?? {}) as { must_change?: boolean };
+  if (data.user && app.must_change && path !== "/set-password") {
+    const to = request.nextUrl.clone();
+    to.pathname = "/set-password";
+    return NextResponse.redirect(to);
+  }
+
+  return response;
+}
+
+export const config = {
+  /* ข้ามไฟล์นิ่ง รูป และไฟล์ของ PWA — ไม่งั้นทุกไฟล์ต้องรอถาม auth หนึ่งรอบ */
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2?)$).*)",
+  ],
+};

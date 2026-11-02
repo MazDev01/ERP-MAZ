@@ -1,0 +1,22 @@
+"use client";
+
+import { createBrowserClient } from "@supabase/ssr";
+import { SUPABASE_ANON_KEY, SUPABASE_URL, hasBackend } from "./env";
+
+/*
+ * ตัวต่อฐานข้อมูลฝั่งเบราว์เซอร์
+ *
+ * เก็บ session ไว้ใน cookie (ไม่ใช่ localStorage) เพราะฝั่งเซิร์ฟเวอร์ต้องอ่านได้ด้วย
+ * ตอนวาดหน้าแรกและตอน proxy.ts ตรวจสิทธิ์ — createBrowserClient ของ @supabase/ssr
+ * จัดการให้อยู่แล้ว ไม่ต้องตั้งเอง
+ *
+ * สร้างครั้งเดียวแล้วใช้ซ้ำ เปิดหลายตัวจะแย่งกันต่ออายุ token
+ */
+let cached: ReturnType<typeof createBrowserClient> | null = null;
+
+/** ตัวต่อฐานข้อมูลของแท็บนี้ — คืน null เมื่อยังไม่ได้ตั้งค่าหลังบ้าน */
+export function supabase() {
+  if (!hasBackend) return null;
+  cached ??= createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return cached;
+}

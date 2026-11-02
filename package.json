@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@prisma/client": "^7.10.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0",
     "@types/three": "^0.186.0",
     "html2canvas-pro": "^2.5.1",
     "jspdf": "^4.2.1",
