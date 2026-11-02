@@ -47,11 +47,29 @@ export async function loadPeople(): Promise<Person[]> {
   if (!sb) return [];
 
   pending = (async () => {
-    const { data } = await sb
+    /* ยังไม่ล็อกอินก็ไม่ต้องถาม — ฐานข้อมูลตอบ 401 เปล่า ๆ (เช่นตอนเปิดหน้าล็อกอิน) */
+    const { data: got } = await sb.auth.getSession();
+    if (!got.session) {
+      pending = null;
+      return [];
+    }
+
+    const { data, error } = await sb
       .from("employees")
       .select("id, emp_no, first_name, last_name, nick, position")
       .order("emp_no");
-    cache = ((data ?? []) as unknown as Row[]).map((r) => ({
+    const rows = (data ?? []) as unknown as Row[];
+    /*
+     * อ่านไม่ได้หรือยังไม่มีสิทธิ์ — ห้ามจำว่า "ไม่มีใครในระบบ"
+     * ถ้าจำไว้ ทั้งหน้าจะไม่รู้จักใครอีกเลยจนกว่าจะโหลดหน้าใหม่
+     * (คิวอนุมัติไม่มีชื่อผู้ยื่น และการตอกบัตรจะหาว่าบัญชีไม่ผูกกับพนักงาน)
+     */
+    if (error || rows.length === 0) {
+      pending = null;
+      return [];
+    }
+
+    cache = rows.map((r) => ({
       id: r.id,
       empNo: r.emp_no,
       name: nameOf(r),

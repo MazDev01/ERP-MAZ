@@ -874,12 +874,17 @@ function CloseDialog({
   onClose: () => void;
 }) {
   const c = hrCycle(month);
+  /* เหตุที่ปิดไม่สำเร็จ — ค้างกล่องไว้พร้อมเหตุผล ไม่ปิดทิ้งให้เข้าใจผิดว่าปิดรอบแล้ว */
+  const [failed, setFailed] = useState("");
 
   function confirm() {
     /* กันไว้อีกชั้น เผื่อสถานะเปลี่ยนระหว่างเปิดกล่อง */
     if (blocked) return;
-    closePeriod(month, today, group);
-    onClose();
+    setFailed("");
+    void closePeriod(month, today, group).then((res) => {
+      if (!res.ok) return setFailed(res.message);
+      onClose();
+    });
   }
 
   return (
@@ -917,6 +922,14 @@ function CloseDialog({
       {why && (
         <p className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-destructive">
           ยังปิดรอบไม่ได้ · {why}
+        </p>
+      )}
+      {failed && (
+        <p
+          role="alert"
+          className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-destructive"
+        >
+          ปิดรอบไม่สำเร็จ · {failed}
         </p>
       )}
       {/* ขาดใบไหนต้องเห็นตรงนี้ด้วย ไม่ใช่เห็นแค่จำนวนแล้วเดาเอาเอง */}

@@ -7,7 +7,9 @@
  * ปิดรอบเวลาทำงาน → คำนวณเงินเดือน → สร้างสลิป → เผยแพร่
  * ถ้าแยกสโตร์ ด่านกันข้ามขั้นจะต้องอ่านข้ามสโตร์กันไปมาทุกหน้า
  *
- * ยังไม่ต่อ backend ทุกอย่างอยู่ใน localStorage ของเครื่องที่เปิดอยู่
+ * ต่อฐานข้อมูลแล้วย้ายมาทีละส่วน — ส่วนที่ย้ายแล้วจะทับค่าในเครื่องตอนอ่าน
+ * ตอนนี้: รอบเวลาทำงาน (periods) อ่านจากตาราง pay_periods แล้ว
+ * ที่เหลือ (ทะเบียนพนักงาน รอบเงินเดือน สลิป) ยังอยู่ใน localStorage ของเครื่องที่เปิดอยู่
  */
 
 import { useSyncExternalStore } from "react";
@@ -48,6 +50,14 @@ import { bkkStamp, parseIsoDate, toIsoDate, todayIso } from "./format";
 import { requirePasswordReset, restoreAccount, suspendAccount } from "./accounts";
 import { createPersistedStore } from "./persisted-store";
 import type { Role } from "./role";
+import { hasBackend } from "./supabase/env";
+import {
+  PERIOD_REASON,
+  blankPeriods,
+  closePeriodRemote,
+  fetchPeriods,
+  reopenPeriodRemote,
+} from "./supabase/periods";
 
 export type HrState = {
   emp: Employee[];
@@ -143,19 +153,101 @@ function addNewStaff(s: HrState): HrState {
 
 const store = createPersistedStore<HrState>("maz-erp.hr.v3", INITIAL, isHrState, addNewStaff);
 
+/* ─── รอบเวลาทำงานจากฐานข้อมูล ─────────────────────────────────────
+ * useSyncExternalStore ต้องได้คำตอบทันที รอ await ไม่ได้ ครั้งแรกจึงคืน
+ * รายการเดือนเปล่า (ยังไม่มีรอบไหนปิด) แล้วสั่งโหลดไว้ พอข้อมูลมาถึงก็บอกให้วาดใหม่
+ *
+ * ค่าตั้งต้นต้องเป็น "ว่างจริง" ห้ามใช้รอบจำลอง ไม่งั้นหน้าจอจะโชว์ว่ารอบ ก.ค.–ส.ค.
+ * ปิดแล้วทั้งที่ฐานข้อมูลไม่มี แล้วแก้เวลาทำงานของรอบนั้นไม่ได้โดยไม่มีใครรู้สาเหตุ
+ */
+const live = hasBackend;
+const BLANK_PERIODS: Period[] = live ? blankPeriods() : [];
+let remote: Period[] | null = null;
+let loadingPeriods = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function loadPeriods() {
+  if (!live || loadingPeriods || remote !== null) return;
+  loadingPeriods = true;
+  void fetchPeriods()
+    .then((list) => {
+      remote = list;
+    })
+    .catch(() => {
+      /* อ่านไม่ได้ — ให้เป็นรายการเปล่าไว้ก่อน ไม่ปล่อยเป็น null ไม่งั้นจะวนยิงใหม่ไม่จบ */
+      remote = blankPeriods();
+    })
+    .finally(() => {
+      loadingPeriods = false;
+      tell();
+    });
+}
+
+/** สั่งอ่านรอบเวลาทำงานใหม่ — เรียกหลังปิดหรือเปิดรอบ */
+function refreshPeriods() {
+  if (!live) return;
+  remote = null;
+  loadPeriods();
+}
+
+/* ประกอบร่างแล้วจำไว้ — useSyncExternalStore ต้องได้วัตถุอ้างอิงเดิมถ้าข้อมูลไม่เปลี่ยน
+   ไม่งั้นจะวาดใหม่ไม่จบ (snapshot ไม่เท่าเดิมทุกครั้งที่อ่าน) */
+let shown: HrState | null = null;
+let fromState: HrState | null = null;
+let fromPeriods: Period[] | null = null;
+
+function snapshot(): HrState {
+  const s = store.get();
+  if (!live) return s;
+  loadPeriods();
+  const periods = remote ?? BLANK_PERIODS;
+  if (shown === null || fromState !== s || fromPeriods !== periods) {
+    fromState = s;
+    fromPeriods = periods;
+    shown = { ...s, periods };
+  }
+  return shown;
+}
+
+
+function subscribe(onChange: () => void) {
+  watchers.add(onChange);
+  const off = store.subscribe(onChange);
+  return () => {
+    watchers.delete(onChange);
+    off();
+  };
+}
+
+/*
+ * ฝั่งเซิร์ฟเวอร์และตอน hydrate ครั้งแรกต้องได้รายการเดือนชุดเดียวกับที่ฐานข้อมูลจะให้
+ * ไม่ใช่รอบจำลอง — ไม่งั้นหน้าจอตั้งเดือนที่เลือกไว้จากรายการจำลอง (ก.ค.–ก.ย.)
+ * แล้ว ?m= ของเดือนปัจจุบันจะถูกปัดทิ้ง เพราะตอนนั้นยังไม่มีเดือนนี้ในรายการ
+ */
+const SERVER_STATE: HrState = live
+  ? { ...store.getServer(), periods: BLANK_PERIODS }
+  : store.getServer();
+
+const getServerState = () => SERVER_STATE;
+
 export function useHr() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return useSyncExternalStore(subscribe, snapshot, getServerState);
 }
 
 /** อ่านนอก React — พนักงานของ PM ซิงก์จากทะเบียนชุดเดียวกันนี้ (ERD HR-BR-19, ดู pm-store) */
 export function hrSnapshot() {
-  return store.get();
+  return snapshot();
 }
 
-export const subscribeHr = store.subscribe;
+export const subscribeHr = subscribe;
 
 export function resetHr() {
   store.reset();
+  refreshPeriods();
 }
 
 /** ผู้ใช้ที่ล็อกอินเป็นฝ่ายบุคคล — ยังไม่มี auth จริงจึงตรึงไว้ที่คนเดียว */
@@ -665,20 +757,47 @@ function reopenIn(
   );
 }
 
-/** ปิดรอบเวลาทำงานของกลุ่มหนึ่ง — หน้าจอกันไว้แล้วว่าต้องไม่มีรายการค้างตรวจ */
-export function closePeriod(month: string, today: string, group: PayGroup, by = HR_ME) {
+/** ต่อฐานข้อมูลแล้วการปิดหรือเปิดรอบพลาดได้จริง หน้าจอต้องได้รู้ว่าพลาดเพราะอะไร */
+export type PeriodResult = { ok: true } | { ok: false; message: string };
+
+function say(reason: string) {
+  return PERIOD_REASON[reason] ?? "ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง";
+}
+
+/**
+ * ปิดรอบเวลาทำงานของกลุ่มหนึ่ง — หน้าจอกันไว้แล้วว่าต้องไม่มีรายการค้างตรวจ
+ * ฐานข้อมูลกันซ้ำว่าต้องเป็นฝ่ายบุคคล และรอบที่ปิดแล้วปิดอีกไม่ได้
+ */
+export async function closePeriod(
+  month: string,
+  today: string,
+  group: PayGroup,
+  by = HR_ME,
+): Promise<PeriodResult> {
+  if (live) {
+    const res = await closePeriodRemote(month, group);
+    refreshPeriods();
+    return res.ok ? { ok: true } : { ok: false, message: say(res.reason) };
+  }
   store.update((s) => ({ ...s, periods: closeIn(s.periods, month, today, by, group, null) }));
+  return { ok: true };
 }
 
 /** เปิดรอบเวลาทำงานใหม่ — ต้องมีเหตุผลเสมอ ระบบเก็บเป็นประวัติ */
-export function reopenPeriod(
+export async function reopenPeriod(
   month: string,
   today: string,
   why: string,
   group: PayGroup,
   by = HR_ME,
-) {
+): Promise<PeriodResult> {
+  if (live) {
+    const res = await reopenPeriodRemote(month, group, why);
+    refreshPeriods();
+    return res.ok ? { ok: true } : { ok: false, message: say(res.reason) };
+  }
   store.update((s) => ({ ...s, periods: reopenIn(s.periods, month, today, by, why, group) }));
+  return { ok: true };
 }
 
 /**
