@@ -5,11 +5,14 @@
  * เก็บแยกตามบทบาท เพราะแต่ละบทบาทคือคนละคน — สลับบทบาทแล้วต้องได้โปรไฟล์ของคนนั้น
  * ไม่ใช่ชื่อของคนก่อนหน้าค้างอยู่
  *
- * TODO: ย้ายไปตาราง employee เมื่อต่อ backend
+ * ต่อฐานข้อมูลแล้วช่องที่ฝ่ายบุคคลเป็นเจ้าของ (ชื่อ ตำแหน่ง ฝ่าย หัวหน้า วันเริ่มงาน
+ * ประเภทการจ้าง) อ่านจากฐานข้อมูลของคนที่ล็อกอินอยู่จริง — ดู supabase/me.ts
+ * ส่วนช่องที่พนักงานแก้เองได้ (เบอร์ที่ทำงาน เบอร์ฉุกเฉิน) ยังเก็บในเครื่อง
  */
 
 import { USERS } from "./mock-data";
 import { HR_EMP, HR_EMPTYPE, hrDept, hrPos } from "./hr-data";
+import { loadMe, meNow, subscribeMe, type Me } from "./supabase/me";
 import { staffEmployeeId, subscribeStaffEmployee } from "./staff-identity";
 import { psEmployeeId, subscribePsEmployee } from "./ps-identity";
 import { createPersistedStore } from "./persisted-store";
@@ -82,6 +85,55 @@ function pickedId(role: Role): string | null {
   return null;
 }
 
+/*
+ * ช่องที่มาจากฐานข้อมูลของคนที่ล็อกอินอยู่ — ไม่มีก็คืน null ให้ไปใช้ทางเดิม
+ * บัญชีที่ไม่ใช่พนักงาน (ผู้บริหาร) ไม่มีตำแหน่งและฝ่าย จึงเว้นว่างไว้
+ */
+/* จำผลไว้ตามตัว Me ที่อ่านได้ — useSyncExternalStore ต้องได้วัตถุอ้างอิงเดิม
+   ถ้าสร้างใหม่ทุกครั้งที่อ่าน React จะวนวาดไม่จบ (เจอจริงตอนต่อโปรไฟล์ 2 พ.ย. 2569) */
+let fromMe: Me | null = null;
+let fromMeOut: DbProfile = null;
+
+type DbProfile = {
+  name: string;
+  employeeId: string;
+  position: string;
+  department: string;
+  supervisor: string;
+  startDate: string;
+  employmentType: string;
+  email: string;
+  phone: string;
+  birth: string;
+} | null;
+
+function fromDb(): DbProfile {
+  loadMe();
+  const me = meNow();
+  if (me === fromMe) return fromMeOut;
+  fromMe = me;
+  fromMeOut = me ? build(me) : null;
+  return fromMeOut;
+}
+
+function build(me: Me): DbProfile {
+  const pos = me.pos ? hrPos(me.pos) : null;
+  return {
+    name: me.name,
+    employeeId: me.empNo,
+    position: pos ? hrPos(me.pos).label : "",
+    department: pos ? hrDept(pos.dept).label : "",
+    supervisor: me.bossName
+      ? `${me.bossName}${me.bossPos ? ` (${hrPos(me.bossPos).label})` : ""}`
+      : "",
+    startDate: me.startDate,
+    employmentType: me.type ? HR_EMPTYPE[me.type].label : "",
+    email: me.email,
+    phone: me.phone,
+    birth: me.birth,
+  };
+}
+
 function hrOwned(role: Role) {
   /*
    * บทบาท "พนักงาน" ไม่ได้ผูกกับคนเดียว — มีหลายตำแหน่ง (SA · Dev · Graphic · Content · Website · Media · BD)
@@ -142,8 +194,40 @@ function pick(all: ProfileByRole, role: Role): EmployeeProfile {
   return merged;
 }
 
+/*
+ * ผสมของจริงจากฐานข้อมูลทับโปรไฟล์ในเครื่อง
+ *
+ * แยกออกมาจาก pick() เพราะค่านี้มีแต่ฝั่งเบราว์เซอร์ ฝั่งเซิร์ฟเวอร์ไม่มี
+ * ถ้าใส่ไปใน snapshot ตรง ๆ หน้าที่วาดช้ากว่า (อยู่ใน Suspense) จะ hydrate
+ * ด้วยค่าที่ไม่ตรงกับ HTML ที่เซิร์ฟเวอร์ส่งมา — React เตือนและวาดทั้งกิ่งใหม่
+ * จึงให้ useProfile() เป็นคนผสม หลังรู้แล้วว่าวาดอยู่ฝั่งเบราว์เซอร์
+ */
+let overAll: EmployeeProfile | null = null;
+let overFrom: EmployeeProfile | null = null;
+let overDb: DbProfile = null;
+
+function withDb(local: EmployeeProfile): EmployeeProfile {
+  const db = fromDb();
+  if (!db) return local;
+  if (overAll && overFrom === local && overDb === db) return overAll;
+  overFrom = local;
+  overDb = db;
+  /* เว้นช่องที่ฐานข้อมูลยังไม่มีค่า ให้ของเดิมอยู่ต่อ */
+  overAll = {
+    ...local,
+    ...Object.fromEntries(Object.entries(db).filter(([, v]) => v !== "" && v !== null)),
+  };
+  return overAll;
+}
+
 const getMerged = () => pick(store.get(), currentRole());
 const getMergedServer = () => pick(store.getServer(), "sales");
+
+/* วาดอยู่ฝั่งเบราว์เซอร์แล้วหรือยัง — ตอน hydrate React ใช้ค่าของฝั่งเซิร์ฟเวอร์ (false)
+   แล้วค่อยวาดใหม่ด้วย true ให้เอง จึงไม่มีการเตือนว่า HTML ไม่ตรงกัน */
+const noSub = () => () => {};
+const onClient = () => true;
+const onServer = () => false;
 
 /* โปรไฟล์เปลี่ยนได้สองทาง — แก้ข้อมูลเอง หรือสลับบทบาท จึงต้องฟังทั้งคู่ */
 function subscribeBoth(onChange: () => void) {
@@ -152,17 +236,20 @@ function subscribeBoth(onChange: () => void) {
     subscribeRole(onChange),
     subscribeStaffEmployee(onChange),
     subscribePsEmployee(onChange),
+    subscribeMe(onChange),
   ];
   return () => off.forEach((fn) => fn());
 }
 
 export function useProfile() {
-  return useSyncExternalStore(subscribeBoth, getMerged, getMergedServer);
+  const hydrated = useSyncExternalStore(noSub, onClient, onServer);
+  const local = useSyncExternalStore(subscribeBoth, getMerged, getMergedServer);
+  return hydrated ? withDb(local) : local;
 }
 
 /** อ่านนอก React เช่นตอนบันทึกใบลา */
 export function currentProfile() {
-  return getMerged();
+  return withDb(getMerged());
 }
 
 export function saveProfile(patch: Partial<EmployeeProfile>) {

@@ -41,7 +41,8 @@ const PASSWORD = "maz1234";
  * ส่วนคนในชุดทดสอบ (T01–T19) ตั้งใจไม่ให้มีบัญชี ไว้ทดสอบการยื่นใบแทน
  */
 const WHO = [
-  { user: "กร", roles: ["ceo"], emp: null, mail: "ceo@maz.local" },
+  /* ผู้บริหารไม่มีแถวในทะเบียน จึงต้องบอกชื่อที่แสดงไว้ที่บัญชี */
+  { user: "กร", roles: ["ceo"], emp: null, mail: "ceo@maz.local", name: "ธนกร ใจกว้าง" },
   { user: "กมล", roles: ["staff"], emp: "E05" },
   { user: "กานต์", roles: ["pm"], emp: "E10" },
   { user: "เสริฐ", roles: ["gm"], emp: "E11" },
@@ -90,6 +91,7 @@ for (const who of WHO) {
     user_id: created.user.id,
     employee_id: empId,
     username: who.user,
+    display_name: who.name ?? "",
     roles: who.roles,
     must_change_password: false,
   });
