@@ -58,7 +58,13 @@ import {
   fetchPeriods,
   reopenPeriodRemote,
 } from "./supabase/periods";
-import { fetchEmployees } from "./supabase/employees";
+import {
+  EMP_REASON,
+  addSalaryStep,
+  createEmployee,
+  fetchEmployees,
+  saveEmployee,
+} from "./supabase/employees";
 import { forgetPeople } from "./supabase/people";
 
 export type HrState = {
@@ -306,7 +312,27 @@ export const HR_ME = "E12";
  * เงินเดือนยกมาจากแถวล่าสุด เพราะการเปลี่ยนประเภทไม่ได้แปลว่าเงินเดือนเปลี่ยน
  * ถ้าจะปรับต้องเป็นคำสั่งแยกอีกใบ
  */
-export function changeEmpType(id: string, type: EmpType, today: string, note: string) {
+export async function changeEmpType(
+  id: string,
+  type: EmpType,
+  today: string,
+  note: string,
+): Promise<EmpResult> {
+  if (live) {
+    const now = snapshot().emp.find((e) => e.id === id);
+    if (!now || now.type === type) return { ok: true };
+    const last = now.history[now.history.length - 1];
+    /* ประเภทการจ้างเปลี่ยน แต่เงินเดือนยกมาจากแถวล่าสุด — ต่อประวัติอีกแถวไว้เป็นหลักฐาน */
+    const step = await addSalaryStep(
+      id,
+      { at: today, pos: now.pos, salary: last?.salary ?? 0, note },
+      false,
+    );
+    if (!step.ok) return { ok: false, message: empSay(step.reason) };
+    const res = await saveEmployee(id, { type });
+    refreshEmployees();
+    return res.ok ? { ok: true } : { ok: false, message: empSay(res.reason) };
+  }
   store.update((s) => ({
     ...s,
     emp: s.emp.map((e) => {
@@ -319,6 +345,7 @@ export function changeEmpType(id: string, type: EmpType, today: string, note: st
       };
     }),
   }));
+  return { ok: true };
 }
 
 /**
@@ -327,7 +354,20 @@ export function changeEmpType(id: string, type: EmpType, today: string, note: st
  * ต่างจาก changeEmpType ตรงที่ต้องให้ HR ระบุเงินเดือนเอง ห้ามยกตัวเลขเดิมมาใช้ต่อ
  * เพราะตัวเลขเดิมของคนทดลองงานเป็นฐานของอัตรารายวัน คนละความหมายกับเงินเดือนรายเดือน
  */
-export function passProbation(id: string, at: string, salary: number) {
+export async function passProbation(id: string, at: string, salary: number): Promise<EmpResult> {
+  if (live) {
+    const now = snapshot().emp.find((e) => e.id === id);
+    if (!now || now.type !== "probat") return { ok: true };
+    const step = await addSalaryStep(
+      id,
+      { at, pos: now.pos, salary, note: "ผ่านทดลองงาน เปลี่ยนเป็นจ่ายรายเดือน" },
+      false,
+    );
+    if (!step.ok) return { ok: false, message: empSay(step.reason) };
+    const res = await saveEmployee(id, { type: "full" });
+    refreshEmployees();
+    return res.ok ? { ok: true } : { ok: false, message: empSay(res.reason) };
+  }
   store.update((s) => ({
     ...s,
     emp: s.emp.map((e) =>
@@ -343,6 +383,7 @@ export function passProbation(id: string, at: string, salary: number) {
           },
     ),
   }));
+  return { ok: true };
 }
 
 /** ข้อมูลที่แก้ทับได้ตรง ๆ — ไม่กระทบตัวเลขเงินเดือนย้อนหลัง จึงไม่ต้องเก็บเป็นประวัติ */
@@ -352,9 +393,20 @@ export function passProbation(id: string, at: string, salary: number) {
  * คนเข้าใหม่เริ่มที่ "ทดลองงาน" เสมอ HR เป็นคนเปลี่ยนเป็นพนักงานประจำเมื่อผ่านเกณฑ์ (BR ของ HR-06)
  * เงินเดือนที่กรอกลงเป็นประวัติแถวแรกพร้อมวันที่มีผล ไม่เขียนทับภายหลัง
  */
-export function addEmployee(
+export async function addEmployee(
   input: Omit<Employee, "id" | "status" | "history"> & { salary: number },
-) {
+): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  if (live) {
+    /* รอบที่ปิดแล้วไม่รับคนเพิ่ม — กันที่นี่เหมือนเดิม ฐานข้อมูลยังไม่รู้เรื่องรอบเงินเดือน */
+    const lock = lockedUntil(snapshot());
+    if (lock && input.startedAt <= lock) {
+      return { ok: false, message: `รอบเงินเดือนถึง ${lock} ปิดแล้ว เพิ่มคนย้อนหลังไม่ได้` };
+    }
+    const res = await createEmployee(input);
+    refreshEmployees();
+    return res.ok ? { ok: true, id: res.empNo } : { ok: false, message: empSay(res.reason) };
+  }
+
   const { salary, ...rest } = input;
   /** คืนรหัสของคนที่เพิ่ม — หน้ารายชื่อใช้เลื่อนไปหาคนนั้น (ต้นแบบ scrollIntoView) */
   let added = "";
@@ -383,7 +435,7 @@ export function addEmployee(
     };
     return { ...s, emp: [...s.emp, emp] };
   });
-  return added;
+  return added ? { ok: true, id: added } : { ok: false, message: "เพิ่มพนักงานไม่สำเร็จ" };
 }
 
 /*
@@ -436,24 +488,41 @@ export function deleteAccount(id: string) {
  * ตำแหน่งหลักคงเดิมถ้ายังอยู่ในรายการที่เลือก เพราะเงินเดือนและประวัติผูกกับตำแหน่งหลัก
  * ไม่งั้นย้ายตำแหน่งหลักไปเป็นอันแรกที่เลือก · ที่เหลือเป็นตำแหน่งควบ
  */
-export function setEmpPositions(id: string, positions: PosKey[]) {
-  if (!positions.length) return;
+export async function setEmpPositions(id: string, positions: PosKey[]): Promise<EmpResult> {
+  if (!positions.length) return { ok: true };
+  if (live) {
+    const now = snapshot().emp.find((e) => e.id === id);
+    const main = now && positions.includes(now.pos) ? now.pos : positions[0];
+    const res = await saveEmployee(id, { pos: main, posMore: positions.filter((v) => v !== main) });
+    refreshEmployees();
+    return res.ok ? { ok: true } : { ok: false, message: empSay(res.reason) };
+  }
   editEmp(id, (e) => {
     const main = positions.includes(e.pos) ? e.pos : positions[0];
     return { ...e, pos: main, posMore: positions.filter((v) => v !== main) };
   });
+  return { ok: true };
 }
 
 /*
  * สิทธิ์วันลาเฉพาะคน (ผู้ใช้สั่ง 8 ต.ค. 2569) — ส่งเฉพาะประเภทที่ต่างจากค่ากลาง
  * ค่าว่างหรือเท่ากับค่ากลางให้ลบทิ้ง จะได้ไม่ต้องตามแก้ทุกคนเวลาค่ากลางเปลี่ยน
  */
-export function setEmpLeaveDays(id: string, days: Record<string, number>) {
+export async function setEmpLeaveDays(
+  id: string,
+  days: Record<string, number>,
+): Promise<EmpResult> {
   const clean: Record<string, number> = {};
   for (const [type, n] of Object.entries(days)) {
     if (Number.isFinite(n) && n >= 0) clean[type] = n;
   }
+  if (live) {
+    const res = await saveEmployee(id, { leaveDays: clean });
+    refreshEmployees();
+    return res.ok ? { ok: true } : { ok: false, message: empSay(res.reason) };
+  }
   editEmp(id, (e) => ({ ...e, leaveDays: Object.keys(clean).length ? clean : undefined }));
+  return { ok: true };
 }
 
 /** เปลี่ยนบทบาทที่บัญชีนี้เข้าใช้ได้ (คนควบสองตำแหน่งได้สองบทบาท) */
@@ -484,7 +553,16 @@ export type EmpProfile = Pick<
 };
 
 /** by = ชื่อผู้แก้ (ฝ่ายบุคคล) · ประทับเวลาไว้ที่ตัวพนักงานเป็น "แก้ไขล่าสุด" */
-export function updateEmpProfile(id: string, profile: EmpProfile, by: string) {
+export async function updateEmpProfile(
+  id: string,
+  profile: EmpProfile,
+  by: string,
+): Promise<EmpResult> {
+  if (live) {
+    const res = await saveEmployee(id, profile as Partial<Employee>, by);
+    refreshEmployees();
+    return res.ok ? { ok: true } : { ok: false, message: empSay(res.reason) };
+  }
   store.update((s) => ({
     ...s,
     emp: s.emp.map((e) => {
@@ -502,6 +580,7 @@ export function updateEmpProfile(id: string, profile: EmpProfile, by: string) {
       return { ...next, account: { ...next.account, roles: [...has, ...add].slice(0, HR_MAX_ROLES) } };
     }),
   }));
+  return { ok: true };
 }
 
 /**
@@ -532,7 +611,22 @@ export function timesheetLockedUntil(s: HrState) {
 }
 
 /** ปรับตำแหน่งหรือเงินเดือน — ต่อแถวประวัติใหม่ ไม่แก้แถวเดิม ด้วยเหตุผลเดียวกับ changeEmpType */
-export function changePosition(id: string, at: string, pos: PosKey, salary: number, note: string) {
+export async function changePosition(
+  id: string,
+  at: string,
+  pos: PosKey,
+  salary: number,
+  note: string,
+): Promise<EmpResult> {
+  if (live) {
+    const lock = lockedUntil(snapshot());
+    if (lock && at <= lock) {
+      return { ok: false, message: `รอบเงินเดือนถึง ${lock} ปิดแล้ว ปรับย้อนหลังไม่ได้` };
+    }
+    const res = await addSalaryStep(id, { at, pos, salary, note });
+    refreshEmployees();
+    return res.ok ? { ok: true } : { ok: false, message: empSay(res.reason) };
+  }
   store.update((s) => {
     const lock = lockedUntil(s);
     if (lock && at <= lock) return s;
@@ -552,10 +646,34 @@ export function changePosition(id: string, at: string, pos: PosKey, salary: numb
       ),
     };
   });
+  return { ok: true };
 }
 
 /** พ้นสภาพ / กลับมาปฏิบัติงาน — ว่างทั้งคู่คือกลับมาเป็นพนักงานปัจจุบัน */
-export function setEmpLeft(id: string, leftAt: string, leftWhy: string) {
+export async function setEmpLeft(
+  id: string,
+  leftAt: string,
+  leftWhy: string,
+): Promise<EmpResult> {
+  if (live) {
+    const lock = lockedUntil(snapshot());
+    if (leftAt && lock && leftAt <= lock) {
+      return { ok: false, message: `รอบเงินเดือนถึง ${lock} ปิดแล้ว บันทึกย้อนหลังไม่ได้` };
+    }
+    const res = await saveEmployee(id, {
+      status: leftAt ? "left" : "active",
+      leftAt: leftAt || "",
+      leftWhy: leftAt ? leftWhy : "",
+    });
+    refreshEmployees();
+    if (!res.ok) return { ok: false, message: empSay(res.reason) };
+    /* พ้นสภาพแล้วต้องเข้าระบบไม่ได้ — ระงับบัญชีเมื่อวันพ้นสภาพมาถึงแล้ว */
+    const who = snapshot().emp.find((x) => x.id === id);
+    if (leftAt && leftAt <= todayIso() && who?.account?.status === "active") {
+      setAccountStatus(id, "suspended", bkkStamp());
+    }
+    return { ok: true };
+  }
   store.update((s) => {
     const lock = lockedUntil(s);
     if (leftAt && lock && leftAt <= lock) return s;
@@ -579,6 +697,7 @@ export function setEmpLeft(id: string, leftAt: string, leftWhy: string) {
   if (leftAt && leftAt <= todayIso() && e?.status === "left" && e.account?.status === "active") {
     setAccountStatus(id, "suspended", bkkStamp());
   }
+  return { ok: true };
 }
 
 // ─── เวลาทำงาน ────────────────────────────────────────────────────
@@ -801,6 +920,13 @@ function reopenIn(
 
 /** ต่อฐานข้อมูลแล้วการปิดหรือเปิดรอบพลาดได้จริง หน้าจอต้องได้รู้ว่าพลาดเพราะอะไร */
 export type PeriodResult = { ok: true } | { ok: false; message: string };
+
+/** ผลของการเขียนทะเบียนพนักงาน — เหมือนกันทุกปุ่มในหน้าฝ่ายบุคคล */
+export type EmpResult = { ok: true } | { ok: false; message: string };
+
+function empSay(reason: string) {
+  return EMP_REASON[reason] ?? "บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง";
+}
 
 function say(reason: string) {
   return PERIOD_REASON[reason] ?? "ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง";

@@ -533,9 +533,12 @@ function LeaveQuotaTab({ emp }: { emp: Employee }) {
       const n = Number(v);
       if (Number.isFinite(n) && n >= 0) out[t] = n;
     }
-    setEmpLeaveDays(emp.id, out);
-    logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${emp.name}: ${Object.entries(out).map(([k, v]) => `${k} ${v} วัน`).join(" · ") || "กลับไปใช้ค่ากลาง"}`);
-    setSaved("บันทึกสิทธิ์วันลาของคนนี้แล้ว");
+    /* รอฐานข้อมูลตอบก่อน ไม่ขึ้นว่าบันทึกแล้วทั้งที่อาจไม่ผ่าน */
+    void setEmpLeaveDays(emp.id, out).then((res) => {
+      if (!res.ok) return setSaved(`บันทึกไม่สำเร็จ · ${res.message}`);
+      logChange("การลา", `สิทธิ์วันลาเฉพาะคน ${emp.name}: ${Object.entries(out).map(([k, v]) => `${k} ${v} วัน`).join(" · ") || "กลับไปใช้ค่ากลาง"}`);
+      setSaved("บันทึกสิทธิ์วันลาของคนนี้แล้ว");
+    });
   }
 
   return (

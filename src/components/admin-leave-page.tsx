@@ -463,13 +463,16 @@ function PersonQuota({ central }: { central: LeaveQuota[] }) {
     const next = { ...(target.leaveDays ?? {}) };
     if (days === null) delete next[type];
     else next[type] = days;
-    setEmpLeaveDays(target.id, next);
-    logChange(
-      "การลา",
-      days === null
-        ? `สิทธิ์วันลาเฉพาะคน ${target.name}: ${type} กลับไปใช้ค่ากลาง ${centralOf(type)} วัน`
-        : `สิทธิ์วันลาเฉพาะคน ${target.name}: ${type} ${days} วัน (ค่ากลาง ${centralOf(type)})`,
-    );
+    /* ลงประวัติเมื่อฐานข้อมูลรับแล้วเท่านั้น ไม่ใช่ลงทันทีที่กด */
+    void setEmpLeaveDays(target.id, next).then((res) => {
+      if (!res.ok) return;
+      logChange(
+        "การลา",
+        days === null
+          ? `สิทธิ์วันลาเฉพาะคน ${target.name}: ${type} กลับไปใช้ค่ากลาง ${centralOf(type)} วัน`
+          : `สิทธิ์วันลาเฉพาะคน ${target.name}: ${type} ${days} วัน (ค่ากลาง ${centralOf(type)})`,
+      );
+    });
   }
 
   return (

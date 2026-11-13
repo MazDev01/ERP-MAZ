@@ -1,6 +1,7 @@
 "use client";
 
 import { signedIn, supabase } from "./client";
+import { rolesOfPosition } from "../hr-data";
 import type { DocKey, EmpAccount, Employee, EmpStatus, EmpType, SalaryStep } from "../hr-data";
 import type { Role } from "../role";
 
@@ -161,4 +162,173 @@ export async function fetchEmployees(): Promise<Employee[]> {
   /* หัวหน้าเก็บเป็น uuid ในฐานข้อมูล แต่หน้าจออ้างด้วยรหัสพนักงาน */
   const codeOf = new Map(rows.map((r) => [r.id, r.emp_no ?? r.id]));
   return rows.map((r) => toEmployee(r, codeOf));
+}
+
+/* ─── เขียน ────────────────────────────────────────────────────────── */
+
+export type EmpWrite = { ok: true; empNo: string } | { ok: false; reason: string };
+export type EmpDone = { ok: true } | { ok: false; reason: string };
+
+/** ข้อความอธิบายเหตุที่ฐานข้อมูลไม่รับ */
+export const EMP_REASON: Record<string, string> = {
+  no_backend: "ยังไม่ได้ต่อฐานข้อมูล",
+  not_found: "ไม่พบพนักงานคนนี้ในทะเบียน",
+  not_hr: "แก้ทะเบียนพนักงานได้เฉพาะฝ่ายบุคคล",
+  no_name: "ต้องกรอกชื่อพนักงาน",
+};
+
+/** รหัสพนักงาน → id จริงในฐานข้อมูล */
+async function idOf(empNo: string): Promise<string | null> {
+  const sb = supabase();
+  if (!sb) return null;
+  const { data } = await sb.from("employees").select("id").eq("emp_no", empNo).maybeSingle();
+  return (data as { id?: string } | null)?.id ?? null;
+}
+
+/** แยกชื่อ-นามสกุลจากช่องที่หน้าจอกรอกมา — กรอกแยกช่องมาก่อน ไม่มีค่อยตัดจากชื่อเต็ม */
+function nameParts(e: { name?: string; first?: string; last?: string }) {
+  if (e.first || e.last) return { first: (e.first ?? "").trim(), last: (e.last ?? "").trim() };
+  const [first, ...rest] = (e.name ?? "").trim().split(/\s+/);
+  return { first: first ?? "", last: rest.join(" ") };
+}
+
+/** ช่องของทะเบียนที่แปลงเป็นคอลัมน์ได้ตรง ๆ */
+function toRow(e: Partial<Employee>, bossId: string | null | undefined) {
+  const { first, last } = nameParts(e);
+  const row: Record<string, unknown> = {};
+  if (first || last) {
+    row.first_name = first;
+    row.last_name = last;
+  }
+  if (e.firstEn !== undefined) row.first_en = e.firstEn ?? "";
+  if (e.lastEn !== undefined) row.last_en = e.lastEn ?? "";
+  if (e.nick !== undefined) row.nick = e.nick;
+  if (e.sex !== undefined) row.sex = e.sex;
+  if (e.birth !== undefined) row.birth = e.birth || null;
+  if (e.pos !== undefined) {
+    row.pos_key = e.pos;
+    /* บทบาทในระบบคิดจากตำแหน่งงาน — สายอนุมัติและ RLS อ่านช่องนี้ */
+    row.position = rolesOfPosition(e.pos)[0] ?? "staff";
+  }
+  if (e.posMore !== undefined) row.pos_more = e.posMore ?? [];
+  if (e.type !== undefined) row.emp_type = e.type;
+  if (e.status !== undefined) row.status = e.status;
+  if (e.startedAt !== undefined) row.started_at = e.startedAt;
+  if (e.leftAt !== undefined) row.left_at = e.leftAt || null;
+  if (e.leftWhy !== undefined) row.left_why = e.leftWhy ?? "";
+  if (e.phone !== undefined) row.phone = e.phone;
+  if (e.email !== undefined) row.email = e.email;
+  if (e.edu !== undefined) row.edu = e.edu;
+  if (e.exp !== undefined) row.exp = e.exp ?? [];
+  if (e.address !== undefined) row.address = e.address;
+  if (e.sos !== undefined) row.sos = e.sos ?? {};
+  if (e.docs !== undefined) row.docs = e.docs ?? [];
+  if (e.leaveDays !== undefined) row.leave_days = e.leaveDays ?? {};
+  if (bossId !== undefined) row.boss_id = bossId;
+  return row;
+}
+
+/** รหัสพนักงานถัดไป — ต่อจากเลขที่มากที่สุดในทะเบียน ไม่ใช่จำนวนแถว (คนพ้นสภาพยังอยู่) */
+async function nextEmpNo(): Promise<string> {
+  const sb = supabase();
+  if (!sb) return "E01";
+  const { data } = await sb.from("employees").select("emp_no").limit(2000);
+  const max = ((data ?? []) as { emp_no: string | null }[]).reduce((n, r) => {
+    const num = Number((r.emp_no ?? "").replace(/\D/g, ""));
+    return Number.isFinite(num) ? Math.max(n, num) : n;
+  }, 0);
+  return `E${String(max + 1).padStart(2, "0")}`;
+}
+
+/**
+ * เพิ่มพนักงานใหม่ — ใส่แถวทะเบียนแล้วต่อด้วยประวัติเงินเดือนแถวแรก
+ *
+ * ถ้าใส่ทะเบียนผ่านแต่ประวัติเงินเดือนพลาด จะได้คนที่ไม่มีฐานเงินเดือน
+ * ซึ่งคำนวณเงินเดือนไม่ได้ จึงถอนแถวทะเบียนออกให้ ไม่ทิ้งคนครึ่ง ๆ ไว้
+ */
+export async function createEmployee(
+  input: Omit<Employee, "id" | "status" | "history"> & { salary: number },
+): Promise<EmpWrite> {
+  const sb = supabase();
+  if (!sb) return { ok: false, reason: "no_backend" };
+  const { first, last } = nameParts(input);
+  if (!first && !last) return { ok: false, reason: "no_name" };
+
+  const boss = input.boss ? await idOf(input.boss) : null;
+  const empNo = await nextEmpNo();
+  const { data, error } = await sb
+    .from("employees")
+    .insert({ ...toRow(input, boss), emp_no: empNo, status: "active" })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, reason: error?.message ?? "insert_failed" };
+
+  const id = (data as { id: string }).id;
+  const { error: eStep } = await sb.from("salary_steps").insert({
+    employee_id: id,
+    effective: input.startedAt,
+    position: input.pos,
+    salary: input.salary,
+    /* ต้นแบบบันทึก "เริ่มงาน" อย่างเดียวทุกประเภท */
+    note: "เริ่มงาน",
+  });
+  if (eStep) {
+    await sb.from("employees").delete().eq("id", id);
+    return { ok: false, reason: eStep.message };
+  }
+  return { ok: true, empNo };
+}
+
+/** แก้ข้อมูลพนักงาน — ส่งเฉพาะช่องที่เปลี่ยน */
+export async function saveEmployee(
+  empNo: string,
+  patch: Partial<Employee>,
+  editedBy?: string,
+): Promise<EmpDone> {
+  const sb = supabase();
+  if (!sb) return { ok: false, reason: "no_backend" };
+  const id = await idOf(empNo);
+  if (!id) return { ok: false, reason: "not_found" };
+
+  const boss = patch.boss === undefined ? undefined : patch.boss ? await idOf(patch.boss) : null;
+  const row = toRow(patch, boss);
+  if (editedBy !== undefined) row.updated_at = new Date().toISOString();
+  if (!Object.keys(row).length) return { ok: true };
+
+  const { error } = await sb.from("employees").update(row).eq("id", id);
+  return error ? { ok: false, reason: error.message } : { ok: true };
+}
+
+/**
+ * ต่อประวัติตำแหน่ง/เงินเดือนอีกแถว — ไม่แก้แถวเดิม
+ * ตัวเลขของรอบที่ผ่านไปแล้วต้องไม่เปลี่ยนตามการปรับเงินเดือนวันนี้
+ */
+export async function addSalaryStep(
+  empNo: string,
+  step: { at: string; pos: string; salary: number; note: string },
+  /* ตำแหน่งปัจจุบันเปลี่ยนตามไปด้วยไหม — ปรับตำแหน่งใช่ · ผ่านทดลองงานไม่ใช่ */
+  movePos = true,
+): Promise<EmpDone> {
+  const sb = supabase();
+  if (!sb) return { ok: false, reason: "no_backend" };
+  const id = await idOf(empNo);
+  if (!id) return { ok: false, reason: "not_found" };
+
+  const { error } = await sb.from("salary_steps").insert({
+    employee_id: id,
+    effective: step.at,
+    position: step.pos,
+    salary: step.salary,
+    note: step.note,
+  });
+  if (error) return { ok: false, reason: error.message };
+
+  if (movePos) {
+    const { error: eUp } = await sb
+      .from("employees")
+      .update({ pos_key: step.pos, position: rolesOfPosition(step.pos)[0] ?? "staff" })
+      .eq("id", id);
+    if (eUp) return { ok: false, reason: eUp.message };
+  }
+  return { ok: true };
 }

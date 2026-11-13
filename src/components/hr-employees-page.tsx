@@ -687,10 +687,18 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
   if (leftChanged && left && (!leftAt || !leftWhy.trim())) errors.push("พ้นสภาพต้องระบุวันที่และเหตุผล");
   if (leftChanged && left && leftAt && leftAt < minAt) errors.push("วันพ้นสภาพต้องหลังรอบเงินเดือนที่ปิดแล้ว");
 
+  /* เหตุที่ฐานข้อมูลไม่รับ — ค้างกล่องไว้พร้อมเหตุผล ไม่ปิดทิ้งให้เข้าใจผิดว่าบันทึกแล้ว */
+  const [failed, setFailed] = useState("");
+
   function save() {
     setTried(true);
     if (errors.length) return;
-    updateEmpProfile(emp.id, {
+    setFailed("");
+    void saveAll();
+  }
+
+  async function saveAll() {
+    const res = await updateEmpProfile(emp.id, {
       name: `${f.first.trim()} ${f.last.trim()}`.trim(),
       first: f.first.trim(),
       last: f.last.trim(),
@@ -710,8 +718,16 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
       /* ตำแหน่งหลักที่เพิ่งเลือกไว้ต้องไม่ซ้ำอยู่ในรายการควบ */
       posMore: posMore.filter((v) => v !== pos),
     }, USERS[role].name);
-    if (posChanged) changePosition(emp.id, posAt, pos, Number(rawSalary), posNote.trim());
-    if (leftChanged) setEmpLeft(emp.id, left ? leftAt : "", left ? leftWhy.trim() : "");
+    if (!res.ok) return setFailed(res.message);
+
+    if (posChanged) {
+      const moved = await changePosition(emp.id, posAt, pos, Number(rawSalary), posNote.trim());
+      if (!moved.ok) return setFailed(moved.message);
+    }
+    if (leftChanged) {
+      const out = await setEmpLeft(emp.id, left ? leftAt : "", left ? leftWhy.trim() : "");
+      if (!out.ok) return setFailed(out.message);
+    }
     onClose();
   }
 
@@ -973,6 +989,14 @@ function EditDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
           ))}
         </ul>
       )}
+      {failed && (
+        <p
+          role="alert"
+          className="mt-4 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] text-destructive"
+        >
+          บันทึกไม่สำเร็จ · {failed}
+        </p>
+      )}
     </Sheet>
   );
 }
@@ -1052,13 +1076,18 @@ function PassDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
   const raw = salary.replace(/,/g, "").trim();
   const ok = /^\d+(\.\d+)?$/.test(raw) && Number(raw) > 0;
 
+  const [failed, setFailed] = useState("");
+
   function confirm() {
     if (!at || !ok) {
       setWarn(true);
       return;
     }
-    passProbation(emp.id, at, Number(raw));
-    onClose();
+    setFailed("");
+    void passProbation(emp.id, at, Number(raw)).then((res) => {
+      if (!res.ok) return setFailed(res.message);
+      onClose();
+    });
   }
 
   return (
@@ -1116,6 +1145,14 @@ function PassDialog({ emp, today, onClose }: { emp: Employee; today: string; onC
       {warn && (
         <p className="mt-2.5 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] text-destructive">
           ระบุวันที่มีผล และเงินเดือนเป็นตัวเลขมากกว่าศูนย์
+        </p>
+      )}
+      {failed && (
+        <p
+          role="alert"
+          className="mt-2.5 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] text-destructive"
+        >
+          บันทึกไม่สำเร็จ · {failed}
         </p>
       )}
       <p className="mt-3 rounded-[11px] border border-border bg-muted/50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
@@ -1277,7 +1314,11 @@ function AddDialog({
     if (user.trim().length < 4) return setWarn("ชื่อผู้ใช้ต้องยาวอย่างน้อย 4 ตัวอักษร");
     if (taken.includes(user.trim())) return setWarn("ชื่อผู้ใช้นี้มีคนใช้แล้ว");
 
-    const id = addEmployee({
+    void add(first, last, name);
+  }
+
+  async function add(first: string, last: string, name: string) {
+    const added = await addEmployee({
       name,
       first,
       last,
@@ -1300,11 +1341,16 @@ function AddDialog({
       /* ฝึกงานไม่มีค่าจ้าง — บันทึกเป็น 0 ไม่ใช่ปล่อยค่าที่ค้างในช่อง */
       salary: f.type === "intern" ? 0 : salary,
     });
+    if (!added.ok) {
+      setWarn(added.message);
+      return;
+    }
+    const id = added.id;
     /* บัญชีสร้างพร้อมพนักงานเสมอ — เมนูที่ใช้ได้ตั้งตามตำแหน่งให้เลย แก้ทีหลังที่หน้าจัดการบัญชีผู้ใช้
        TODO: ต่อ backend แล้วต้องสร้างพนักงานกับบัญชีในธุรกรรมเดียว ไม่ให้มีพนักงานที่ไม่มีบัญชีค้างอยู่ */
-    if (id) createAccount(id, user.trim(), today, rolesOfEmployee({ pos: f.pos as PosKey }));
+    createAccount(id, user.trim(), today, rolesOfEmployee({ pos: f.pos as PosKey }));
     onClose();
-    if (id) onAdded?.(id, { user: user.trim(), pass, name });
+    onAdded?.(id, { user: user.trim(), pass, name });
   }
 
   return (
