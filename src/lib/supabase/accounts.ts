@@ -40,18 +40,23 @@ async function callerIsHr() {
   return data === true;
 }
 
-/** พนักงานคนนี้เป็นใคร และมีบัญชีอยู่แล้วหรือยัง */
+const IS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * พนักงานคนนี้เป็นใคร และมีบัญชีอยู่แล้วหรือยัง
+ * หน้าจออ้างคนด้วยรหัสพนักงาน (E05) ส่วนฐานข้อมูลใช้ uuid — รับได้ทั้งสองแบบ
+ */
 async function employeeOf(admin: NonNullable<ReturnType<typeof adminAuth>>, employeeId: string) {
   const { data: emp } = await admin
     .from("employees")
     .select("id, emp_no, first_name, nick")
-    .eq("id", employeeId)
+    .eq(IS_UUID.test(employeeId) ? "id" : "emp_no", employeeId)
     .maybeSingle();
   if (!emp) return null;
   const { data: acc } = await admin
     .from("user_accounts")
     .select("user_id")
-    .eq("employee_id", employeeId)
+    .eq("employee_id", emp.id)
     .maybeSingle();
   return { emp, acc };
 }
@@ -88,7 +93,7 @@ export async function createAccount(input: {
 
   const { error: linkErr } = await admin.from("user_accounts").insert({
     user_id: created.user.id,
-    employee_id: input.employeeId,
+    employee_id: found.emp.id,
     username,
     roles: input.roles,
     must_change_password: true,
@@ -152,5 +157,86 @@ export async function setOwnPassword(newPassword: string): Promise<AccountResult
 
   /* ปลดธง "ต้องตั้งรหัสใหม่" — คอลัมน์นี้เจ้าตัวแก้เองไม่ได้ จึงต้องผ่านฝั่งเซิร์ฟเวอร์ */
   await admin.from("user_accounts").update({ must_change_password: false }).eq("user_id", me.user.id);
+  return { ok: true };
+}
+
+/**
+ * ลบบัญชีเข้าระบบของพนักงานคนนี้ — ลบแค่บัญชี ไม่ใช่ลบคน
+ * พนักงานยังอยู่ในทะเบียน เวลาทำงานและเงินเดือนไม่หาย (BR-02)
+ * ลบผู้ใช้ในระบบ auth แล้วแถวใน user_accounts หายตามเอง (on delete cascade)
+ */
+export async function removeAccount(input: { employeeId: string }): Promise<AccountResult> {
+  const admin = adminAuth();
+  if (!admin) return { ok: false, reason: "no_backend" };
+  if (!(await callerIsHr())) return { ok: false, reason: "not_hr" };
+
+  const found = await employeeOf(admin, input.employeeId);
+  if (!found?.acc) return { ok: false, reason: "no_account" };
+
+  const { error } = await admin.auth.admin.deleteUser(found.acc.user_id);
+  if (error) return { ok: false, reason: error.message };
+
+  await admin.from("audit_log").insert({
+    action: "delete_account",
+    target: found.emp.id,
+    detail: {},
+  });
+  return { ok: true };
+}
+
+/** เปลี่ยนบทบาทที่บัญชีนี้เข้าใช้ได้ — คนควบสองตำแหน่งได้สองบทบาท */
+export async function setAccountRoles(input: {
+  employeeId: string;
+  roles: string[];
+}): Promise<AccountResult> {
+  const admin = adminAuth();
+  if (!admin) return { ok: false, reason: "no_backend" };
+  if (!(await callerIsHr())) return { ok: false, reason: "not_hr" };
+  if (input.roles.length < 1 || input.roles.length > 2) return { ok: false, reason: "bad_roles" };
+
+  const found = await employeeOf(admin, input.employeeId);
+  if (!found?.acc) return { ok: false, reason: "no_account" };
+
+  const { error } = await admin
+    .from("user_accounts")
+    .update({ roles: input.roles })
+    .eq("user_id", found.acc.user_id);
+  if (error) return { ok: false, reason: error.message };
+
+  await admin.from("audit_log").insert({
+    action: "set_account_roles",
+    target: found.emp.id,
+    detail: { roles: input.roles },
+  });
+  return { ok: true };
+}
+
+/** ระงับหรือคืนสิทธิ์บัญชี — ระงับแล้วหน้าเข้าสู่ระบบจะไม่ให้ผ่าน */
+export async function setAccountStatus(input: {
+  employeeId: string;
+  status: "active" | "suspended";
+}): Promise<AccountResult> {
+  const admin = adminAuth();
+  if (!admin) return { ok: false, reason: "no_backend" };
+  if (!(await callerIsHr())) return { ok: false, reason: "not_hr" };
+
+  const found = await employeeOf(admin, input.employeeId);
+  if (!found?.acc) return { ok: false, reason: "no_account" };
+
+  const { error } = await admin
+    .from("user_accounts")
+    .update({
+      status: input.status,
+      /* คืนสิทธิ์แล้วต้องล้างจำนวนครั้งที่กรอกรหัสผิด ไม่งั้นโดนระงับซ้ำทันที */
+      ...(input.status === "active" ? { failed_attempts: 0 } : {}),
+    })
+    .eq("user_id", found.acc.user_id);
+  if (error) return { ok: false, reason: error.message };
+
+  await admin.from("audit_log").insert({
+    action: "set_account_status",
+    target: found.emp.id,
+    detail: { status: input.status },
+  });
   return { ok: true };
 }

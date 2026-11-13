@@ -531,7 +531,7 @@ export function DualRolePane() {
     }
     /* ทุกปุ่มกดสลับได้อิสระ กดครั้งแรกติด กดซ้ำหลุด เหมือนปุ่มอื่นในหน้านี้ */
     setWhy("");
-    setAccountRoles(id, next);
+    void setAccountRoles(id, next);
     logChange("บทบาทและสิทธิ์", `${name} · บทบาทของบัญชี ${next.map(roleLabel).join(" + ")}`);
   }
 

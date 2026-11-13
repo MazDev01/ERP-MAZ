@@ -73,7 +73,11 @@ function tempPass() {
   const num = "23456789";
   const sym = "#@!";
   const pick = (s: string) => s.charAt(Math.floor(Math.random() * s.length));
-  return pick(up) + pick(low) + pick(low) + pick(low) + pick(num) + pick(num) + pick(sym);
+  /* ยาว 10 ตัว — ฝั่งเซิร์ฟเวอร์ไม่รับรหัสสั้นกว่า 8 ตัว (createAccount ใน supabase/accounts.ts) */
+  return (
+    pick(up) + pick(low) + pick(low) + pick(low) + pick(low) +
+    pick(num) + pick(num) + pick(num) + pick(sym) + pick(low)
+  );
 }
 
 export function HrEmployeesPage() {
@@ -1347,8 +1351,12 @@ function AddDialog({
     }
     const id = added.id;
     /* บัญชีสร้างพร้อมพนักงานเสมอ — เมนูที่ใช้ได้ตั้งตามตำแหน่งให้เลย แก้ทีหลังที่หน้าจัดการบัญชีผู้ใช้
-       TODO: ต่อ backend แล้วต้องสร้างพนักงานกับบัญชีในธุรกรรมเดียว ไม่ให้มีพนักงานที่ไม่มีบัญชีค้างอยู่ */
-    createAccount(id, user.trim(), today, rolesOfEmployee({ pos: f.pos as PosKey }));
+       พนักงานลงทะเบียนไปแล้ว ถ้าบัญชีพลาดจึงไม่ถอนคนออก แต่บอกให้ไปสร้างบัญชีที่หน้าจัดการบัญชี */
+    const acc = await createAccount(id, user.trim(), today, rolesOfEmployee({ pos: f.pos as PosKey }), pass);
+    if (!acc.ok) {
+      setWarn(`เพิ่มพนักงานแล้ว แต่สร้างบัญชีเข้าระบบไม่สำเร็จ · ${acc.message} — สร้างบัญชีให้ภายหลังที่หน้าจัดการบัญชีผู้ใช้`);
+      return;
+    }
     onClose();
     onAdded?.(id, { user: user.trim(), pass, name });
   }

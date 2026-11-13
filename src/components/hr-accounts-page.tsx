@@ -17,6 +17,7 @@ import { thaiDate } from "@/lib/format";
 import {
   HR_ACC_STATUS,
   HR_EMPTYPE,
+  HR_MAX_ROLES,
   accountRoles,
   hrPos,
   posOf,
@@ -48,7 +49,11 @@ function tempPass() {
   const num = "23456789";
   const sym = "#@!";
   const pick = (s: string) => s.charAt(Math.floor(Math.random() * s.length));
-  return pick(up) + pick(low) + pick(low) + pick(low) + pick(num) + pick(num) + pick(sym);
+  /* ยาว 10 ตัว — ฝั่งเซิร์ฟเวอร์ไม่รับรหัสสั้นกว่า 8 ตัว (createAccount ใน supabase/accounts.ts) */
+  return (
+    pick(up) + pick(low) + pick(low) + pick(low) + pick(low) +
+    pick(num) + pick(num) + pick(num) + pick(sym) + pick(low)
+  );
 }
 
 export function HrAccountsPage() {
@@ -62,6 +67,10 @@ export function HrAccountsPage() {
   /* ระงับบัญชีแล้วคนนั้นเข้าระบบไม่ได้ทันที — ต้องถามก่อน กดพลาดแล้วเพื่อนร่วมงานทำงานไม่ได้
      (พบตอนทดสอบแบบสวมบทบาท 7 ต.ค. 2569) · คืนสิทธิ์ไม่ต้องถาม เพราะเป็นการเปิดให้ใช้งาน */
   const [suspending, setSuspending] = useState<Employee | null>(null);
+  /* เหตุที่ทำไม่สำเร็จ — ปุ่มคืนสิทธิ์/ระงับไม่มีกล่องของตัวเอง จึงบอกไว้ที่หัวหน้าจอ */
+  const [failed, setFailed] = useState("");
+  const act = (job: Promise<{ ok: boolean; message?: string }>) =>
+    void job.then((r) => setFailed(r.ok ? "" : r.message ?? "ทำรายการไม่สำเร็จ"));
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -104,6 +113,15 @@ export function HrAccountsPage() {
         </div>
       </div>
 
+      {failed && (
+        <p
+          role="alert"
+          className="rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-4 py-3 text-[13px] text-destructive"
+        >
+          ทำรายการไม่สำเร็จ · {failed}
+        </p>
+      )}
+
       <section className="panel glass flex flex-col">
         <div className="scroll-stable min-h-0 flex-1 overflow-auto max-sm:hidden">
           <table className="data-table cards-sm min-w-[1000px]">
@@ -133,7 +151,7 @@ export function HrAccountsPage() {
                     onRoles={() => setRoling(e.id)}
                     onToggle={() => {
                       if (e.account?.status === "active") return setSuspending(e);
-                      setAccountStatus(e.id, "active");
+                      act(setAccountStatus(e.id, "active"));
                     }}
                   />
                 ))
@@ -190,7 +208,7 @@ export function HrAccountsPage() {
                         className="btn glass-thin"
                         onClick={() => {
                           if (a.status === "active") return setSuspending(e);
-                          setAccountStatus(e.id, "active");
+                          act(setAccountStatus(e.id, "active"));
                         }}
                       >
                         {a.status === "active" ? "ระงับบัญชี" : "คืนสิทธิ์"}
@@ -227,7 +245,7 @@ export function HrAccountsPage() {
         detail="งานที่ทำค้างไว้ยังอยู่ครบ · คืนสิทธิ์ให้ใหม่ได้ทุกเมื่อจากหน้านี้"
         confirmLabel="ระงับบัญชี"
         onConfirm={() => {
-          if (suspending) setAccountStatus(suspending.id, "suspended");
+          if (suspending) act(setAccountStatus(suspending.id, "suspended"));
           setSuspending(null);
         }}
         onCancel={() => setSuspending(null)}
@@ -346,9 +364,11 @@ function AccountDialog({
     const name = user.trim();
     if (name.length < 4) return setWarn("ชื่อผู้ใช้ต้องยาวอย่างน้อย 4 ตัวอักษร");
     if (taken.includes(name)) return setWarn("ชื่อผู้ใช้นี้มีคนใช้แล้ว");
-    /* TODO: ต่อ backend แล้วต้องรีเซ็ตรหัสที่ระบบยืนยันตัวตนจริง แล้วบังคับตั้งรหัสใหม่ครั้งแรก */
-    resetAccount(emp.id, name, roles);
-    onClose();
+    /* รหัสชั่วคราวต้องถูกตั้งที่ระบบยืนยันตัวตนจริง ไม่ใช่แค่โชว์บนหน้าจอ */
+    void resetAccount(emp.id, name, roles, pass).then((res) => {
+      if (!res.ok) return setWarn(res.message);
+      onClose();
+    });
   }
 
   return (
@@ -436,6 +456,11 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
 
   function toggle(r: Role) {
     if (own.includes(r)) return;
+    /* ควบได้ไม่เกิน HR_MAX_ROLES บทบาท — กันตั้งแต่ตอนติ๊ก ไม่ใช่ปล่อยให้ไปโดนปฏิเสธตอนบันทึก */
+    if (!picked.includes(r) && picked.length >= HR_MAX_ROLES) {
+      setWarn(`เลือกได้ไม่เกิน ${HR_MAX_ROLES} บทบาท — เอาบทบาทเดิมออกก่อน`);
+      return;
+    }
     setWarn("");
     setPicked((list) => (list.includes(r) ? list.filter((x) => x !== r) : [...list, r]));
   }
@@ -454,8 +479,10 @@ function RolesDialog({ emp, onClose }: { emp: Employee; onClose: () => void }) {
             className="btn solid btn-solid"
             onClick={() => {
               if (!picked.length) return setWarn("เลือกอย่างน้อยหนึ่งบทบาท");
-              setAccountRoles(emp.id, picked);
-              onClose();
+              void setAccountRoles(emp.id, picked).then((res) => {
+                if (!res.ok) return setWarn(res.message);
+                onClose();
+              });
             }}
           >
             บันทึก

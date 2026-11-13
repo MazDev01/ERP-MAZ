@@ -449,7 +449,63 @@ function editEmp(id: string, fn: (e: Employee) => Employee) {
 }
 
 
-export function createAccount(id: string, user: string, today: string, roles: Role[]) {
+/*
+ * บัญชีเข้าระบบอยู่ในระบบ auth ของ Supabase ซึ่งเขียนจากเบราว์เซอร์ตรง ๆ ไม่ได้
+ * ต้องผ่านเส้นทางฝั่งเซิร์ฟเวอร์ (/api/accounts) ที่ถือกุญแจ service role
+ * และตรวจเองว่าคนเรียกเป็นฝ่ายบุคคลจริง
+ */
+const ACC_REASON: Record<string, string> = {
+  no_backend: "ยังไม่ได้ต่อฐานข้อมูล",
+  not_hr: "จัดการบัญชีได้เฉพาะฝ่ายบุคคล",
+  no_employee: "ไม่พบพนักงานคนนี้ในทะเบียน",
+  no_account: "พนักงานคนนี้ยังไม่มีบัญชีเข้าระบบ",
+  has_account: "พนักงานคนนี้มีบัญชีอยู่แล้ว",
+  bad_username: "ชื่อผู้ใช้ไม่ถูกรูปแบบ",
+  bad_roles: "ต้องมีบทบาท 1–2 บทบาท",
+  weak_password: "รหัสชั่วคราวต้องยาวอย่างน้อย 8 ตัวอักษร",
+  bad_json: "ส่งข้อมูลไม่ถูกต้อง",
+};
+
+async function callAccounts(
+  method: "POST" | "PATCH" | "DELETE",
+  body: Record<string, unknown>,
+): Promise<EmpResult> {
+  try {
+    const res = await fetch("/api/accounts", {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const out = (await res.json()) as { ok?: boolean; reason?: string };
+    if (out.ok) return { ok: true };
+    const reason = out.reason ?? "unknown";
+    return { ok: false, message: ACC_REASON[reason] ?? reason };
+  } catch {
+    return { ok: false, message: "ติดต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง" };
+  }
+}
+
+export async function createAccount(
+  id: string,
+  user: string,
+  today: string,
+  roles: Role[],
+  tempPassword = "",
+): Promise<EmpResult> {
+  if (live) {
+    const res = await callAccounts("POST", {
+      employeeId: id,
+      username: user,
+      roles,
+      tempPassword,
+    });
+    refreshEmployees();
+    return res;
+  }
+  return createAccountLocal(id, user, today, roles);
+}
+
+function createAccountLocal(id: string, user: string, today: string, roles: Role[]): EmpResult {
   editEmp(id, (e) =>
     e.account
       ? e
@@ -457,14 +513,39 @@ export function createAccount(id: string, user: string, today: string, roles: Ro
   );
   /* คนที่เพิ่งได้บัญชี ต้องตั้งรหัสเองตอนเข้าระบบครั้งแรก */
   requirePasswordReset(id, true);
+  return { ok: true };
 }
 
 /** ตั้งรหัสใหม่ให้พนักงาน — เปลี่ยนชื่อผู้ใช้ไปพร้อมกันได้ และบังคับตั้งรหัสเองตอนเข้าระบบ */
-export function resetAccount(id: string, user: string, roles: Role[]) {
+export async function resetAccount(
+  id: string,
+  user: string,
+  roles: Role[],
+  tempPassword = "",
+): Promise<EmpResult> {
+  if (live) {
+    /* รหัสผ่านอยู่ในระบบ auth — เปลี่ยนได้ทางเดียวคือผ่านฝั่งเซิร์ฟเวอร์ */
+    const pass = await fetch("/api/accounts/reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ employeeId: id, tempPassword }),
+    })
+      .then((r) => r.json() as Promise<{ ok?: boolean; reason?: string }>)
+      .catch(() => ({ ok: false, reason: "network" }));
+    if (!pass.ok) {
+      const reason = pass.reason ?? "unknown";
+      return { ok: false, message: ACC_REASON[reason] ?? reason };
+    }
+    /* บทบาทเก็บคนละที่กับรหัสผ่าน ถ้าเปลี่ยนด้วยก็ส่งอีกคำขอ */
+    const res = roles.length ? await callAccounts("PATCH", { employeeId: id, roles }) : { ok: true as const };
+    refreshEmployees();
+    return res;
+  }
   editEmp(id, (e) =>
     e.account ? { ...e, account: { ...e.account, user, roles, mustChange: true } } : e,
   );
   requirePasswordReset(id, true);
+  return { ok: true };
 }
 
 /**
@@ -473,7 +554,13 @@ export function resetAccount(id: string, user: string, roles: Role[]) {
  * ใช้ตอนสร้างบัญชีผิดคนหรือคนนั้นไม่ต้องใช้ระบบแล้ว · สร้างใหม่ได้เสมอ
  * คืนสิทธิ์ให้บทบาทที่เคยถูกระงับด้วย ไม่งั้นบัญชีใหม่ของบทบาทนั้นจะเข้าไม่ได้
  */
-export function deleteAccount(id: string) {
+export async function deleteAccount(id: string): Promise<EmpResult> {
+  if (live) {
+    const res = await callAccounts("DELETE", { employeeId: id });
+    if (res.ok) restoreAccount(id);
+    refreshEmployees();
+    return res;
+  }
   restoreAccount(id);
   editEmp(id, (e) => {
     if (!e.account) return e;
@@ -481,6 +568,7 @@ export function deleteAccount(id: string) {
     delete next.account;
     return next;
   });
+  return { ok: true };
 }
 
 /**
@@ -526,16 +614,32 @@ export async function setEmpLeaveDays(
 }
 
 /** เปลี่ยนบทบาทที่บัญชีนี้เข้าใช้ได้ (คนควบสองตำแหน่งได้สองบทบาท) */
-export function setAccountRoles(id: string, roles: Role[]) {
+export async function setAccountRoles(id: string, roles: Role[]): Promise<EmpResult> {
+  if (live) {
+    const res = await callAccounts("PATCH", { employeeId: id, roles });
+    refreshEmployees();
+    return res;
+  }
   editEmp(id, (e) => (e.account ? { ...e, account: { ...e.account, roles } } : e));
+  return { ok: true };
 }
 
-export function setAccountStatus(id: string, status: "active" | "suspended", at = "") {
-  const emp = store.get().emp.find((e) => e.id === id);
+export async function setAccountStatus(
+  id: string,
+  status: "active" | "suspended",
+  at = "",
+): Promise<EmpResult> {
+  const emp = snapshot().emp.find((e) => e.id === id);
+  if (live) {
+    const res = await callAccounts("PATCH", { employeeId: id, status });
+    refreshEmployees();
+    return res;
+  }
   editEmp(id, (e) => (e.account ? { ...e, account: { ...e.account, status } } : e));
   /* ระงับบัญชีต้องมีผลที่หน้าเข้าสู่ระบบด้วย — เก็บตามคน คนอื่นในบทบาทเดียวกันไม่โดนด้วย */
   if (status === "suspended") suspendAccount(id, `ฝ่ายบุคคลระงับบัญชีของ ${emp?.name ?? id}`, at);
   else restoreAccount(id);
+  return { ok: true };
 }
 
 export type EmpProfile = Pick<
