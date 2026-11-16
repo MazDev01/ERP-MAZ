@@ -6,13 +6,17 @@
  *
  * บันทึกจากหน้าจอของผู้ดูแล (หลังเรียกฟังก์ชันบันทึก) ไม่ได้ดักในสโตร์
  * เพราะข้อความต้องบอกเป็นภาษาคนว่าเปลี่ยนอะไรจากอะไรเป็นอะไร ซึ่งหน้าจอรู้ดีที่สุด
- * เก็บย้อนหลังไม่เกิน LOG_LIMIT รายการ — ยังไม่มี backend ถ้าเก็บไม่จำกัด localStorage จะเต็ม
+ * ต่อฐานข้อมูลแล้วลงที่ตาราง setting_log ซึ่งเขียนได้อย่างเดียว ห้ามแก้ห้ามลบ
+ * ประวัติที่อยู่เฉพาะเครื่องคนที่แก้ไม่ใช่ประวัติ — คนอื่นตรวจย้อนไม่ได้เลย
+ * ที่เก็บในเครื่องยังอยู่สำหรับโหมดไม่ต่อฐานข้อมูล และจำกัด LOG_LIMIT รายการเหมือนเดิม
  */
 
 import { useSyncExternalStore } from "react";
 import { bkkStamp } from "./format";
 import { RETIRED_ADMIN_NAME, USERS } from "./mock-data";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+import { fetchChangeLog, writeChangeLog } from "./supabase/audit";
 import { currentProfile } from "./profile-data";
 
 export type LogArea =
@@ -58,8 +62,63 @@ const store = createPersistedStore<LogEntry[]>(
   renameRetiredAdmin,
 );
 
+/* ─── ประวัติจากฐานข้อมูล ──────────────────────────────────────── */
+const live = hasBackend;
+let rows: LogEntry[] | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+const EMPTY: LogEntry[] = [];
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function load() {
+  if (!live || loading || rows !== null) return;
+  loading = true;
+  void fetchChangeLog(LOG_LIMIT)
+    .then((list) => {
+      rows = list.map((r) => ({
+        id: r.id,
+        at: r.at,
+        by: r.by,
+        area: r.area as LogArea,
+        detail: r.detail,
+      }));
+    })
+    .catch(() => {
+      rows = EMPTY;
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+/** สั่งอ่านประวัติใหม่ — เรียกหลังลงรายการใหม่ */
+export function refreshAdminLog() {
+  if (!live) return;
+  rows = null;
+  load();
+}
+
+function snapshot(): LogEntry[] {
+  if (!live) return store.get();
+  load();
+  return rows ?? EMPTY;
+}
+
+function subscribe(onChange: () => void) {
+  watchers.add(onChange);
+  const off = store.subscribe(onChange);
+  return () => {
+    watchers.delete(onChange);
+    off();
+  };
+}
+
 export function useAdminLog() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return useSyncExternalStore(subscribe, snapshot, store.getServer);
 }
 
 export function logChange(area: LogArea, detail: string) {
@@ -73,6 +132,13 @@ export function logChange(area: LogArea, detail: string) {
     area,
     detail,
   };
+  if (live) {
+    /* ลงฐานข้อมูลแล้วค่อยอ่านกลับ — ประวัติต้องเป็นชุดเดียวกับที่คนอื่นเห็น */
+    void writeChangeLog(area, detail, entry.by).then((ok) => {
+      if (ok) refreshAdminLog();
+    });
+    return;
+  }
   store.update((list) => [entry, ...list].slice(0, LOG_LIMIT));
 }
 
