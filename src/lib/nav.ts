@@ -84,7 +84,8 @@ const SETTINGS_SUB: SubItem[] = [
     on: (p: string, q: URLSearchParams) => p === "/admin/settings" && settingsKeyOf(q) === x.key,
   })),
   /* หน้าระบบที่แยกเป็นหน้าของตัวเอง — อยู่ท้ายเมนูย่อย */
-  { label: "เลขที่เอกสาร", href: "/admin/doc-numbers", caption: "ระบบ" },
+  { label: "ประกาศถึงพนักงาน", href: "/admin/announce", caption: "ระบบ" },
+  { label: "เลขที่เอกสาร", href: "/admin/doc-numbers" },
   { label: "ประวัติการตั้งค่า", href: "/admin/log" },
   { label: "ข้อมูลตัวอย่าง", href: "/admin/data" },
 ];

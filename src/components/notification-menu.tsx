@@ -24,6 +24,7 @@ import { useProfile } from "@/lib/profile-data";
 import { approvesFor, useApprovalRoute, useRole } from "@/lib/role";
 import { useMyRoles } from "@/lib/hr-link";
 import { useEmpRequests } from "@/lib/emp-requests";
+import { useAnnounces } from "@/lib/announce-store";
 import { useAllLeave } from "@/lib/leave-store";
 import { useAllOt } from "@/lib/ot-store";
 import { useAllClaims } from "@/lib/expense-store";
@@ -59,6 +60,7 @@ export function useNotices(): Notice[] {
   const allOt = useAllOt();
   const allClaims = useAllClaims();
   const extra = useEmpRequests();
+  const announces = useAnnounces();
 
   /* คำขอที่ยังไม่ได้ตัดสิน — นับเฉพาะประเภทและบทบาทที่เราเป็นผู้อนุมัติ
      รวมคำขอของพนักงานที่ยังไม่มีบัญชีเข้าระบบ (emp-requests) ที่ส่งถึง PM / GM ด้วย
@@ -91,12 +93,14 @@ export function useNotices(): Notice[] {
         empReqs: extra,
         /* นัดหมายของทั้งระบบ — ในนี้กรองเฉพาะใบที่มีชื่อเราเป็นผู้เข้าร่วม */
         events: sched.events,
+        /* ประกาศจากฝ่ายบุคคล — ฐานข้อมูลคัดแล้วว่าใบไหนถึงบทบาทของเรา */
+        announces,
       })
         // เรื่องที่ปิดไว้ในหน้าตั้งค่าแจ้งเตือน ไม่ต้องขึ้นกระดิ่ง
         .filter((n) => !n.event || popupOn(notify, n.event))
         // เมนูที่ผู้ดูแลระบบปิดไว้ ไม่ต้องเตือนเรื่องของหน้านั้น กดไปก็เข้าไม่ได้
         .filter((n) => canVisitAny(n.href.split("?")[0], myRoles, access, route)),
-    [crm, pm, acc, hr, leaves, ot, punches, claims, notify, role, myRoles, approvals, me.employeeId, access, route, adminLog, extra, sched.events],
+    [crm, pm, acc, hr, leaves, ot, punches, claims, notify, role, myRoles, approvals, me.employeeId, access, route, adminLog, extra, sched.events, announces],
   );
 
   return notices;

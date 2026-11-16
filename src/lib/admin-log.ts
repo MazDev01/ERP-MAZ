@@ -17,6 +17,7 @@ import { RETIRED_ADMIN_NAME, USERS } from "./mock-data";
 import { createPersistedStore } from "./persisted-store";
 import { hasBackend } from "./supabase/env";
 import { fetchChangeLog, writeChangeLog } from "./supabase/audit";
+import { hasAnyRole, subscribeMe } from "./supabase/me";
 import { currentProfile } from "./profile-data";
 
 export type LogArea =
@@ -75,6 +76,13 @@ function tell() {
 
 function load() {
   if (!live || loading || rows !== null) return;
+  /*
+   * ประวัติการตั้งค่าเป็นของฝ่ายบุคคลและผู้บริหาร (RLS คัดอยู่แล้ว)
+   * คนอื่นเปิดแอปแล้วยิงคำขอนี้ไปก็ได้รายการเปล่ากลับมาเสมอ — เสียรอบเน็ตฟรี ๆ บนมือถือ
+   * ยังไม่รู้ว่าเป็นใคร (null) ก็ยังไม่ยิง รอจนรู้แล้วค่อยโหลด (loadMe แจ้งให้วาดใหม่เอง)
+   */
+  const allowed = hasAnyRole("hr", "ceo");
+  if (allowed !== true) return;
   loading = true;
   void fetchChangeLog(LOG_LIMIT)
     .then((list) => {
@@ -111,9 +119,12 @@ function snapshot(): LogEntry[] {
 function subscribe(onChange: () => void) {
   watchers.add(onChange);
   const off = store.subscribe(onChange);
+  /* รู้ว่าเป็นใครเมื่อไรค่อยวาดใหม่ — ถ้าเป็นฝ่ายบุคคลจะได้โหลดประวัติตอนนั้น */
+  const offMe = subscribeMe(onChange);
   return () => {
     watchers.delete(onChange);
     off();
+    offMe();
   };
 }
 

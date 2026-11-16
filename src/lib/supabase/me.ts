@@ -74,6 +74,16 @@ export function meNow(): Me | null {
   return cache;
 }
 
+/**
+ * บัญชีนี้ถือบทบาทใดบทบาทหนึ่งในนี้ไหม — null คือยังไม่รู้ (ยังโหลดไม่เสร็จ)
+ * ใช้กันไม่ให้หน้าจอของคนทั่วไปไปดึงข้อมูลของฝ่ายบุคคลมาเปล่า ๆ ตั้งแต่เปิดแอป
+ */
+export function hasAnyRole(...want: Role[]): boolean | null {
+  const m = cache;
+  if (!m) return null;
+  return m.roles.some((r) => want.includes(r));
+}
+
 export function forgetMe() {
   cache = null;
   loading = false;

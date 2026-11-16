@@ -28,6 +28,7 @@ import {
   type PayGroup,
 } from "./hr-data";
 import type { HrState } from "./hr-store";
+import type { Announce } from "./supabase/announce";
 import type { LeaveRecord } from "./leave-data";
 import type { EmpRequest } from "./emp-requests";
 import type { NotifyEventKey } from "./notify-settings";
@@ -133,10 +134,25 @@ export function buildNotices(input: {
   empReqs?: EmpRequest[];
   /** นัดหมายทั้งหมด — ผู้ถูกเชิญต้องรู้ว่ามีนัด และรู้เมื่อนัดถูกยกเลิก (สร้างนัดได้เฉพาะ PM/GM) */
   events?: PmEvent[];
+  /** ประกาศจากฝ่ายบุคคล — เรื่องที่ระบบคิดเองไม่ได้ ต้องมีคนบอก (ฐานข้อมูลคัดผู้รับให้แล้ว) */
+  announces?: Announce[];
 }): Notice[] {
   const { crm, pm, acc, leaves, ot, punches, claims, now, role } = input;
   const today = toIsoDate(now);
   const out: Notice[] = [];
+
+  /* ประกาศขึ้นก่อนเรื่องที่ระบบคำนวณเอง — คนประกาศตั้งใจให้ทุกคนเห็น */
+  for (const a of input.announces ?? []) {
+    out.push({
+      id: `announce-${a.id}`,
+      level: a.level,
+      group: "ประกาศจากฝ่ายบุคคล",
+      title: a.title,
+      detail: a.detail,
+      href: "/notifications",
+      date: toIsoDate(new Date(a.from)),
+    });
+  }
   const nameOf = new Map(crm.customers.map((c) => [c.code, c.name]));
 
   // ═══ คำขอที่รอเราอนุมัติ — ขึ้นก่อนเรื่องอื่นเพราะมีคนรอเราอยู่ ═══
