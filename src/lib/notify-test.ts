@@ -213,35 +213,17 @@ export async function setBadge(n: number) {
   return true;
 }
 
-/* ── ลงทะเบียนกับตัวส่งทดสอบบนคอม (tools/push-sender.mjs) ──
- * ตัวส่งเป็นคนถือกุญแจและรายชื่อเครื่อง ระบบนี้ไม่มี backend ของตัวเอง
- * เปิดระบบตรง ๆ โดยไม่ผ่านตัวส่ง /__push/* จะไม่มี — การ์ดบอกว่าต้องเปิดผ่านลิงก์ทดสอบ */
+/* ── ลงทะเบียนเครื่องนี้กับเซิร์ฟเวอร์ของระบบ ──
+ * เซิร์ฟเวอร์ถือกุญแจลับ VAPID และรายชื่อเครื่องในตาราง push_devices
+ * ของเดิมชี้ไปที่ตัวส่งทดสอบบนคอม (/__push/*) ซึ่งต้องรันเอง จึงส่งถึงมือถือไม่ได้ตอนใช้งานจริง */
 
 export type SenderInfo = { publicKey: string } | null;
 
-/*
- * ถามตัวส่งไปแล้วและไม่มี — จำไว้ทั้งแท็บ ไม่ต้องถามซ้ำ
- * เปิดระบบด้วย next start ธรรมดา /__push/key จะ 404 เสมอ ทุกครั้งที่เปิดแท็บ
- * "การแจ้งเตือน" ในหน้าโปรไฟล์จึงมีบรรทัดแดงใน console หนึ่งบรรทัด (ไล่กดทุกปุ่ม 12 ต.ค. 2569)
- * ตัวระบบรับมือกับ 404 ได้อยู่แล้ว แต่เสียงรบกวนทำให้หา error จริงยาก
- */
-const NO_SENDER = "maz-erp.no-push-sender";
-
-/** ตัวส่งรันอยู่ไหม — ได้กุญแจกลับมาแปลว่าเปิดผ่านตัวส่ง */
+/** ระบบตั้งกุญแจแจ้งเตือนไว้ไหม — ไม่มีก็ลงทะเบียนไม่ได้ */
 export async function senderInfo(): Promise<SenderInfo> {
   try {
-    if (sessionStorage.getItem(NO_SENDER)) return null;
-  } catch {
-    /* โหมดส่วนตัวอ่าน sessionStorage ไม่ได้ — ถามตัวส่งตามปกติ */
-  }
-  try {
-    const res = await fetch("/__push/key", { cache: "no-store" });
-    if (!res.ok) {
-      try {
-        sessionStorage.setItem(NO_SENDER, "1");
-      } catch {}
-      return null;
-    }
+    const res = await fetch("/api/push/key", { cache: "no-store" });
+    if (!res.ok) return null;
     const d = (await res.json()) as { publicKey?: string };
     return d.publicKey ? { publicKey: d.publicKey } : null;
   } catch {
@@ -255,7 +237,7 @@ function keyBytes(s: string) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
-/** กุญแจของ subscription เดิมตรงกับของตัวส่งไหม — ตัวส่งสร้างกุญแจใหม่ (ลบ .data) ต้องลงทะเบียนใหม่ */
+/** กุญแจของ subscription เดิมตรงกับของเซิร์ฟเวอร์ไหม — เปลี่ยนกุญแจแล้วต้องลงทะเบียนใหม่ */
 function sameKey(sub: PushSubscription, publicKey: string) {
   const k = sub.options.applicationServerKey;
   if (!k) return false;
@@ -269,8 +251,23 @@ export async function currentSubscription() {
   return reg && "pushManager" in reg ? reg.pushManager.getSubscription() : null;
 }
 
+const SAVE_REASON: Record<string, string> = {
+  no_account: "บัญชีนี้ยังไม่ผูกกับพนักงาน — แจ้งฝ่ายบุคคล",
+  no_backend: "ยังไม่ได้ต่อฐานข้อมูล",
+  bad_subscription: "ข้อมูลเครื่องไม่ครบ ลองใหม่อีกครั้ง",
+  no_device: "เครื่องนี้ยังไม่ได้เปิดรับแจ้งเตือน",
+  no_push: "ระบบยังไม่ได้ตั้งกุญแจแจ้งเตือน",
+};
+
+async function answer(res: Response): Promise<PwaResult> {
+  const d = (await res.json().catch(() => ({}))) as { ok?: boolean; reason?: string; sent?: number };
+  if (d.ok) return { ok: true, reason: "" };
+  const why = d.reason ?? "";
+  return { ok: false, reason: SAVE_REASON[why] ?? why ?? "เซิร์ฟเวอร์ไม่รับคำขอ" };
+}
+
 /**
- * ลงทะเบียนเครื่องนี้กับตัวส่ง — เรียกหลังได้สิทธิ์แจ้งเตือนแล้ว (enableNotify)
+ * ลงทะเบียนเครื่องนี้ — เรียกหลังได้สิทธิ์แจ้งเตือนแล้ว (enableNotify)
  * userVisibleOnly บังคับทั้ง iOS และ Chrome: ทุก push ต้องแสดงให้ผู้ใช้เห็น
  */
 export async function registerDevice(publicKey: string, label: string): Promise<PwaResult> {
@@ -287,20 +284,20 @@ export async function registerDevice(publicKey: string, label: string): Promise<
       await sub.unsubscribe();
       sub = null;
     }
-    /* บางเครื่องต่อระบบ push ไม่ได้ (เน็ตบล็อก เบราว์เซอร์ไม่มี FCM) คำสั่งนี้จะค้างเงียบ — ตัดที่ 25 วินาที ให้ผู้ทดสอบรู้ */
+    /* บางเครื่องต่อระบบ push ไม่ได้ (เน็ตบล็อก เบราว์เซอร์ไม่มี FCM) คำสั่งนี้จะค้างเงียบ — ตัดที่ 25 วินาที ให้ผู้ใช้รู้ */
     sub ??= await Promise.race([
       reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }),
       new Promise<never>((_, no) =>
         setTimeout(() => no(new Error("ระบบ push ของเครื่องไม่ตอบใน 25 วินาที — ตรวจเน็ตแล้วลองใหม่")), 25000),
       ),
     ]);
-    const res = await fetch("/__push/devices", {
+    const res = await fetch("/api/push/devices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub.toJSON(), label, platform: deviceLabel() }),
     });
-    if (!res.ok) return { ok: false, reason: "ตัวส่งไม่รับการลงทะเบียน — ลองใหม่อีกครั้ง" };
-    return { ok: true, reason: `ลงทะเบียนแล้ว ผ่าน ${pushServiceOf(sub.endpoint)} — ส่งจากคอมได้เลย` };
+    if (!res.ok) return answer(res);
+    return { ok: true, reason: `เปิดรับแจ้งเตือนแล้ว ผ่าน ${pushServiceOf(sub.endpoint)}` };
   } catch (e) {
     return { ok: false, reason: `ลงทะเบียนไม่สำเร็จ: ${String(e)}` };
   }
@@ -309,10 +306,34 @@ export async function registerDevice(publicKey: string, label: string): Promise<
 export async function unregisterDevice() {
   const sub = await currentSubscription();
   if (!sub) return;
-  await fetch("/__push/devices", {
+  await fetch("/api/push/devices", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ endpoint: sub.endpoint }),
   }).catch(() => {});
   await sub.unsubscribe();
+}
+
+/** ให้เซิร์ฟเวอร์ส่งแจ้งเตือนจริงเข้าเครื่องของตัวเอง — ไม่ใช่การจำลองในเครื่อง */
+export async function sendSelfTest(): Promise<PwaResult> {
+  try {
+    const res = await fetch("/api/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        payload: {
+          title: "ทดสอบแจ้งเตือน ERP MAZ",
+          body: "ถ้าเห็นข้อความนี้ แจ้งเตือนเข้าเครื่องใช้งานได้แล้ว",
+          url: "/notify-test",
+          tag: "maz-self-test",
+          level: "info",
+          vibrate: [80, 40, 80],
+        },
+      }),
+    });
+    if (!res.ok) return answer(res);
+    return { ok: true, reason: "ส่งจากเซิร์ฟเวอร์แล้ว — ปิดจอหรือออกจากแอปก็ยังขึ้น" };
+  } catch {
+    return { ok: false, reason: "ส่งไม่ได้ — ตรวจการเชื่อมต่อแล้วลองใหม่" };
+  }
 }

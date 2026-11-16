@@ -8,6 +8,7 @@ import {
   currentSubscription,
   deviceLabel,
   registerDevice,
+  sendSelfTest,
   senderInfo,
   unregisterDevice,
   type SenderInfo,
@@ -15,14 +16,14 @@ import {
 
 type View =
   | { kind: "loading" }
-  /** เปิดระบบตรง ๆ ไม่ได้ผ่านตัวส่งทดสอบบนคอม */
+  /** ระบบยังไม่ได้ตั้งกุญแจแจ้งเตือน (VAPID) จึงส่งเข้าเครื่องไม่ได้ */
   | { kind: "no-sender" }
   | { kind: "ios-install" }
   | { kind: "ready"; sender: NonNullable<SenderInfo>; endpoint: string | null };
 
 /*
- * การ์ด "การแจ้งเตือนบนเครื่องนี้" — ให้มือถือลงทะเบียนรับแจ้งเตือนจากตัวส่งทดสอบบนคอม (tools/push-sender.mjs)
- * ยังไม่มี backend ของระบบ การ์ดนี้ใช้ได้เฉพาะตอนเปิดผ่านลิงก์ทดสอบที่ชี้ไปที่ตัวส่ง
+ * การ์ด "การแจ้งเตือนบนเครื่องนี้" — ขอสิทธิ์แล้วลงทะเบียนเครื่องไว้กับเซิร์ฟเวอร์ของระบบ
+ * เครื่องที่ลงทะเบียนแล้วรับแจ้งเตือนได้ทั้งที่ปิดจอและปิดแอป (ตาราง push_devices)
  */
 export function DevicePushCard() {
   const [view, setView] = useState<View>({ kind: "loading" });
@@ -60,10 +61,17 @@ export function DevicePushCard() {
     setBusy(false);
   }
 
+  /* ส่งจากเซิร์ฟเวอร์จริง ไม่ใช่จำลองในเครื่อง — ปิดจอแล้วยังต้องขึ้น */
+  async function selfTest() {
+    setBusy(true);
+    setMsg(await sendSelfTest());
+    setBusy(false);
+  }
+
   async function unregister() {
     setBusy(true);
     await unregisterDevice();
-    setMsg({ ok: true, reason: "ยกเลิกการลงทะเบียนแล้ว เครื่องนี้จะไม่ได้รับแจ้งเตือนทดสอบอีก" });
+    setMsg({ ok: true, reason: "ปิดรับแจ้งเตือนแล้ว เครื่องนี้จะไม่ได้รับแจ้งเตือนอีก" });
     await load();
     setBusy(false);
   }
@@ -76,7 +84,7 @@ export function DevicePushCard() {
 
       {view.kind === "no-sender" && (
         <p className="mt-1 leading-relaxed text-muted-foreground">
-          ใช้ได้เมื่อเปิดผ่านลิงก์ทดสอบที่ต่อกับตัวส่งบนคอมเท่านั้น (ยังไม่มีเซิร์ฟเวอร์ของระบบ)
+          ระบบยังไม่ได้ตั้งกุญแจแจ้งเตือน (VAPID) — แจ้งผู้ดูแลระบบ
         </p>
       )}
 
@@ -93,21 +101,31 @@ export function DevicePushCard() {
         (view.endpoint && notifyState() === "granted" ? (
           <>
             <p className="mt-1 leading-relaxed text-[var(--success)]">
-              ลงทะเบียนแล้ว · รับผ่าน {pushServiceOf(view.endpoint)} — ส่งแจ้งเตือนทดสอบจากคอมได้เลย
+              เปิดรับแจ้งเตือนแล้ว · รับผ่าน {pushServiceOf(view.endpoint)}
             </p>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={unregister}
-              className="btn glass-thin mt-3 h-10 rounded-[20px] px-4 text-[13px] disabled:opacity-45"
-            >
-              ยกเลิกการลงทะเบียน
-            </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={selfTest}
+                className="btn-solid h-10 rounded-[20px] px-4 text-[13px] font-semibold disabled:opacity-45"
+              >
+                {busy ? "กำลังส่ง…" : "ส่งแจ้งเตือนทดสอบ"}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={unregister}
+                className="btn glass-thin h-10 rounded-[20px] px-4 text-[13px] disabled:opacity-45"
+              >
+                ปิดรับแจ้งเตือน
+              </button>
+            </div>
           </>
         ) : (
           <>
             <label className="mt-2 block text-xs text-muted-foreground">
-              ชื่อเครื่อง (ให้ผู้ส่งเลือกถูกเครื่อง)
+              ชื่อเครื่อง (ไว้ดูว่าเป็นเครื่องไหน)
               <input
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
@@ -121,7 +139,7 @@ export function DevicePushCard() {
               onClick={() => register(view.sender.publicKey)}
               className="btn-solid mt-3 h-11 w-full rounded-[22px] text-sm font-semibold disabled:opacity-45"
             >
-              {busy ? "กำลังลงทะเบียน…" : "อนุญาตและลงทะเบียนเครื่องนี้"}
+              {busy ? "กำลังลงทะเบียน…" : "อนุญาตและเปิดรับแจ้งเตือนบนเครื่องนี้"}
             </button>
           </>
         ))}
