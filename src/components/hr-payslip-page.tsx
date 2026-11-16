@@ -897,6 +897,8 @@ function PublishDialog({
   onClose: () => void;
 }) {
   const [why, setWhy] = useState("");
+  /* เหตุที่ฐานข้อมูลไม่รับ — ไม่ปิดกล่องทิ้งให้เข้าใจผิดว่าทำสำเร็จ */
+  const [failed, setFailed] = useState("");
   /** ยกเลิกการเผยแพร่โดยไม่ระบุเหตุผล — ขึ้นคำเตือนตาม mockup */
   const [warn, setWarn] = useState(false);
   const whyBox = useRef<HTMLDivElement>(null);
@@ -921,9 +923,13 @@ function PublishDialog({
                 whyBox.current?.querySelector("input")?.focus();
                 return;
               }
-              if (undo) unpublishSlips(month, today, why.trim(), group);
-              else publishSlips(month, today, group);
-              onClose();
+              const job = undo
+                ? unpublishSlips(month, today, why.trim(), group)
+                : publishSlips(month, today, group);
+              void job.then((res) => {
+                if (!res.ok) return setFailed(res.message);
+                onClose();
+              });
             }}
           >
             ยืนยัน
@@ -931,6 +937,14 @@ function PublishDialog({
         </>
       }
     >
+      {failed && (
+        <p
+          role="alert"
+          className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] text-destructive"
+        >
+          ทำรายการไม่สำเร็จ · {failed}
+        </p>
+      )}
       {/* ป้าย-ค่าเรียงกัน อ่านทีเดียวจบว่ากำลังทำอะไรกับรอบไหนของกลุ่มไหน */}
       <dl className="grid gap-x-4 gap-y-2 text-[13.5px] sm:grid-cols-[150px_minmax(0,1fr)]">
         <Pair k="รอบการจ่าย" v={thaiMonth(month)} />

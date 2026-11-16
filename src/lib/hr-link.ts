@@ -61,8 +61,8 @@ import { leavePeriodOf, leaveYearOf, type LeaveRecord } from "./leave-data";
 /* บทบาทที่ล็อกอินได้ → รหัสในทะเบียนพนักงาน (ย้ายไปอยู่ hr-data เพื่อให้สโตร์ใช้ได้โดยไม่วนกัน) */
 export { ROLE_EMPLOYEE };
 
-/* รหัสพนักงานบนหน้าจอ (E05) → id จริงในฐานข้อมูล — ฟังก์ชันคำนวณอ้างด้วย id จริง */
-function empUuid(empNo: string): string | null {
+/** รหัสพนักงานบนหน้าจอ (E05) → id จริงในฐานข้อมูล — ฟังก์ชันในฐานข้อมูลอ้างด้วย id จริง */
+export function empUuid(empNo: string): string | null {
   return peopleNow().find((p) => p.empNo === empNo)?.id ?? null;
 }
 

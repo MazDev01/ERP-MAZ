@@ -66,6 +66,18 @@ import {
   saveEmployee,
 } from "./supabase/employees";
 import { forgetPeople } from "./supabase/people";
+import {
+  PAYRUN_REASON,
+  closePayrunRemote,
+  decidePayrollRemote,
+  fetchPayApprovals,
+  fetchPayruns,
+  fetchSlips,
+  publishSlipsRemote,
+  reopenPayrunRemote,
+  sendPayroll,
+  unpublishSlipsRemote,
+} from "./supabase/payrun";
 
 export type HrState = {
   emp: Employee[];
@@ -176,6 +188,10 @@ let remote: Period[] | null = null;
 let loadingPeriods = false;
 let people: Employee[] | null = null;
 let loadingPeople = false;
+let runs: Period[] | null = null;
+let approvals: Record<string, PayApproval> | null = null;
+let slips: Slip[] | null = null;
+let loadingPay = false;
 const watchers = new Set<() => void>();
 
 function tell() {
@@ -222,6 +238,39 @@ function loadPeople() {
     });
 }
 
+/*
+ * รอบจ่าย การอนุมัติของ CEO และสลิป — อ่านพร้อมกันเพราะอยู่หน้าเดียวกัน
+ * และต้องเห็นตรงกันเสมอ (ยอดที่ CEO อนุมัติ = ยอดที่ปิดรอบ = ยอดบนสลิป)
+ */
+function loadPay() {
+  if (!live || loadingPay || runs !== null) return;
+  loadingPay = true;
+  void Promise.all([fetchPayruns(), fetchPayApprovals(), fetchSlips()])
+    .then(([a, b, c]) => {
+      runs = a;
+      approvals = b;
+      slips = c;
+    })
+    .catch(() => {
+      runs = BLANK_PERIODS;
+      approvals = {};
+      slips = [];
+    })
+    .finally(() => {
+      loadingPay = false;
+      tell();
+    });
+}
+
+/** สั่งอ่านรอบจ่ายใหม่ — เรียกหลังส่งให้ CEO ปิดรอบ หรือออกสลิป */
+export function refreshPayruns() {
+  if (!live) return;
+  runs = null;
+  approvals = null;
+  slips = null;
+  loadPay();
+}
+
 /** สั่งอ่านรอบเวลาทำงานใหม่ — เรียกหลังปิดหรือเปิดรอบ */
 function refreshPeriods() {
   if (!live) return;
@@ -244,18 +293,29 @@ let fromState: HrState | null = null;
 let fromPeriods: Period[] | null = null;
 let fromPeople: Employee[] | null = null;
 
+let fromRuns: Period[] | null = null;
+
 function snapshot(): HrState {
   const s = store.get();
   if (!live) return s;
   loadPeriods();
   loadPeople();
+  loadPay();
   const periods = remote ?? BLANK_PERIODS;
   const emp = people ?? BLANK_EMP;
-  if (shown === null || fromState !== s || fromPeriods !== periods || fromPeople !== emp) {
+  const payruns = runs ?? BLANK_PERIODS;
+  if (
+    shown === null ||
+    fromState !== s ||
+    fromPeriods !== periods ||
+    fromPeople !== emp ||
+    fromRuns !== payruns
+  ) {
     fromState = s;
     fromPeriods = periods;
     fromPeople = emp;
-    shown = { ...s, periods, emp };
+    fromRuns = payruns;
+    shown = { ...s, periods, emp, payruns, payApprove: approvals ?? {}, slips: slips ?? [] };
   }
   return shown;
 }
@@ -276,7 +336,14 @@ function subscribe(onChange: () => void) {
  * แล้ว ?m= ของเดือนปัจจุบันจะถูกปัดทิ้ง เพราะตอนนั้นยังไม่มีเดือนนี้ในรายการ
  */
 const SERVER_STATE: HrState = live
-  ? { ...store.getServer(), periods: BLANK_PERIODS, emp: BLANK_EMP }
+  ? {
+      ...store.getServer(),
+      periods: BLANK_PERIODS,
+      emp: BLANK_EMP,
+      payruns: BLANK_PERIODS,
+      payApprove: {},
+      slips: [],
+    }
   : store.getServer();
 
 const getServerState = () => SERVER_STATE;
@@ -889,13 +956,18 @@ export function decideInternLeave(id: string, ok: boolean, now: string, by = HR_
 // ─── CEO อนุมัติยอดเงินเดือน ─────────────────────────────────────
 
 /** ฝ่ายบุคคลส่งยอดของกลุ่มหนึ่งให้ CEO อนุมัติ — ส่งซ้ำได้หลังถูกตีกลับ */
-export function sendPayrollToCeo(
+export async function sendPayrollToCeo(
   month: string,
   group: PayGroup,
   snap: { people: number; net: number; ss: number },
   now: string,
   by = HR_ME,
-) {
+): Promise<EmpResult> {
+  if (live) {
+    const res = await sendPayroll(month, group, snap);
+    refreshPayruns();
+    return res.ok ? { ok: true } : { ok: false, message: paySay(res.reason) };
+  }
   store.update((s) => ({
     ...s,
     payApprove: {
@@ -903,6 +975,7 @@ export function sendPayrollToCeo(
       [payApproveKey(month, group)]: { status: "waiting", ...snap, sentBy: by, sentAt: now },
     },
   }));
+  return { ok: true };
 }
 
 /**
@@ -911,7 +984,7 @@ export function sendPayrollToCeo(
  * snap = ยอดที่ CEO เห็นบนจอตอนกด (อ่านจากผลคำนวณของรอบ ไม่ใช่ยอดที่เก็บไว้เอง)
  * บันทึกทับไว้ด้วย เพราะสิ่งที่อนุมัติคือเลขที่เห็น ถ้าเลขขยับทีหลังต้องรู้ได้ว่าขยับจากอะไร
  */
-export function decidePayroll(
+export async function decidePayroll(
   month: string,
   group: PayGroup,
   ok: boolean,
@@ -919,7 +992,12 @@ export function decidePayroll(
   now: string,
   by = "CEO",
   snap?: { people: number; net: number; ss: number },
-) {
+): Promise<EmpResult> {
+  if (live) {
+    const res = await decidePayrollRemote(month, group, ok, reason);
+    refreshPayruns();
+    return res.ok ? { ok: true } : { ok: false, message: paySay(res.reason) };
+  }
   store.update((s) => {
     const key = payApproveKey(month, group);
     const cur = s.payApprove[key];
@@ -939,6 +1017,7 @@ export function decidePayroll(
       },
     };
   });
+  return { ok: true };
 }
 
 /**
@@ -1025,6 +1104,11 @@ function reopenIn(
 /** ต่อฐานข้อมูลแล้วการปิดหรือเปิดรอบพลาดได้จริง หน้าจอต้องได้รู้ว่าพลาดเพราะอะไร */
 export type PeriodResult = { ok: true } | { ok: false; message: string };
 
+/** เหตุที่ฐานข้อมูลไม่รับงานของสายเงินเดือน */
+function paySay(reason: string) {
+  return PAYRUN_REASON[reason] ?? "ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง";
+}
+
 /** ผลของการเขียนทะเบียนพนักงาน — เหมือนกันทุกปุ่มในหน้าฝ่ายบุคคล */
 export type EmpResult = { ok: true } | { ok: false; message: string };
 
@@ -1076,13 +1160,22 @@ export async function reopenPeriod(
  * ปิดรอบเงินเดือนของกลุ่มหนึ่ง พร้อมเก็บยอดที่ปิดไว้ในตัวรอบ
  * เก็บเป็นตัวเลข ณ วันที่ปิด ไม่คำนวณใหม่ตอนเปิดดู เพราะเงินเดือนของคนเปลี่ยนได้ภายหลัง
  */
-export function closePayrun(
+export async function closePayrun(
   month: string,
   today: string,
   group: PayGroup,
   sum: CycleSum,
   by = HR_ME,
-) {
+  /* บรรทัดรายคนพร้อมรหัสจริงในฐานข้อมูล — ฐานข้อมูลเอาไปตรวจกับข้อมูลดิบก่อนยอมให้ปิด */
+  lines?: { employee_id: string; line: unknown; net: number }[],
+): Promise<EmpResult> {
+  if (live) {
+    const res = await closePayrunRemote(month, group, sum, lines ?? []);
+    refreshPayruns();
+    if (res.ok) return { ok: true };
+    const extra = res.reason === "mismatch" ? " — ตรวจตัวเลขเวลาทำงานอีกครั้ง" : "";
+    return { ok: false, message: paySay(res.reason) + extra };
+  }
   store.update((s) => {
     /*
      * ห้ามข้ามขั้น — ปิดรอบเงินเดือนได้ก็ต่อเมื่อปิดรอบเวลาทำงานของกลุ่มนั้นแล้ว
@@ -1094,6 +1187,7 @@ export function closePayrun(
     if (!closedIn(period, group)) return s;
     return { ...s, payruns: closeIn(s.payruns, month, today, by, group, sum) };
   });
+  return { ok: true };
 }
 
 export function reopenPayrun(
@@ -1118,15 +1212,20 @@ export function reopenPayrun(
  *
  * ยอดที่ปิดไว้ (sum) ไม่ลบทิ้ง — ประวัติรอบต้องยังอ่านได้ว่าตอนปิดครั้งก่อนปิดไปเท่าไร
  */
-export function reopenPayrunWithReason(
+export async function reopenPayrunWithReason(
   month: string,
   today: string,
   why: string,
   group: PayGroup,
   by = HR_ME,
-) {
+): Promise<EmpResult> {
   const reason = why.trim();
-  if (!reason) return false;
+  if (!reason) return { ok: false, message: "ต้องกรอกเหตุผล" };
+  if (live) {
+    const res = await reopenPayrunRemote(month, group, reason);
+    refreshPayruns();
+    return res.ok ? { ok: true } : { ok: false, message: paySay(res.reason) };
+  }
   const day = group === "day";
   store.update((s) => {
     const run = s.payruns.find((p) => p.month === month);
@@ -1167,7 +1266,7 @@ export function reopenPayrunWithReason(
       ),
     };
   });
-  return true;
+  return { ok: true };
 }
 
 // ─── ค่าที่ไม่มีสูตร ──────────────────────────────────────────────
@@ -1216,23 +1315,39 @@ export function makeSlips(month: string, today: string, group: PayGroup) {
   );
 }
 
-export function publishSlips(month: string, today: string, group: PayGroup, by = HR_ME) {
+export async function publishSlips(
+  month: string,
+  today: string,
+  group: PayGroup,
+  by = HR_ME,
+): Promise<EmpResult> {
+  if (live) {
+    const res = await publishSlipsRemote(month, group);
+    refreshPayruns();
+    return res.ok ? { ok: true } : { ok: false, message: paySay(res.reason) };
+  }
   /* พนักงานต้องรู้ทันทีที่เปิดให้ดู ไม่ต้องรอ HR เดินไปบอกทีละคน */
   editSlip(month, (sp) =>
     group === "day"
       ? { ...sp, dayPublished: true, dayPublishedAt: today, dayBy: by }
       : { ...sp, published: true, publishedAt: today, by },
   );
+  return { ok: true };
 }
 
 /** ยกเลิกการเผยแพร่ — ต้องมีเหตุผล และเก็บเป็นประวัติไว้ทุกครั้ง */
-export function unpublishSlips(
+export async function unpublishSlips(
   month: string,
   today: string,
   why: string,
   group: PayGroup,
   by = HR_ME,
-) {
+): Promise<EmpResult> {
+  if (live) {
+    const res = await unpublishSlipsRemote(month, group, why.trim());
+    refreshPayruns();
+    return res.ok ? { ok: true } : { ok: false, message: paySay(res.reason) };
+  }
   editSlip(month, (sp) =>
     group === "day"
       ? {
@@ -1250,6 +1365,7 @@ export function unpublishSlips(
           unpublished: [...sp.unpublished, { at: today, by, why }],
         },
   );
+  return { ok: true };
 }
 
 /**

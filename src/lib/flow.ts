@@ -55,15 +55,20 @@ import type { Role } from "./role";
  * ปิดรอบเงินเดือนของกลุ่มหนึ่ง แล้วบันทึกที่ใบเบิกว่าจ่ายคืนไปกับรอบนี้ (ERD expense_claim.payroll_line_id)
  * หน้าคำนวณเงินเดือนต้องเรียกตัวนี้ ไม่เรียก closePayrun ตรง ๆ ไม่งั้นใบเบิกจะถูกนับซ้ำในรอบถัดไป
  */
-export function closePayrunFlow(
+export async function closePayrunFlow(
   month: string,
   today: string,
   group: PayGroup,
   sum: CycleSum,
   reimbursed: { role: Role; month: string }[],
+  /* บรรทัดรายคนพร้อมรหัสจริง — ฐานข้อมูลตรวจกับข้อมูลดิบก่อนยอมให้ปิด */
+  lines?: { employee_id: string; line: unknown; net: number }[],
 ) {
-  closePayrun(month, today, group, sum);
+  const res = await closePayrun(month, today, group, sum, undefined, lines);
+  if (!res.ok) return res;
+  /* ต่อฐานข้อมูลแล้ว close_payrun เป็นคนติดธงจ่ายคืนให้เอง ตัวนี้จึงทำงานเฉพาะโหมดในเครื่อง */
   markReimbursed(reimbursed, month);
+  return res;
 }
 
 // ═══ ยกเลิกดีลหลังปิดการขาย ═══════════════════════════════════════

@@ -336,6 +336,8 @@ function PayrollStrip() {
   const [listing, setListing] = useState<string | null>(null);
   /* แถวที่กำลังยืนยันก่อนอนุมัติ — กดปุ่มเดียวแล้วเซ็นเลยไม่ได้ */
   const [confirming, setConfirming] = useState<string | null>(null);
+  /* เหตุที่ฐานข้อมูลไม่รับ — ไม่ปิดกล่องทิ้งให้เข้าใจผิดว่าอนุมัติไปแล้ว */
+  const [failed, setFailed] = useState("");
 
   const waiting = Object.entries(hr.payApprove)
     .filter(([, a]) => a.status === "waiting")
@@ -463,8 +465,10 @@ function PayrollStrip() {
                 className="btn solid btn-solid max-sm:!h-12 max-sm:justify-center"
                 onClick={() => {
                   if (!why.trim()) return setWarn(true);
-                  decidePayroll(month, group, false, why.trim(), bkkStamp());
-                  setRejecting(null);
+                  void decidePayroll(month, group, false, why.trim(), bkkStamp()).then((res) => {
+                    if (!res.ok) return setFailed(res.message);
+                    setRejecting(null);
+                  });
                 }}
               >
                 ส่งตีกลับ
@@ -474,6 +478,15 @@ function PayrollStrip() {
           )}
         </div>
       ))}
+
+      {failed && (
+        <p
+          role="alert"
+          className="rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-4 py-3 text-[13px] text-destructive"
+        >
+          ทำรายการไม่สำเร็จ · {failed}
+        </p>
+      )}
 
       {/* ขั้นยืนยันก่อนเซ็น — บอกให้ครบว่ากำลังอนุมัติรอบไหน กลุ่มไหน กี่คน ยอดเท่าไร
           ยอดในกล่องนี้คือตัวเดียวกับที่ส่งเข้า decidePayroll ไม่ได้คิดใหม่อีกชุด */}
@@ -500,13 +513,15 @@ function PayrollStrip() {
             onCancel={() => setConfirming(null)}
             /* บันทึกเลขที่เห็นบนจอไปกับการอนุมัติ ขยับเมื่อไรจะได้รู้ว่าขยับจากอะไร */
             onConfirm={() => {
-              decidePayroll(w.month, w.group, true, "", bkkStamp(), "CEO", {
+              void decidePayroll(w.month, w.group, true, "", bkkStamp(), "CEO", {
                 people: w.sum.n,
                 net: w.sum.net,
                 ss: w.sum.ss,
+              }).then((res) => {
+                if (!res.ok) return setFailed(res.message);
+                setConfirming(null);
+                setListing(null);
               });
-              setConfirming(null);
-              setListing(null);
             }}
           />
         );

@@ -64,6 +64,7 @@ import { reopenPayrunWithReason, sendPayrollToCeo, useHr } from "@/lib/hr-store"
 import { closePayrunFlow } from "@/lib/flow";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
 import {
+  empUuid,
   useDbPayLines, useComSource, useHrTime, useMissingApproved, usePayrollVoidWatch, type MissingReq } from "@/lib/hr-link";
 import type { Role } from "@/lib/role";
 import { EyeIcon, PencilIcon } from "./icons";
@@ -211,14 +212,20 @@ export function HrPayrollPage() {
           ? "ต้องให้ CEO อนุมัติยอดก่อนจึงปิดรอบได้"
           : "";
 
+  /* เหตุที่ฐานข้อมูลไม่รับ — ขึ้นบนหน้า ไม่ใช่เงียบไป */
+  const [failed, setFailed] = useState("");
+
   function sendToCeo() {
     if (!month || !canSend) return;
-    sendPayrollToCeo(
+    setFailed("");
+    void sendPayrollToCeo(
       month,
       group,
       { people: groupSum.n, net: groupSum.net, ss: groupSum.ss },
       bkkStamp(),
-    );
+    ).then((res) => {
+      if (!res.ok) setFailed(res.message);
+    });
   }
 
   const current = viewing ? rows.find((x) => x.e.id === viewing) : undefined;
@@ -239,6 +246,15 @@ export function HrPayrollPage() {
     <div className="space-y-4" onClick={() => setPick(null)}>
       {/* มือถือ: ชื่อรอบ + ปุ่มปฏิทิน แทนแถบหัวเรื่องกับช่องวันที่ของจอคอม */}
       <PayHead title={cycleTitle(month ?? null, range.from, range.to)} onCal={() => setCal(true)} />
+
+      {failed && (
+        <p
+          role="alert"
+          className="rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-4 py-3 text-[13px] text-destructive"
+        >
+          ทำรายการไม่สำเร็จ · {failed}
+        </p>
+      )}
 
       {cal && (
         <CycleSheet
@@ -1178,6 +1194,19 @@ const PAY_DLG_KV =
 const PAY_DLG_NOTE =
   "max-sm:rounded-[14px] max-sm:bg-[#FFF6E5] max-sm:px-3.5 max-sm:py-3 max-sm:text-[13px] max-sm:text-[#7A4A07]";
 
+/*
+ * บรรทัดรายคนที่ส่งไปให้ฐานข้อมูลตรวจตอนปิดรอบ
+ * ส่งเฉพาะตัวเลขที่ฐานข้อมูลนับเองได้ (ชั่วโมงทำงาน นาทีสาย ชั่วโมงโอที)
+ * ไม่ตรงเมื่อไรคือปิดไม่ได้ — กันยอดที่แก้มาจากหน้าเว็บ
+ */
+function dbLines(lines: Line[]) {
+  return lines.flatMap((x) => {
+    const id = empUuid(x.e.id);
+    if (!id) return [];
+    return [{ employee_id: id, line: { net: x.c.net }, net: x.c.net }];
+  });
+}
+
 function CloseDialog({
   month,
   group,
@@ -1206,12 +1235,19 @@ function CloseDialog({
   const ss = sum.ss;
   const c = hrCycle(month);
 
+  /* เหตุที่ปิดไม่สำเร็จ — ค้างกล่องไว้พร้อมเหตุผล ไม่ปิดทิ้งให้เข้าใจผิดว่าปิดรอบแล้ว */
+  const [failed, setFailed] = useState("");
+
   function confirm() {
     /* กันอีกชั้น รอบเวลาทำงานต้องปิดและ CEO ต้องอนุมัติยอดแล้ว */
     if (blocked) return;
-    /* เก็บยอดที่ปิดไว้ในตัวรอบ หน้าประวัติรอบอ่านตัวเลขชุดนี้ ไม่คำนวณใหม่ */
-    closePayrunFlow(month, today, group, sum, reimbursed);
-    onClose();
+    setFailed("");
+    /* เก็บยอดที่ปิดไว้ในตัวรอบ หน้าประวัติรอบอ่านตัวเลขชุดนี้ ไม่คำนวณใหม่
+       และส่งบรรทัดรายคนไปให้ฐานข้อมูลตรวจกับข้อมูลดิบก่อนยอมให้ปิด */
+    void closePayrunFlow(month, today, group, sum, reimbursed, dbLines(lines)).then((res) => {
+      if (!res.ok) return setFailed(res.message);
+      onClose();
+    });
   }
 
   return (
@@ -1235,6 +1271,14 @@ function CloseDialog({
       }
     >
       {/* มือถือ: สรุปรอบเป็นกล่องชมพู ชื่อรอบเด่น (ต้นแบบ pay-dlg) */}
+      {failed && (
+        <p
+          role="alert"
+          className="mt-3 rounded-[11px] border border-[rgba(192,18,31,.2)] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] text-destructive"
+        >
+          ทำรายการไม่สำเร็จ · {failed}
+        </p>
+      )}
       <p className={`text-[12.5px] text-muted-foreground ${PAY_DLG_HEAD}`}>
         <span className="max-sm:text-[16px] max-sm:font-bold max-sm:text-foreground">รอบ {thaiMonth(month)}</span>
         <span className="max-sm:hidden"> · </span>
@@ -1311,7 +1355,7 @@ function ReopenDialog({
             className="btn solid btn-solid"
             onClick={() => {
               if (!why.trim()) return setWarn(true);
-              reopenPayrunWithReason(month, today, why.trim(), group);
+              void reopenPayrunWithReason(month, today, why.trim(), group);
               onClose();
             }}
           >
