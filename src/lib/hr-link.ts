@@ -16,7 +16,7 @@
  * TODO: ⚠️ ข้อมูลส่วนตัวและเงินเดือนของสามคนแรกเป็นค่าสมมติ ดูหมายเหตุใน hr-data.ts
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dayKey, recordsOfDay, toSessions, type PunchRecord } from "./attendance";
 import { useAllPunches } from "./attendance-store";
 import { hasBackend } from "./supabase/env";
@@ -407,6 +407,8 @@ export function useMissingApproved(c: Cycle): MissingReq[] {
  *
  * รอบที่ปิดไปแล้วไม่เรียกใหม่ — ต้องอ่านยอดที่บันทึกไว้ตอนปิด (HR-BR-03)
  */
+type PayLineInput = { month: string; commission: Record<string, number>; absent: Record<string, number> };
+
 export function useDbPayLines(month: string | null | undefined, closed: boolean) {
   const hr = useHr();
   const time = useHrTime();
@@ -433,17 +435,24 @@ export function useDbPayLines(month: string | null | undefined, closed: boolean)
 
   const key = input ? JSON.stringify(input) : "";
 
+  /*
+   * ยิงตาม "คีย์ข้อความ" ไม่ใช่ตัวอ้างอิงของวัตถุ
+   * hr.emp/time สร้างวัตถุใหม่ทุกครั้งที่วาด ถ้าผูก effect ไว้กับตัวอ้างอิง
+   * จะยิงคำขอใหม่ทุกครั้งที่คำตอบกลับมา วนไม่จบ (เจอจริง 16 ครั้งต่อการเปิดหน้าเดียว)
+   */
   useEffect(() => {
-    if (!input) return;
+    /* คีย์คือตัว input ที่แปลงเป็นข้อความอยู่แล้ว — อ่านกลับมาใช้ได้เลย ไม่ต้องพึ่ง ref */
+    const now = key ? (JSON.parse(key) as PayLineInput) : null;
+    if (!now) return;
     let alive = true;
-    void fetchPayrollLines(input.month, input.commission, input.absent).then((list) => {
+    void fetchPayrollLines(now.month, now.commission, now.absent).then((list) => {
       /* ตั้งค่าในคำตอบของคำขอ ไม่ใช่ในตัว effect — ตั้งตรง ๆ จะวาดซ้อนกันเป็นลูกโซ่ */
       if (alive) setGot({ key, rows: list });
     });
     return () => {
       alive = false;
     };
-  }, [input, key]);
+  }, [key]);
 
   const rows = got && got.key === key ? got.rows : null;
 
@@ -503,7 +512,7 @@ export function useDbPayLinesMap(months: string[]) {
   const wanted = useMemo(() => [...new Set(months.filter(Boolean))].sort(), [months]);
 
   const inputs = useMemo(() => {
-    if (!hasBackend) return [] as { month: string; commission: Record<string, number>; absent: Record<string, number> }[];
+    if (!hasBackend) return [] as PayLineInput[];
     return wanted.map((month) => {
       const range = hrCycle(month);
       const commission: Record<string, number> = {};
@@ -520,21 +529,27 @@ export function useDbPayLinesMap(months: string[]) {
     });
   }, [wanted, hr.emp, time, src]);
 
-  const keys = useMemo(() => inputs.map((i) => JSON.stringify(i)).join("|"), [inputs]);
+  /* เหตุผลเดียวกับ useDbPayLines — ผูกกับคีย์ข้อความ ไม่งั้นยิงวนไม่จบ */
+  const keys = useMemo(() => inputs.map((i) => JSON.stringify(i)).join(" "), [inputs]);
+  /* รอบไหนยิงด้วยคีย์นี้ไปแล้วไม่ต้องยิงซ้ำ แม้ React จะเรียก effect ใหม่ */
+  const asked = useRef<Record<string, string>>({});
 
   useEffect(() => {
-    if (!inputs.length) return;
+    const list = (keys ? keys.split(" ") : []).map((k) => JSON.parse(k) as PayLineInput);
+    if (!list.length) return;
     let alive = true;
-    for (const input of inputs) {
+    for (const input of list) {
       const key = JSON.stringify(input);
-      void fetchPayrollLines(input.month, input.commission, input.absent).then((list) => {
-        if (alive && list.length) setGot((prev) => ({ ...prev, [input.month]: { key, rows: list } }));
+      if (asked.current[input.month] === key) continue;
+      asked.current[input.month] = key;
+      void fetchPayrollLines(input.month, input.commission, input.absent).then((rows) => {
+        if (alive && rows.length) setGot((prev) => ({ ...prev, [input.month]: { key, rows } }));
       });
     }
     return () => {
       alive = false;
     };
-  }, [inputs, keys]);
+  }, [keys]);
 
   return useMemo(() => {
     const byNo = new Map(hr.emp.map((e) => [e.id, e]));
@@ -580,8 +595,9 @@ export function usePayrollSumFn() {
   /* รอบที่ต้องใช้คือรอบที่ส่งให้ CEO ไว้ — ถามฐานข้อมูลเฉพาะรอบที่ยังไม่ปิด */
   const months = useMemo(
     () =>
-      Object.keys(hr.payApprove)
-        .map((k) => k.split("|")[0])
+      Object.entries(hr.payApprove)
+        .filter(([, a]) => a.status === "waiting" || a.status === "approved")
+        .map(([k]) => k.split("|")[0])
         .filter((m) => !hr.payruns.find((p) => p.month === m)?.closed),
     [hr.payApprove, hr.payruns],
   );
