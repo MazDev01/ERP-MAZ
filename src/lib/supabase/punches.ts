@@ -115,6 +115,9 @@ export const PUNCH_REASON: Record<string, string> = {
   outside: "อยู่นอกพื้นที่ทำงาน",
   weak: "สัญญาณ GPS ไม่แม่น ลองใหม่อีกครั้ง",
   closed: "รอบเวลานี้ปิดแล้ว",
+  /* เวลาเข้างานต้องมาจากนาฬิกาของเซิร์ฟเวอร์ จะเก็บไว้ในเครื่องแล้วส่งทีหลังไม่ได้
+     ไม่งั้นเวลาที่บันทึกจะเป็นเวลาที่ผู้ใช้เลือกเอง ซึ่งเป็นเรื่องเงิน */
+  offline: "ไม่มีสัญญาณอินเทอร์เน็ต — เวลาเข้างานบันทึกที่เซิร์ฟเวอร์เท่านั้น ลองใหม่เมื่อมีเน็ต",
 };
 
 /**
@@ -129,14 +132,32 @@ export async function sendPunch(
   const sb = supabase();
   if (!sb) return { ok: false, reason: "no_backend" };
 
-  const { data, error } = await sb.rpc("clock_punch", {
-    p_type: type,
-    p_lat: geo?.lat ?? null,
-    p_lng: geo?.lng ?? null,
-    p_acc: geo?.acc ?? null,
-    p_note: note ?? "",
-  });
-  if (error) return { ok: false, reason: error.message };
+  /* ไม่มีเน็ตก็ไม่ต้องยิงให้เสียเวลา บอกเหตุตรง ๆ ตั้งแต่ต้น */
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return { ok: false, reason: "offline" };
+  }
+
+  let data: unknown;
+  let error: { message: string } | null = null;
+  try {
+    const res = await sb.rpc("clock_punch", {
+      p_type: type,
+      p_lat: geo?.lat ?? null,
+      p_lng: geo?.lng ?? null,
+      p_acc: geo?.acc ?? null,
+      p_note: note ?? "",
+    });
+    data = res.data;
+    error = res.error;
+  } catch {
+    /* ยิงไม่ถึงเซิร์ฟเวอร์เลย (เน็ตหลุดกลางทาง) — เป็นคนละเรื่องกับฐานข้อมูลปฏิเสธ */
+    return { ok: false, reason: "offline" };
+  }
+  /* ชั้น supabase-js คืน error แบบไม่มีสถานะเมื่อยิงไม่ถึงปลายทาง */
+  if (error) {
+    const net = /fetch|network|failed to fetch/i.test(error.message);
+    return { ok: false, reason: net ? "offline" : error.message };
+  }
 
   const res = (data ?? {}) as {
     ok?: boolean;

@@ -31,6 +31,7 @@ import { useRole } from "@/lib/role";
 import { canVisit } from "@/lib/nav";
 import { expectedInMinutes, expectedOutMinutes, formatMinutes, formatMinutesOfDay, leaveWindowOf, looksForgotten, minutesOfTime, requiredMinutes } from "@/lib/work-schedule";
 import { popupOn, useNotifySettings } from "@/lib/notify-settings";
+import { useOnline } from "@/lib/pwa";
 import { areaSettings, freshFix, judge, locate, meters, useLiveGeo, type LiveGeo, type PunchGeo } from "@/lib/work-area";
 import { ChevronLeftIcon, ChevronRightIcon, ClockIcon, LeaveIcon, LoginIcon, PinIcon, PlusIcon, PowerIcon } from "./icons";
 
@@ -80,6 +81,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   const lastIn = [...todayRecords].reverse().find((r) => r.type === "in") ?? null;
   const lastOut = [...todayRecords].reverse().find((r) => r.type === "out") ?? null;
   const checkedOut = !isWorking && Boolean(lastOut);
+  const online = useOnline();
   /* ตำแหน่งสดสำหรับป้ายสถานะ — ติดตามเฉพาะตอนยังไม่ได้เข้างาน */
   const live = useLiveGeo(!isWorking);
   const rounds = toSessions(todayRecords).length;
@@ -246,6 +248,8 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
 
   /* ข้อความใต้ปุ่มวงกลม — ตรรกะเดียวกับป้ายพื้นที่ของจอคอม (AreaBadge) */
   const areaText = (() => {
+    /* ไม่มีเน็ตก็ตอกไม่ได้ เพราะเวลาต้องมาจากนาฬิกาของเซิร์ฟเวอร์ — บอกก่อนกด ไม่ใช่หลังกด */
+    if (!online) return "ไม่มีเน็ต — ตอกบัตรไม่ได้";
     if (isWorking) return lastIn?.geo?.status === "inside" ? "เข้างานในพื้นที่ทำงาน" : "กำลังทำงานอยู่";
     if (checkedOut && live.phase !== "ready") return "ออกงานแล้ววันนี้";
     if (forgotIn) return `ค้างไว้ไม่ได้ตอกออกเมื่อ ${thaiDate(dayKey(new Date(forgotIn.at)))} — แจ้งฝ่ายบุคคลแก้ย้อนหลัง`;

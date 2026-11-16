@@ -151,6 +151,25 @@ export function useHydrated() {
   );
 }
 
+/**
+ * เครื่องนี้ต่อเน็ตอยู่ไหม — ฝั่งเซิร์ฟเวอร์ถือว่าต่ออยู่ ไม่งั้น HTML ที่วาดมาจะไม่ตรงกับหน้าจอ
+ * ใช้บอกผู้ใช้ล่วงหน้าว่าตอนนี้ทำอะไรไม่ได้ ดีกว่าให้กดแล้วค่อยขึ้นว่าไม่สำเร็จ
+ */
+export function useOnline() {
+  return useSyncExternalStore(
+    (l) => {
+      window.addEventListener("online", l);
+      window.addEventListener("offline", l);
+      return () => {
+        window.removeEventListener("online", l);
+        window.removeEventListener("offline", l);
+      };
+    },
+    () => navigator.onLine,
+    () => true,
+  );
+}
+
 export function usePwa(): PwaSnapshot {
   return useSyncExternalStore(
     (l) => {
