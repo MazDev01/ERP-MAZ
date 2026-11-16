@@ -17,6 +17,8 @@
 
 import { useSyncExternalStore } from "react";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+import { SETTINGS_REASON, fetchSettings, saveSettings } from "./supabase/settings";
 import { todayIso } from "./format";
 
 export type ScheduleSettings = {
@@ -494,10 +496,71 @@ const store = createPersistedStore<SystemSettings>(
 let live = false;
 const liveListeners = new Set<() => void>();
 
+/*
+ * ─── ค่าจริงอยู่ในฐานข้อมูล ────────────────────────────────────────
+ *
+ * ของเดิมเก็บในเครื่องที่เปิดหน้าอยู่ ผู้ดูแลแก้อัตราประกันสังคมที่เครื่องหนึ่ง
+ * อีกเครื่องยังคิดด้วยอัตราเก่า และเงินเดือนที่คำนวณออกมาจะคนละตัวเลข
+ *
+ * ฐานข้อมูลเป็นเจ้าของค่า — โหลดเสร็จเมื่อไรทับของในเครื่องทันที
+ * ส่วนการแก้ทุกครั้งเขียนขึ้นฐานข้อมูลทั้งก้อนแล้วลงประวัติไว้ว่าใครแก้อะไร
+ */
+const dbOn = hasBackend;
+let pulled = false;
+let pulling = false;
+
+function pull() {
+  if (!dbOn || pulling || pulled) return;
+  pulling = true;
+  void fetchSettings()
+    .then((got) => {
+      pulled = true;
+      if (got) store.set(fill({ ...DEFAULT_SETTINGS, ...got }));
+    })
+    .catch(() => {
+      /* อ่านไม่ได้ก็ใช้ค่าที่มีไปก่อน ไม่วนยิงใหม่ไม่จบ */
+      pulled = true;
+    })
+    .finally(() => {
+      pulling = false;
+      for (const l of liveListeners) l();
+    });
+}
+
+/** สั่งอ่านค่าจากฐานข้อมูลใหม่ */
+export function refreshSettings() {
+  if (!dbOn) return;
+  pulled = false;
+  pull();
+}
+
+/**
+ * แก้ค่าแล้วส่งขึ้นฐานข้อมูลทั้งก้อน
+ * หน้าจอขยับทันทีเพื่อให้กดแล้วเห็นผล ถ้าฐานข้อมูลไม่รับจะคืนค่าเดิมกลับและบอกเหตุ
+ */
+async function apply(
+  fn: (s: SystemSettings) => SystemSettings,
+  log?: { area: string; detail: string },
+): Promise<SettingsResult> {
+  const before = store.get();
+  store.update(fn);
+  if (!dbOn) return { ok: true };
+
+  const res = await saveSettings(store.get(), log);
+  if (res.ok) return { ok: true };
+  store.set(before);
+  for (const l of liveListeners) l();
+  return { ok: false, message: SETTINGS_REASON[res.reason] ?? res.reason };
+}
+
+/** ผลของการบันทึกค่าตั้งค่า — หน้าจอเอาไปบอกผู้ใช้ได้ */
+export type SettingsResult = { ok: true } | { ok: false; message: string };
+
 /** เรียกครั้งเดียวจากเปลือกแอปหลัง hydrate — จากนี้ settings() คืนค่าที่ผู้ดูแลตั้งไว้ */
 export function goLive() {
   if (live) return;
   live = true;
+  pull();
   for (const l of liveListeners) l();
 }
 
@@ -574,12 +637,12 @@ export function settings(): SystemSettings {
  * rates ที่ใช้อยู่อัปเดตตามวันนี้เสมอ เผื่อชุดใหม่มีผลย้อนหลังหรือมีผลวันนี้
  */
 export function saveRatesFrom(at: string, rates: RateSettings, note: string) {
-  store.update((s) => {
+  return apply((s) => {
     const history = [...s.rateHistory.filter((h) => h.at !== at), { at, rates, note }].sort((a, b) =>
       a.at.localeCompare(b.at),
     );
     return { ...s, rateHistory: history, rates: ratesOn(todayIso(), { ...s, rateHistory: history }) };
-  });
+  }, { area: "อัตราและภาษี", detail: note || `อัตราชุดใหม่มีผล ${at}` });
 }
 
 /*
@@ -588,13 +651,13 @@ export function saveRatesFrom(at: string, rates: RateSettings, note: string) {
  * พิกัดเก็บที่ work-area (คนละที่เก็บ) — ผู้เรียกต้องบันทึกที่นั่นด้วยเมื่อวันเริ่มใช้ถึงแล้ว
  */
 export function saveAttFrom(at: string, times: AttTimes, place: AttPlace, note: string) {
-  store.update((s) => {
+  return apply((s) => {
     const attHistory = [...s.attHistory.filter((h) => h.at !== at), { at, times, place, note }].sort((a, b) =>
       a.at.localeCompare(b.at),
     );
     const hit = attOn(todayIso(), { ...s, attHistory });
     return { ...s, attHistory, schedule: hit ? { ...s.schedule, ...hit.times } : s.schedule };
-  });
+  }, { area: "เวลาทำงานและจุดลงเวลา", detail: note || `ชุดใหม่มีผล ${at}` });
 }
 
 /*
@@ -603,12 +666,15 @@ export function saveAttFrom(at: string, times: AttTimes, place: AttPlace, note: 
  * ส่ง start/end ว่าง = เลิกใช้กะพิเศษ กลับไปใช้เวลาบริษัท
  */
 export function saveRoleShift(role: string, start: string, end: string) {
-  store.update((s) => {
-    const shifts = { ...(s.schedule.shifts ?? {}) };
-    if (start && end) shifts[role] = { start, end };
-    else delete shifts[role];
-    return { ...s, schedule: { ...s.schedule, shifts } };
-  });
+  return apply(
+    (s) => {
+      const shifts = { ...(s.schedule.shifts ?? {}) };
+      if (start && end) shifts[role] = { start, end };
+      else delete shifts[role];
+      return { ...s, schedule: { ...s.schedule, shifts } };
+    },
+    { area: "เวลาทำงาน", detail: start && end ? `กะของ ${role} ${start}–${end}` : `ยกเลิกกะเฉพาะของ ${role}` },
+  );
 }
 
 /** ค่าจริงถูกเปิดใช้หลัง hydrate แล้วหรือยัง — ที่อื่นใช้กันไม่ให้วาดต่างจากฝั่งเซิร์ฟเวอร์ */
@@ -636,11 +702,14 @@ export function useSystemSettings() {
 }
 
 export function saveSection<K extends keyof SystemSettings>(key: K, value: SystemSettings[K]) {
-  store.update((s) => ({ ...s, [key]: value }));
+  return apply((s) => ({ ...s, [key]: value }), { area: String(key), detail: `บันทึกหมวด ${String(key)}` });
 }
 
 export function resetSection<K extends keyof SystemSettings>(key: K) {
-  store.update((s) => ({ ...s, [key]: DEFAULT_SETTINGS[key] }));
+  return apply(
+    (s) => ({ ...s, [key]: DEFAULT_SETTINGS[key] }),
+    { area: String(key), detail: `คืนค่าตั้งต้นของหมวด ${String(key)}` },
+  );
 }
 
 export function resetSystemSettings() {
