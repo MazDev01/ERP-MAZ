@@ -1,11 +1,12 @@
 /*
  * ตั้งค่าการแจ้งเตือนของพนักงาน — หน้าโปรไฟล์เป็นคนแก้ หน้าอื่นเป็นคนใช้
  * (หน้าตอกบัตรใช้เวลาเตือนล่วงหน้า · กระดิ่งใช้ว่าเรื่องไหนเปิดอยู่)
- * TODO: ย้ายไปตาราง notification_setting เมื่อต่อ backend
  */
 
 import { useSyncExternalStore } from "react";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+import { fetchNotifySettings, saveNotifySettingsRemote } from "./supabase/notify";
 
 /** เรื่องที่แจ้งเตือนได้ — คีย์เดียวกับที่การแจ้งเตือนในกระดิ่งใช้จัดกลุ่ม */
 export const NOTIFY_EVENTS = [
@@ -71,12 +72,53 @@ const store = createPersistedStore<NotifySettings>(
   isSettings,
 );
 
+/*
+ * ต่อฐานข้อมูลแล้วเก็บที่ notify_settings ของคนนั้น
+ * ตั้งค่าที่มือถือแล้วคอมต้องรู้ด้วย ไม่ใช่ต่างเครื่องต่างตั้ง
+ */
+const live = hasBackend;
+let pulled = false;
+let pulling = false;
+const watchers = new Set<() => void>();
+
+function pull() {
+  if (!live || pulling || pulled) return;
+  pulling = true;
+  void fetchNotifySettings()
+    .then((got) => {
+      pulled = true;
+      if (got) store.set({ ...DEFAULT_NOTIFY, ...(got as Partial<NotifySettings>) });
+    })
+    .catch(() => {
+      pulled = true;
+    })
+    .finally(() => {
+      pulling = false;
+      for (const fn of watchers) fn();
+    });
+}
+
+function subscribe(onChange: () => void) {
+  watchers.add(onChange);
+  const off = store.subscribe(onChange);
+  return () => {
+    watchers.delete(onChange);
+    off();
+  };
+}
+
+function snapshot(): NotifySettings {
+  pull();
+  return store.get();
+}
+
 export function useNotifySettings() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return useSyncExternalStore(subscribe, snapshot, store.getServer);
 }
 
 export function saveNotifySettings(next: NotifySettings) {
   store.set(next);
+  if (live) void saveNotifySettingsRemote(next);
 }
 
 export function resetNotifySettings() {
