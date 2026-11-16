@@ -12,13 +12,14 @@
 
 -- ─── พนักงานจริง ──────────────────────────────────────────────────
 /* หกคนนี้มีบัญชีเข้าระบบ (ดู tools/seed-accounts.mjs) · ไม่ติดธงทดสอบ */
-insert into public.employees (emp_no, first_name, last_name, nick, sex, position, pos_key, emp_type, started_at, phone, email) values
-  ('E05', 'กมลชนก',   'พูนสุข',   'กมล',   'หญิง', 'staff', 'website', 'full', '2025-01-06', '081-555-5555', 'staff@maz.co.th'),
-  ('E10', 'ชนิกานต์', 'วัฒนกุล',  'กานต์', 'หญิง', 'pm',    'pm',      'full', '2024-02-01', '081-010-1010', 'pm@maz.co.th'),
-  ('E11', 'ประเสริฐ', 'มั่นคงดี', 'เสริฐ', 'ชาย',  'gm',    'gm',      'full', '2023-05-01', '081-111-0011', 'gm@maz.co.th'),
-  ('E12', 'ปวีณา',    'ศรีสุข',   'ปวีณา', 'หญิง', 'hr',    'hr',      'full', '2024-03-01', '081-121-2121', 'hr@maz.co.th'),
-  ('E15', 'บุญมา',    'สะอาด',    'มา',    'หญิง', 'maid',  'maid',    'full', '2025-06-01', '081-515-1515', ''),
-  ('E18', 'ชนัญชิดา', 'ใจดี',     'ชิดา',  'หญิง', 'sales', 'sales',   'full', '2024-08-15', '081-181-8181', 'sales@maz.co.th')
+/* ชื่ออังกฤษไม่ใช่ของประดับ — ชื่อผู้ใช้ของบัญชีเข้าระบบคิดจากชื่อต้นอังกฤษ (suggestUserOf) */
+insert into public.employees (emp_no, first_name, last_name, first_en, last_en, nick, sex, position, pos_key, emp_type, started_at, phone, email) values
+  ('E05', 'กมลชนก',   'พูนสุข',   'Kamonchanok', 'Poonsuk',    'กมล',   'หญิง', 'staff', 'website', 'full', '2025-01-06', '081-555-5555', 'staff@maz.co.th'),
+  ('E10', 'ชนิกานต์', 'วัฒนกุล',  'Chanikan',    'Wattanakul', 'กานต์', 'หญิง', 'pm',    'pm',      'full', '2024-02-01', '081-010-1010', 'pm@maz.co.th'),
+  ('E11', 'ประเสริฐ', 'มั่นคงดี', 'Prasert',     'Mankongdee', 'เสริฐ', 'ชาย',  'gm',    'gm',      'full', '2023-05-01', '081-111-0011', 'gm@maz.co.th'),
+  ('E12', 'ปวีณา',    'ศรีสุข',   'Paweena',     'Srisuk',     'ปวีณา', 'หญิง', 'hr',    'hr',      'full', '2024-03-01', '081-121-2121', 'hr@maz.co.th'),
+  ('E15', 'บุญมา',    'สะอาด',    'Bunma',       'Sa-ard',     'มา',    'หญิง', 'maid',  'maid',    'full', '2025-06-01', '081-515-1515', ''),
+  ('E18', 'ชนัญชิดา', 'ใจดี',     'Chananchida', 'Jaidee',     'ชิดา',  'หญิง', 'sales', 'sales',   'full', '2024-08-15', '081-181-8181', 'sales@maz.co.th')
 on conflict (emp_no) do nothing;
 
 /* หัวหน้า — ผู้จัดการทั่วไปดูแลทุกคน */

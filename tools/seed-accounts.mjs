@@ -38,17 +38,19 @@ const PASSWORD = "maz1234";
  * emp ว่าง = บัญชีที่ไม่ใช่พนักงานในทะเบียน (ผู้บริหาร) ตามที่เจ้าของสั่ง 2 พ.ย. 2569
  * ผู้บริหารจึงไม่โผล่ในลงเวลา การลา รอบเงินเดือน หรือรายชื่อผู้รับงาน
  * mail เป็นอีเมลแฝงสำหรับระบบ auth เท่านั้น ผู้ใช้ล็อกอินด้วยชื่อผู้ใช้
+ * ชื่อผู้ใช้เป็นชื่อต้นอังกฤษตัวพิมพ์เล็ก ตามกติกาเดียวกับ suggestUserOf ในหน้าฝ่ายบุคคล
+ * (ของเดิมเป็นชื่อเล่นภาษาไทย ต้องสลับแป้นพิมพ์ตอนล็อกอินบนมือถือ — เจ้าของทักท้วง 16 พ.ย. 2569)
  * ส่วนคนในชุดทดสอบ (T01–T19) ตั้งใจไม่ให้มีบัญชี ไว้ทดสอบการยื่นใบแทน
  */
 const WHO = [
   /* ผู้บริหารไม่มีแถวในทะเบียน จึงต้องบอกชื่อที่แสดงไว้ที่บัญชี */
-  { user: "กร", roles: ["ceo"], emp: null, mail: "ceo@maz.local", name: "ธนกร ใจกว้าง" },
-  { user: "กมล", roles: ["staff"], emp: "E05" },
-  { user: "กานต์", roles: ["pm"], emp: "E10" },
-  { user: "เสริฐ", roles: ["gm"], emp: "E11" },
-  { user: "ปวีณา", roles: ["hr"], emp: "E12" },
-  { user: "มา", roles: ["maid"], emp: "E15" },
-  { user: "ชิดา", roles: ["sales"], emp: "E18" },
+  { user: "thanakorn", roles: ["ceo"], emp: null, mail: "ceo@maz.local", name: "ธนกร ใจกว้าง" },
+  { user: "kamonchanok", roles: ["staff"], emp: "E05" },
+  { user: "chanikan", roles: ["pm"], emp: "E10" },
+  { user: "prasert", roles: ["gm"], emp: "E11" },
+  { user: "paweena", roles: ["hr"], emp: "E12" },
+  { user: "bunma", roles: ["maid"], emp: "E15" },
+  { user: "chananchida", roles: ["sales"], emp: "E18" },
 ];
 
 const { data: emps, error } = await admin.from("employees").select("id, emp_no");
