@@ -251,6 +251,24 @@ export async function currentSubscription() {
   return reg && "pushManager" in reg ? reg.pushManager.getSubscription() : null;
 }
 
+/**
+ * เครื่องนี้พร้อมรับแจ้งเตือนจริงไหม — ต้องมีทั้ง subscription ในเครื่องและแถวในฐานข้อมูล
+ * เบราว์เซอร์จำ subscription ไว้เองแม้ฝั่งเซิร์ฟเวอร์จะไม่มีแล้ว ถ้าดูแค่ในเครื่องจะบอกผู้ใช้ผิด
+ */
+export async function deviceReady(): Promise<string | null> {
+  const sub = await currentSubscription();
+  if (!sub) return null;
+  try {
+    const res = await fetch(`/api/push/devices?endpoint=${encodeURIComponent(sub.endpoint)}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const d = (await res.json()) as { known?: boolean };
+    return d.known ? sub.endpoint : null;
+  } catch {
+    /* ถามไม่ได้ก็ถือว่ายังใช้ได้ ไม่ไล่ให้ลงทะเบียนใหม่เพราะเน็ตสะดุดชั่วคราว */
+    return sub.endpoint;
+  }
+}
+
 const SAVE_REASON: Record<string, string> = {
   no_account: "บัญชีนี้ยังไม่ผูกกับพนักงาน — แจ้งฝ่ายบุคคล",
   no_backend: "ยังไม่ได้ต่อฐานข้อมูล",

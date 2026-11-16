@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { enableNotify, isIOS, isStandalone, notifyState, useHydrated, type PwaResult } from "@/lib/pwa";
 import { pushServiceOf } from "@/lib/push-scenarios";
 import {
-  currentSubscription,
   deviceLabel,
+  deviceReady,
   registerDevice,
   sendSelfTest,
   senderInfo,
@@ -34,10 +34,11 @@ export function DevicePushCard() {
   const ios = useHydrated() && isIOS();
 
   const load = useCallback(async () => {
-    const [sender, sub] = await Promise.all([senderInfo(), currentSubscription()]);
+    /* เช็คกับเซิร์ฟเวอร์ด้วย ไม่ใช่เชื่อ subscription ในเครื่องอย่างเดียว */
+    const [sender, endpoint] = await Promise.all([senderInfo(), deviceReady()]);
     if (!sender) return setView({ kind: "no-sender" });
     if (isIOS() && !isStandalone()) return setView({ kind: "ios-install" });
-    setView({ kind: "ready", sender, endpoint: sub?.endpoint ?? null });
+    setView({ kind: "ready", sender, endpoint });
   }, []);
 
   useEffect(() => {

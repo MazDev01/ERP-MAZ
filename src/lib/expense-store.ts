@@ -15,9 +15,11 @@ import { empRequestIds } from "./emp-requests";
 import { HR_REIMB } from "./hr-data";
 import { createRoleStore } from "./role-store";
 import { uploadAttachment } from "./supabase/files";
+import { pingDoc } from "./push-notify";
 import {
   CLAIM_REASON,
   claimIdOfMonth,
+  idOfClaim,
   decideClaim,
   fetchClaims,
   fileClaim,
@@ -267,10 +269,9 @@ export async function submitClaim(month: string): Promise<ClaimWriteResult> {
     /* ไฟล์หลักฐานต้องขึ้นถังจริง ผู้อนุมัติจะได้กดเปิดดูได้
        ใบยื่นไปแล้ว ถ้าไฟล์พลาดจึงไม่ถอนใบ — แนบเพิ่มทีหลังได้ */
     const waiting = filesOf(month);
-    if (waiting.length) {
-      const id = await claimIdOfMonth(month);
-      if (id) for (const f of waiting) await uploadAttachment("expense", id, f);
-    }
+    const id = await claimIdOfMonth(month);
+    if (id && waiting.length) for (const f of waiting) await uploadAttachment("expense", id, f);
+    pingDoc("expense", id);
     clearFiles(month);
     dropDraft(month);
     store.refresh();
@@ -312,6 +313,7 @@ export async function approveClaim(
 ): Promise<ClaimWriteResult> {
   if (store.live) {
     const res = await decideClaim(role, month, true, comment);
+    if (res.ok) pingDoc("expense", await idOfClaim(role, month));
     store.refresh();
     return res.ok ? { ok: true } : { ok: false, message: say(res.reason, res) };
   }
@@ -336,6 +338,7 @@ export async function rejectClaim(
 ): Promise<ClaimWriteResult> {
   if (store.live) {
     const res = await decideClaim(role, month, false, comment);
+    if (res.ok) pingDoc("expense", await idOfClaim(role, month));
     store.refresh();
     return res.ok ? { ok: true } : { ok: false, message: say(res.reason, res) };
   }

@@ -5,6 +5,7 @@ import { OT_RECORDS, type OtRecord } from "./ot-data";
 import type { Role } from "./role";
 import { createRoleStore } from "./role-store";
 import { uploadAttachment } from "./supabase/files";
+import { pingDoc } from "./push-notify";
 import {
   OT_REASON,
   otIdOf,
@@ -60,9 +61,10 @@ export async function addOtRequest(input: {
       reason: input.reason,
     });
     /* ไฟล์ต้องขึ้นถังจริง ไม่ใช่เก็บแค่ชื่อ — ใบยื่นไปแล้ว ไฟล์พลาดไม่ถอนใบ */
-    if (res.ok && input.upload?.length) {
+    if (res.ok) {
       const id = await otIdOf(res.record.id);
-      if (id) for (const f of input.upload) await uploadAttachment("ot", id, f);
+      if (id && input.upload?.length) for (const f of input.upload) await uploadAttachment("ot", id, f);
+      pingDoc("ot", id);
     }
     store.refresh();
     return res.ok ? res.record : null;
@@ -121,6 +123,7 @@ export async function approveOt(
 ): Promise<OtWriteResult> {
   if (store.live) {
     const res = await sbDecide(id, true, comment, approvedHours);
+    if (res.ok) pingDoc("ot", await otIdOf(id));
     store.refresh();
     return res.ok ? { ok: true } : { ok: false, message: say(res.reason, res) };
   }
@@ -137,6 +140,7 @@ export async function approveOt(
 export async function rejectOt(role: Role, id: string, comment: string): Promise<OtWriteResult> {
   if (store.live) {
     const res = await sbDecide(id, false, comment);
+    if (res.ok) pingDoc("ot", await otIdOf(id));
     store.refresh();
     return res.ok ? { ok: true } : { ok: false, message: say(res.reason, res) };
   }

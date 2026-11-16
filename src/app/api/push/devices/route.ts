@@ -1,4 +1,4 @@
-import { dropDevice, saveDevice } from "@/lib/supabase/push";
+import { dropDevice, knowsDevice, saveDevice } from "@/lib/supabase/push";
 
 async function readBody(request: Request): Promise<Record<string, unknown> | null> {
   try {
@@ -6,6 +6,12 @@ async function readBody(request: Request): Promise<Record<string, unknown> | nul
   } catch {
     return null;
   }
+}
+
+/** เซิร์ฟเวอร์ยังจำเครื่องนี้ได้ไหม — หน้าจอใช้ตรวจก่อนบอกผู้ใช้ว่าเปิดอยู่ */
+export async function GET(request: Request) {
+  const endpoint = new URL(request.url).searchParams.get("endpoint") ?? "";
+  return Response.json({ ok: true, known: await knowsDevice(endpoint) });
 }
 
 /** เครื่องนี้ขอรับแจ้งเตือน — บันทึกในชื่อเจ้าของ session (RLS กันแอบลงในชื่อคนอื่น) */

@@ -22,6 +22,7 @@ import { myEmpNo, staffEmployeeId } from "./staff-identity";
 import { USERS } from "./mock-data";
 import { empRequestIds } from "./emp-requests";
 import { uploadAttachment } from "./supabase/files";
+import { pingDoc } from "./push-notify";
 import {
   LEAVE_REASON,
   leaveIdOf,
@@ -95,9 +96,11 @@ export async function addLeaveRequest(input: {
     });
     /* ไฟล์ต้องขึ้นถังจริง ไม่ใช่เก็บแค่ชื่อไว้โชว์ — ผู้อนุมัติต้องกดเปิดดูได้
        ใบยื่นไปแล้ว ถ้าไฟล์พลาดจึงไม่ถอนใบ ผู้ยื่นแนบเพิ่มทีหลังได้ */
-    if (res.ok && input.upload?.length) {
+    if (res.ok) {
       const id = await leaveIdOf(res.record.id);
-      if (id) for (const f of input.upload) await uploadAttachment("leave", id, f);
+      if (id && input.upload?.length) for (const f of input.upload) await uploadAttachment("leave", id, f);
+      /* ผู้อนุมัติต้องรู้ทันทีว่ามีใบใหม่ ไม่ต้องรอเปิดแอปเอง */
+      pingDoc("leave", id);
     }
     store.refresh();
     return res.ok ? res.record : null;
@@ -173,6 +176,7 @@ export function useAllLeave() {
 export async function approveLeave(role: Role, id: string): Promise<LeaveWriteResult> {
   if (store.live) {
     const res = await sbDecide(id, true, "");
+    if (res.ok) pingDoc("leave", await leaveIdOf(id));
     store.refresh();
     return res.ok ? { ok: true } : { ok: false, message: say(res.reason, res) };
   }
@@ -193,6 +197,7 @@ export async function rejectLeave(
 ): Promise<LeaveWriteResult> {
   if (store.live) {
     const res = await sbDecide(id, false, reason);
+    if (res.ok) pingDoc("leave", await leaveIdOf(id));
     store.refresh();
     return res.ok ? { ok: true } : { ok: false, message: say(res.reason, res) };
   }
