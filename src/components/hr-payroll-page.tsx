@@ -63,7 +63,8 @@ import {
 import { reopenPayrunWithReason, sendPayrollToCeo, useHr } from "@/lib/hr-store";
 import { closePayrunFlow } from "@/lib/flow";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
-import { useComSource, useHrTime, useMissingApproved, usePayrollVoidWatch, type MissingReq } from "@/lib/hr-link";
+import {
+  useDbPayLines, useComSource, useHrTime, useMissingApproved, usePayrollVoidWatch, type MissingReq } from "@/lib/hr-link";
 import type { Role } from "@/lib/role";
 import { EyeIcon, PencilIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
@@ -138,7 +139,13 @@ export function HrPayrollPage() {
    * รอบที่ปิดแล้วอ่านยอดที่บันทึกไว้ ไม่คำนวณใหม่ (HR-BR-03)
    * ไม่งั้นหน้านี้กับหน้าสลิปและประวัติรอบจะไม่ตรงกัน ทันทีที่มีอะไรขยับหลังปิดรอบ
    */
-  const rows: Line[] = payLines(hr.emp, range, time, hr.extras, today, src, payrun, month);
+  /*
+   * ตัวเลขมาจากสูตรในฐานข้อมูล (payroll_lines) ไม่ใช่คิดในเบราว์เซอร์
+   * รอบที่ปิดแล้วยังอ่านยอดที่บันทึกไว้เหมือนเดิม และถ้าฐานข้อมูลยังตอบไม่มา
+   * ก็ใช้สูตรฝั่งหน้าจอไปก่อน หน้าจะได้ไม่ว่างระหว่างรอ
+   */
+  const dbRows = useDbPayLines(month, payClosed);
+  const rows: Line[] = dbRows ?? payLines(hr.emp, range, time, hr.extras, today, src, payrun, month);
   const monthly = linesOfGroup(rows, "month");
   const daily = linesOfGroup(rows, "day");
 

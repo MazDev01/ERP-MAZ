@@ -16,9 +16,12 @@
  * TODO: ⚠️ ข้อมูลส่วนตัวและเงินเดือนของสามคนแรกเป็นค่าสมมติ ดูหมายเหตุใน hr-data.ts
  */
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { dayKey, recordsOfDay, toSessions, type PunchRecord } from "./attendance";
 import { useAllPunches } from "./attendance-store";
+import { hasBackend } from "./supabase/env";
+import { fetchPayrollLines, type DbPayLine } from "./supabase/payroll";
+import { peopleNow } from "./supabase/people";
 import { lateMinutes } from "./work-schedule";
 import {
   ROLE_EMPLOYEE,
@@ -26,14 +29,17 @@ import {
   DEMO_CHECKIN,
   DEMO_LEAVE_TODAY,
   accountRoles,
+  commissionBase,
   hrCycle,
   linesOfGroup,
   payLines,
+  recInRange,
   sumOfGroup,
   type ComSource,
   type Cycle,
   type LeaveKind,
   type PayGroup,
+  type PayLine,
   type TimeRec,
 } from "./hr-data";
 import { useStaffEmployeeId } from "./staff-identity";
@@ -54,6 +60,11 @@ import { leavePeriodOf, leaveYearOf, type LeaveRecord } from "./leave-data";
 
 /* บทบาทที่ล็อกอินได้ → รหัสในทะเบียนพนักงาน (ย้ายไปอยู่ hr-data เพื่อให้สโตร์ใช้ได้โดยไม่วนกัน) */
 export { ROLE_EMPLOYEE };
+
+/* รหัสพนักงานบนหน้าจอ (E05) → id จริงในฐานข้อมูล — ฟังก์ชันคำนวณอ้างด้วย id จริง */
+function empUuid(empNo: string): string | null {
+  return peopleNow().find((p) => p.empNo === empNo)?.id ?? null;
+}
 
 /** รหัสพนักงาน → บทบาท (ใช้ตอนอยากรู้ว่าคนนี้ล็อกอินเป็นอะไร) */
 export const EMPLOYEE_ROLE: Record<string, Role> = Object.fromEntries(
@@ -384,6 +395,94 @@ export function useMissingApproved(c: Cycle): MissingReq[] {
 
     return out;
   }, [time, reqs, ot, leave, claims, src, c.from, c.to]);
+}
+
+/*
+ * ─── เงินเดือนที่ฐานข้อมูลคำนวณให้ ────────────────────────────────
+ *
+ * สูตรอยู่ในฐานข้อมูลแล้ว (payroll_lines · หลังบ้านรอบที่ 12) หน้าจอจึงไม่คิดเอง
+ * เหลือสองอย่างที่ต้องส่งขึ้นไป เพราะฐานข้อมูลยังไม่รู้
+ *   ฐานค่าคอม — ยอดขายที่ปิดได้ / ยอดที่ลูกค้าจ่าย (งานขายยังไม่มีหลังบ้าน)
+ *   วันขาดงาน — รายการที่ฝ่ายบุคคลตรวจแล้วว่าขาดจริง (ยังอยู่ในหน้าจอ)
+ *
+ * รอบที่ปิดไปแล้วไม่เรียกใหม่ — ต้องอ่านยอดที่บันทึกไว้ตอนปิด (HR-BR-03)
+ */
+export function useDbPayLines(month: string | null | undefined, closed: boolean) {
+  const hr = useHr();
+  const time = useHrTime();
+  const src = useComSource();
+  /* เก็บคู่กับคีย์ของคำขอ — คำตอบที่มาช้ากว่าการเปลี่ยนรอบจะได้ไม่ถูกเอามาใช้ผิดรอบ */
+  const [got, setGot] = useState<{ key: string; rows: DbPayLine[] } | null>(null);
+
+  /* คีย์ของสิ่งที่ส่งขึ้นไป — เปลี่ยนเมื่อไรค่อยถามฐานข้อมูลใหม่ ไม่ใช่ทุกครั้งที่วาด */
+  const input = useMemo(() => {
+    if (!month || closed || !hasBackend) return null;
+    const range = hrCycle(month);
+    const commission: Record<string, number> = {};
+    const absent: Record<string, number> = {};
+    for (const e of hr.emp) {
+      const uuid = empUuid(e.id);
+      if (!uuid) continue;
+      const base = commissionBase(e, range, src);
+      if (base > 0) commission[uuid] = base;
+      const n = recInRange(time, e.id, range).issues.filter((x: { absent?: boolean }) => x.absent).length;
+      if (n > 0) absent[uuid] = n;
+    }
+    return { month, commission, absent };
+  }, [month, closed, hr.emp, time, src]);
+
+  const key = input ? JSON.stringify(input) : "";
+
+  useEffect(() => {
+    if (!input) return;
+    let alive = true;
+    void fetchPayrollLines(input.month, input.commission, input.absent).then((list) => {
+      /* ตั้งค่าในคำตอบของคำขอ ไม่ใช่ในตัว effect — ตั้งตรง ๆ จะวาดซ้อนกันเป็นลูกโซ่ */
+      if (alive) setGot({ key, rows: list });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [input, key]);
+
+  const rows = got && got.key === key ? got.rows : null;
+
+  /* แปลงเป็นรูปที่หน้าจอใช้อยู่เดิม — คนที่ฐานข้อมูลไม่รู้จักข้ามไป */
+  return useMemo(() => {
+    if (!rows?.length) return null;
+    const byNo = new Map(hr.emp.map((e) => [e.id, e]));
+    const out: PayLine[] = [];
+    for (const r of rows) {
+      const e = r.emp_no ? byNo.get(r.emp_no) : undefined;
+      if (!e) continue;
+      out.push({
+        e,
+        c: {
+          base: r.base,
+          ot: r.ot,
+          com: r.com,
+          inc: r.inc,
+          allow: r.allow,
+          adj: r.adj,
+          ss: r.ss,
+          lateMin: r.late_min,
+          lateChargedMin: r.late_min,
+          late: r.late,
+          absentDays: r.absent_days,
+          absent: r.absent,
+          unpaidDays: r.unpaid_days,
+          unpaid: r.unpaid,
+          gross: r.gross,
+          reimb: r.reimb,
+          net: r.net,
+        },
+        days: r.days,
+        rate: r.rate,
+        snapped: false,
+      });
+    }
+    return out.length ? out : null;
+  }, [rows, hr.emp]);
 }
 
 /*
