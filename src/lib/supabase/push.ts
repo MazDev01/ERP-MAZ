@@ -169,6 +169,15 @@ async function employeesWithRole(role: string): Promise<string[]> {
     .map((a) => a.employee_id as string);
 }
 
+/** จองสิทธิ์ส่งของคู่ (ใบ, สถานะ) นี้ — จองได้แปลว่ายังไม่มีใครส่ง */
+async function claimSend(docId: string, status: string): Promise<boolean> {
+  const sv = adminSupabase();
+  if (!sv) return true;
+  const { error } = await sv.from("push_sent").insert({ doc_id: docId, status });
+  /* ชนกุญแจหลัก = มีคนส่งไปแล้ว */
+  return !error;
+}
+
 async function nameOf(employeeId: string): Promise<string> {
   const sv = adminSupabase();
   if (!sv) return "";
@@ -190,9 +199,13 @@ async function nameOf(employeeId: string): Promise<string> {
  *   อนุมัติ/ตีกลับ → เข้าเครื่องของผู้ยื่น
  * ไม่ส่งเข้าเครื่องของคนที่เป็นต้นเหตุเอง — เพิ่งกดเองกับมือ ไม่ต้องเตือน
  */
-export async function notifyDoc(kind: Kind, id: string): Promise<PushResult> {
+export async function notifyDoc(kind: Kind, id: string, asSystem = false): Promise<PushResult> {
   if (!hasPush) return { ok: false, reason: "no_push" };
-  const sb = await serverSupabase();
+  /*
+   * asSystem = คำขอมาจากฐานข้อมูลเอง (ทริกเกอร์) ไม่ใช่จากเบราว์เซอร์ของใคร จึงไม่มี session ให้ใช้
+   * ทางนั้นผ่านการตรวจกุญแจลับมาแล้วที่ชั้น route
+   */
+  const sb = asSystem ? adminSupabase() : await serverSupabase();
   if (!sb) return { ok: false, reason: "no_backend" };
   if (!TABLE[kind] || !id) return { ok: false, reason: "bad_doc" };
 
@@ -206,7 +219,13 @@ export async function notifyDoc(kind: Kind, id: string): Promise<PushResult> {
     | null;
   if (!doc) return { ok: false, reason: "no_doc" };
 
-  const me = await myEmployeeId();
+  /*
+   * กันส่งซ้ำ — เรื่องเดียวกันมาได้สองทาง (หน้าจอบอกหลังกด และทริกเกอร์ของฐานข้อมูล)
+   * ใครจองคู่ (ใบ, สถานะ) นี้ได้ก่อนเป็นคนส่ง อีกทางเงียบไป เครื่องปลายทางจึงไม่สั่นสองรอบ
+   */
+  if (!(await claimSend(doc.id, doc.status))) return { ok: true, sent: 0 };
+
+  const me = asSystem ? null : await myEmployeeId();
   const who = await nameOf(doc.employee_id);
   const label = DOC[kind];
   const no = doc.no ?? "";
