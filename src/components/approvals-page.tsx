@@ -27,12 +27,14 @@
  *   แท็บที่ต้นแบบซ่อน ยังโผล่ถ้าสายอนุมัติส่งคำขอประเภทนั้นมาจริง (ผู้ดูแลระบบย้ายสายได้) — ไม่ให้คำขอตกหล่น
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { decideEmpRequest, empFuelKm, undoEmpDecision, useEmpRequests, type EmpRequest } from "@/lib/emp-requests";
 import { claimParts, fuelRate, type ExpenseClaim } from "@/lib/expense-data";
 import { hrPos } from "@/lib/hr-data";
 import { lockedUntil, timesheetLockedUntil, useHr } from "@/lib/hr-store";
 import { logChange } from "@/lib/admin-log";
+import { fileUrl, listAttachments, type Attachment } from "@/lib/supabase/files";
+import { leaveIdOf } from "@/lib/supabase/leave";
 import { ConfirmDialog } from "./confirm-dialog";
 import { approveClaim, rejectClaim, undoClaimDecision, useAllClaims } from "@/lib/expense-store";
 import { baht, daysBetween, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
@@ -751,6 +753,53 @@ function Head() {
  * รายละเอียดคำขอ + ตัดสินในกล่องเดียว
  * อนุมัติ = บันทึกทันที · ไม่อนุมัติ = กดครั้งแรกเปิดช่องเหตุผล กดอีกครั้งถึงบันทึก (ต้องมีเหตุผล)
  */
+/*
+ * ไฟล์แนบของใบนี้ — ผู้อนุมัติต้องกดเปิดดูได้จริง ไม่ใช่เห็นแค่ชื่อไฟล์
+ * ถังเป็นแบบส่วนตัว จึงขอลิงก์ชั่วคราวตอนกด ไม่ได้ฝังลิงก์ถาวรไว้ในหน้า
+ */
+function Attachments({ kind, no }: { kind: Kind; no: string }) {
+  const [files, setFiles] = useState<Attachment[]>([]);
+
+  useEffect(() => {
+    if (!no || kind !== "leave") return;
+    let alive = true;
+    void (async () => {
+      const id = await leaveIdOf(no);
+      if (!id) return;
+      const list = await listAttachments("leave", id);
+      if (alive) setFiles(list);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [kind, no]);
+
+  if (!files.length) return null;
+  return (
+    <Kv
+      label="เอกสารแนบ"
+      value={
+        <span className="flex flex-wrap gap-2">
+          {files.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className="btn glass-thin btn-mini"
+              onClick={() => {
+                void fileUrl(f.path).then((url) => {
+                  if (url) window.open(url, "_blank", "noopener");
+                });
+              }}
+            >
+              {f.name}
+            </button>
+          ))}
+        </span>
+      }
+    />
+  );
+}
+
 function RequestDialog({
   item,
   mode = "view",
@@ -870,6 +919,7 @@ function RequestDialog({
         {(item.kind === "leave" || Boolean(item.note)) && (
           <Kv label="เหตุผลของผู้ยื่น" value={item.note || "ไม่ได้เขียนเหตุผล"} />
         )}
+        <Attachments kind={item.kind} no={item.no} />
         <Kv label="ยื่นเมื่อ" value={thaiStamp(item.at)} />
         {/* คนหนึ่งควบหลายบทบาทได้ — บอกให้ชัดว่ากำลังตัดสินใบนี้ในฐานะอะไร จะได้ไม่สับสน */}
         <Kv label="ถึงคุณในฐานะ" value={roleLabel(item.as)} />

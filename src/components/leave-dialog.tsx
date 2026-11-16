@@ -9,6 +9,7 @@ import { lockScroll } from "@/lib/scroll-lock";
 import { isWorkday } from "@/lib/holidays";
 import { leaveTypes, type LeaveRecord, type LeaveType } from "@/lib/leave-data";
 import { addLeaveRequest, excessDays, leaveUsage } from "@/lib/leave-store";
+import { ALLOWED_MIME, FILE_REASON, MAX_FILE_BYTES } from "@/lib/supabase/files";
 import { useOtRecords } from "@/lib/ot-store";
 import { hasNoApprover, useApprovalRoute, useRole } from "@/lib/role";
 import { currentProfile } from "@/lib/profile-data";
@@ -63,6 +64,8 @@ export function LeaveDialog({
   const [tried, setTried] = useState(false);
   /* เหตุที่ยื่นไม่ผ่าน — ขึ้นในกล่องเดิม ไม่ปิดกล่องทิ้ง */
   const [failed, setFailed] = useState("");
+  /* ไฟล์ที่เลือกมาแนบไม่ได้ — บอกตั้งแต่ตอนเลือก */
+  const [fileWarn, setFileWarn] = useState("");
   /* เปิดมาให้เริ่มที่วันนี้ก่อน — ลาย้อนหลังหรือล่วงหน้าค่อยเลื่อนเอง
      ถ้าถูกส่งวันที่มาจากหน้าบันทึกเวลา ให้ใช้วันนั้นแทน */
   const [from, setFrom] = useState(presetDate || TODAY);
@@ -77,6 +80,8 @@ export function LeaveDialog({
   const { start: startMin, end: endMin } = preset()[half];
   const [reason, setReason] = useState("");
   const [files, setFiles] = useState<string[]>([]);
+  /* ตัวไฟล์จริงที่จะอัปโหลดตอนกดยื่น — ชื่อไฟล์แยกไว้ใน files สำหรับโชว์ */
+  const [picked, setPicked] = useState<File[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // ปิดด้วย Esc + ล็อกการเลื่อนพื้นหลังระหว่างเปิด
@@ -231,6 +236,7 @@ export function LeaveDialog({
       reason: reason.trim(),
       employee: currentProfile().name,
       files,
+      upload: picked,
     }).then((rec) => {
       if (!rec) return setFailed("ยื่นใบลาไม่สำเร็จ ลองใหม่อีกครั้ง");
       onSubmitted(days);
@@ -402,9 +408,21 @@ export function LeaveDialog({
                 multiple
                 aria-label="เลือกเอกสารประกอบ"
                 className="sr-only"
-                onChange={(e) =>
-                  setFiles(Array.from(e.target.files ?? []).map((f) => f.name))
-                }
+                onChange={(e) => {
+                  const list = Array.from(e.target.files ?? []);
+                  /* บอกตั้งแต่ตอนเลือกว่าไฟล์ไหนแนบไม่ได้ ไม่ใช่ปล่อยไปเด้งตอนกดยื่น */
+                  const bad = list.find(
+                    (f) => f.size > MAX_FILE_BYTES || (f.type && !ALLOWED_MIME.includes(f.type)),
+                  );
+                  setFileWarn(
+                    bad
+                      ? `${bad.name} แนบไม่ได้ — ${bad.size > MAX_FILE_BYTES ? FILE_REASON.too_big : FILE_REASON.bad_type}`
+                      : "",
+                  );
+                  const okList = bad ? [] : list;
+                  setPicked(okList);
+                  setFiles(okList.map((f) => f.name));
+                }}
               />
               <button
                 type="button"
@@ -421,6 +439,11 @@ export function LeaveDialog({
                     : `เลือกแล้ว ${files.length} ไฟล์`}
               </span>
             </div>
+            {fileWarn && (
+              <p role="alert" className="mt-1.5 text-[12.5px] text-destructive">
+                {fileWarn}
+              </p>
+            )}
           </Field>
 
           <div className="glass-thin flex items-center justify-between gap-3 rounded-[11px] px-[13px] py-[11px] text-[13px]">

@@ -203,6 +203,11 @@ export async function fileLeave(input: {
 }
 
 /** uuid ของใบจากเลขที่ใบที่หน้าจอถืออยู่ (LV-2569-0001) */
+/** เลขที่ใบ (LV-2569-0001) → id จริงในฐานข้อมูล — ไฟล์แนบผูกกับ id ไม่ใช่เลขที่ใบ */
+export async function leaveIdOf(no: string): Promise<string | null> {
+  return idOf(no);
+}
+
 async function idOf(no: string): Promise<string | null> {
   const sb = supabase();
   if (!sb) return null;

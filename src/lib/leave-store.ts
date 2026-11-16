@@ -21,8 +21,10 @@ import { hrSnapshot } from "./hr-store";
 import { staffEmployeeId } from "./staff-identity";
 import { USERS } from "./mock-data";
 import { empRequestIds } from "./emp-requests";
+import { uploadAttachment } from "./supabase/files";
 import {
   LEAVE_REASON,
+  leaveIdOf,
   cancelLeave as sbCancel,
   decideLeave as sbDecide,
   fetchLeave,
@@ -74,6 +76,8 @@ export async function addLeaveRequest(input: {
   reason: string;
   employee: string;
   files?: string[];
+  /** ไฟล์จริงที่จะแนบขึ้นถัง — files เก็บแค่ชื่อไว้โชว์ตอนยังไม่ได้ต่อฐานข้อมูล */
+  upload?: File[];
 }): Promise<LeaveRecord | null> {
   /* ต่อฐานข้อมูลแล้ว — เลขที่ใบและเวลาที่ยื่นออกจากฐานข้อมูล ไม่ใช่จากเบราว์เซอร์
      เลขที่ใบต้องไม่ซ้ำทั้งบริษัท สองคนกดยื่นพร้อมกันจากสองเครื่องจึงนับที่เดียวได้เท่านั้น */
@@ -89,6 +93,12 @@ export async function addLeaveRequest(input: {
       hours: input.hours,
       reason: input.reason,
     });
+    /* ไฟล์ต้องขึ้นถังจริง ไม่ใช่เก็บแค่ชื่อไว้โชว์ — ผู้อนุมัติต้องกดเปิดดูได้
+       ใบยื่นไปแล้ว ถ้าไฟล์พลาดจึงไม่ถอนใบ ผู้ยื่นแนบเพิ่มทีหลังได้ */
+    if (res.ok && input.upload?.length) {
+      const id = await leaveIdOf(res.record.id);
+      if (id) for (const f of input.upload) await uploadAttachment("leave", id, f);
+    }
     store.refresh();
     return res.ok ? res.record : null;
   }
