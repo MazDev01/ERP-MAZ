@@ -352,6 +352,7 @@ export function AdminHolidaysPage() {
         dirty={d.dirty}
         isDefault={d.isDefault}
         invalid={Object.values(d.draft).some((x) => !x.trim()) ? "ชื่อวันหยุดต้องไม่ว่าง" : ""}
+        error={d.error}
         onSave={d.save}
         onCancel={d.cancel}
         onDefault={d.toDefault}

@@ -31,6 +31,7 @@ import {
   canRoute,
   resetApprovalRoute,
   roleLabel,
+  pushRoutes,
   setApprover,
   useApprovalRoute,
   type ApproverKey,
@@ -374,6 +375,8 @@ export function RoutePane() {
           onConfirm={() => {
             const n = pendingOf(edit.kind, edit.role);
             setApprover(edit.kind, edit.role, edit.to);
+            /* ฐานข้อมูลเป็นคนบอกว่าใบนี้ขึ้นใคร — เปลี่ยนบนจอแล้วต้องส่งขึ้นไปด้วย */
+            void pushRoutes();
             /* ลงประวัติว่าใครเปลี่ยนเมื่อไร พร้อมจำนวนใบที่ย้ายตาม — ใบที่หายไปจากคิวเดิมจะได้ตามได้ */
             logChange(
               "บทบาทและสิทธิ์",
@@ -393,6 +396,7 @@ export function RoutePane() {
         onCancel={() => setResetting(false)}
         onConfirm={() => {
           resetApprovalRoute();
+          void pushRoutes();
           logChange("บทบาทและสิทธิ์", "คืนสายอนุมัติเป็นค่าตั้งต้น");
           setResetting(false);
         }}

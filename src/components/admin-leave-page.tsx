@@ -323,6 +323,7 @@ export function AdminLeavePage() {
         dirty={d.dirty || c.dirty}
         isDefault={d.isDefault && c.saved.vacationCarryMax === 0 && c.saved.leaveYearStart === "01-01"}
         invalid={bad || (badCarry ? "จำนวนวันยกยอดต้องเป็นจำนวนเต็ม 0 ถึง 365" : "")}
+        error={d.error || c.error}
         onSave={() => {
           if (d.dirty) d.save();
           if (c.dirty) c.save();

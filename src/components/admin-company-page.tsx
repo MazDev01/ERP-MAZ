@@ -430,6 +430,7 @@ export function AdminCompanyPage() {
         dirty={d.dirty}
         isDefault={d.isDefault}
         invalid={problemOf(list)}
+        error={d.error}
         onSave={d.save}
         onCancel={() => {
           d.cancel();

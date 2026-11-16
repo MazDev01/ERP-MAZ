@@ -19,6 +19,7 @@ import { useSyncExternalStore } from "react";
 import { createPersistedStore } from "./persisted-store";
 import { hasBackend } from "./supabase/env";
 import { SETTINGS_REASON, fetchSettings, saveSettings } from "./supabase/settings";
+import { syncHolidays, syncLeaveTypes } from "./supabase/catalog";
 import { todayIso } from "./format";
 
 export type ScheduleSettings = {
@@ -701,8 +702,38 @@ export function useSystemSettings() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);
 }
 
-export function saveSection<K extends keyof SystemSettings>(key: K, value: SystemSettings[K]) {
-  return apply((s) => ({ ...s, [key]: value }), { area: String(key), detail: `บันทึกหมวด ${String(key)}` });
+/*
+ * บางหมวดฐานข้อมูลใช้เองจากตารางของมัน ไม่ได้อ่านจากก้อนนี้ (ดู supabase/catalog.ts)
+ * บันทึกก้อนผ่านแล้วต้องเขียนตารางนั้นต่อให้สำเร็จด้วย ไม่งั้นจอบอกว่าเปลี่ยนแต่ระบบทำตามของเก่า
+ */
+async function mirror<K extends keyof SystemSettings>(key: K, value: SystemSettings[K]): Promise<SettingsResult> {
+  if (!dbOn) return { ok: true };
+  if (key === "leave") {
+    const r = await syncLeaveTypes(
+      (value as LeaveQuota[]).map((q) => ({ code: q.type, days: q.days, off: q.off })),
+    );
+    return r.ok ? { ok: true } : { ok: false, message: `บันทึกประเภทการลาลงฐานข้อมูลไม่สำเร็จ: ${r.reason}` };
+  }
+  if (key === "holidays") {
+    const r = await syncHolidays(value as Record<string, string>);
+    return r.ok ? { ok: true } : { ok: false, message: `บันทึกวันหยุดลงฐานข้อมูลไม่สำเร็จ: ${r.reason}` };
+  }
+  return { ok: true };
+}
+
+export async function saveSection<K extends keyof SystemSettings>(key: K, value: SystemSettings[K]): Promise<SettingsResult> {
+  const before = store.get();
+  const res = await apply((s) => ({ ...s, [key]: value }), { area: String(key), detail: `บันทึกหมวด ${String(key)}` });
+  if (!res.ok) return res;
+
+  const side = await mirror(key, value);
+  if (!side.ok) {
+    /* ตารางที่ระบบใช้จริงเขียนไม่ผ่าน — ถอยค่าทั้งก้อนกลับ ไม่ปล่อยให้สองที่ไม่ตรงกัน */
+    store.set(before);
+    void saveSettings(before);
+    for (const l of liveListeners) l();
+  }
+  return side;
 }
 
 export function resetSection<K extends keyof SystemSettings>(key: K) {

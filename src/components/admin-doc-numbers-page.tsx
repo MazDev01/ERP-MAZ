@@ -117,7 +117,7 @@ export function AdminDocNumbersPage() {
         </div>
       </Card>
 
-      <SaveBar dirty={d.dirty} isDefault={d.isDefault} invalid={problem(d.draft)} onSave={d.save} onCancel={d.cancel} onDefault={d.toDefault} />
+      <SaveBar dirty={d.dirty} isDefault={d.isDefault} invalid={problem(d.draft)} error={d.error} onSave={d.save} onCancel={d.cancel} onDefault={d.toDefault} />
     </div>
   );
 }

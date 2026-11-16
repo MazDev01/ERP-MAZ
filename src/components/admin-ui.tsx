@@ -212,23 +212,51 @@ export function useSectionDraft<K extends keyof SystemSettings>(
 ) {
   const saved = useSystemSettings()[key];
   const [draft, setDraft] = useState<SystemSettings[K]>(saved);
+  const [error, setError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const isDefault = JSON.stringify(saved) === JSON.stringify(DEFAULT_SETTINGS[key]);
 
-  function save() {
+  /*
+   * บันทึกไม่ผ่านต้องขึ้นให้เห็น — ของเดิมทิ้งผลลัพธ์ไปเฉย ๆ
+   * ฐานข้อมูลปฏิเสธ (ไม่ใช่ฝ่ายบุคคล · เน็ตหลุด) แล้วหน้าจอยังขึ้นว่า "บันทึกแล้ว"
+   */
+  async function save() {
     const changes = describe(saved, draft);
-    saveSection(key, draft);
+    const res = await saveSection(key, draft);
+    if (!res.ok) {
+      setError(res.message);
+      return;
+    }
+    setError("");
     logChange(area, changes.length ? changes.join(" · ") : "บันทึกโดยไม่มีค่าที่เปลี่ยน");
   }
 
-  function toDefault() {
+  async function toDefault() {
     const changes = describe(saved, DEFAULT_SETTINGS[key]);
-    saveSection(key, DEFAULT_SETTINGS[key]);
+    const res = await saveSection(key, DEFAULT_SETTINGS[key]);
+    if (!res.ok) {
+      setError(res.message);
+      return;
+    }
+    setError("");
     setDraft(DEFAULT_SETTINGS[key]);
     logChange(area, `คืนค่าตั้งต้น${changes.length ? ` · ${changes.join(" · ")}` : ""}`);
   }
 
-  return { saved, draft, setDraft, dirty, isDefault, save, cancel: () => setDraft(saved), toDefault };
+  return {
+    saved,
+    draft,
+    setDraft,
+    dirty,
+    isDefault,
+    error,
+    save: () => void save(),
+    cancel: () => {
+      setDraft(saved);
+      setError("");
+    },
+    toDefault: () => void toDefault(),
+  };
 }
 
 /** แถบบันทึกท้ายหน้า — ติดขอบล่างตอนมีร่างที่ยังไม่บันทึก */
@@ -239,11 +267,14 @@ export function SaveBar({
   onSave,
   onCancel,
   onDefault,
+  error = "",
   note = "มีผลกับทุกบทบาททันทีที่บันทึก",
 }: {
   dirty: boolean;
   isDefault: boolean;
   invalid?: string;
+  /** บันทึกแล้วไม่ผ่าน — ต่างจาก invalid ตรงที่ยังกดบันทึกซ้ำได้ */
+  error?: string;
   onSave: () => void;
   onCancel: () => void;
   onDefault: () => void;
@@ -262,9 +293,9 @@ export function SaveBar({
         }`}
       >
         <span
-          className={`mr-auto text-[12.5px] max-sm:w-full ${invalid ? "text-destructive" : "text-muted-foreground"}`}
+          className={`mr-auto text-[12.5px] max-sm:w-full ${invalid || error ? "text-destructive" : "text-muted-foreground"}`}
         >
-          {invalid || (dirty ? "มีการแก้ไขที่ยังไม่บันทึก · " + note : "บันทึกแล้ว")}
+          {invalid || error || (dirty ? "มีการแก้ไขที่ยังไม่บันทึก · " + note : "บันทึกแล้ว")}
         </span>
         <button
           type="button"

@@ -14,6 +14,7 @@
 import { useSyncExternalStore } from "react";
 import { createPersistedStore } from "./persisted-store";
 import { settings } from "./system-settings";
+import { syncRoutes, type RouteRow } from "./supabase/catalog";
 import { HR_EMP, ROLE_EMPLOYEE } from "./hr-data";
 import { setShiftRole } from "./work-schedule";
 
@@ -302,6 +303,29 @@ export function canRoute(key: ApproverKey, from: Role) {
 export function setApprover(kind: RequestKind, from: Role, key: ApproverKey) {
   if (!canRoute(key, from)) return;
   routeStore.update((r) => ({ ...r, [kind]: { ...r[kind], [from]: key } }));
+}
+
+/*
+ * สายอนุมัติที่ใช้จริง แปลงเป็นรูปที่ฐานข้อมูลเก็บ (บทบาทผู้ยื่น → บทบาทผู้อนุมัติ)
+ *
+ * ฝั่งหน้าจอมีสองชั้น: สายรายบทบาท (routeStore) กับสายรายตำแหน่งที่ทับได้ (posRoute)
+ * ส่วนฐานข้อมูลเก็บชั้นเดียวคือผลลัพธ์ จึงคิดผลรวมให้เรียบร้อยก่อนค่อยส่งไป
+ */
+export function routeRowsNow(): RouteRow[] {
+  const route = routeStore.get();
+  const rows: RouteRow[] = [];
+  for (const kind of KINDS) {
+    for (const r of ROLES) {
+      const approver = APPROVER_ROLE[routeKeyOf(r.key, kind, route)];
+      if (approver) rows.push({ kind, from: r.key, approver });
+    }
+  }
+  return rows;
+}
+
+/** ส่งสายอนุมัติขึ้นฐานข้อมูล — เรียกหลังผู้ดูแลแก้สายอนุมัติทุกครั้ง */
+export async function pushRoutes() {
+  return syncRoutes(routeRowsNow());
 }
 
 export function resetApprovalRoute() {

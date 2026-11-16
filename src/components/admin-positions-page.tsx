@@ -32,6 +32,7 @@ import {
   positionOfRole,
   ROLES,
   roleLabel,
+  pushRoutes,
   useApprovalRoute,
   type ApprovalRoute,
   type ApproverKey,
@@ -228,6 +229,8 @@ function PositionsPane({ tabs }: { tabs: ReactNode }) {
   const hr = useHr();
   /* สายอนุมัติรายบทบาท — ใช้เป็นค่าที่ตกไปถึงเมื่อตำแหน่งไม่ได้ตั้งของตัวเอง */
   const byRole = useApprovalRoute();
+  /* ฐานข้อมูลเก็บสายอนุมัติไว้เอง (approval_routes) เพราะเป็นคนตัดสินว่าใบนี้ขึ้นใคร */
+  const [routeErr, setRouteErr] = useState("");
   /* กล่องเพิ่ม/แก้ตำแหน่ง — null = ปิด · "" = เพิ่มใหม่ · รหัสตำแหน่ง = แก้ */
   const [editing, setEditing] = useState<string | null>(null);
   const [deptEditing, setDeptEditing] = useState<{ v: string; label: string } | null>(null);
@@ -419,9 +422,15 @@ function PositionsPane({ tabs }: { tabs: ReactNode }) {
       <SaveBar
         dirty={cat.dirty || route.dirty}
         isDefault={!(cat.saved.positions?.length ?? 0) && !Object.keys(route.saved).length}
+        error={cat.error || route.error || routeErr}
         onSave={() => {
           if (cat.dirty) cat.save();
           if (route.dirty) route.save();
+          /* ร่างเพิ่งบันทึกลงสโตร์ — รอรอบวาดถัดไปแล้วค่อยคิดสายอนุมัติที่ใช้จริงส่งขึ้นฐานข้อมูล */
+          void Promise.resolve().then(async () => {
+            const r = await pushRoutes();
+            setRouteErr(r.ok ? "" : `บันทึกสายอนุมัติลงฐานข้อมูลไม่สำเร็จ: ${r.reason}`);
+          });
         }}
         onCancel={() => {
           cat.cancel();

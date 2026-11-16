@@ -282,6 +282,7 @@ export function AdminRatesPage() {
         dirty={ss.dirty}
         isDefault={history.length === 0 && ss.isDefault}
         invalid={badSs}
+        error={ss.error}
         onSave={() => ss.save()}
         onCancel={() => ss.cancel()}
         onDefault={() => {

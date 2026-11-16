@@ -556,6 +556,7 @@ export function AdminOptionsPage({ only }: { only?: CatKey } = {}) {
         dirty={d.dirty || cat.dirty || wht.dirty || d2.dirty}
         isDefault={d.isDefault && cat.isDefault && wht.isDefault && d2.isDefault}
         invalid={OPTION_GROUPS.some((g) => d.draft[g.key].length === 0) ? "ทุกรายการต้องมีอย่างน้อยหนึ่งตัวเลือก" : ""}
+        error={d.error || cat.error || wht.error || d2.error}
         onSave={() => {
           if (d.dirty) d.save();
           if (cat.dirty) cat.save();
