@@ -17,6 +17,7 @@ import {
   type OtRecord,
 } from "@/lib/ot-data";
 import { addOtRequest } from "@/lib/ot-store";
+import { ALLOWED_MIME, FILE_REASON, MAX_FILE_BYTES } from "@/lib/supabase/files";
 import { recordsOfDay } from "@/lib/attendance";
 import {
   getRecordsServerSnapshot,
@@ -95,6 +96,10 @@ export function OtDialog({
   const [reason, setReason] = useState("");
   /* เหตุที่ยื่นไม่ผ่าน — ขึ้นในรายการปัญหาเดิมของกล่อง ไม่ปิดกล่องทิ้ง */
   const [failed, setFailed] = useState("");
+  /* ไฟล์ประกอบที่เลือกไว้ — ส่งขึ้นถังตอนยื่นสำเร็จ */
+  const [picked, setPicked] = useState<File[]>([]);
+  const [fileWarn, setFileWarn] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -223,6 +228,8 @@ export function OtDialog({
           endMin: e,
           hours: otHours(s, e),
           reason: reason.trim(),
+          /* แนบไฟล์ชุดเดียวกับทุกวันที่ยื่นในครั้งนี้ */
+          upload: picked,
         });
         /* ใบไหนพลาดก็หยุดทันที ใบที่ยื่นผ่านแล้วยังอยู่ในระบบ
            ปิดกล่องไปทั้งที่ยื่นไม่ครบจะเข้าใจผิดว่าได้ทุกวัน */
@@ -352,6 +359,55 @@ export function OtDialog({
               placeholder="ระบุงานที่ปฏิบัติของเวลาที่ขอ"
               className="field-control h-[78px] resize-y py-2.5 leading-relaxed"
             />
+          </div>
+
+          {/* เอกสารประกอบ — เช่นภาพงานที่ทำนอกเวลา หรือใบสั่งงานจากหัวหน้า */}
+          <div className="mb-[15px]">
+            <span className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">
+              เอกสารประกอบ (ถ้ามี)
+            </span>
+            <div className="flex items-center gap-2.5">
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept="image/*,application/pdf"
+                aria-label="เลือกเอกสารประกอบ"
+                className="sr-only"
+                onChange={(e) => {
+                  const list = Array.from(e.target.files ?? []);
+                  /* บอกตั้งแต่ตอนเลือกว่าไฟล์ไหนแนบไม่ได้ ไม่ปล่อยไปเด้งตอนกดยื่น */
+                  const bad = list.find(
+                    (f) => f.size > MAX_FILE_BYTES || (f.type && !ALLOWED_MIME.includes(f.type)),
+                  );
+                  setFileWarn(
+                    bad
+                      ? `${bad.name} แนบไม่ได้ — ${bad.size > MAX_FILE_BYTES ? FILE_REASON.too_big : FILE_REASON.bad_type}`
+                      : "",
+                  );
+                  setPicked(bad ? [] : list);
+                }}
+              />
+              <button
+                type="button"
+                className="btn glass-thin"
+                onClick={() => fileRef.current?.click()}
+              >
+                เลือกไฟล์
+              </button>
+              <span className="truncate text-[12.5px] text-muted-foreground">
+                {picked.length === 0
+                  ? "ยังไม่ได้เลือกไฟล์"
+                  : picked.length === 1
+                    ? picked[0].name
+                    : `เลือกแล้ว ${picked.length} ไฟล์`}
+              </span>
+            </div>
+            {fileWarn && (
+              <p role="alert" className="mt-1.5 text-[12.5px] text-destructive">
+                {fileWarn}
+              </p>
+            )}
           </div>
 
           <div className="glass-thin rounded-[11px] px-[13px] py-[11px] text-[13px]">

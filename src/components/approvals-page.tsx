@@ -35,8 +35,10 @@ import { lockedUntil, timesheetLockedUntil, useHr } from "@/lib/hr-store";
 import { logChange } from "@/lib/admin-log";
 import { fileUrl, listAttachments, type Attachment } from "@/lib/supabase/files";
 import { leaveIdOf } from "@/lib/supabase/leave";
+import { otIdOf } from "@/lib/supabase/ot";
 import { ConfirmDialog } from "./confirm-dialog";
 import { approveClaim, rejectClaim, undoClaimDecision, useAllClaims } from "@/lib/expense-store";
+import { idOfClaim } from "@/lib/supabase/expense";
 import { baht, daysBetween, thaiDate, thaiMonth, thaiStamp, todayIso } from "@/lib/format";
 import { type LeaveRecord } from "@/lib/leave-data";
 import {
@@ -757,22 +759,28 @@ function Head() {
  * ไฟล์แนบของใบนี้ — ผู้อนุมัติต้องกดเปิดดูได้จริง ไม่ใช่เห็นแค่ชื่อไฟล์
  * ถังเป็นแบบส่วนตัว จึงขอลิงก์ชั่วคราวตอนกด ไม่ได้ฝังลิงก์ถาวรไว้ในหน้า
  */
-function Attachments({ kind, no }: { kind: Kind; no: string }) {
+function Attachments({ item }: { item: Request }) {
   const [files, setFiles] = useState<Attachment[]>([]);
+  const { kind, no, role, key } = item;
 
   useEffect(() => {
-    if (!no || kind !== "leave") return;
     let alive = true;
     void (async () => {
-      const id = await leaveIdOf(no);
+      /* ใบลากับใบโอทีอ้างด้วยเลขที่ใบ ส่วนใบเบิกอ้างด้วย "บทบาท + เดือน" ตามที่คิวใช้ */
+      const id =
+        kind === "leave"
+          ? no && (await leaveIdOf(no))
+          : kind === "ot"
+            ? no && (await otIdOf(no))
+            : role && (await idOfClaim(role, key));
       if (!id) return;
-      const list = await listAttachments("leave", id);
+      const list = await listAttachments(kind, id);
       if (alive) setFiles(list);
     })();
     return () => {
       alive = false;
     };
-  }, [kind, no]);
+  }, [kind, no, role, key]);
 
   if (!files.length) return null;
   return (
@@ -919,7 +927,7 @@ function RequestDialog({
         {(item.kind === "leave" || Boolean(item.note)) && (
           <Kv label="เหตุผลของผู้ยื่น" value={item.note || "ไม่ได้เขียนเหตุผล"} />
         )}
-        <Attachments kind={item.kind} no={item.no} />
+        <Attachments item={item} />
         <Kv label="ยื่นเมื่อ" value={thaiStamp(item.at)} />
         {/* คนหนึ่งควบหลายบทบาทได้ — บอกให้ชัดว่ากำลังตัดสินใบนี้ในฐานะอะไร จะได้ไม่สับสน */}
         <Kv label="ถึงคุณในฐานะ" value={roleLabel(item.as)} />

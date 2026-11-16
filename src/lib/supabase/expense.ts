@@ -228,11 +228,27 @@ export async function withdrawClaimRemote(month: string): Promise<ClaimDone> {
   return res.ok ? { ok: true } : { ok: false, reason: res.reason ?? "unknown" };
 }
 
+/** ใบเบิกของเดือนนั้นของตัวเอง → id จริงในฐานข้อมูล (ไฟล์แนบผูกกับ id) */
+export async function claimIdOfMonth(month: string): Promise<string | null> {
+  const sb = supabase();
+  if (!sb) return null;
+  await loadPeople();
+  const me = myId();
+  if (!me) return null;
+  const { data } = await sb
+    .from("expense_claims")
+    .select("id")
+    .eq("month", month)
+    .eq("employee_id", me)
+    .maybeSingle();
+  return (data as { id?: string } | null)?.id ?? null;
+}
+
 /*
  * หน้าอนุมัติอ้างถึงใบเบิกด้วย "บทบาท + เดือน" ไม่ใช่เลขที่ใบ (ของเดิมเป็นแบบนั้น)
  * จึงต้องแปลงกลับเป็นรหัสใบ — หนึ่งบทบาทคือหนึ่งคน จึงหาคนของบทบาทนั้นก่อน
  */
-async function idOfClaim(role: Role, month: string): Promise<string | null> {
+export async function idOfClaim(role: Role, month: string): Promise<string | null> {
   const sb = supabase();
   if (!sb) return null;
   await loadPeople();

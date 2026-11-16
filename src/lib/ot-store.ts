@@ -4,8 +4,10 @@ import { bkkStamp, nextDocNo } from "./format";
 import { OT_RECORDS, type OtRecord } from "./ot-data";
 import type { Role } from "./role";
 import { createRoleStore } from "./role-store";
+import { uploadAttachment } from "./supabase/files";
 import {
   OT_REASON,
+  otIdOf,
   cancelOt as sbCancel,
   decideOt as sbDecide,
   fetchOt,
@@ -44,11 +46,24 @@ export async function addOtRequest(input: {
   endMin: number;
   hours: number;
   reason: string;
+  /** ไฟล์ประกอบ เช่นภาพงานที่ทำนอกเวลา — แนบเข้ากับใบหลังยื่นสำเร็จ */
+  upload?: File[];
 }): Promise<OtRecord | null> {
   /* เลขที่ใบและเวลาที่ยื่นออกจากฐานข้อมูล ไม่ใช่จากเบราว์เซอร์
      เลขที่ต้องไม่ซ้ำทั้งบริษัท สองคนยื่นพร้อมกันจึงนับที่เดียวได้เท่านั้น */
   if (store.live) {
-    const res = await fileOt(input);
+    const res = await fileOt({
+      date: input.date,
+      startMin: input.startMin,
+      endMin: input.endMin,
+      hours: input.hours,
+      reason: input.reason,
+    });
+    /* ไฟล์ต้องขึ้นถังจริง ไม่ใช่เก็บแค่ชื่อ — ใบยื่นไปแล้ว ไฟล์พลาดไม่ถอนใบ */
+    if (res.ok && input.upload?.length) {
+      const id = await otIdOf(res.record.id);
+      if (id) for (const f of input.upload) await uploadAttachment("ot", id, f);
+    }
     store.refresh();
     return res.ok ? res.record : null;
   }

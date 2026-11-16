@@ -164,6 +164,11 @@ export async function fileOt(input: {
   return { ok: true, record: toOt(data as unknown as Row) };
 }
 
+/** เลขที่ใบ (OT-2569-0001) → id จริงในฐานข้อมูล — ไฟล์แนบผูกกับ id */
+export async function otIdOf(no: string): Promise<string | null> {
+  return idOf(no);
+}
+
 async function idOf(no: string): Promise<string | null> {
   const sb = supabase();
   if (!sb) return null;

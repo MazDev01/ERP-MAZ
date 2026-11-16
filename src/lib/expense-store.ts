@@ -14,8 +14,10 @@ import { ROLES, type Role } from "./role";
 import { empRequestIds } from "./emp-requests";
 import { HR_REIMB } from "./hr-data";
 import { createRoleStore } from "./role-store";
+import { uploadAttachment } from "./supabase/files";
 import {
   CLAIM_REASON,
+  claimIdOfMonth,
   decideClaim,
   fetchClaims,
   fileClaim,
@@ -159,6 +161,34 @@ function edit(
   });
 }
 
+/*
+ * ไฟล์หลักฐานที่ผู้ใช้เลือกไว้ระหว่างกรอกใบร่าง
+ *
+ * ใบร่างอยู่ในเครื่องและเก็บได้แค่ "ชื่อไฟล์" (ตัวไฟล์ใส่ localStorage ไม่ได้)
+ * จึงพักตัวไฟล์ไว้ในหน่วยความจำของแท็บนี้ แล้วส่งขึ้นถังตอนกดยื่น
+ * ปิดแท็บก่อนยื่น = ไฟล์หาย ซึ่งตรงกับที่หน้าจอบอกว่ายังไม่ได้ยื่น
+ */
+const pending = new Map<string, File>();
+
+const fileKey = (month: string, rowId: string) => `${month}|${rowId}`;
+
+/** จำไฟล์ของแถวนี้ไว้ก่อน — ส่งขึ้นถังตอนกดยื่น */
+export function holdClaimFile(month: string, rowId: string, file: File | null) {
+  if (file) pending.set(fileKey(month, rowId), file);
+  else pending.delete(fileKey(month, rowId));
+}
+
+/** ไฟล์ที่พักไว้ของเดือนนั้นทั้งหมด */
+function filesOf(month: string): File[] {
+  const out: File[] = [];
+  for (const [key, file] of pending) if (key.startsWith(`${month}|`)) out.push(file);
+  return out;
+}
+
+function clearFiles(month: string) {
+  for (const key of [...pending.keys()]) if (key.startsWith(`${month}|`)) pending.delete(key);
+}
+
 /** ลบใบร่างของเดือนนั้นทิ้ง — เรียกหลังยื่นสำเร็จ ของจริงอยู่ในฐานข้อมูลแล้ว */
 function dropDraft(month: string) {
   drafts.update((ds) => ds.filter((c) => c.month !== month));
@@ -234,6 +264,14 @@ export async function submitClaim(month: string): Promise<ClaimWriteResult> {
   if (store.live) {
     const res = await fileClaim(draft);
     if (!res.ok) return { ok: false, message: say(res.reason) };
+    /* ไฟล์หลักฐานต้องขึ้นถังจริง ผู้อนุมัติจะได้กดเปิดดูได้
+       ใบยื่นไปแล้ว ถ้าไฟล์พลาดจึงไม่ถอนใบ — แนบเพิ่มทีหลังได้ */
+    const waiting = filesOf(month);
+    if (waiting.length) {
+      const id = await claimIdOfMonth(month);
+      if (id) for (const f of waiting) await uploadAttachment("expense", id, f);
+    }
+    clearFiles(month);
     dropDraft(month);
     store.refresh();
     return { ok: true };

@@ -21,6 +21,7 @@ import {
 import { optionsOf } from "@/lib/options";
 import { useAddOption } from "./add-option";
 import {
+  holdClaimFile,
   addFuelRow,
   addOtherRow,
   removeOtherRow,
@@ -455,8 +456,12 @@ function OtherCard({
                       type="file"
                       accept="image/*,application/pdf"
                       aria-label={`ไฟล์หลักฐานของค่าใช้จ่ายลำดับ ${i + 1}`}
-                      /* ยังไม่มี backend — เก็บแค่ชื่อไฟล์ไว้ให้ผู้อนุมัติเห็นว่าแนบอะไรมา */
-                      onChange={(e) => updateOtherRow(month, r.id, { file: e.target.files?.[0]?.name ?? "" })}
+                      /* ชื่อไฟล์เก็บไว้โชว์บนใบ ส่วนตัวไฟล์พักไว้แล้วส่งขึ้นถังตอนกดยื่น */
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        holdClaimFile(month, r.id, f);
+                        updateOtherRow(month, r.id, { file: f?.name ?? "" });
+                      }}
                       className="field-control py-1.5 text-[12.5px]"
                     />
                   )}

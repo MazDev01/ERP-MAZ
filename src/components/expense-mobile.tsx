@@ -25,6 +25,7 @@ import {
   type ExpenseClaim,
 } from "@/lib/expense-data";
 import {
+  holdClaimFile,
   addFuelRow,
   addOtherRow,
   claimOf,
@@ -546,7 +547,11 @@ function OtherFields({
             accept="image/*,application/pdf"
             aria-label="แนบใบเสร็จ"
             className="absolute inset-x-0 bottom-0 h-11 opacity-0"
-            onChange={(e) => updateOtherRow(month, row.id, { file: e.target.files?.[0]?.name ?? "" })}
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              holdClaimFile(month, row.id, f);
+              updateOtherRow(month, row.id, { file: f?.name ?? "" });
+            }}
           />
         )}
       </label>
