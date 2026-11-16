@@ -18,6 +18,17 @@
 import { useSyncExternalStore } from "react";
 import { bkkStamp } from "./format";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+
+/*
+ * ⚠️ ชุดนี้เป็นข้อมูลตัวอย่างสำหรับโหมดเดโมเท่านั้น
+ *
+ * ต่อฐานข้อมูลจริงแล้ว คำขอทุกใบอยู่ในตาราง leave_requests / ot_requests / expense_claims
+ * รวมถึงใบที่ยื่นแทนคนที่ยังไม่มีบัญชี (file_leave รับ employeeId มาได้)
+ * ถ้ายังปล่อยชุดตัวอย่างนี้เข้าไป คิวอนุมัติของคนจริงจะมีใบปลอมปนอยู่
+ * (เจอจริง 16 พ.ย. 2569 — หน้าอนุมัติของผู้บริหารมีใบโอทีของ E01/E03/E04/E06 ที่ไม่มีตัวตนในระบบ)
+ */
+const EMPTY: EmpRequest[] = [];
 
 export type EmpRequest = {
   id: string;
@@ -116,7 +127,8 @@ const store = createPersistedStore<EmpRequest[]>(
 );
 
 export function useEmpRequests() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  const all = useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return hasBackend ? EMPTY : all;
 }
 
 /**
@@ -124,6 +136,7 @@ export function useEmpRequests() {
  * ถ้าไม่รวม เลขใหม่จะไปซ้ำกับใบที่ค้างอยู่ในคิวของ GM
  */
 export function empRequestIds(kind: EmpRequest["kind"]) {
+  if (hasBackend) return [];
   return store.get().filter((r) => r.kind === kind).map((r) => r.id);
 }
 
