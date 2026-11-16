@@ -9,12 +9,15 @@
  * เก็บแค่รหัสพนักงาน ข้อมูลอื่นอ่านจากทะเบียนฝ่ายบุคคลเสมอ
  * (ฝ่ายบุคคลแก้ตำแหน่งแล้วต้องเปลี่ยนตาม ไม่ใช่ค้างค่าที่คัดลอกไว้)
  *
- * TODO: ต่อ backend แล้วอ่านจากบัญชีที่ล็อกอินจริง ไม่ใช่ตัวเลือกในเครื่อง
+ * ต่อฐานข้อมูลแล้ว "ฉันเป็นใคร" มาจากบัญชีที่ล็อกอินจริง (supabase/me)
+ * ตัวเลือกในเครื่องเหลือไว้ใช้ตอนไม่มีฐานข้อมูล (เดโม) เท่านั้น
+ * ไม่งั้นล็อกอินเป็นคนหนึ่ง แต่ใบลา สลิป และวันลาคงเหลือเป็นของอีกคน
  */
 
 import { useSyncExternalStore } from "react";
 import { HR_EMP, HR_EMPTYPE, ROLE_EMPLOYEE, hrPos, type Employee } from "./hr-data";
 import { createPersistedStore } from "./persisted-store";
+import { meNow, subscribeMe } from "./supabase/me";
 
 const DEFAULT_ID = ROLE_EMPLOYEE.staff ?? "E05";
 
@@ -37,10 +40,21 @@ export function staffTeam(): Employee[] {
   );
 }
 
-/** รหัสพนักงานของพนักงานที่ใช้อยู่ — คนที่ถูกลบหรือพ้นสภาพไปแล้วถอยกลับไปคนตั้งต้น */
+/**
+ * รหัสพนักงานของคนที่ล็อกอินอยู่
+ * ล็อกอินจริงแล้วใช้รหัสจากบัญชี — ตัวเลือกในเครื่องใช้เฉพาะตอนยังไม่รู้ว่าเป็นใคร
+ * คนที่ถูกลบหรือพ้นสภาพไปแล้วถอยกลับไปคนตั้งต้น
+ */
 export function staffEmployeeId() {
+  const mine = meNow()?.empNo;
+  if (mine) return mine;
   const id = store.get();
   return staffTeam().some((e) => e.id === id) ? id : DEFAULT_ID;
+}
+
+/** รหัสพนักงานจากบัญชีที่ล็อกอิน — ว่างคือยังไม่รู้ หรือบัญชีนี้ไม่ใช่พนักงาน (ผู้บริหาร) */
+export function myEmpNo() {
+  return meNow()?.empNo ?? "";
 }
 
 export function staffEmployee(): Employee | undefined {
@@ -53,11 +67,17 @@ export function setStaffEmployee(id: string) {
 }
 
 export function subscribeStaffEmployee(fn: () => void) {
-  return store.subscribe(fn);
+  /* ทั้งตัวเลือกในเครื่องและ "ฉันเป็นใคร" จากฐานข้อมูล — อย่างหลังมาถึงหลัง hydrate */
+  const offStore = store.subscribe(fn);
+  const offMe = subscribeMe(fn);
+  return () => {
+    offStore();
+    offMe();
+  };
 }
 
 export function useStaffEmployeeId() {
-  return useSyncExternalStore(store.subscribe, staffEmployeeId, () => DEFAULT_ID);
+  return useSyncExternalStore(subscribeStaffEmployee, staffEmployeeId, () => DEFAULT_ID);
 }
 
 /** ชื่อ + ตำแหน่ง สำหรับดรอปดาวน์เลือกคน — ทดลองงานกับฝึกงานกำกับไว้ด้วย เพราะกติกาวันลาต่างกัน */

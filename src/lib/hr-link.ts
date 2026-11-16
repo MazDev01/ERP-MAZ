@@ -42,7 +42,7 @@ import {
   type PayLine,
   type TimeRec,
 } from "./hr-data";
-import { useStaffEmployeeId } from "./staff-identity";
+import { myEmpNo, useStaffEmployeeId } from "./staff-identity";
 import { useCrm } from "./crm-store";
 import { claimTotal, fuelTotal } from "./expense-data";
 import { useAllClaims } from "./expense-store";
@@ -485,6 +485,86 @@ export function useDbPayLines(month: string | null | undefined, closed: boolean)
   }, [rows, hr.emp]);
 }
 
+
+/*
+ * เงินเดือนที่ฐานข้อมูลคำนวณให้ "หลายรอบพร้อมกัน"
+ *
+ * หน้าที่ CEO ใช้ดูยอดรออนุมัติมีได้หลายรอบในจอเดียว และต้องเห็นตัวเลขชุดเดียวกับ
+ * หน้าคำนวณเงินเดือนของฝ่ายบุคคล (ผู้ใช้กำหนด 23 ก.ย. 2569 — ต้องอนุมัติตัวเลขที่จ่ายจริง)
+ * ของเดิม CEO คิดเองในเครื่องด้วยสูตรฝั่งหน้าจอ ส่วนฝ่ายบุคคลอ่านจากฐานข้อมูล
+ * สองหน้าจึงมีโอกาสไม่ตรงกันโดยไม่มีใครรู้
+ */
+export function useDbPayLinesMap(months: string[]) {
+  const hr = useHr();
+  const time = useHrTime();
+  const src = useComSource();
+  const [got, setGot] = useState<Record<string, { key: string; rows: DbPayLine[] }>>({});
+
+  const wanted = useMemo(() => [...new Set(months.filter(Boolean))].sort(), [months]);
+
+  const inputs = useMemo(() => {
+    if (!hasBackend) return [] as { month: string; commission: Record<string, number>; absent: Record<string, number> }[];
+    return wanted.map((month) => {
+      const range = hrCycle(month);
+      const commission: Record<string, number> = {};
+      const absent: Record<string, number> = {};
+      for (const e of hr.emp) {
+        const uuid = empUuid(e.id);
+        if (!uuid) continue;
+        const base = commissionBase(e, range, src);
+        if (base > 0) commission[uuid] = base;
+        const n = recInRange(time, e.id, range).issues.filter((x: { absent?: boolean }) => x.absent).length;
+        if (n > 0) absent[uuid] = n;
+      }
+      return { month, commission, absent };
+    });
+  }, [wanted, hr.emp, time, src]);
+
+  const keys = useMemo(() => inputs.map((i) => JSON.stringify(i)).join("|"), [inputs]);
+
+  useEffect(() => {
+    if (!inputs.length) return;
+    let alive = true;
+    for (const input of inputs) {
+      const key = JSON.stringify(input);
+      void fetchPayrollLines(input.month, input.commission, input.absent).then((list) => {
+        if (alive && list.length) setGot((prev) => ({ ...prev, [input.month]: { key, rows: list } }));
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [inputs, keys]);
+
+  return useMemo(() => {
+    const byNo = new Map(hr.emp.map((e) => [e.id, e]));
+    const out: Record<string, PayLine[]> = {};
+    for (const input of inputs) {
+      const hit = got[input.month];
+      if (!hit || hit.key !== JSON.stringify(input)) continue;
+      const lines: PayLine[] = [];
+      for (const r of hit.rows) {
+        const e = r.emp_no ? byNo.get(r.emp_no) : undefined;
+        if (!e) continue;
+        lines.push({
+          e,
+          c: {
+            base: r.base, ot: r.ot, com: r.com, inc: r.inc, allow: r.allow, adj: r.adj, ss: r.ss,
+            lateMin: r.late_min, lateChargedMin: r.late_min, late: r.late,
+            absentDays: r.absent_days, absent: r.absent, unpaidDays: r.unpaid_days, unpaid: r.unpaid,
+            gross: r.gross, reimb: r.reimb, net: r.net,
+          },
+          days: r.days,
+          rate: r.rate,
+          snapped: false,
+        });
+      }
+      if (lines.length) out[input.month] = lines;
+    }
+    return out;
+  }, [got, inputs, hr.emp]);
+}
+
 /*
  * ─── ผลการคำนวณของรอบ — หน้าที่เกี่ยวข้องอ่านจากที่นี่ที่เดียว ──────
  *
@@ -497,14 +577,25 @@ export function usePayrollSumFn() {
   const src = useComSource();
   const today = todayIso();
 
+  /* รอบที่ต้องใช้คือรอบที่ส่งให้ CEO ไว้ — ถามฐานข้อมูลเฉพาะรอบที่ยังไม่ปิด */
+  const months = useMemo(
+    () =>
+      Object.keys(hr.payApprove)
+        .map((k) => k.split("|")[0])
+        .filter((m) => !hr.payruns.find((p) => p.month === m)?.closed),
+    [hr.payApprove, hr.payruns],
+  );
+  const dbMap = useDbPayLinesMap(months);
+
   return useCallback(
     (month: string, group: PayGroup) => {
       const range = hrCycle(month);
       const payrun = hr.payruns.find((p) => p.month === month);
-      const lines = payLines(hr.emp, range, time, hr.extras, today, src, payrun, month);
+      /* ตัวเลขชุดเดียวกับหน้าคำนวณเงินเดือน — ฐานข้อมูลเป็นคนคิด หน้าจอคิดเองเฉพาะตอนยังไม่มีคำตอบ */
+      const lines = dbMap[month] ?? payLines(hr.emp, range, time, hr.extras, today, src, payrun, month);
       return sumOfGroup(linesOfGroup(lines, group), group, range, hr.extras);
     },
-    [hr.emp, hr.payruns, hr.extras, time, src, today],
+    [dbMap, hr.emp, hr.payruns, hr.extras, time, src, today],
   );
 }
 
@@ -560,7 +651,8 @@ export function useMyRoles(): Role[] {
   const hr = useHr();
   /* บทบาทพนักงานสลับคนได้ตอนเข้าระบบ — บัญชีที่ใช้คือของคนที่เลือกไว้ ไม่ใช่คนตั้งต้นของบทบาท */
   const staffId = useStaffEmployeeId();
-  const myId = role === "staff" ? staffId : ROLE_EMPLOYEE[role];
+  /* ล็อกอินจริงแล้วยึดรหัสจากบัญชี — ข้อมูลจำลองรายบทบาทใช้เฉพาะตอนไม่มีฐานข้อมูล */
+  const myId = myEmpNo() || (role === "staff" ? staffId : ROLE_EMPLOYEE[role]);
   return useMemo(() => {
     /* ผู้ดูแลระบบเป็นบัญชีแยก (เจ้าของสั่ง 25 ก.ย. 2569) — ผู้บริหารไม่ได้ถือสิทธิ์นี้แล้ว
        เมนูตั้งค่าจึงไม่ติดไปอยู่ในเมนูของผู้บริหารอีก

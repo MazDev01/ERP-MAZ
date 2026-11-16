@@ -13,7 +13,7 @@
 import { USERS } from "./mock-data";
 import { HR_EMP, HR_EMPTYPE, hrDept, hrPos } from "./hr-data";
 import { loadMe, meNow, subscribeMe, type Me } from "./supabase/me";
-import { staffEmployeeId, subscribeStaffEmployee } from "./staff-identity";
+import { myEmpNo, staffEmployeeId, subscribeStaffEmployee } from "./staff-identity";
 import { psEmployeeId, subscribePsEmployee } from "./ps-identity";
 import { createPersistedStore } from "./persisted-store";
 import { currentRole, subscribeRole, type Role } from "./role";
@@ -79,6 +79,9 @@ const store = createPersistedStore<ProfileByRole>(
  */
 /** บทบาทที่ไม่ได้ผูกกับคนเดียว — คืนรหัสพนักงานที่เลือกไว้ ที่เหลือคืนค่าว่าง */
 function pickedId(role: Role): string | null {
+  /* ล็อกอินจริงแล้วรหัสมาจากบัญชี ไม่ใช่ตัวเลือกในเครื่อง */
+  const mine = myEmpNo();
+  if (mine) return mine;
   if (role === "staff") return staffEmployeeId();
   /* ทีมก่อนการขายมี SA กับ BD (เจ้าของถาม 5 ต.ค. 2569 "แล้วของ BD ล่ะ") */
   if (role === "ps") return psEmployeeId();

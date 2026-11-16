@@ -16,6 +16,7 @@
 import { useMemo } from "react";
 import { HR_EMP, type EmpType } from "./hr-data";
 import { useStaffEmployeeId } from "./staff-identity";
+import { meNow } from "./supabase/me";
 import { useRole, type Role } from "./role";
 import { ROLE_EMPLOYEE } from "./hr-data";
 
@@ -61,6 +62,9 @@ export function leavePolicyOf(type: EmpType): LeavePolicy {
 
 /** ประเภทการจ้างของคนที่ล็อกอินอยู่ — พนักงานอ่านจากคนที่เลือกไว้ บทบาทอื่นอ่านจากคนที่ผูกไว้ */
 export function empTypeOfRole(role: Role, staffId: string): EmpType {
+  /* ประเภทการจ้างของบัญชีที่ล็อกอินจริงมาก่อนข้อมูลจำลอง — กติกาวันลาต่างกันตามประเภท */
+  const mine = meNow()?.type;
+  if (mine) return mine;
   const id = role === "staff" ? staffId : ROLE_EMPLOYEE[role];
   return HR_EMP.find((e) => e.id === id)?.type ?? "full";
 }

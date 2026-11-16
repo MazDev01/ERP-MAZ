@@ -18,7 +18,7 @@ import { createRoleStore } from "./role-store";
 import { bkkStamp, nextDocNo } from "./format";
 import { HR_INTERN_LEAVE, ROLE_EMPLOYEE } from "./hr-data";
 import { hrSnapshot } from "./hr-store";
-import { staffEmployeeId } from "./staff-identity";
+import { myEmpNo, staffEmployeeId } from "./staff-identity";
 import { USERS } from "./mock-data";
 import { empRequestIds } from "./emp-requests";
 import { uploadAttachment } from "./supabase/files";
@@ -275,8 +275,13 @@ function baseDays(type: LeaveType, period: string, empId = myEmployeeId()) {
   );
 }
 
-/** รหัสพนักงานของคนที่ล็อกอินอยู่ — ทีมงานอ่านจากคนที่เลือกไว้ บทบาทอื่นอ่านจากคนที่ผูกกับบทบาท */
+/**
+ * รหัสพนักงานของคนที่ล็อกอินอยู่
+ * ต่อฐานข้อมูลแล้วอ่านจากบัญชีจริง — ไม่งั้นวันลาคงเหลือเป็นของคนที่ผูกไว้กับบทบาทในข้อมูลจำลอง
+ */
 function myEmployeeId() {
+  const mine = myEmpNo();
+  if (mine) return mine;
   const role = currentRole();
   return role === "staff" ? staffEmployeeId() : (ROLE_EMPLOYEE[role] ?? "");
 }
