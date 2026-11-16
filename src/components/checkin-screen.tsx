@@ -74,7 +74,8 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
 
   const today = now ? dayKey(now) : null;
   const todayRecords = today ? recordsOfDay(records, today) : [];
-  const { isWorking } = currentStatus(records);
+  /* วันนี้เท่านั้น — ใบเข้างานของวันก่อนที่ลืมตอกออก ต้องไม่ล็อกให้กดได้แต่ "ออกงาน" ตลอดไป */
+  const { isWorking, forgotIn } = currentStatus(records, today ?? undefined);
   // ตอกได้หลายรอบต่อวัน จึงต้องโชว์รอบล่าสุดเสมอ ไม่งั้นกดแล้วเลขไม่ขยับ
   const lastIn = [...todayRecords].reverse().find((r) => r.type === "in") ?? null;
   const lastOut = [...todayRecords].reverse().find((r) => r.type === "out") ?? null;
@@ -247,6 +248,7 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   const areaText = (() => {
     if (isWorking) return lastIn?.geo?.status === "inside" ? "เข้างานในพื้นที่ทำงาน" : "กำลังทำงานอยู่";
     if (checkedOut && live.phase !== "ready") return "ออกงานแล้ววันนี้";
+    if (forgotIn) return `ค้างไว้ไม่ได้ตอกออกเมื่อ ${thaiDate(dayKey(new Date(forgotIn.at)))} — แจ้งฝ่ายบุคคลแก้ย้อนหลัง`;
     if (live.phase === "locating") return "กำลังค้นหาพื้นที่ทำงาน…";
     if (live.phase === "error") return "เปิดตำแหน่งเพื่อเข้างาน";
     if (live.geo.status === "inside") return "อยู่ในพื้นที่ทำงาน";

@@ -24,11 +24,14 @@ import { RADIUS_MAX, RADIUS_MIN, locate, mapLink, saveWorkplace, useAreaSettings
 import { lockedUntil, useHr } from "@/lib/hr-store";
 import { ROLES, type Role } from "@/lib/role";
 
-/** รัศมีเป็นกิโลเมตรตามต้นแบบ — ระบบเก็บเป็นเมตร */
-const KM_MIN = RADIUS_MIN / 1000;
-const KM_MAX = RADIUS_MAX / 1000;
+/*
+ * รัศมีกรอกเป็น "เมตร" ไม่ใช่กิโลเมตรทศนิยมแบบต้นแบบ
+ * ของเดิมต้องพิมพ์ 0.15 เพื่อให้ได้ 150 เมตร ซึ่งคิดในหัวยากและพิมพ์ผิดง่าย
+ * (เจ้าของสั่งให้ใช้ง่ายกว่านี้ 16 พ.ย. 2569) ปุ่มระยะที่ใช้บ่อยกดได้เลย
+ */
+const RADIUS_PICKS = [50, 100, 150, 300, 500];
 
-type Draft = { start: string; end: string; lunchStart: string; lunchEnd: string; lat: string; lng: string; km: string };
+type Draft = { start: string; end: string; lunchStart: string; lunchEnd: string; lat: string; lng: string; m: string };
 
 function problemOf(d: Draft) {
   const t = (x: string) => minutesOfDay(x);
@@ -38,10 +41,10 @@ function problemOf(d: Draft) {
   if (t(d.lunchStart) < t(d.start) || t(d.lunchEnd) > t(d.end)) return "ช่วงพักเที่ยงต้องอยู่ในเวลาทำงาน";
   const lat = Number(d.lat);
   const lng = Number(d.lng);
-  const km = Number(d.km);
+  const m = Number(d.m);
   if (!(d.lat.trim() && Number.isFinite(lat) && Math.abs(lat) <= 90)) return "ละติจูดต้องอยู่ระหว่าง -90 ถึง 90";
   if (!(d.lng.trim() && Number.isFinite(lng) && Math.abs(lng) <= 180)) return "ลองจิจูดต้องอยู่ระหว่าง -180 ถึง 180";
-  if (!(Number.isFinite(km) && km >= KM_MIN && km <= KM_MAX)) return `รัศมีต้องอยู่ระหว่าง ${KM_MIN} ถึง ${KM_MAX} กิโลเมตร`;
+  if (!(Number.isFinite(m) && m >= RADIUS_MIN && m <= RADIUS_MAX)) return `รัศมีต้องอยู่ระหว่าง ${RADIUS_MIN} ถึง ${RADIUS_MAX} เมตร`;
   return "";
 }
 
@@ -70,8 +73,10 @@ export function AdminAttendancePage() {
     lunchEnd: s.schedule.lunchEnd,
     lat: String(place.lat),
     lng: String(place.lng),
-    km: String(place.radius / 1000),
+    m: String(place.radius),
   }));
+  const [showXY, setShowXY] = useState(false);
+  const [done, setDone] = useState("");
   const [at, setAt] = useState(() => (minAt && minAt > todayIso() ? minAt : todayIso()));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -80,7 +85,7 @@ export function AdminAttendancePage() {
   const bad = problemOf(d);
   const lat = Number(d.lat);
   const lng = Number(d.lng);
-  const km = Number(d.km);
+  const m = Number(d.m);
   const workMin = bad ? 0 : minutesOfDay(d.end) - minutesOfDay(d.start) - (minutesOfDay(d.lunchEnd) - minutesOfDay(d.lunchStart));
   const lunchMin = bad ? 0 : minutesOfDay(d.lunchEnd) - minutesOfDay(d.lunchStart);
   const dirty =
@@ -90,7 +95,7 @@ export function AdminAttendancePage() {
     d.lunchEnd !== s.schedule.lunchEnd ||
     lat !== place.lat ||
     lng !== place.lng ||
-    Math.round(km * 1000) !== place.radius;
+    Math.round(m) !== place.radius;
 
   function reset() {
     setD({
@@ -100,9 +105,10 @@ export function AdminAttendancePage() {
       lunchEnd: s.schedule.lunchEnd,
       lat: String(place.lat),
       lng: String(place.lng),
-      km: String(place.radius / 1000),
+      m: String(place.radius),
     });
     setErr("");
+    setDone("");
   }
 
   async function here() {
@@ -117,7 +123,11 @@ export function AdminAttendancePage() {
     setD((x) => ({ ...x, lat: got.fix.lat.toFixed(6), lng: got.fix.lng.toFixed(6) }));
   }
 
-  function save() {
+  /*
+   * จุดลงเวลาไปอยู่ในฐานข้อมูล (work_areas) เพราะ clock_punch เป็นคนตัดสินว่าอยู่ในพื้นที่ไหม
+   * บันทึกไม่สำเร็จต้องบอกทันที ไม่ใช่ขยับหมุดบนจอแล้วพนักงานกดเข้างานไม่ได้โดยไม่มีใครรู้
+   */
+  async function save() {
     if (bad) {
       setErr(bad);
       return;
@@ -131,13 +141,26 @@ export function AdminAttendancePage() {
       return;
     }
     const times = { start: d.start, end: d.end, lunchStart: d.lunchStart, lunchEnd: d.lunchEnd };
-    const radius = Math.round(km * 1000);
-    const note = `เวลาทำงาน ${d.start}–${d.end} · พักเที่ยง ${d.lunchStart}–${d.lunchEnd} · รัศมี ${km} กม.`;
+    const radius = Math.round(m);
+    const note = `เวลาทำงาน ${d.start}–${d.end} · พักเที่ยง ${d.lunchStart}–${d.lunchEnd} · รัศมี ${radius} ม.`;
+
+    setBusy(true);
+    const res = await saveWorkplace({ ...place, lat, lng, radius });
+    setBusy(false);
+    if (!res.ok) {
+      setDone("");
+      setErr(`บันทึกจุดลงเวลาไม่สำเร็จ: ${res.message}`);
+      return;
+    }
+
     saveAttFrom(at, times, { lat, lng, radius }, note);
-    /* มีผลแล้ววันนี้ก็เขียนพิกัดลงที่เก็บของพื้นที่เข้างานด้วย (คนละที่เก็บกับค่าตั้งค่า) */
-    if (at <= todayIso()) saveWorkplace({ ...place, lat, lng, radius });
     logChange("เวลาทำงาน", `เริ่มใช้ ${thaiDate(at)} · ${note}`);
     setErr("");
+    setDone(
+      at <= todayIso()
+        ? `บันทึกแล้ว — พนักงานกดเข้างานได้ในรัศมี ${radius} เมตรจากหมุดนี้`
+        : `บันทึกแล้ว — จุดลงเวลาใช้ทันที ส่วนเวลาทำงานเริ่ม ${thaiDate(at)}`,
+    );
   }
 
   const hist = [...s.attHistory].sort((a, b) => b.at.localeCompare(a.at));
@@ -192,7 +215,7 @@ export function AdminAttendancePage() {
               <AreaMap
                 lat={lat}
                 lng={lng}
-                radius={Number.isFinite(km) && km > 0 ? km * 1000 : 150}
+                radius={Number.isFinite(m) && m > 0 ? m : 150}
                 onPick={(la, ln) => setD((x) => ({ ...x, lat: String(la), lng: String(ln) }))}
                 className="h-[300px] w-full"
               />
@@ -216,42 +239,80 @@ export function AdminAttendancePage() {
           </div>
 
           <div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-            <Input2 label="ละติจูด">
-              <input value={d.lat} inputMode="decimal" onChange={(e) => set("lat", e.target.value)} className={`${inputCls} num`} />
-            </Input2>
-            <Input2 label="ลองจิจูด">
-              <input value={d.lng} inputMode="decimal" onChange={(e) => set("lng", e.target.value)} className={`${inputCls} num`} />
-            </Input2>
+          {/* ขั้นที่ 1 ปักหมุด — ปุ่มเดียวจบถ้ายืนอยู่ที่ออฟฟิศ ไม่ต้องรู้ว่าละติจูดคืออะไร */}
+          <p className="text-[12.5px] font-semibold text-foreground">1. ปักหมุดที่สำนักงาน</p>
+          <button type="button" className="btn glass-thin mt-2 w-full justify-center" disabled={busy} onClick={() => void here()}>
+            <CrosshairIcon className="size-4" strokeWidth={2.2} />
+            {busy ? "กำลังหาตำแหน่ง…" : "ใช้ตำแหน่งที่ฉันอยู่ตอนนี้"}
+          </button>
+          <p className="mt-1.5 text-[12px] text-muted-foreground">หรือกดบนแผนที่ตรงจุดที่ต้องการ</p>
+
+          {/* ขั้นที่ 2 รัศมี — เลือกจากระยะที่ใช้บ่อย ไม่ต้องคิดเป็นทศนิยมกิโลเมตร */}
+          <p className="mt-4 text-[12.5px] font-semibold text-foreground">2. พนักงานต้องอยู่ใกล้หมุดแค่ไหน</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {RADIUS_PICKS.map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => set("m", String(v))}
+                aria-pressed={Math.round(m) === v}
+                className={`h-9 rounded-full border px-3.5 text-[13px] transition-colors ${
+                  Math.round(m) === v
+                    ? "border-primary bg-primary text-white"
+                    : "border-border bg-card hover:border-primary"
+                }`}
+              >
+                {v} ม.
+              </button>
+            ))}
           </div>
-          <div className="mt-3">
-            <Input2 label="รัศมีที่ลงเวลาได้" hint={`ตั้งได้ ${KM_MIN} ถึง ${KM_MAX} กิโลเมตร · พนักงานต้องอยู่ในวงนี้จึงกดเข้างานได้`}>
-              <div className="flex items-center gap-2">
-                <input
-                  value={d.km}
-                  inputMode="decimal"
-                  onChange={(e) => set("km", e.target.value)}
-                  className={`${inputCls} num w-[130px]`}
-                />
-                <span className="text-[12.5px] whitespace-nowrap text-muted-foreground">กิโลเมตร</span>
-              </div>
-            </Input2>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-[12.5px] text-muted-foreground">หรือกำหนดเอง</span>
+            <input
+              value={d.m}
+              inputMode="numeric"
+              aria-label="รัศมีที่ลงเวลาได้ (เมตร)"
+              onChange={(e) => set("m", e.target.value)}
+              className={`${inputCls} num w-[90px]`}
+            />
+            <span className="text-[12.5px] text-muted-foreground">เมตร</span>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="button" className="btn glass-thin" disabled={busy} onClick={() => void here()}>
-              <CrosshairIcon className="size-4" strokeWidth={2.2} />
-              {busy ? "กำลังหาตำแหน่ง…" : "ใช้ตำแหน่งปัจจุบัน"}
-            </button>
-            <span className="text-[12px] text-muted-foreground">กดขณะอยู่ที่สำนักงาน</span>
-          </div>
+          <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+            ตั้งได้ {RADIUS_MIN} ถึง {RADIUS_MAX} เมตร · ยิ่งแคบยิ่งกันคนกดเข้างานจากที่บ้าน แต่ถ้าแคบเกินไป
+            สัญญาณ GPS เพี้ยนนิดเดียวก็กดไม่ได้ (แนะนำ 100–150 เมตร)
+          </p>
+
+          {/* พิกัดตัวเลขเป็นของคนที่รู้ว่าจะกรอกอะไร — ซ่อนไว้ ไม่ให้เกะกะคนทั่วไป */}
+          <button
+            type="button"
+            onClick={() => setShowXY((v) => !v)}
+            className="mt-3 text-[12.5px] text-primary underline"
+          >
+            {showXY ? "ซ่อนพิกัดตัวเลข" : "กรอกพิกัดเป็นตัวเลขเอง"}
+          </button>
+          {showXY && (
+            <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <Input2 label="ละติจูด">
+                <input value={d.lat} inputMode="decimal" onChange={(e) => set("lat", e.target.value)} className={`${inputCls} num`} />
+              </Input2>
+              <Input2 label="ลองจิจูด">
+                <input value={d.lng} inputMode="decimal" onChange={(e) => set("lng", e.target.value)} className={`${inputCls} num`} />
+              </Input2>
+            </div>
+          )}
           </div>
         </div>
       </Card>
 
       <section className="glass rounded-[18px] px-4 py-4 sm:px-5">
         {err && (
-          <p className="mb-3 rounded-[11px] border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-[12.5px] font-semibold text-destructive">
+          <p role="status" className="mb-3 rounded-[11px] border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-[12.5px] font-semibold text-destructive">
             {err}
+          </p>
+        )}
+        {!err && done && (
+          <p role="status" className="mb-3 rounded-[11px] px-3 py-2.5 text-[12.5px] font-semibold" style={{ background: "var(--success-soft)", color: "var(--success)" }}>
+            {done}
           </p>
         )}
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -280,7 +341,7 @@ export function AdminAttendancePage() {
             <button type="button" className="btn glass-thin disabled:opacity-45" disabled={!dirty} onClick={reset}>
               ยกเลิกการแก้
             </button>
-            <button type="button" className="btn solid btn-solid disabled:opacity-45" disabled={Boolean(bad)} onClick={save}>
+            <button type="button" className="btn solid btn-solid disabled:opacity-45" disabled={Boolean(bad) || busy} onClick={() => void save()}>
               บันทึก
             </button>
           </div>

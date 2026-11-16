@@ -58,6 +58,7 @@ import {
 } from "@/lib/botnav-prefs";
 import { UserMenu } from "./user-menu";
 import { goLive, settingsId, useLiveSettings } from "@/lib/system-settings";
+import { goLiveAreas } from "@/lib/work-area";
 
 const DW_FULL = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
 
@@ -266,6 +267,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const liveSettings = useLiveSettings();
   useEffect(() => {
     goLive();
+    /* จุดลงเวลาตัวจริงอยู่ในฐานข้อมูล — ดึงมาทับของในเครื่องหลัง hydrate เหมือนค่าตั้งค่าอื่น */
+    goLiveAreas();
   }, []);
   const settingsKey = settingsId(liveSettings);
 

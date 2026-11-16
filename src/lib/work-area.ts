@@ -11,8 +11,10 @@
  * อยู่ในรัศมีเข้างานได้ · อยู่นอก / GPS ไม่แม่น / ไม่ได้พิกัด → เข้างานไม่ได้ ให้ลองใหม่
  * ตรวจเฉพาะตอนเข้างาน ออกงานไม่ตรวจ เพราะคนออกไปหาลูกค้าแล้วเลิกงานข้างนอกเป็นเรื่องปกติ
  *
- * ยังไม่มี backend — พิกัดที่ส่งมาจากเบราว์เซอร์ปลอมได้ เมื่อต่อเซิร์ฟเวอร์แล้ว
- * ต้องตรวจซ้ำฝั่งเซิร์ฟเวอร์ และ geolocation ใช้ได้เฉพาะ https หรือ localhost เท่านั้น
+ * จุดลงเวลาตัวจริงอยู่ในตาราง work_areas ของฐานข้อมูล เพราะ clock_punch เป็นคนตัดสิน
+ * ว่าอยู่ในพื้นที่ไหม พิกัดที่ส่งมาจากเบราว์เซอร์ปลอมได้ จึงเชื่อฝั่งเครื่องไม่ได้
+ * ของในเครื่องเป็นแค่สำเนาไว้วาดหน้า — โหลดจากฐานข้อมูลเสร็จเมื่อไรทับทันที
+ * (geolocation ใช้ได้เฉพาะ https หรือ localhost เท่านั้น)
  */
 
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -20,6 +22,8 @@ import { createPersistedStore } from "./persisted-store";
 import { useHydrated } from "./pwa";
 import { todayIso } from "./format";
 import { attOn, saveAttFrom, settings } from "./system-settings";
+import { AREA_REASON, fetchArea, saveAreaRemote } from "./supabase/areas";
+import { hasBackend } from "./supabase/env";
 
 export type WorkArea = {
   id: string;
@@ -110,8 +114,52 @@ export function workplaceOf(s: AreaSettings): WorkArea {
   return { ...base, ...p };
 }
 
-export function saveWorkplace(area: WorkArea) {
+/*
+ * ─── จุดลงเวลาตัวจริงอยู่ในฐานข้อมูล ───────────────────────────────
+ * โหลดลงมาทับของในเครื่องหลังเปลือกแอปพร้อม (goLiveAreas) หน้าตั้งค่าจึงโชว์ค่าที่
+ * เซิร์ฟเวอร์ใช้ตัดสินจริง ไม่ใช่ค่าที่ใครสักคนเคยตั้งไว้ในเครื่องนี้
+ */
+let pulled = false;
+
+export function goLiveAreas() {
+  if (!hasBackend || pulled) return;
+  pulled = true;
+  void fetchArea()
+    .then((got) => {
+      if (!got) return;
+      store.update((s) => ({
+        ...s,
+        areas: [{ ...(s.areas[0] ?? INITIAL.areas[0]), ...got, active: true }],
+      }));
+    })
+    .catch(() => {
+      /* อ่านไม่ได้ก็ใช้ค่าที่มีไปก่อน */
+    });
+}
+
+export type SaveAreaResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * ย้ายจุดลงเวลา — ต้องขึ้นฐานข้อมูลให้สำเร็จก่อน ไม่งั้นคืนค่าเดิมและบอกเหตุ
+ * ถ้าแก้แต่ในเครื่อง พนักงานจะกดเข้างานไม่ได้โดยที่ผู้ดูแลเห็นว่าหมุดย้ายแล้ว
+ */
+export async function saveWorkplace(area: WorkArea): Promise<SaveAreaResult> {
+  const before = store.get();
   store.update((s) => ({ ...s, areas: [{ ...area, active: true }] }));
+
+  if (hasBackend) {
+    const res = await saveAreaRemote({
+      name: area.name,
+      lat: area.lat,
+      lng: area.lng,
+      radius: area.radius,
+      address: area.address,
+    });
+    if (!res.ok) {
+      store.set(before);
+      return { ok: false, message: AREA_REASON[res.reason] ?? res.reason };
+    }
+  }
   /* มีประวัติแล้วพิกัดอ่านจากประวัติ — แก้จากหน้านี้ต้องลงประวัติของวันนี้ด้วย ไม่งั้นค่าใหม่ถูกชุดเก่าทับ */
   const s = settings();
   if (s.attHistory.length) {
@@ -123,6 +171,7 @@ export function saveWorkplace(area: WorkArea) {
       "แก้จุดลงเวลาจากหน้าพื้นที่เข้างาน",
     );
   }
+  return { ok: true };
 }
 
 export function resetAreaSettings() {

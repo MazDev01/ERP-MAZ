@@ -85,11 +85,27 @@ export function recordsOfDay(records: PunchRecord[], day: string) {
     .sort((a, b) => a.at.localeCompare(b.at));
 }
 
-/** สถานะปัจจุบัน: กำลังทำงานอยู่ไหม + เวลาที่เข้างานล่าสุด */
-export function currentStatus(records: PunchRecord[]) {
-  const last = [...records].sort((a, b) => a.at.localeCompare(b.at)).at(-1);
+/**
+ * สถานะปัจจุบัน: กำลังทำงานอยู่ไหม + เวลาที่ตอกล่าสุด
+ *
+ * นับเฉพาะการตอกของ "วันนี้" เท่านั้น
+ * ของเดิมดูการตอกล่าสุดโดยไม่สนวัน ใครลืมตอกออกสักวันหนึ่ง วันถัดไปหน้าจอจะขึ้นว่า
+ * กำลังทำงานอยู่ค้างไว้ตลอด ปุ่มกลายเป็น "ออกงาน" ซึ่งฐานข้อมูลปฏิเสธ (not_in เพราะ
+ * ใบเข้างานไม่ใช่ของวันนี้) และปุ่มเข้างานก็ไม่โผล่ — ตอกบัตรไม่ได้อีกเลย
+ * (เจ้าของแจ้ง "เช็คอินเช็คเอาไม่ได้" 16 พ.ย. 2569)
+ *
+ * forgotIn = ใบเข้างานของวันก่อนที่ไม่มีใบออกคู่กัน ไว้ให้หน้าจอบอกว่าลืมตอกออกวันไหน
+ */
+export function currentStatus(records: PunchRecord[], day: string = dayKey(new Date())) {
+  const sorted = [...records].sort((a, b) => a.at.localeCompare(b.at));
+  const today = sorted.filter((r) => dayKey(new Date(r.at)) === day);
+  const last = today.at(-1) ?? null;
   const isWorking = last?.type === "in";
-  return { isWorking, lastPunch: last ?? null };
+
+  const before = sorted.filter((r) => dayKey(new Date(r.at)) < day).at(-1) ?? null;
+  const forgotIn = !today.length && before?.type === "in" ? before : null;
+
+  return { isWorking, lastPunch: last, forgotIn };
 }
 
 /**
