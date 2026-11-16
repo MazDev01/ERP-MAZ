@@ -23,6 +23,8 @@ export const metadata: Metadata = {
   title: "ERP MAZ",
   description: "ระบบ ERP งานขายและงานบุคคลของ MAZ",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "ERP MAZ" },
+  /* iPhone อ่านไอคอนหน้าจอโฮมจากตรงนี้ ไม่ได้อ่านจาก manifest — ไม่มีก็ได้ภาพหน้าจอเว็บเป็นไอคอน */
+  icons: { apple: "/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
