@@ -1322,7 +1322,11 @@ export function workedDaysIn(
       (a, x) => a + (x.hours != null ? Math.min(1, x.hours / HR_OT_DIVISOR.hours) : x.span === "half" ? 0.5 : 1),
       0,
     );
-  return round2(days - leave);
+  /* วันที่ฝ่ายบุคคลสรุปว่า "ขาดงานจริง" ไม่นับเป็นวันที่มาทำงาน
+     (เอกสารสอบถามเพิ่มเติมฝ่ายบุคคล ข้อ 1.5 — ทดลองงานได้ค่าจ้างเฉพาะวันที่มางาน)
+     เดิมไม่หักเลย และ absentDeduction ก็ข้ามคนจ่ายรายวันไป วันขาดของทดลองงานจึงได้เงินเต็ม */
+  const absent = recInRange(time, e.id, c).issues.filter((x) => x.absent && upTo(x.d)).length;
+  return round2(Math.max(0, days - leave - absent));
 }
 
 export type PaySlipCalc = {
@@ -1416,7 +1420,9 @@ export function lateDeduction(e: Employee, c: Cycle, minutes: number) {
   /* อัตราหักมาสายของรอบนั้น — รอบเก่าคิดด้วยอัตราที่ใช้อยู่ตอนนั้น ไม่ใช่อัตราวันนี้ */
   const r = ratesOn(c.to);
   const charged = Math.max(0, minutes);
-  const perDay = isDaily(e) ? dailyRateIn(e, c) : baseSalaryIn(e, c) / HR_OT_DIVISOR.days;
+  /* มาสายใช้ค่าแรงต่อวัน = ฐาน ÷ 22 ทั้งรายวันและรายเดือน
+     (เอกสารสอบถามเพิ่มเติมฝ่ายบุคคล ข้อ 2.2 — เงินเดือน 15,000 → 681.82 บาท/วัน) */
+  const perDay = dailyRateIn(e, c);
   const perMin = r.lateMode === "fixed" ? r.latePerMinute : perDay / HR_OT_DIVISOR.hours / 60;
   return { charged, perMin, amount: round2(charged * perMin) };
 }
