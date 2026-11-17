@@ -75,10 +75,15 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
 
   const today = now ? dayKey(now) : null;
   const todayRecords = today ? recordsOfDay(records, today) : [];
-  /* วันนี้เท่านั้น — ใบเข้างานของวันก่อนที่ลืมตอกออก ต้องไม่ล็อกให้กดได้แต่ "ออกงาน" ตลอดไป */
-  const { isWorking, forgotIn } = currentStatus(records, today ?? undefined);
+  /* ใบเข้างานของวันก่อนที่ลืมตอกออก ต้องไม่ล็อกให้กดได้แต่ "ออกงาน" ตลอดไป
+     ยกเว้นงานข้ามคืนที่เพิ่งเข้าเมื่อคืนและยังไม่เกิน 12 ชั่วโมง (overnight) — อันนั้นยังกดออกได้ */
+  const { isWorking, forgotIn, overnight } = currentStatus(
+    records,
+    today ?? undefined,
+    now ?? undefined,
+  );
   // ตอกได้หลายรอบต่อวัน จึงต้องโชว์รอบล่าสุดเสมอ ไม่งั้นกดแล้วเลขไม่ขยับ
-  const lastIn = [...todayRecords].reverse().find((r) => r.type === "in") ?? null;
+  const lastIn = [...todayRecords].reverse().find((r) => r.type === "in") ?? overnight ?? null;
   const lastOut = [...todayRecords].reverse().find((r) => r.type === "out") ?? null;
   const checkedOut = !isWorking && Boolean(lastOut);
   const online = useOnline();
@@ -250,6 +255,8 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   const areaText = (() => {
     /* ไม่มีเน็ตก็ตอกไม่ได้ เพราะเวลาต้องมาจากนาฬิกาของเซิร์ฟเวอร์ — บอกก่อนกด ไม่ใช่หลังกด */
     if (!online) return "ไม่มีเน็ต — ตอกบัตรไม่ได้";
+    if (overnight)
+      return `เข้างานเมื่อ ${thaiDate(dayKey(new Date(overnight.at)))} ${formatClock(new Date(overnight.at))} น. · กำลังทำงานข้ามคืน`;
     if (isWorking) return lastIn?.geo?.status === "inside" ? "เข้างานในพื้นที่ทำงาน" : "กำลังทำงานอยู่";
     if (checkedOut && live.phase !== "ready") return "ออกงานแล้ววันนี้";
     if (forgotIn) return `ค้างไว้ไม่ได้ตอกออกเมื่อ ${thaiDate(dayKey(new Date(forgotIn.at)))} — แจ้งฝ่ายบุคคลแก้ย้อนหลัง`;

@@ -94,18 +94,34 @@ export function recordsOfDay(records: PunchRecord[], day: string) {
  * ใบเข้างานไม่ใช่ของวันนี้) และปุ่มเข้างานก็ไม่โผล่ — ตอกบัตรไม่ได้อีกเลย
  * (เจ้าของแจ้ง "เช็คอินเช็คเอาไม่ได้" 16 พ.ย. 2569)
  *
- * forgotIn = ใบเข้างานของวันก่อนที่ไม่มีใบออกคู่กัน ไว้ให้หน้าจอบอกว่าลืมตอกออกวันไหน
+ * ยกเว้นงานที่ข้ามเที่ยงคืน — เข้า 5 ทุ่มแล้วยังทำอยู่ตอนตี 1 ยังถือว่า "กำลังทำงาน"
+ * ถ้าใบเข้างานของเมื่อวานยังไม่เกิน 12 ชั่วโมง (กติกาเดียวกับที่ฐานข้อมูลยอมให้กดออก)
+ * เกินกว่านั้นคือลืมตอกออก ให้ฝ่ายบุคคลเติมเวลาย้อนหลังแทน
+ *
+ * forgotIn = ใบเข้างานของวันก่อนที่ไม่มีใบออกคู่กันและเลยเวลามาแล้ว
  */
-export function currentStatus(records: PunchRecord[], day: string = dayKey(new Date())) {
+export const OVERNIGHT_MS = 12 * 60 * 60 * 1000;
+
+export function currentStatus(
+  records: PunchRecord[],
+  day: string = dayKey(new Date()),
+  now: Date = new Date(),
+) {
   const sorted = [...records].sort((a, b) => a.at.localeCompare(b.at));
   const today = sorted.filter((r) => dayKey(new Date(r.at)) === day);
   const last = today.at(-1) ?? null;
-  const isWorking = last?.type === "in";
 
   const before = sorted.filter((r) => dayKey(new Date(r.at)) < day).at(-1) ?? null;
-  const forgotIn = !today.length && before?.type === "in" ? before : null;
+  /* ใบเข้างานของเมื่อวานที่ยังไม่ถูกปิด และยังอยู่ในช่วงที่กดออกได้ */
+  const overnight =
+    !today.length && before?.type === "in" && now.getTime() - new Date(before.at).getTime() <= OVERNIGHT_MS
+      ? before
+      : null;
 
-  return { isWorking, lastPunch: last, forgotIn };
+  const isWorking = last?.type === "in" || Boolean(overnight);
+  const forgotIn = !today.length && before?.type === "in" && !overnight ? before : null;
+
+  return { isWorking, lastPunch: last ?? overnight, forgotIn, overnight };
 }
 
 /**
