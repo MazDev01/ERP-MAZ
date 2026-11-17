@@ -1077,8 +1077,21 @@ function statusOf(s: string): Status {
 }
 
 /** ชื่อและตำแหน่งของบทบาทที่ล็อกอินได้ */
-function who(role: Role) {
-  return { src: "role" as const, role, name: USERS[role].name, sub: roleLabel(role) };
+/*
+ * ชื่อผู้ยื่นบนคิวอนุมัติ — ต้องเป็นชื่อเจ้าของใบจริง ไม่ใช่ชื่อประจำบทบาท
+ *
+ * ใบในระบบถูกจัดกลุ่มตามบทบาทของเจ้าของใบ ตอนที่ยังมีคนละคนต่อหนึ่งบทบาท
+ * ชื่อประจำบทบาทจึงตรงกับเจ้าของใบพอดี แต่เดี๋ยวนี้บทบาทเดียวมีได้หลายคน
+ * (และฝ่ายบุคคลยื่นแทนคนที่ไม่มีบัญชีได้) — ถ้าใช้ชื่อประจำบทบาท
+ * ผู้อนุมัติจะเห็นชื่อคนอื่นบนใบของอีกคน แล้วตัดสินผิดคน (เจอจริง 17 พ.ย. 2569)
+ */
+function who(role: Role, owner?: string) {
+  return {
+    src: "role" as const,
+    role,
+    name: owner?.trim() || USERS[role].name,
+    sub: roleLabel(role),
+  };
 }
 
 /** คำขอของทีมงานตามรหัสพนักงาน (emp-requests) — รูปเดียวกับใบของบทบาท */
@@ -1156,7 +1169,7 @@ function fromLeave(
     note: status === "rejected" ? "" : v.comment,
     away,
     kind: "leave",
-    ...who(role),
+    ...who(role, v.employee),
     as,
     key: v.id,
     no: v.id,
@@ -1179,7 +1192,7 @@ function fromOt(role: Role, v: OtRecord, as: Role): Request {
   ];
   return {
     kind: "ot",
-    ...who(role),
+    ...who(role, v.employee),
     as,
     key: v.id,
     no: v.id,
@@ -1209,7 +1222,7 @@ function fromClaim(role: Role, v: ExpenseClaim, as: Role): Request {
   ];
   return {
     kind: "expense",
-    ...who(role),
+    ...who(role, v.employee),
     as,
     key: v.month,
     no: v.no ?? "",

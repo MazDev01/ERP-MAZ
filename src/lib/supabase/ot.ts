@@ -134,12 +134,14 @@ export async function fileOt(input: {
   endMin: number;
   hours: number;
   reason: string;
+  /** ยื่นแทนคนที่ยังไม่มีบัญชี — ไม่ส่งมาคือยื่นของตัวเอง */
+  employeeId?: string;
 }): Promise<OtWrite> {
   const sb = supabase();
   if (!sb) return { ok: false, reason: "no_backend" };
   await loadPeople();
 
-  const owner = myId();
+  const owner = input.employeeId ?? myId();
   if (!owner) return { ok: false, reason: "no_account" };
   const role = roleById(owner);
   const route = role ? await routeFor(role) : null;
@@ -155,7 +157,7 @@ export async function fileOt(input: {
       hours: input.hours,
       reason: input.reason,
       approver_role: route,
-      filed_by: owner,
+      filed_by: myId(),
     })
     .select(COLS)
     .single();

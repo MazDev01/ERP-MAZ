@@ -250,6 +250,8 @@ const HR: NavItem[] = [
   { group: "ฝ่ายบุคคล", label: "รอบเงินเดือน", icon: "clock", href: "/hr/timesheet", sub: PAY_SUB },
   { group: "ฝ่ายบุคคล", label: "รายงาน", icon: "chart", href: "/hr/report" },
   { group: "ฝ่ายบุคคล", label: "จัดการบัญชีผู้ใช้", icon: "user", href: "/hr/accounts" },
+  /* ใบลา/โอทีของคนที่ยังไม่มีบัญชีเข้าระบบ มาถึงฝ่ายบุคคลเป็นกระดาษ ต้องมีทางกรอกเข้าระบบ */
+  { group: "ฝ่ายบุคคล", label: "ยื่นใบแทนพนักงาน", icon: "leave", href: "/hr/file-for" },
 
   /*
    * ตั้งค่าระบบและข้อมูลหลัก (Full Proposal · M5) — เจ้าของโมดูลคือฝ่ายบุคคล
