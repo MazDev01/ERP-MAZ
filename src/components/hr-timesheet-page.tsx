@@ -43,7 +43,9 @@ import {
 } from "@/lib/hr-data";
 import {
   closePeriod,
+  fillMissingPunch,
   noteIssue,
+  setLateMin,
   useHr,
 } from "@/lib/hr-store";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
@@ -686,6 +688,29 @@ function DayDetail({
   /* บันทึกไม่ผ่านต้องขึ้นให้เห็น — ผลการตรวจมีผลกับเงินเดือน ปล่อยเงียบไม่ได้ */
   const [busy, setBusy] = useState("");
   const [failed, setFailed] = useState("");
+  /* กล่องเติมเวลาที่ขาด และกล่องแก้นาทีมาสาย — ทีละวัน */
+  const [fill, setFill] = useState<{ day: string; type: "in" | "out"; time: string; why: string } | null>(null);
+  const [fixLate, setFixLate] = useState<{ day: string; min: string; was: number; why: string } | null>(null);
+
+  async function doFill() {
+    if (!fill || !fill.why.trim() || !/^\d{2}:\d{2}$/.test(fill.time)) return;
+    setBusy(fill.day);
+    const res = await fillMissingPunch(emp.id, fill.type, fill.day, fill.time, fill.why.trim());
+    setBusy("");
+    if (res.ok) setFill(null);
+    setFailed(res.ok ? "" : res.message);
+  }
+
+  async function doFixLate() {
+    if (!fixLate || !fixLate.why.trim()) return;
+    const min = Number(fixLate.min);
+    if (!Number.isFinite(min) || min < 0) return;
+    setBusy(fixLate.day);
+    const res = await setLateMin(emp.id, fixLate.day, Math.round(min), fixLate.why.trim(), fixLate.was);
+    setBusy("");
+    if (res.ok) setFixLate(null);
+    setFailed(res.ok ? "" : res.message);
+  }
 
   async function decide(empId: string, day: string, absent: boolean) {
     const note = (notes[day] ?? "").trim();
@@ -714,6 +739,16 @@ function DayDetail({
           <em className="num basis-full text-[11.5px] not-italic text-muted-foreground">
             แก้จาก {x.was} นาที
           </em>
+        )}
+        {/* มาตรงเวลาแต่กดช้าเพราะแบตหมด/เน็ตล่ม ต้องแก้ได้ แต่ต้องมีเหตุผลและเห็นค่าเดิมเสมอ */}
+        {!locked && (
+          <button
+            type="button"
+            className="btn glass-thin btn-mini"
+            onClick={() => setFixLate({ day: x.d, min: String(x.min), was: x.was ?? x.min, why: "" })}
+          >
+            แก้นาที
+          </button>
         )}
       </span>,
     );
@@ -786,6 +821,88 @@ function DayDetail({
             บันทึกไม่สำเร็จ: {failed}
           </p>
         )}
+        {fill && (
+          <div className="mb-3 rounded-[12px] border border-primary/30 bg-card p-3">
+            <p className="text-[12.5px] font-semibold">
+              เติมเวลา{fill.type === "in" ? "เข้างาน" : "ออกงาน"} วันที่ {thaiDate(fill.day)}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <select
+                value={fill.type}
+                aria-label="ชนิดเวลาที่เติม"
+                onChange={(e) => setFill({ ...fill, type: e.target.value as "in" | "out" })}
+                className="field-control h-9 rounded-[10px] px-2 text-[13px]"
+              >
+                <option value="in">เวลาเข้างาน</option>
+                <option value="out">เวลาออกงาน</option>
+              </select>
+              <input
+                type="time"
+                value={fill.time}
+                aria-label="เวลาที่เติม"
+                onChange={(e) => setFill({ ...fill, time: e.target.value })}
+                className="field-control num h-9 w-[120px] rounded-[10px] px-2 text-[13px]"
+              />
+              <input
+                value={fill.why}
+                aria-label="เหตุผลที่เติมเวลา"
+                placeholder="เหตุผล เช่น มือถือแบตหมด ยืนยันกับหัวหน้าแล้ว"
+                onChange={(e) => setFill({ ...fill, why: e.target.value })}
+                className="field-control min-w-0 flex-1 rounded-[10px] px-3 text-[13px]"
+                style={{ height: 36 }}
+              />
+              <button type="button" className="btn glass-thin btn-mini" onClick={() => setFill(null)}>
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                className="btn solid btn-solid btn-mini disabled:opacity-45"
+                disabled={!fill.why.trim() || busy === fill.day}
+                onClick={() => void doFill()}
+              >
+                บันทึกเวลา
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+              เวลาที่เติมจะถูกบันทึกว่าฝ่ายบุคคลเป็นคนใส่ พร้อมเหตุผล และแก้ไม่ได้หลังปิดรอบ
+            </p>
+          </div>
+        )}
+        {fixLate && (
+          <div className="mb-3 rounded-[12px] border border-primary/30 bg-card p-3">
+            <p className="text-[12.5px] font-semibold">
+              แก้นาทีมาสาย วันที่ {thaiDate(fixLate.day)} · เครื่องบันทึกไว้ {fixLate.was} นาที
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                value={fixLate.min}
+                inputMode="numeric"
+                aria-label="นาทีที่มาสาย"
+                onChange={(e) => setFixLate({ ...fixLate, min: e.target.value })}
+                className="field-control num h-9 w-[90px] rounded-[10px] px-2 text-[13px]"
+              />
+              <input
+                value={fixLate.why}
+                aria-label="เหตุผลที่แก้นาทีมาสาย"
+                placeholder="เหตุผล เช่น มาตรงเวลาแต่เน็ตล่ม"
+                onChange={(e) => setFixLate({ ...fixLate, why: e.target.value })}
+                className="field-control min-w-0 flex-1 rounded-[10px] px-3 text-[13px]"
+                style={{ height: 36 }}
+              />
+              <button type="button" className="btn glass-thin btn-mini" onClick={() => setFixLate(null)}>
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                className="btn solid btn-solid btn-mini disabled:opacity-45"
+                disabled={!fixLate.why.trim() || busy === fixLate.day}
+                onClick={() => void doFixLate()}
+              >
+                บันทึก
+              </button>
+            </div>
+          </div>
+        )}
         {(
           rec.issues.map((x) => (
             /* รายการที่ยังไม่ได้บันทึกเหตุผล ขึ้นกรอบชมพูให้สะดุดตา */
@@ -835,6 +952,21 @@ function DayDetail({
                     onClick={() => void decide(emp.id, x.d, true)}
                   >
                     ขาดงาน
+                  </button>
+                  {/* มาทำงานจริงแต่ลืมกด — เติมเวลาให้ได้ ไม่ใช่ได้แค่เขียนหมายเหตุ */}
+                  <button
+                    type="button"
+                    className="btn glass-thin flex-none max-sm:h-[46px]! max-sm:w-full max-sm:justify-center max-sm:rounded-[12px]!"
+                    onClick={() =>
+                      setFill({
+                        day: x.d,
+                        type: x.kind === "nopair" ? "out" : "in",
+                        time: x.kind === "nopair" ? "18:00" : "09:00",
+                        why: "",
+                      })
+                    }
+                  >
+                    เติมเวลา
                   </button>
                 </div>
               )}

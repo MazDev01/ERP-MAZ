@@ -40,6 +40,7 @@ import {
   type LeaveKind,
   type PayGroup,
   type IssueRow,
+  type LateRow,
   type PayLine,
   type TimeRec,
 } from "./hr-data";
@@ -48,7 +49,7 @@ import { useCrm } from "./crm-store";
 import { claimTotal, fuelTotal } from "./expense-data";
 import { useAllClaims } from "./expense-store";
 import { useAcc } from "./acc-store";
-import { useHr, useReviews, voidPayApproval } from "./hr-store";
+import { useHr, useReviews, useTimeEdits, voidPayApproval } from "./hr-store";
 import { usePm } from "./pm-store";
 import { entitlementDays, useAllLeave } from "./leave-store";
 import { useEmpRequests, type EmpRequest } from "./emp-requests";
@@ -249,6 +250,7 @@ export function useHrTime(): Record<string, TimeRec> {
   const punches = useAllPunches();
   const reqs = useEmpRequests();
   const reviews = useReviews();
+  const edits = useTimeEdits();
   const emp = hr.emp;
   const today = todayIso();
 
@@ -285,7 +287,11 @@ export function useHrTime(): Record<string, TimeRec> {
       out[id] = {
         ...base,
         issues,
-        late: roles.reduce((acc, r) => mergeLate(acc, punches[r]), base.late),
+        /* ฝ่ายบุคคลแก้นาทีมาสายได้ และต้องเห็นค่าเดิมคู่กัน (was) ว่าเครื่องบันทึกมาเท่าไร */
+        late: withEdits(
+          roles.reduce((acc, r) => mergeLate(acc, punches[r]), base.late),
+          edits.filter((e) => e.emp === id && e.kind === "late"),
+        ),
         leave: lv,
         ot: roles.flatMap((r) =>
           ot[r]
@@ -302,7 +308,21 @@ export function useHrTime(): Record<string, TimeRec> {
     }
     addEmpRequests(out, reqs);
     return out;
-  }, [hr.time, leave, ot, punches, reqs, reviews, emp, today]);
+  }, [hr.time, leave, ot, punches, reqs, reviews, edits, emp, today]);
+}
+
+/** ทาบค่าที่ฝ่ายบุคคลแก้ลงบนตัวเลขที่เครื่องคำนวณได้ */
+function withEdits(rows: LateRow[], mine: { day: string; value: number; was: number | null }[]): LateRow[] {
+  if (!mine.length) return rows;
+  const out = rows.map((x) => {
+    const hit = mine.find((e) => e.day === x.d);
+    return hit ? { ...x, min: hit.value, was: hit.was ?? x.was ?? x.min } : x;
+  });
+  /* แก้ให้วันที่เครื่องไม่ได้นับว่าสาย (เช่น เติมเวลาเข้าย้อนหลังแล้วสายจริง) ก็ต้องโผล่ */
+  for (const e of mine) {
+    if (!out.some((x) => x.d === e.day)) out.push({ d: e.day, min: e.value, was: e.was ?? 0 });
+  }
+  return out.sort((a, b) => a.d.localeCompare(b.d));
 }
 
 /*

@@ -154,3 +154,112 @@ export async function saveExtraRemote(
   }
   return { ok: true };
 }
+
+/* ── ฝ่ายบุคคลแก้ตัวเลขเวลา และเติมเวลาที่ขาด ─────────────────── */
+
+export type TimeEdit = { emp: string; day: string; kind: "late" | "ot"; value: number; was: number | null; why: string };
+
+/** รายการแก้ตัวเลขเวลาทั้งหมดที่คนนี้เห็นได้ */
+export async function fetchTimeEdits(): Promise<TimeEdit[]> {
+  const sb = await db();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("time_edits")
+    .select("employee_id, on_date, kind, value, was, why")
+    .order("on_date");
+  if (error || !data) return [];
+
+  await loadPeople();
+  const name = new Map(peopleNow().map((p) => [p.id, p.empNo]));
+  return (data as { employee_id: string; on_date: string; kind: "late" | "ot"; value: number; was: number | null; why: string }[])
+    .map((r) => ({
+      emp: name.get(r.employee_id) ?? "",
+      day: r.on_date,
+      kind: r.kind,
+      value: Number(r.value),
+      was: r.was === null ? null : Number(r.was),
+      why: r.why,
+    }))
+    .filter((r) => r.emp);
+}
+
+/**
+ * แก้นาทีมาสายหรือชั่วโมงโอทีของวันหนึ่ง
+ * เก็บค่าที่เครื่องคำนวณได้ (was) ไว้ครั้งแรกที่แก้ — ต้องตรวจย้อนได้ว่าเดิมเท่าไร
+ */
+export async function saveTimeEdit(
+  emp: string,
+  day: string,
+  kind: "late" | "ot",
+  value: number,
+  was: number | null,
+  why: string,
+): Promise<ReviewResult> {
+  const sb = await db();
+  if (!sb) return { ok: false, reason: "no_backend" };
+  if (!why.trim()) return { ok: false, reason: "need_note" };
+
+  await loadPeople();
+  const uuid = peopleNow().find((p) => p.empNo === emp)?.id;
+  if (!uuid) return { ok: false, reason: "no_person" };
+
+  /* ค่าเดิมมีอยู่แล้วไม่ทับ — was คือ "ก่อนมนุษย์แตะครั้งแรก" ไม่ใช่ก่อนแก้รอบล่าสุด */
+  const old = await sb
+    .from("time_edits")
+    .select("was")
+    .eq("employee_id", uuid)
+    .eq("on_date", day)
+    .eq("kind", kind)
+    .maybeSingle();
+  const keepWas = (old.data as { was: number | null } | null)?.was ?? was;
+
+  const { data, error } = await sb
+    .from("time_edits")
+    .upsert(
+      { employee_id: uuid, on_date: day, kind, value, was: keepWas, why: why.trim(), edited_at: new Date().toISOString() },
+      { onConflict: "employee_id,on_date,kind" },
+    )
+    .select("on_date");
+  if (error) return { ok: false, reason: error.message };
+  if (!data || data.length === 0) return { ok: false, reason: "no_right" };
+  return { ok: true };
+}
+
+export const FILL_REASON: Record<string, string> = {
+  not_hr: "ต้องเป็นฝ่ายบุคคลจึงเติมเวลาได้",
+  bad_type: "ชนิดการตอกไม่ถูกต้อง",
+  bad_time: "เวลาต้องอยู่ในรูป ชช:นน",
+  need_reason: "ต้องระบุเหตุผล",
+  future: "เติมเวลาในอนาคตไม่ได้",
+  period_closed: "รอบนี้ปิดแล้ว แก้ย้อนหลังไม่ได้",
+};
+
+/** เติมเวลาเข้าหรือออกที่พนักงานลืมกด — ลงบันทึกว่าใครเติมและเพราะอะไร */
+export async function fillPunch(
+  emp: string,
+  type: "in" | "out",
+  day: string,
+  time: string,
+  why: string,
+): Promise<ReviewResult> {
+  const sb = await db();
+  if (!sb) return { ok: false, reason: "no_backend" };
+  if (!why.trim()) return { ok: false, reason: "need_note" };
+
+  await loadPeople();
+  const uuid = peopleNow().find((p) => p.empNo === emp)?.id;
+  if (!uuid) return { ok: false, reason: "no_person" };
+
+  const { data, error } = await sb.rpc("hr_fill_punch", {
+    p_employee: uuid,
+    p_type: type,
+    p_date: day,
+    p_time: time,
+    p_why: why.trim(),
+  });
+  if (error) return { ok: false, reason: error.message };
+
+  const res = (data ?? {}) as { ok?: boolean; reason?: string };
+  if (!res.ok) return { ok: false, reason: FILL_REASON[res.reason ?? ""] ?? res.reason ?? "unknown" };
+  return { ok: true };
+}

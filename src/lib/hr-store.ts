@@ -48,6 +48,7 @@ import {
 import { isWorkday } from "./holidays";
 import { bkkStamp, parseIsoDate, toIsoDate, todayIso } from "./format";
 import { requirePasswordReset, restoreAccount, suspendAccount } from "./accounts";
+import { refreshRecords } from "./attendance-store";
 import { createPersistedStore } from "./persisted-store";
 import type { Role } from "./role";
 import { hasBackend } from "./supabase/env";
@@ -71,9 +72,13 @@ import {
   fetchAdjusts,
   fetchExtras,
   fetchReviews,
+  fetchTimeEdits,
+  fillPunch,
   saveExtraRemote,
   saveReview,
+  saveTimeEdit,
   type Review,
+  type TimeEdit,
 } from "./supabase/hr-review";
 import {
   PAYRUN_REASON,
@@ -312,22 +317,39 @@ let fromExtras: Record<string, Record<string, Extra>> | null = null;
  * ทั้งที่สองเรื่องนี้เป็นตัวตั้งของเงินที่จ่ายจริง
  */
 let reviews: Review[] | null = null;
+let edits: TimeEdit[] | null = null;
 let loadingReviews = false;
 
 function loadReviews() {
   if (!live || loadingReviews || reviews !== null) return;
   loadingReviews = true;
-  void fetchReviews()
-    .then((list) => {
+  void Promise.all([fetchReviews(), fetchTimeEdits()])
+    .then(([list, editList]) => {
       reviews = list;
+      edits = editList;
     })
     .catch(() => {
       reviews = [];
+      edits = [];
     })
     .finally(() => {
       loadingReviews = false;
       tell();
     });
+}
+
+const NO_EDITS: TimeEdit[] = [];
+
+/** รายการแก้ตัวเลขเวลาของฝ่ายบุคคล — หน้าที่คิดเวลาเองเอาไปทาบ */
+export function useTimeEdits(): TimeEdit[] {
+  return useSyncExternalStore(
+    subscribe,
+    () => {
+      loadReviews();
+      return edits ?? NO_EDITS;
+    },
+    () => NO_EDITS,
+  );
 }
 
 /** เงินเพิ่มของทุกเดือนที่โหลดมาแล้ว — โหลดแยกรายเดือนตามที่หน้าจอขอ */
@@ -370,6 +392,7 @@ export function useReviews(): Review[] {
 /** สั่งอ่านใหม่หลังฝ่ายบุคคลบันทึก */
 function refreshReviews() {
   reviews = null;
+  edits = null;
   loadReviews();
 }
 
@@ -1006,20 +1029,65 @@ function editTime(id: string, fn: (r: TimeRec) => TimeRec) {
  * เก็บค่าเดิมไว้ใน was ครั้งแรกที่แก้เท่านั้น แก้ซ้ำจะไม่ทับค่าเดิมทิ้ง
  * เพราะสิ่งที่ต้องตรวจย้อนได้คือ "เครื่องบันทึกมาเท่าไร" ไม่ใช่ค่าก่อนแก้รอบล่าสุด
  */
-export function setLateMin(id: string, day: string, min: number) {
+/**
+ * แก้จำนวนนาทีที่มาสาย — ต้องมีเหตุผลเสมอ เพราะตัวเลขนี้กลายเป็นเงินที่หัก
+ * เก็บค่าที่เครื่องบันทึกมาไว้ใน was ครั้งแรกที่แก้เท่านั้น
+ */
+export async function setLateMin(
+  id: string,
+  day: string,
+  min: number,
+  why: string,
+  was?: number,
+): Promise<HrSaveResult> {
+  if (live) {
+    const res = await saveTimeEdit(id, day, "late", min, was ?? null, why);
+    if (!res.ok) return { ok: false, message: REVIEW_REASON[res.reason] ?? res.reason };
+    refreshReviews();
+    return { ok: true };
+  }
   editTime(id, (r) => ({
     ...r,
-    late: r.late.map((x) =>
-      x.d === day ? { ...x, min, was: x.was ?? x.min } : x,
-    ),
+    late: r.late.map((x) => (x.d === day ? { ...x, min, was: x.was ?? x.min } : x)),
   }));
+  return { ok: true };
 }
 
-export function setOtHours(id: string, day: string, hours: number) {
+/** เติมเวลาเข้า/ออกที่พนักงานลืมกด — ฐานข้อมูลเป็นคนตรวจสิทธิ์และรอบที่ปิดแล้ว */
+export async function fillMissingPunch(
+  id: string,
+  type: "in" | "out",
+  day: string,
+  time: string,
+  why: string,
+): Promise<HrSaveResult> {
+  if (!live) return { ok: false, message: "ยังไม่ได้ต่อฐานข้อมูล" };
+  const res = await fillPunch(id, type, day, time, why);
+  if (!res.ok) return { ok: false, message: REVIEW_REASON[res.reason] ?? res.reason };
+  /* การตอกบัตรที่เติมใหม่ต้องเข้ามาในหน้าจอด้วย ไม่ใช่เห็นแค่ตอนโหลดหน้าใหม่ */
+  refreshRecords();
+  refreshReviews();
+  return { ok: true };
+}
+
+export async function setOtHours(
+  id: string,
+  day: string,
+  hours: number,
+  why = "ฝ่ายบุคคลปรับตามเวลาทำงานจริง",
+  was?: number,
+): Promise<HrSaveResult> {
+  if (live) {
+    const res = await saveTimeEdit(id, day, "ot", hours, was ?? null, why);
+    if (!res.ok) return { ok: false, message: REVIEW_REASON[res.reason] ?? res.reason };
+    refreshReviews();
+    return { ok: true };
+  }
   editTime(id, (r) => ({
     ...r,
     ot: r.ot.map((x) => (x.d === day ? { ...x, h: hours, was: x.was ?? x.h } : x)),
   }));
+  return { ok: true };
 }
 
 /**
