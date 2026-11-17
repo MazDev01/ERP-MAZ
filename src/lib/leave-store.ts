@@ -307,6 +307,11 @@ export function carriedDays(records: LeaveRecord[], type: LeaveType, period: str
 }
 
 /** สิทธิ์ของรอบปีนั้น — ส่งใบลาของคนนั้นมาด้วยเพื่อรวมลาพักร้อนที่ยกมาจากปีก่อน */
+/** สั่งอ่านใบลาจากฐานข้อมูลใหม่ — ใช้หลังฝ่ายบุคคลบันทึกใบย้อนหลัง */
+export function refreshLeave() {
+  store.refresh();
+}
+
 export function entitlementDays(type: LeaveType, period: string, records?: LeaveRecord[], empId?: string) {
   return baseDays(type, period, empId) + (records ? carriedDays(records, type, period, empId) : 0);
 }

@@ -27,7 +27,9 @@ import {
   type Employee,
 } from "@/lib/hr-data";
 import { currentPeriod, leaveTypes } from "@/lib/leave-data";
-import { entitlementDays } from "@/lib/leave-store";
+import { entitlementDays, refreshLeave } from "@/lib/leave-store";
+import { recordPastLeave } from "@/lib/supabase/leave";
+import { empUuid } from "@/lib/hr-link";
 import { setEmpLeaveDays } from "@/lib/hr-store";
 import { logChange } from "@/lib/admin-log";
 import { CloseIcon } from "./icons";
@@ -589,6 +591,152 @@ function LeaveQuotaTab({ emp }: { emp: Employee }) {
           ใช้ค่ากลางทุกประเภท
         </button>
       </div>
+
+      <PastLeave emp={emp} types={types} />
     </Sect>
   );
 }
+
+/*
+ * ยกวันลาที่ใช้ไปแล้วจากระบบเดิมเข้ามา
+ *
+ * สิทธิ์คงเหลือในระบบคิดจาก "ใบลาที่อนุมัติแล้ว" ที่มีอยู่จริง ถ้าไม่ใส่ของเก่าเข้ามา
+ * ระบบจะคิดว่าทุกคนยังมีสิทธิ์เต็ม แล้วอนุมัติเกินสิทธิ์โดยไม่มีใครรู้
+ * ใบที่บันทึกทางนี้เป็น "อนุมัติแล้ว" ตั้งแต่ต้น เพราะมันเกิดขึ้นจริงไปแล้ว
+ */
+function PastLeave({ emp, types }: { emp: Employee; types: string[] }) {
+  const [type, setType] = useState(types[0] ?? "");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [days, setDays] = useState("");
+  const [why, setWhy] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const ready = Boolean(type && from && to && Number(days) > 0 && why.trim());
+
+  async function add() {
+    const uuid = empUuid(emp.id);
+    if (!uuid) return setMsg({ ok: false, text: "ไม่พบพนักงานคนนี้ในฐานข้อมูล" });
+    setBusy(true);
+    const res = await recordPastLeave({
+      employeeId: uuid,
+      type,
+      from,
+      to: to || from,
+      days: Number(days),
+      why: why.trim(),
+    });
+    setBusy(false);
+    if (!res.ok) return setMsg({ ok: false, text: SAY[res.reason] ?? res.reason });
+    logChange("การลา", `ยกวันลาเดิมของ ${emp.name}: ${type} ${days} วัน (${thaiDate(from)}) — ${why.trim()}`);
+    refreshLeave();
+    setFrom("");
+    setTo("");
+    setDays("");
+    setWhy("");
+    setMsg({ ok: true, text: `บันทึกแล้ว เลขที่ ${res.no} — สิทธิ์คงเหลือของคนนี้ลดลงตามจริง` });
+  }
+
+  return (
+    <div className="mt-5 border-t border-border pt-4">
+      <h4 className="text-[13px] font-bold">ยกวันลาที่ใช้ไปแล้วจากระบบเดิม</h4>
+      <p className="mt-1 mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+        ใส่เฉพาะวันลาของปีนี้ที่อนุมัติไปแล้วก่อนเริ่มใช้ระบบ · ใบที่บันทึกจะนับเป็นลาที่อนุมัติแล้วทันที
+        และหักสิทธิ์คงเหลือของคนนี้
+      </p>
+
+      {msg && (
+        <p
+          role="status"
+          className="mb-3 rounded-[10px] px-3 py-2 text-[12.5px]"
+          style={
+            msg.ok
+              ? { background: "var(--success-soft)", color: "var(--success)" }
+              : { background: "var(--destructive-soft)", color: "var(--destructive)" }
+          }
+        >
+          {msg.text}
+        </p>
+      )}
+
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        <label className="text-[12.5px]">
+          <span className="block text-muted-foreground">ประเภทการลา</span>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            aria-label="ประเภทวันลาที่ยกมา"
+            className="field-control mt-1 h-10 w-full"
+          >
+            {types.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[12.5px]">
+          <span className="block text-muted-foreground">จำนวนวันที่ใช้ไป</span>
+          <input
+            value={days}
+            inputMode="decimal"
+            aria-label="จำนวนวันที่ใช้ไป"
+            onChange={(e) => setDays(e.target.value.replace(/[^0-9.]/g, ""))}
+            className="field-control num mt-1 h-10 w-full text-right"
+          />
+        </label>
+        <label className="text-[12.5px]">
+          <span className="block text-muted-foreground">วันที่เริ่มลา</span>
+          <input
+            type="date"
+            value={from}
+            aria-label="วันที่เริ่มลาที่ยกมา"
+            onChange={(e) => setFrom(e.target.value)}
+            className="field-control num mt-1 h-10 w-full"
+          />
+        </label>
+        <label className="text-[12.5px]">
+          <span className="block text-muted-foreground">วันที่สิ้นสุด (ไม่ใส่ = วันเดียว)</span>
+          <input
+            type="date"
+            value={to}
+            aria-label="วันที่สิ้นสุดที่ยกมา"
+            onChange={(e) => setTo(e.target.value)}
+            className="field-control num mt-1 h-10 w-full"
+          />
+        </label>
+      </div>
+      <label className="mt-2.5 block text-[12.5px]">
+        <span className="block text-muted-foreground">เหตุผล / อ้างอิงใบเดิม</span>
+        <input
+          value={why}
+          aria-label="เหตุผลของวันลาที่ยกมา"
+          placeholder="เช่น ยกจากแฟ้มใบลากระดาษ เล่มที่ 2/2569"
+          onChange={(e) => setWhy(e.target.value)}
+          className="field-control mt-1 h-10 w-full"
+        />
+      </label>
+
+      <button
+        type="button"
+        className="btn solid btn-solid mt-3 disabled:opacity-45"
+        disabled={!ready || busy}
+        onClick={() => void add()}
+      >
+        {busy ? "กำลังบันทึก…" : "บันทึกวันลาที่ใช้ไปแล้ว"}
+      </button>
+    </div>
+  );
+}
+
+/** เหตุที่ฐานข้อมูลไม่รับ — แปลให้อ่านรู้เรื่อง */
+const SAY: Record<string, string> = {
+  not_hr: "ต้องเป็นฝ่ายบุคคลจึงบันทึกได้",
+  need_reason: "ต้องระบุเหตุผล",
+  bad_range: "วันสิ้นสุดต้องไม่อยู่ก่อนวันเริ่ม",
+  bad_days: "จำนวนวันต้องมากกว่า 0",
+  bad_type: "ประเภทการลานี้ปิดใช้งานอยู่",
+  period_closed: "วันที่นี้อยู่ในรอบเงินเดือนที่ปิดแล้ว แก้ย้อนหลังไม่ได้",
+  leave_overlap: "ช่วงวันนี้ซ้อนกับใบลาที่มีอยู่แล้ว",
+};

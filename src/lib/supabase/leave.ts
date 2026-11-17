@@ -268,3 +268,32 @@ export async function undoLeave(no: string, why: string): Promise<Decided> {
   const res = (data ?? {}) as { ok?: boolean; reason?: string };
   return res.ok ? { ok: true } : { ok: false, reason: res.reason ?? "unknown" };
 }
+
+/**
+ * ฝ่ายบุคคลบันทึกวันลาที่ใช้ไปแล้วจากระบบเดิม — ลงเป็นใบที่อนุมัติแล้วตั้งแต่ต้น
+ * ใช้ตอนย้ายเข้าระบบ เพื่อให้สิทธิ์คงเหลือของแต่ละคนตรงกับความจริง
+ */
+export async function recordPastLeave(input: {
+  employeeId: string;
+  type: string;
+  from: string;
+  to: string;
+  days: number;
+  why: string;
+}): Promise<{ ok: true; no: string } | { ok: false; reason: string }> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return { ok: false, reason: "no_backend" };
+
+  const { data, error } = await sb.rpc("hr_record_leave", {
+    p_employee: input.employeeId,
+    p_type: input.type,
+    p_from: input.from,
+    p_to: input.to,
+    p_days: input.days,
+    p_why: input.why,
+  });
+  if (error) return { ok: false, reason: error.message };
+
+  const res = (data ?? {}) as { ok?: boolean; reason?: string; no?: string };
+  return res.ok ? { ok: true, no: res.no ?? "" } : { ok: false, reason: res.reason ?? "unknown" };
+}
