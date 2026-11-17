@@ -170,6 +170,17 @@ async function employeesWithRole(role: string): Promise<string[]> {
 }
 
 /** จองสิทธิ์ส่งของคู่ (ใบ, สถานะ) นี้ — จองได้แปลว่ายังไม่มีใครส่ง */
+/*
+ * ปิดงานในคิวของฐานข้อมูล (push_outbox) — ฐานข้อมูลยิงมาแล้วรอให้ปลายทางบอกว่าจบ
+ * ถ้าไม่มีใครบอก ฐานข้อมูลจะยิงซ้ำทุกนาที เพราะการยิงพลาดเงียบ ๆ เคยทำให้แจ้งเตือนหาย
+ * เรียกด้วยกุญแจระบบเสมอ ผู้ใช้ทั่วไปไม่มีสิทธิ์แตะคิวนี้
+ */
+async function markDone(docId: string, status: string) {
+  const sv = adminSupabase();
+  if (!sv) return;
+  await sv.rpc("push_done", { p_doc: docId, p_status: status });
+}
+
 async function claimSend(docId: string, status: string): Promise<boolean> {
   const sv = adminSupabase();
   if (!sv) return true;
@@ -223,7 +234,11 @@ export async function notifyDoc(kind: Kind, id: string, asSystem = false): Promi
    * กันส่งซ้ำ — เรื่องเดียวกันมาได้สองทาง (หน้าจอบอกหลังกด และทริกเกอร์ของฐานข้อมูล)
    * ใครจองคู่ (ใบ, สถานะ) นี้ได้ก่อนเป็นคนส่ง อีกทางเงียบไป เครื่องปลายทางจึงไม่สั่นสองรอบ
    */
-  if (!(await claimSend(doc.id, doc.status))) return { ok: true, sent: 0 };
+  if (!(await claimSend(doc.id, doc.status))) {
+    /* อีกทางส่งไปแล้ว งานนี้จบแล้วเหมือนกัน ไม่ต้องให้ฐานข้อมูลยิงซ้ำ */
+    await markDone(doc.id, doc.status);
+    return { ok: true, sent: 0 };
+  }
 
   const me = asSystem ? null : await myEmployeeId();
   const who = await nameOf(doc.employee_id);
@@ -250,7 +265,10 @@ export async function notifyDoc(kind: Kind, id: string, asSystem = false): Promi
   }
 
   const list = to.filter((x) => x && x !== me);
-  if (list.length === 0) return { ok: true, sent: 0 };
+  if (list.length === 0) {
+    await markDone(doc.id, doc.status);
+    return { ok: true, sent: 0 };
+  }
 
   const res = await pushToEmployees(list, {
     id: `${kind}-${doc.id}-${doc.status}`,
@@ -265,7 +283,9 @@ export async function notifyDoc(kind: Kind, id: string, asSystem = false): Promi
 
   /* ปลายทางยังไม่ได้เปิดรับแจ้งเตือนบนเครื่องไหนเลย — เป็นเรื่องปกติ ไม่ใช่ความผิดพลาด
      (ถ้าตอบเป็นข้อผิดพลาด จะมีบรรทัดแดงใน console ทุกครั้งที่มีคนยื่นใบ) */
-  return !res.ok && res.reason === "no_device" ? { ok: true, sent: 0 } : res;
+  const noDevice = !res.ok && res.reason === "no_device";
+  if (res.ok || noDevice) await markDone(doc.id, doc.status);
+  return noDevice ? { ok: true, sent: 0 } : res;
 }
 
 /**
