@@ -7,8 +7,7 @@
     "dev:https": "next dev --experimental-https -H 26.224.66.120",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "push:sender": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/push-sender.mjs"
+    "lint": "eslint"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
