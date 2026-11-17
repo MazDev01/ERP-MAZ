@@ -419,7 +419,24 @@ export function OtPage() {
   );
 }
 
+/*
+ * ยกเลิกใบโอที — เดิมเรียกแล้วทิ้งผลทันที (void) ถ้าฐานข้อมูลไม่รับ
+ * (ใบถูกตัดสินไปแล้ว หรือรอบจ่ายปิดแล้ว) พนักงานกดแล้วไม่มีอะไรเกิดขึ้นและไม่รู้ว่าทำไม
+ * ใบลาบอกเหตุอยู่แล้ว ใบโอทีจึงต้องบอกด้วย (เจอตอนไล่ทดสอบ 17 พ.ย. 2569)
+ */
+function useCancelOt() {
+  const [err, setErr] = useState("");
+  const run = (id: string) => {
+    setErr("");
+    void cancelOtRequest(id).then((r) => {
+      if (!r.ok) setErr(r.message);
+    });
+  };
+  return { err, run };
+}
+
 function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
+  const cancel = useCancelOt();
   const adjusted =
     row.status === "อนุมัติแล้ว" &&
     row.approvedHours != null &&
@@ -461,9 +478,16 @@ function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
       </td>
       <td className="c">
         {row.status === "รออนุมัติ" ? (
-          <button type="button" className="lnk" onClick={() => void cancelOtRequest(row.id)}>
-            ยกเลิก
-          </button>
+          <>
+            <button type="button" className="lnk" onClick={() => cancel.run(row.id)}>
+              ยกเลิก
+            </button>
+            {cancel.err && (
+              <span role="alert" className="why text-destructive">
+                {cancel.err}
+              </span>
+            )}
+          </>
         ) : (
           "—"
         )}
@@ -474,6 +498,7 @@ function Row({ row, hit }: { row: OtRecord; hit?: boolean }) {
 
 /** การ์ดคำขอบนมือถือ — กริดตามต้นแบบ (#ot-rows > tr บนจอแคบ) เลขที่ใบซ่อน เหลือเวลายื่นแทน */
 function MobileCard({ row, hit }: { row: OtRecord; hit?: boolean }) {
+  const cancel = useCancelOt();
   const adjusted =
     row.status === "อนุมัติแล้ว" &&
     row.approvedHours != null &&
@@ -509,9 +534,14 @@ function MobileCard({ row, hit }: { row: OtRecord; hit?: boolean }) {
       <span className="no num">ยื่น {submittedText(row.submittedAt)}</span>
       {row.status === "รออนุมัติ" && (
         <div className="ac">
-          <button type="button" className="lnk" onClick={() => void cancelOtRequest(row.id)}>
+          <button type="button" className="lnk" onClick={() => cancel.run(row.id)}>
             ยกเลิก
           </button>
+          {cancel.err && (
+            <span role="alert" className="why text-destructive">
+              {cancel.err}
+            </span>
+          )}
         </div>
       )}
     </li>
