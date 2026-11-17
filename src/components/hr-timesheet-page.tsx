@@ -683,6 +683,18 @@ function DayDetail({
   onClose: () => void;
 }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
+  /* บันทึกไม่ผ่านต้องขึ้นให้เห็น — ผลการตรวจมีผลกับเงินเดือน ปล่อยเงียบไม่ได้ */
+  const [busy, setBusy] = useState("");
+  const [failed, setFailed] = useState("");
+
+  async function decide(empId: string, day: string, absent: boolean) {
+    const note = (notes[day] ?? "").trim();
+    if (!note) return;
+    setBusy(day);
+    const res = await noteIssue(empId, day, note, absent);
+    setBusy("");
+    setFailed(res.ok ? "" : res.message);
+  }
 
   /* รวมทุกอย่างเข้าเป็น "วันที่" เดียวกัน เพราะวันหนึ่งอาจมาสายและมีโอทีพร้อมกัน */
   const byDay = new Map<string, React.ReactNode[]>();
@@ -769,6 +781,11 @@ function DayDetail({
       {rec.issues.length > 0 && (
       <section className="mt-5 border-t border-border pt-4 max-sm:order-first max-sm:mt-0 max-sm:border-0 max-sm:pt-0">
         <h3 className="mb-2.5 text-[12.5px] font-bold text-primary max-sm:text-[14px]">รายการที่ต้องตรวจ</h3>
+        {failed && (
+          <p role="status" className="mb-2.5 rounded-[11px] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[12.5px] font-semibold text-destructive">
+            บันทึกไม่สำเร็จ: {failed}
+          </p>
+        )}
         {(
           rec.issues.map((x) => (
             /* รายการที่ยังไม่ได้บันทึกเหตุผล ขึ้นกรอบชมพูให้สะดุดตา */
@@ -805,17 +822,17 @@ function DayDetail({
                   <button
                     type="button"
                     className="btn glass-thin flex-none disabled:opacity-45 max-sm:h-[46px]! max-sm:w-full max-sm:justify-center max-sm:rounded-[12px]!"
-                    disabled={!(notes[x.d] ?? "").trim()}
-                    onClick={() => noteIssue(emp.id, x.d, (notes[x.d] ?? "").trim())}
+                    disabled={!(notes[x.d] ?? "").trim() || busy === x.d}
+                    onClick={() => void decide(emp.id, x.d, false)}
                   >
                     มาทำงานจริง
                   </button>
                   <button
                     type="button"
                     className="btn solid btn-solid flex-none disabled:opacity-45 max-sm:h-[46px]! max-sm:w-full max-sm:justify-center max-sm:rounded-[12px]!"
-                    disabled={!(notes[x.d] ?? "").trim()}
+                    disabled={!(notes[x.d] ?? "").trim() || busy === x.d}
                     title="หักเงินเต็มวันตามค่าจ้างรายวันในรอบนี้"
-                    onClick={() => noteIssue(emp.id, x.d, (notes[x.d] ?? "").trim(), true)}
+                    onClick={() => void decide(emp.id, x.d, true)}
                   >
                     ขาดงาน
                   </button>

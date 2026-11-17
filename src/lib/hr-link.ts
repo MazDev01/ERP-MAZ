@@ -39,6 +39,7 @@ import {
   type Cycle,
   type LeaveKind,
   type PayGroup,
+  type IssueRow,
   type PayLine,
   type TimeRec,
 } from "./hr-data";
@@ -47,13 +48,13 @@ import { useCrm } from "./crm-store";
 import { claimTotal, fuelTotal } from "./expense-data";
 import { useAllClaims } from "./expense-store";
 import { useAcc } from "./acc-store";
-import { useHr, voidPayApproval } from "./hr-store";
+import { useHr, useReviews, voidPayApproval } from "./hr-store";
 import { usePm } from "./pm-store";
 import { entitlementDays, useAllLeave } from "./leave-store";
 import { useEmpRequests, type EmpRequest } from "./emp-requests";
 import { otKindOf, paidHours } from "./ot-data";
 import { useAllOt } from "./ot-store";
-import { addDays, baht, bkkOf, pad2, thaiMonth, todayIso } from "./format";
+import { addDays, baht, bkkOf, pad2, parseIsoDate, thaiMonth, toIsoDate, todayIso } from "./format";
 import { isWorkday } from "./holidays";
 import { useRole, type Role } from "./role";
 import { leavePeriodOf, leaveYearOf, type LeaveRecord } from "./leave-data";
@@ -247,6 +248,9 @@ export function useHrTime(): Record<string, TimeRec> {
   const ot = useAllOt();
   const punches = useAllPunches();
   const reqs = useEmpRequests();
+  const reviews = useReviews();
+  const emp = hr.emp;
+  const today = todayIso();
 
   return useMemo(() => {
     const out: Record<string, TimeRec> = { ...hr.time };
@@ -267,8 +271,20 @@ export function useHrTime(): Record<string, TimeRec> {
       const lv = roles
         .flatMap((r) => leave[r].filter(counted).flatMap((x) => spread(x, unpaid)))
         .filter((x) => !days.has(x.d) && days.add(x.d));
+      /* วันที่ต้องให้ฝ่ายบุคคลตรวจ — คิดจากการตอกบัตรจริง ไม่ใช่รายการที่ฝังมากับข้อมูลตัวอย่าง
+         (ของเดิมมาจาก hr.time เท่านั้น พนักงานจริงที่ลืมตอกออกจึงไม่เคยโผล่ให้ตรวจเลย) */
+      const minePunch = roles.flatMap((r) => punches[r]);
+      const built = issuesFromPunches(minePunch, lv, emp.find((e) => e.id === id)?.startedAt ?? "", today);
+      const issues = built.length
+        ? built.map((x) => {
+            const hit = reviews.find((r) => r.emp === id && r.day === x.d);
+            return hit ? { ...x, note: hit.note, absent: hit.absent } : x;
+          })
+        : base.issues;
+
       out[id] = {
         ...base,
+        issues,
         late: roles.reduce((acc, r) => mergeLate(acc, punches[r]), base.late),
         leave: lv,
         ot: roles.flatMap((r) =>
@@ -286,7 +302,60 @@ export function useHrTime(): Record<string, TimeRec> {
     }
     addEmpRequests(out, reqs);
     return out;
-  }, [hr.time, leave, ot, punches, reqs]);
+  }, [hr.time, leave, ot, punches, reqs, reviews, emp, today]);
+}
+
+/*
+ * สร้างรายการที่ต้องตรวจจากการตอกบัตรจริง
+ *   nopair   วันนั้นมีตอกเข้า แต่ไม่มีตอกออก (ลืมกดออก)
+ *   norecord วันทำงานที่ไม่มีการตอกเลย และไม่มีใบลาของวันนั้น
+ *
+ * ดูย้อนหลังไม่เกิน 70 วัน ครอบรอบปัจจุบันกับรอบก่อนหน้าพอดี
+ * และไม่ไล่ก่อนวันเริ่มงานของคนนั้น ไม่งั้นคนเข้าใหม่จะมีวันขาดงานย้อนหลังเป็นสิบวัน
+ */
+function issuesFromPunches(
+  list: PunchRecord[],
+  leaveRows: { d: string }[],
+  startedAt: string,
+  today: string,
+): IssueRow[] {
+  if (!list.length && !startedAt) return [];
+
+  const byDay = new Map<string, { in: boolean; out: boolean }>();
+  for (const p of list) {
+    const d = dayKey(new Date(p.at));
+    const cur = byDay.get(d) ?? { in: false, out: false };
+    if (p.type === "in") cur.in = true;
+    else cur.out = true;
+    byDay.set(d, cur);
+  }
+
+  const from = new Date(`${today}T00:00:00`);
+  from.setDate(from.getDate() - 70);
+  /*
+   * เริ่มไล่จากวันแรกที่คนนี้เคยตอกบัตรจริง ไม่ใช่วันเริ่มงาน
+   * คนที่ยังไม่เคยใช้ระบบเลยไม่ใช่ "ขาดงาน" แต่เป็น "ยังไม่ได้เริ่มใช้" — ขึ้นให้ตรวจไปก็ไม่มีประโยชน์
+   * และจะกลบวันที่ต้องตรวจจริงจนหาไม่เจอ
+   */
+  const firstPunch = [...byDay.keys()].sort()[0] ?? "";
+  if (!firstPunch) return [];
+  const bound = [toIsoDate(from), startedAt, firstPunch].filter(Boolean).sort().pop() as string;
+  const first = bound;
+  const onLeave = new Set(leaveRows.map((x) => x.d));
+
+  const out: IssueRow[] = [];
+  for (const d = parseIsoDate(first); toIsoDate(d) <= today; d.setDate(d.getDate() + 1)) {
+    const iso = toIsoDate(d);
+    const rec = byDay.get(iso);
+    if (rec) {
+      if (rec.in && !rec.out) out.push({ d: iso, kind: "nopair", note: "" });
+      continue;
+    }
+    /* วันหยุดและวันที่มีใบลาไม่ใช่เรื่องต้องตรวจ */
+    if (!isWorkday(d, iso) || onLeave.has(iso)) continue;
+    out.push({ d: iso, kind: "norecord", note: "" });
+  }
+  return out;
 }
 
 /** ใบที่อนุมัติแล้วแต่ไม่โผล่ในรอบ — หนึ่งแถวคือหนึ่งใบที่จะไม่ได้เงินถ้าปิดรอบไปตอนนี้ */

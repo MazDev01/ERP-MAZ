@@ -35,6 +35,8 @@ export function EditExtra({
   const [inc, setInc] = useState(commaInput(String(saved.incentive)));
   const [allow, setAllow] = useState(commaInput(String(saved.allowance)));
   const [adjust, setAdjust] = useState<Adjust[]>(saved.adjust);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState("");
   const [amt, setAmt] = useState("");
   const [why, setWhy] = useState("");
   /** กดเพิ่ม/บันทึกทั้งที่กรอกไม่ถูก — ขึ้นคำเตือนตาม mockup แทนการกดไม่ลงเฉย ๆ */
@@ -73,6 +75,7 @@ export function EditExtra({
           <button
             type="button"
             className="btn solid btn-solid"
+            disabled={busy}
             onClick={() => {
               if (!valid) return setWarn(true);
               const next: Extra = {
@@ -80,8 +83,13 @@ export function EditExtra({
                 allowance: allowNum ?? 0,
                 adjust,
               };
-              saveExtra(month, emp.id, next);
-              onClose();
+              /* บันทึกไม่ผ่านต้องไม่ปิดกล่อง ไม่งั้นเข้าใจว่าบันทึกแล้วทั้งที่ยอดไม่ขึ้นระบบ */
+              setBusy(true);
+              void saveExtra(month, emp.id, next).then((res) => {
+                setBusy(false);
+                if (res.ok) onClose();
+                else setFailed(res.message);
+              });
             }}
           >
             บันทึก
@@ -92,6 +100,12 @@ export function EditExtra({
       <p className="text-[12.5px] text-muted-foreground">
         {hrPos(emp.pos).label} · รอบ {thaiMonth(month)}
       </p>
+
+      {failed && (
+        <p role="status" className="mt-3 rounded-[11px] bg-[var(--destructive-soft)] px-3.5 py-2.5 text-[13px] font-semibold text-destructive">
+          บันทึกไม่สำเร็จ: {failed}
+        </p>
+      )}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Field label="Incentive (บาท)">

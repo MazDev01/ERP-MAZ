@@ -67,6 +67,15 @@ import {
 } from "./supabase/employees";
 import { forgetPeople } from "./supabase/people";
 import {
+  REVIEW_REASON,
+  fetchAdjusts,
+  fetchExtras,
+  fetchReviews,
+  saveExtraRemote,
+  saveReview,
+  type Review,
+} from "./supabase/hr-review";
+import {
   PAYRUN_REASON,
   closePayrunRemote,
   decidePayrollRemote,
@@ -294,6 +303,104 @@ let fromPeriods: Period[] | null = null;
 let fromPeople: Employee[] | null = null;
 
 let fromRuns: Period[] | null = null;
+let fromReviews: Review[] | null = null;
+let fromExtras: Record<string, Record<string, Extra>> | null = null;
+
+/*
+ * ผลการตรวจเวลาทำงาน และเงินเพิ่ม/เงินหักรายคน — ย้ายขึ้นฐานข้อมูลแล้ว (รอบที่ 19)
+ * ของเดิมอยู่ในเครื่องของฝ่ายบุคคลที่เปิดหน้าอยู่ อีกเครื่องจึงเห็นไม่ตรงกัน
+ * ทั้งที่สองเรื่องนี้เป็นตัวตั้งของเงินที่จ่ายจริง
+ */
+let reviews: Review[] | null = null;
+let loadingReviews = false;
+
+function loadReviews() {
+  if (!live || loadingReviews || reviews !== null) return;
+  loadingReviews = true;
+  void fetchReviews()
+    .then((list) => {
+      reviews = list;
+    })
+    .catch(() => {
+      reviews = [];
+    })
+    .finally(() => {
+      loadingReviews = false;
+      tell();
+    });
+}
+
+/** เงินเพิ่มของทุกเดือนที่โหลดมาแล้ว — โหลดแยกรายเดือนตามที่หน้าจอขอ */
+let extraMonths: Record<string, Record<string, Extra>> = {};
+const askedExtras = new Set<string>();
+
+function loadExtras(month: string) {
+  if (!live || !month || askedExtras.has(month)) return;
+  askedExtras.add(month);
+  void Promise.all([fetchExtras(month), fetchAdjusts(month)])
+    .then(([list, adjusts]) => {
+      const out: Record<string, Extra> = {};
+      for (const r of list) out[r.emp] = { incentive: r.incentive, allowance: r.allowance, adjust: [] };
+      for (const a of adjusts) {
+        out[a.emp] ??= { incentive: 0, allowance: 0, adjust: [] };
+        out[a.emp].adjust.push({ amt: a.amount, why: a.why });
+      }
+      extraMonths = { ...extraMonths, [month]: out };
+    })
+    .catch(() => {
+      extraMonths = { ...extraMonths, [month]: {} };
+    })
+    .finally(tell);
+}
+
+const NO_REVIEWS: Review[] = [];
+
+/** ผลการตรวจทั้งหมดจากฐานข้อมูล — หน้าจอที่สร้างรายการต้องตรวจเองเอาไปทาบ */
+export function useReviews(): Review[] {
+  return useSyncExternalStore(
+    subscribe,
+    () => {
+      loadReviews();
+      return reviews ?? NO_REVIEWS;
+    },
+    () => NO_REVIEWS,
+  );
+}
+
+/** สั่งอ่านใหม่หลังฝ่ายบุคคลบันทึก */
+function refreshReviews() {
+  reviews = null;
+  loadReviews();
+}
+
+function refreshExtras(month: string) {
+  askedExtras.delete(month);
+  loadExtras(month);
+}
+
+/* ผลการตรวจจากฐานข้อมูลทับของในเครื่อง — ฐานข้อมูลเป็นเจ้าของค่า */
+function withReviews(s: HrState): HrState {
+  if (!reviews?.length) return s;
+  const byEmp = new Map<string, Review[]>();
+  for (const r of reviews) {
+    const list = byEmp.get(r.emp) ?? [];
+    list.push(r);
+    byEmp.set(r.emp, list);
+  }
+  const time = { ...s.time };
+  for (const [emp, list] of byEmp) {
+    const rec = time[emp];
+    if (!rec) continue;
+    time[emp] = {
+      ...rec,
+      issues: rec.issues.map((x) => {
+        const hit = list.find((r) => r.day === x.d);
+        return hit ? { ...x, note: hit.note, absent: hit.absent } : x;
+      }),
+    };
+  }
+  return { ...s, time };
+}
 
 function snapshot(): HrState {
   const s = store.get();
@@ -301,6 +408,7 @@ function snapshot(): HrState {
   loadPeriods();
   loadPeople();
   loadPay();
+  loadReviews();
   const periods = remote ?? BLANK_PERIODS;
   const emp = people ?? BLANK_EMP;
   const payruns = runs ?? BLANK_PERIODS;
@@ -309,13 +417,25 @@ function snapshot(): HrState {
     fromState !== s ||
     fromPeriods !== periods ||
     fromPeople !== emp ||
-    fromRuns !== payruns
+    fromRuns !== payruns ||
+    fromReviews !== reviews ||
+    fromExtras !== extraMonths
   ) {
     fromState = s;
     fromPeriods = periods;
     fromPeople = emp;
     fromRuns = payruns;
-    shown = { ...s, periods, emp, payruns, payApprove: approvals ?? {}, slips: slips ?? [] };
+    fromReviews = reviews;
+    fromExtras = extraMonths;
+    shown = withReviews({
+      ...s,
+      periods,
+      emp,
+      payruns,
+      payApprove: approvals ?? {},
+      slips: slips ?? [],
+      extras: { ...s.extras, ...extraMonths },
+    });
   }
   return shown;
 }
@@ -908,11 +1028,32 @@ export function setOtHours(id: string, day: string, hours: number) {
  * ระบุด้วยวันที่ ไม่ใช่ลำดับในอาเรย์ เพราะรายการที่แสดงถูกกรองตามรอบมาแล้ว
  * ลำดับที่เห็นบนจอกับลำดับจริงในข้อมูลจึงไม่ตรงกัน
  */
-export function noteIssue(id: string, day: string, note: string, absent = false) {
+/**
+ * สรุปผลการตรวจของวันที่มีปัญหา — "มาทำงานจริง" หรือ "ขาดงาน" พร้อมเหตุผล
+ * ต่อฐานข้อมูลแล้วต้องขึ้นไปให้สำเร็จก่อน ไม่งั้นฝ่ายบุคคลอีกคนจะไม่เห็นว่าตรวจไปแล้ว
+ * และยอดหักขาดงานของสองเครื่องจะไม่ตรงกัน
+ */
+export async function noteIssue(
+  id: string,
+  day: string,
+  note: string,
+  absent = false,
+): Promise<HrSaveResult> {
+  const before = store.get();
   editTime(id, (r) => ({
     ...r,
     issues: r.issues.map((x) => (x.d === day ? { ...x, note, absent } : x)),
   }));
+  if (!live) return { ok: true };
+
+  const res = await saveReview(id, day, note, absent);
+  if (!res.ok) {
+    store.set(before);
+    tell();
+    return { ok: false, message: REVIEW_REASON[res.reason] ?? res.reason };
+  }
+  refreshReviews();
+  return { ok: true };
 }
 
 // ─── ใบลาของนักศึกษาฝึกงาน ───────────────────────────────────────
@@ -1102,6 +1243,8 @@ function reopenIn(
 }
 
 /** ต่อฐานข้อมูลแล้วการปิดหรือเปิดรอบพลาดได้จริง หน้าจอต้องได้รู้ว่าพลาดเพราะอะไร */
+export type HrSaveResult = { ok: true } | { ok: false; message: string };
+
 export type PeriodResult = { ok: true } | { ok: false; message: string };
 
 /** เหตุที่ฐานข้อมูลไม่รับงานของสายเงินเดือน */
@@ -1272,11 +1415,23 @@ export async function reopenPayrunWithReason(
 // ─── ค่าที่ไม่มีสูตร ──────────────────────────────────────────────
 
 /** บันทึก Incentive ค่าตำแหน่ง และรายการปรับปรุงของคนหนึ่งในรอบหนึ่ง */
-export function saveExtra(month: string, id: string, extra: Extra) {
+export async function saveExtra(month: string, id: string, extra: Extra): Promise<HrSaveResult> {
+  const before = store.get();
   store.update((s) => ({
     ...s,
     extras: { ...s.extras, [month]: { ...(s.extras[month] ?? {}), [id]: extra } },
   }));
+  if (!live) return { ok: true };
+
+  /* เงินเพิ่มและรายการปรับปรุงเป็นตัวตั้งของเงินที่จ่ายจริง เก็บไว้ในเครื่องเดียวไม่ได้ */
+  const res = await saveExtraRemote(month, id, extra);
+  if (!res.ok) {
+    store.set(before);
+    tell();
+    return { ok: false, message: REVIEW_REASON[res.reason] ?? res.reason };
+  }
+  refreshExtras(month);
+  return { ok: true };
 }
 
 // ─── สลิปเงินเดือน ────────────────────────────────────────────────
