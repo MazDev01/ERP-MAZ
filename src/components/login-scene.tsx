@@ -178,14 +178,32 @@ export function LoginScene({ className = "" }: { className?: string }) {
       const collar = mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.13, 32), M.clay);
       collar.position.y = 1.09;
       body.add(collar);
-      const tie = mesh(new THREE.BoxGeometry(0.075, 0.34, 0.025), M.red);
-      tie.position.set(0, 0.83, 0.275);
-      tie.rotation.x = -0.22;
-      body.add(tie);
-      const knot = mesh(new THREE.BoxGeometry(0.09, 0.07, 0.04), M.red);
-      knot.position.set(0, 1.0, 0.225);
-      knot.rotation.x = -0.45;
-      body.add(knot);
+      /*
+       * เนกไทต้องโค้งไปตามผิวลำตัว ไม่ใช่แผ่นตรง
+       *
+       * ลำตัวเป็นทรงกลึง ท่อนล่างรัศมี 0.3 คงที่ ช่วงไหล่โค้งเข้าหาคอจนเหลือ 0.17
+       * แผ่นตรงจึงมีช่วงที่จมอยู่ใต้ผิว พอลำตัวหายใจ (torso.scale.y) ผิวขยับคร่อมแผ่น
+       * เห็นเป็นเนกไททะลุลำตัว (เจ้าของแจ้ง 17 พ.ย. 2569)
+       *
+       * ที่นี่จึงกลึงเนกไทจากเส้นขอบเดียวกับลำตัว แค่ถอยออกมาจากผิวนิดเดียว
+       * และผูกไว้กับลำตัวเอง — หายใจแล้วขยับไปด้วยกัน ไม่มีทางคร่อมกันอีก
+       */
+      /** รัศมีของลำตัวที่ความสูง y — ท่อนตรงกับโดมช่วงไหล่ใช้สูตรเดียวกับเส้นขอบ tp */
+      const bodyR = (y: number) => (y <= 0.755 ? 0.3 : Math.sqrt(Math.max(0, 0.09 - (y - 0.755) ** 2)));
+      /** แถบโค้งแปะผิวลำตัว — ใช้ทั้งเนกไทและปม */
+      const strip = (from: number, to: number, gap: number, wide: number) => {
+        const pts = [];
+        const steps = 14;
+        for (let i = 0; i <= steps; i++) {
+          const y = from + ((to - from) * i) / steps;
+          pts.push(new THREE.Vector2(bodyR(y) + gap, y));
+        }
+        const m = mesh(new THREE.LatheGeometry(pts, 20, -wide / 2, wide), M.red);
+        torso.add(m);
+        return m;
+      };
+      strip(0.68, 0.985, 0.012, 0.26);   /* ตัวเนกไท */
+      strip(0.975, 1.035, 0.022, 0.34);  /* ปมใต้ปกเสื้อ */
 
       /* แขนสองข้าง — ข้อศอกงอ ยกปลายแขนขึ้นระดับอก แบมือหงายรับของ */
       function bentArm(side: number) {
