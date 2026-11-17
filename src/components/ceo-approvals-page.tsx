@@ -343,9 +343,10 @@ function PayrollStrip() {
     .filter(([, a]) => a.status === "waiting")
     .map(([key, a]) => {
       const [month, group] = key.split("|") as [string, PayGroup];
-      /* ตัวเลขที่ CEO เห็นและกดอนุมัติ = ผลคำนวณของรอบ ณ ตอนนี้ */
+      /* ตัวเลขที่ CEO เห็นและกดอนุมัติ = ผลคำนวณของรอบ ณ ตอนนี้
+         ยังไม่ได้คำตอบจากฐานข้อมูล = ยังไม่ให้เซ็น เพราะเลขบนจอยังไม่ใช่เลขที่จ่ายจริง */
       const sum = sumOf(month, group);
-      return { key, month, group, a, sum };
+      return { key, month, group, a, sum, ready: sumOf.ready(month) };
     })
     /* รอบเก่าก่อน · ในรอบเดียวกันรายเดือนก่อนรายวัน (ต้นแบบ) */
     .sort((x, y) => x.month.localeCompare(y.month) || (x.group === "month" ? -1 : 1));
@@ -363,7 +364,7 @@ function PayrollStrip() {
       <h2 className="px-5 pt-[15px] pb-2 text-[15px] font-bold">
         ยอดเงินเดือนรออนุมัติ <b className="ml-1 text-primary">{waiting.length}</b>
       </h2>
-      {waiting.map(({ key, month, group, a, sum }) => (
+      {waiting.map(({ key, month, group, a, sum, ready }) => (
         <div key={key} className="border-t border-border px-5 py-3.5">
           <div className="flex flex-wrap items-center gap-3.5">
             <div className="min-w-0 flex-1 sm:min-w-[240px]">
@@ -371,7 +372,9 @@ function PayrollStrip() {
                 รอบ {thaiMonth(month)} · {GROUP_LABEL[group]}
               </b>
               <p className="mt-0.5 text-[13px]">
-                {sum.n} คน · ยอดจ่ายสุทธิ {baht(sum.net)} บาท · นำส่งประกันสังคม {baht(sum.ss * 2)} บาท
+                {ready
+                  ? `${sum.n} คน · ยอดจ่ายสุทธิ ${baht(sum.net)} บาท · นำส่งประกันสังคม ${baht(sum.ss * 2)} บาท`
+                  : "กำลังอ่านยอดจากฐานข้อมูล…"}
               </p>
               {/* ตัวเลขนี้คิดเมื่อไร ต้องอ่านออกจากหน้าจอ ไม่ใช่เดาว่าเป็นของวันนี้ */}
               <p className="mt-0.5 text-[12px] text-muted-foreground">
@@ -391,7 +394,9 @@ function PayrollStrip() {
                 </button>
                 <button
                   type="button"
-                  className="btn solid btn-solid max-sm:!h-12 max-sm:flex-1 max-sm:justify-center"
+                  className="btn solid btn-solid max-sm:!h-12 max-sm:flex-1 max-sm:justify-center disabled:opacity-45"
+                  disabled={!ready}
+                  title={ready ? "" : "ยังอ่านยอดจากฐานข้อมูลไม่เสร็จ"}
                   onClick={() => setConfirming(key)}
                 >
                   อนุมัติยอดนี้

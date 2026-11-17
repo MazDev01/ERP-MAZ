@@ -653,26 +653,39 @@ export function useDbPayLinesMap(months: string[]) {
   useEffect(() => {
     const list = (keys ? keys.split(" ") : []).map((k) => JSON.parse(k) as PayLineInput);
     if (!list.length) return;
-    let alive = true;
     for (const input of list) {
       const key = JSON.stringify(input);
       if (asked.current[input.month] === key) continue;
       asked.current[input.month] = key;
-      void fetchPayrollLines(input.month, input.commission, input.absent).then((rows) => {
-        if (alive && rows.length) setGot((prev) => ({ ...prev, [input.month]: { key, rows } }));
-      });
+      /*
+       * เก็บคำตอบไว้เสมอ ไม่ทิ้งเมื่อ effect รอบนี้ถูกยกเลิก
+       * ของเดิมถ้าฐานที่ใช้คิดขยับระหว่างรอคำตอบ คำตอบจะถูกทิ้ง แต่ asked ยังจำว่า "ยิงแล้ว"
+       * รอบนั้นจึงไม่มีตัวเลขตลอดไป — หน้าอนุมัติของ CEO ค้างเป็น "กำลังอ่านยอด" (17 พ.ย. 2569)
+       */
+      void fetchPayrollLines(input.month, input.commission, input.absent)
+        .then((rows) => {
+          if (rows.length) setGot((prev) => ({ ...prev, [input.month]: { key, rows } }));
+          else delete asked.current[input.month];
+        })
+        .catch(() => {
+          /* ยิงไม่ผ่าน — ให้ลองใหม่ได้รอบหน้า */
+          delete asked.current[input.month];
+        });
     }
-    return () => {
-      alive = false;
-    };
   }, [keys]);
 
   return useMemo(() => {
     const byNo = new Map(hr.emp.map((e) => [e.id, e]));
     const out: Record<string, PayLine[]> = {};
     for (const input of inputs) {
+      /*
+       * ใช้คำตอบล่าสุดของเดือนนั้นแม้ฐานที่ใช้คิดเพิ่งขยับ (เช่น ผลการตรวจเวลาเพิ่งโหลดเสร็จ)
+       * ของเดิมบังคับให้คีย์ตรงเป๊ะ พอฐานขยับหลังคำตอบกลับมา หน้าจอจะไม่มีตัวเลขเลยค้างอยู่อย่างนั้น
+       * (เจอตอนไล่ทั้งสาย 17 พ.ย. 2569 — หน้าของ CEO ขึ้น "กำลังอ่านยอด" ไม่จบ)
+       * คำขอรอบใหม่ยังยิงอยู่ ตัวเลขจึงตามมาทีหลังเอง
+       */
       const hit = got[input.month];
-      if (!hit || hit.key !== JSON.stringify(input)) continue;
+      if (!hit) continue;
       const lines: PayLine[] = [];
       for (const r of hit.rows) {
         const e = r.emp_no ? byNo.get(r.emp_no) : undefined;
@@ -719,7 +732,7 @@ export function usePayrollSumFn() {
   );
   const dbMap = useDbPayLinesMap(months);
 
-  return useCallback(
+  const sumOf = useCallback(
     (month: string, group: PayGroup) => {
       const range = hrCycle(month);
       const payrun = hr.payruns.find((p) => p.month === month);
@@ -729,6 +742,18 @@ export function usePayrollSumFn() {
     },
     [dbMap, hr.emp, hr.payruns, hr.extras, time, src, today],
   );
+
+  /*
+   * ยอดของรอบนี้มาจากฐานข้อมูลแล้วหรือยัง
+   * ยังไม่มา = ตัวเลขบนจอเป็นของสูตรฝั่งหน้าจอ ซึ่งอาจไม่ตรงกับที่จ่ายจริง
+   * หน้าที่ให้ CEO เซ็นต้องรอให้มาก่อน ไม่ใช่ให้เซ็นเลขชั่วคราว (เจอตอนไล่ทั้งสาย 17 พ.ย. 2569)
+   */
+  const ready = useCallback(
+    (month: string) => !hasBackend || Boolean(dbMap[month]) || Boolean(hr.payruns.find((p) => p.month === month)?.closed),
+    [dbMap, hr.payruns],
+  );
+
+  return Object.assign(sumOf, { ready });
 }
 
 /**

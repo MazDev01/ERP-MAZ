@@ -52,6 +52,7 @@ import { refreshRecords } from "./attendance-store";
 import { createPersistedStore } from "./persisted-store";
 import type { Role } from "./role";
 import { hasBackend } from "./supabase/env";
+import { signedIn } from "./supabase/client";
 import {
   PERIOD_REASON,
   blankPeriods,
@@ -212,16 +213,34 @@ function tell() {
   for (const fn of watchers) fn();
 }
 
+/*
+ * โหลดข้อมูลของฝ่ายบุคคลจากฐานข้อมูล
+ *
+ * ⚠️ ต้องมี session ก่อนเสมอ — ถ้ายิงตอนยังกู้ session ไม่เสร็จ ฐานข้อมูลจะตอบ "ไม่มีข้อมูล"
+ * แล้วตัวโหลดจะจำคำตอบนั้นไว้ หน้าฝ่ายบุคคลและหน้าของผู้บริหารจะว่างเปล่าจนกว่าจะโหลดหน้าใหม่
+ * (เจอตอนไล่ทั้งสายวันที่ 17 พ.ย. 2569 — ปุ่มอนุมัติยอดของ CEO ค้างเป็นสีจาง)
+ * ตัวช่วยนี้จึงรอจน session มาก่อนค่อยยิง และปล่อยให้ลองใหม่ได้ถ้ายังไม่มา
+ */
+async function afterSignIn(): Promise<boolean> {
+  for (let i = 0; i < 20; i++) {
+    if (await signedIn()) return true;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return false;
+}
+
 function loadPeriods() {
   if (!live || loadingPeriods || remote !== null) return;
   loadingPeriods = true;
-  void fetchPeriods()
+  void afterSignIn()
+    .then((ok) => (ok ? fetchPeriods() : Promise.reject(new Error("no_session"))))
     .then((list) => {
       remote = list;
     })
-    .catch(() => {
-      /* อ่านไม่ได้ — ให้เป็นรายการเปล่าไว้ก่อน ไม่ปล่อยเป็น null ไม่งั้นจะวนยิงใหม่ไม่จบ */
-      remote = blankPeriods();
+    .catch((e: Error) => {
+      /* ยังไม่มี session = ยังไม่รู้ ปล่อยเป็น null ให้ลองใหม่รอบหน้า
+         อ่านไม่ได้ด้วยเหตุอื่นค่อยปักเป็นรายการเปล่า ไม่งั้นจะวนยิงไม่จบ */
+      if (e.message !== "no_session") remote = blankPeriods();
     })
     .finally(() => {
       loadingPeriods = false;
@@ -239,12 +258,13 @@ function loadPeriods() {
 function loadPeople() {
   if (!live || loadingPeople || people !== null) return;
   loadingPeople = true;
-  void fetchEmployees()
+  void afterSignIn()
+    .then((ok) => (ok ? fetchEmployees() : Promise.reject(new Error("no_session"))))
     .then((list) => {
       people = list;
     })
-    .catch(() => {
-      people = BLANK_EMP;
+    .catch((e: Error) => {
+      if (e.message !== "no_session") people = BLANK_EMP;
     })
     .finally(() => {
       loadingPeople = false;
@@ -259,16 +279,23 @@ function loadPeople() {
 function loadPay() {
   if (!live || loadingPay || runs !== null) return;
   loadingPay = true;
-  void Promise.all([fetchPayruns(), fetchPayApprovals(), fetchSlips()])
+  void afterSignIn()
+    .then((ok) =>
+      ok
+        ? Promise.all([fetchPayruns(), fetchPayApprovals(), fetchSlips()])
+        : Promise.reject(new Error("no_session")),
+    )
     .then(([a, b, c]) => {
       runs = a;
       approvals = b;
       slips = c;
     })
-    .catch(() => {
-      runs = BLANK_PERIODS;
-      approvals = {};
-      slips = [];
+    .catch((e: Error) => {
+      if (e.message !== "no_session") {
+        runs = BLANK_PERIODS;
+        approvals = {};
+        slips = [];
+      }
     })
     .finally(() => {
       loadingPay = false;
@@ -323,14 +350,17 @@ let loadingReviews = false;
 function loadReviews() {
   if (!live || loadingReviews || reviews !== null) return;
   loadingReviews = true;
-  void Promise.all([fetchReviews(), fetchTimeEdits()])
+  void afterSignIn()
+    .then((ok) => (ok ? Promise.all([fetchReviews(), fetchTimeEdits()]) : Promise.reject(new Error("no_session"))))
     .then(([list, editList]) => {
       reviews = list;
       edits = editList;
     })
-    .catch(() => {
-      reviews = [];
-      edits = [];
+    .catch((e: Error) => {
+      if (e.message !== "no_session") {
+        reviews = [];
+        edits = [];
+      }
     })
     .finally(() => {
       loadingReviews = false;
