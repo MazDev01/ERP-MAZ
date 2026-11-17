@@ -498,6 +498,32 @@ export function useMissingApproved(c: Cycle): MissingReq[] {
  */
 type PayLineInput = { month: string; commission: Record<string, number>; absent: Record<string, number> };
 
+/**
+ * ฐานที่ใช้คิดเงินเดือนของรอบนั้น (ค่าคอม · วันขาดงาน)
+ * ส่งขึ้นไปพร้อมตอนส่งยอดให้ CEO และตอนปิดรอบ เพื่อให้ฐานข้อมูลคิดซ้ำด้วยชุดเดียวกันแล้วเทียบ
+ */
+export function usePayBasis(month: string | null | undefined) {
+  const hr = useHr();
+  const time = useHrTime();
+  const src = useComSource();
+
+  return useMemo(() => {
+    const commission: Record<string, number> = {};
+    const absent: Record<string, number> = {};
+    if (!month) return { commission, absent };
+    const range = hrCycle(month);
+    for (const e of hr.emp) {
+      const uuid = empUuid(e.id);
+      if (!uuid) continue;
+      const base = commissionBase(e, range, src);
+      if (base > 0) commission[uuid] = base;
+      const n = recInRange(time, e.id, range).issues.filter((x: { absent?: boolean }) => x.absent).length;
+      if (n > 0) absent[uuid] = n;
+    }
+    return { commission, absent };
+  }, [month, hr.emp, time, src]);
+}
+
 export function useDbPayLines(month: string | null | undefined, closed: boolean) {
   const hr = useHr();
   const time = useHrTime();

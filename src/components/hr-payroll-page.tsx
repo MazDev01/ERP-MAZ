@@ -65,7 +65,7 @@ import { closePayrunFlow } from "@/lib/flow";
 import { HrSteps, useUrlGroup, useUrlMonth } from "./hr-steps";
 import {
   empUuid,
-  useDbPayLines, useComSource, useHrTime, useMissingApproved, usePayrollVoidWatch, type MissingReq } from "@/lib/hr-link";
+  useDbPayLines, usePayBasis, useComSource, useHrTime, useMissingApproved, usePayrollVoidWatch, type MissingReq } from "@/lib/hr-link";
 import type { Role } from "@/lib/role";
 import { EyeIcon, PencilIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
@@ -146,6 +146,8 @@ export function HrPayrollPage() {
    * ก็ใช้สูตรฝั่งหน้าจอไปก่อน หน้าจะได้ไม่ว่างระหว่างรอ
    */
   const dbRows = useDbPayLines(month, payClosed);
+  /* ฐานที่ใช้คิด (ค่าคอม · วันขาดงาน) ส่งขึ้นไปให้ฐานข้อมูลคิดซ้ำตอนส่งยอดและตอนปิดรอบ */
+  const basis = usePayBasis(month);
   const rows: Line[] = dbRows ?? payLines(hr.emp, range, time, hr.extras, today, src, payrun, month);
   const monthly = linesOfGroup(rows, "month");
   const daily = linesOfGroup(rows, "day");
@@ -223,6 +225,8 @@ export function HrPayrollPage() {
       group,
       { people: groupSum.n, net: groupSum.net, ss: groupSum.ss },
       bkkStamp(),
+      undefined,
+      basis,
     ).then((res) => {
       if (!res.ok) setFailed(res.message);
     });
@@ -1234,6 +1238,8 @@ function CloseDialog({
   const net = sum.net;
   const ss = sum.ss;
   const c = hrCycle(month);
+  /* ฐานที่ใช้คิดของรอบนี้ — ส่งไปให้ฐานข้อมูลคิดซ้ำแล้วเทียบก่อนยอมปิดรอบ */
+  const basis = usePayBasis(month);
 
   /* เหตุที่ปิดไม่สำเร็จ — ค้างกล่องไว้พร้อมเหตุผล ไม่ปิดทิ้งให้เข้าใจผิดว่าปิดรอบแล้ว */
   const [failed, setFailed] = useState("");
@@ -1244,7 +1250,7 @@ function CloseDialog({
     setFailed("");
     /* เก็บยอดที่ปิดไว้ในตัวรอบ หน้าประวัติรอบอ่านตัวเลขชุดนี้ ไม่คำนวณใหม่
        และส่งบรรทัดรายคนไปให้ฐานข้อมูลตรวจกับข้อมูลดิบก่อนยอมให้ปิด */
-    void closePayrunFlow(month, today, group, sum, reimbursed, dbLines(lines)).then((res) => {
+    void closePayrunFlow(month, today, group, sum, reimbursed, dbLines(lines), basis).then((res) => {
       if (!res.ok) return setFailed(res.message);
       onClose();
     });

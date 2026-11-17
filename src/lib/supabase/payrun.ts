@@ -197,13 +197,21 @@ async function call(fn: string, args: Record<string, unknown>): Promise<PayrunDo
 }
 
 /** ฝ่ายบุคคลส่งยอดให้ CEO ดู — ต้องปิดรอบเวลาทำงานก่อน (ฐานข้อมูลกันเอง) */
-export function sendPayroll(month: string, group: PayGroup, snap: { people: number; net: number; ss: number }) {
+export function sendPayroll(
+  month: string,
+  group: PayGroup,
+  snap: { people: number; net: number; ss: number },
+  /* ค่าคอมและวันขาดงานชุดเดียวกับที่หน้าจอใช้แสดง — ฐานข้อมูลคิดซ้ำด้วยชุดนี้แล้วเทียบ */
+  basis?: { commission: Record<string, number>; absent: Record<string, number> },
+) {
   return call("send_payroll", {
     p_month: month,
     p_group: group,
     p_people: snap.people,
     p_net: snap.net,
     p_ss: snap.ss,
+    p_commission: basis?.commission ?? {},
+    p_absent: basis?.absent ?? {},
   });
 }
 
@@ -221,8 +229,16 @@ export function closePayrunRemote(
   group: PayGroup,
   sum: CycleSum,
   lines: { employee_id: string; line: unknown; net: number }[],
+  basis?: { commission: Record<string, number>; absent: Record<string, number> },
 ) {
-  return call("close_payrun", { p_month: month, p_group: group, p_sum: sum, p_lines: lines });
+  return call("close_payrun", {
+    p_month: month,
+    p_group: group,
+    p_sum: sum,
+    p_lines: lines,
+    p_commission: basis?.commission ?? {},
+    p_absent: basis?.absent ?? {},
+  });
 }
 
 export function reopenPayrunRemote(month: string, group: PayGroup, why: string) {

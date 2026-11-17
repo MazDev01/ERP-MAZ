@@ -1171,9 +1171,11 @@ export async function sendPayrollToCeo(
   snap: { people: number; net: number; ss: number },
   now: string,
   by = HR_ME,
+  /* ฐานที่ใช้คิด (ค่าคอม · วันขาดงาน) — ฐานข้อมูลคิดซ้ำด้วยชุดนี้ก่อนรับยอด */
+  basis?: { commission: Record<string, number>; absent: Record<string, number> },
 ): Promise<EmpResult> {
   if (live) {
-    const res = await sendPayroll(month, group, snap);
+    const res = await sendPayroll(month, group, snap, basis);
     refreshPayruns();
     return res.ok ? { ok: true } : { ok: false, message: paySay(res.reason) };
   }
@@ -1379,12 +1381,18 @@ export async function closePayrun(
   by = HR_ME,
   /* บรรทัดรายคนพร้อมรหัสจริงในฐานข้อมูล — ฐานข้อมูลเอาไปตรวจกับข้อมูลดิบก่อนยอมให้ปิด */
   lines?: { employee_id: string; line: unknown; net: number }[],
+  basis?: { commission: Record<string, number>; absent: Record<string, number> },
 ): Promise<EmpResult> {
   if (live) {
-    const res = await closePayrunRemote(month, group, sum, lines ?? []);
+    const res = await closePayrunRemote(month, group, sum, lines ?? [], basis);
     refreshPayruns();
     if (res.ok) return { ok: true };
-    const extra = res.reason === "mismatch" ? " — ตรวจตัวเลขเวลาทำงานอีกครั้ง" : "";
+    const extra =
+      res.reason === "mismatch"
+        ? " — ตรวจตัวเลขเวลาทำงานอีกครั้ง"
+        : res.reason === "sum_mismatch" || res.reason === "line_mismatch"
+          ? " — ยอดบนจอไม่ตรงกับที่ฐานข้อมูลคำนวณได้ โหลดหน้าใหม่แล้วลองอีกครั้ง"
+          : "";
     return { ok: false, message: paySay(res.reason) + extra };
   }
   store.update((s) => {

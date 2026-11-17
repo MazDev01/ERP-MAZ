@@ -63,8 +63,10 @@ export async function closePayrunFlow(
   reimbursed: { role: Role; month: string }[],
   /* บรรทัดรายคนพร้อมรหัสจริง — ฐานข้อมูลตรวจกับข้อมูลดิบก่อนยอมให้ปิด */
   lines?: { employee_id: string; line: unknown; net: number }[],
+  /* ฐานที่ใช้คิด — ฐานข้อมูลคิดซ้ำด้วยชุดนี้แล้วเทียบก่อนยอมให้ปิด */
+  basis?: { commission: Record<string, number>; absent: Record<string, number> },
 ) {
-  const res = await closePayrun(month, today, group, sum, undefined, lines);
+  const res = await closePayrun(month, today, group, sum, undefined, lines, basis);
   if (!res.ok) return res;
   /* ต่อฐานข้อมูลแล้ว close_payrun เป็นคนติดธงจ่ายคืนให้เอง ตัวนี้จึงทำงานเฉพาะโหมดในเครื่อง */
   markReimbursed(reimbursed, month);
