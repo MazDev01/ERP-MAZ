@@ -458,6 +458,9 @@ function snapshot(): HrState {
       payApprove: approvals ?? {},
       slips: slips ?? [],
       extras: { ...s.extras, ...extraMonths },
+      /* ใบลาฝึกงานชุดตัวอย่างไม่ใช่ของจริง — ต่อฐานข้อมูลแล้วต้องไม่โผล่ในคิวของฝ่ายบุคคล
+         (โรคเดียวกับคำขอตัวอย่างที่เคยปนในคิวของผู้บริหาร 16 พ.ย. 2569) */
+      internLeave: [],
     });
   }
   return shown;
