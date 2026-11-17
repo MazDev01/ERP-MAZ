@@ -21,6 +21,7 @@ import { dayKey, recordsOfDay, toSessions, type PunchRecord } from "./attendance
 import { useAllPunches } from "./attendance-store";
 import { hasBackend } from "./supabase/env";
 import { fetchPayrollLines, type DbPayLine } from "./supabase/payroll";
+import { fetchMySlipLines } from "./supabase/payrun";
 import { peopleNow } from "./supabase/people";
 import { lateMinutes } from "./work-schedule";
 import {
@@ -1013,4 +1014,25 @@ export function useTodayAttendance() {
         };
       });
   }, [hr.emp, time, punches]);
+}
+
+/**
+ * บรรทัดสลิปของตัวเองจากฐานข้อมูล — โหลดครั้งเดียวต่อการเปิดหน้า
+ * ใช้แทนการอ่านยอดรวมของรอบ ซึ่งมีบรรทัดของทุกคนอยู่ข้างใน
+ */
+export function useMySlipLines() {
+  const [rows, setRows] = useState<{ month: string; group: PayGroup; line: unknown }[]>([]);
+
+  useEffect(() => {
+    if (!hasBackend) return;
+    let alive = true;
+    void fetchMySlipLines().then((list) => {
+      if (alive) setRows(list);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return rows;
 }

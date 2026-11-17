@@ -32,7 +32,7 @@ import {
   type Employee,
 } from "@/lib/hr-data";
 import { countDownload, countView, useHr } from "@/lib/hr-store";
-import { ROLE_EMPLOYEE, useComSource, useHrTime } from "@/lib/hr-link";
+import { ROLE_EMPLOYEE, useComSource, useHrTime, useMySlipLines } from "@/lib/hr-link";
 import { downloadCsv, toCsv } from "@/lib/report-export";
 import { useRole } from "@/lib/role";
 import { useStaffEmployeeId } from "@/lib/staff-identity";
@@ -55,6 +55,8 @@ export function MyPayslipPage() {
   const staffId = useStaffEmployeeId();
   const myId = role === "staff" ? staffId : ROLE_EMPLOYEE[role];
   const me = myId ? hr.emp.find((e) => e.id === myId) : undefined;
+  /* บรรทัดสลิปของตัวเองจากฐานข้อมูล — ตารางนี้ปล่อยให้เห็นเฉพาะของตัวเองและเฉพาะรอบที่เผยแพร่แล้ว */
+  const mineLines = useMySlipLines();
 
   const rows: Row[] = [];
   if (me && me.type !== "intern") {
@@ -62,7 +64,8 @@ export function MyPayslipPage() {
     for (const sp of hr.slips) {
       const published = day ? sp.dayPublished : sp.published;
       if (!published || !inPeriod(me, sp.month)) continue;
-      const line = lineOf(hr, me, sp.month, day, time, src);
+      const mine = mineLines.find((x) => x.month === sp.month && (x.group === "day") === day)?.line as CycleLine | undefined;
+      const line = lineOf(hr, me, sp.month, day, time, src, mine ?? null);
       if (!line) continue;
       rows.push({
         month: sp.month,
@@ -281,7 +284,11 @@ function lineOf(
   day: boolean,
   time: ReturnType<typeof useHrTime>,
   src: ComSource,
+  /* บรรทัดสลิปของตัวเองจากฐานข้อมูล — มาก่อนยอดรวมของรอบเสมอ
+     ยอดรวมของรอบมีบรรทัดของทุกคน พนักงานทั่วไปจึงไม่ควรอ่านได้ (ไล่ตรวจสิทธิ์ 17 พ.ย. 2569) */
+  mine?: CycleLine | null,
 ): CycleLine | null {
+  if (mine) return mine;
   const run = hr.payruns.find((p) => p.month === month);
   const sum = day ? run?.daySum : run?.sum;
   const saved = sum?.lines.find((x) => x.id === me.id);

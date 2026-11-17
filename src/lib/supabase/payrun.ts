@@ -252,3 +252,25 @@ export function publishSlipsRemote(month: string, group: PayGroup) {
 export function unpublishSlipsRemote(month: string, group: PayGroup, why: string) {
   return call("unpublish_slips", { p_month: month, p_group: group, p_why: why });
 }
+
+/*
+ * บรรทัดสลิปของตัวเอง — อ่านจาก payslip_lines ไม่ใช่จากยอดรวมของรอบ
+ *
+ * ยอดรวมของรอบ (payruns.sum) มีบรรทัดของทุกคนอยู่ข้างใน ถ้าพนักงานอ่านได้
+ * ก็เท่ากับเปิดเงินเดือนทั้งบริษัทให้ทุกคนดู (เจอตอนไล่ตรวจสิทธิ์ 17 พ.ย. 2569)
+ * ตารางนี้ RLS ปล่อยให้เจ้าตัวเห็นเฉพาะรอบที่เผยแพร่สลิปแล้วเท่านั้น
+ */
+export async function fetchMySlipLines(): Promise<{ month: string; group: PayGroup; line: unknown }[]> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return [];
+  const { data, error } = await sb
+    .from("payslip_lines")
+    .select("month, pay_group, line")
+    .order("month", { ascending: false });
+  if (error || !data) return [];
+  return (data as { month: string; pay_group: string; line: unknown }[]).map((r) => ({
+    month: r.month,
+    group: (r.pay_group === "day" ? "day" : "month") as PayGroup,
+    line: r.line,
+  }));
+}

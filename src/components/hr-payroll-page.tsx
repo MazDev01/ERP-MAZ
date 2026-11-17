@@ -1203,11 +1203,29 @@ const PAY_DLG_NOTE =
  * ส่งเฉพาะตัวเลขที่ฐานข้อมูลนับเองได้ (ชั่วโมงทำงาน นาทีสาย ชั่วโมงโอที)
  * ไม่ตรงเมื่อไรคือปิดไม่ได้ — กันยอดที่แก้มาจากหน้าเว็บ
  */
+/*
+ * บรรทัดรายคนที่เก็บไว้กับรอบ — เก็บรายละเอียดทั้งแถว ไม่ใช่แค่ยอดสุทธิ
+ * เพราะสลิปของพนักงานอ่านจากตรงนี้ (payslip_lines) ไม่ได้อ่านจากยอดรวมของรอบอีกต่อไป
+ * ยอดรวมของรอบมีบรรทัดของทุกคนอยู่ ถ้าให้พนักงานอ่านได้ก็เท่ากับเปิดเงินเดือนทั้งบริษัท
+ */
 function dbLines(lines: Line[]) {
   return lines.flatMap((x) => {
     const id = empUuid(x.e.id);
     if (!id) return [];
-    return [{ employee_id: id, line: { net: x.c.net }, net: x.c.net }];
+    return [
+      {
+        employee_id: id,
+        line: {
+          id: x.e.id,
+          name: x.e.name,
+          pos: x.e.pos,
+          days: x.days,
+          rate: x.rate,
+          ...x.c,
+        },
+        net: x.c.net,
+      },
+    ];
   });
 }
 
