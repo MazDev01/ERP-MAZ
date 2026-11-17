@@ -61,7 +61,12 @@ export async function fetchFiledByMe(): Promise<FiledDoc[]> {
   if (!sb) return [];
   if (!(await afterSignIn())) return [];
   await loadPeople();
-  const me = myId();
+  /* ถามฐานข้อมูลตรง ๆ ถ้าทะเบียนในเครื่องยังไม่รู้ว่าเราเป็นใคร — ไม่งั้นตารางว่างทั้งที่มีใบ */
+  let me = myId();
+  if (!me) {
+    const { data } = await sb.rpc("my_employee_id");
+    me = typeof data === "string" ? data : null;
+  }
   if (!me) return [];
 
   const [lv, ot] = await Promise.all([

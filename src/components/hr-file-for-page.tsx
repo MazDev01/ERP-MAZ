@@ -12,7 +12,7 @@
  * ฐานข้อมูลเป็นคนคุมว่ายื่นแทนใครได้ (can_file_for) — หน้าจอแค่ไม่เสนอชื่อคนที่มีบัญชีให้เลือก
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateField } from "./thai-date-picker";
 import { Field, Input, Select, Textarea } from "./ui";
 import { thaiDate, todayIso } from "@/lib/format";
@@ -64,9 +64,21 @@ export function HrFileForPage() {
   const [end, setEnd] = useState("20:00");
   const [reason, setReason] = useState("");
 
+  /*
+   * หน้าเปิดใหม่มีการอ่านซ้อนกันหลายรอบ (React เรียก effect สองครั้งในโหมดพัฒนา
+   * และรอบแรกอาจยิงก่อน session กู้คืนเสร็จ) — รอบที่ได้คำตอบ "ว่าง" อาจกลับมาทีหลัง
+   * แล้วลบรายการที่อ่านได้แล้วทิ้ง เห็นเป็นตาราง "ยังไม่มีใบ" ทั้งที่มีใบอยู่
+   * จึงนับรอบไว้ แล้วรับเฉพาะคำตอบของรอบล่าสุดเท่านั้น
+   */
+  const round = useRef(0);
   const reload = useCallback(() => {
-    void fetchNoAccount().then(setPeople);
-    void fetchFiledByMe().then(setDocs);
+    const n = ++round.current;
+    void fetchNoAccount().then((v) => {
+      if (n === round.current) setPeople(v);
+    });
+    void fetchFiledByMe().then((v) => {
+      if (n === round.current) setDocs(v);
+    });
   }, []);
   useEffect(reload, [reload]);
 

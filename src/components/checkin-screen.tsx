@@ -117,7 +117,11 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
   const viewRecords = viewDay ? recordsOfDay(records, viewDay) : [];
   const viewLeave =
     viewIsToday || !viewDay ? leaveWindow : leaveWindowOf(leavesOnDate(leaveRecords, viewDay)[0]);
-  const viewIn = [...viewRecords].reverse().find((r) => r.type === "in") ?? null;
+  /* ทำงานข้ามคืนอยู่ — ใบเข้างานเป็นของเมื่อวาน แต่ช่อง "เวลาเข้างาน" ของวันนี้ต้องไม่ว่าง
+     ไม่งั้นคนที่กำลังทำงานอยู่เห็น --:-- ทั้งที่เพิ่งตอกเข้าไปเมื่อสี่ชั่วโมงก่อน */
+  const viewIn =
+    ([...viewRecords].reverse().find((r) => r.type === "in") ?? null) ??
+    (viewIsToday ? overnight : null);
   const viewOut = [...viewRecords].reverse().find((r) => r.type === "out") ?? null;
   const viewWorked = viewDay
     ? Math.round(workedMsOfDay(viewRecords, viewIsToday ? (tick ?? 0) : 0, viewLeave) / 60000)
