@@ -8,7 +8,24 @@ import { pushToMe } from "@/lib/supabase/push";
  * เรื่องที่ระบบส่งให้คนอื่น (มีใบรออนุมัติ · ใบถูกอนุมัติ) จะเรียก pushToEmployees
  * จากฝั่งเซิร์ฟเวอร์ตรง ๆ ไม่ผ่านทางนี้
  */
+import { serverSupabase } from "@/lib/supabase/server";
+
+/*
+ * ทางนี้ต้องมี session เสมอ — ยังไม่ล็อกอินก็ไม่มีเครื่องของตัวเองให้ส่งถึง
+ * ถ้าไม่กั้นตั้งแต่ต้น คนนอกยิงเข้ามารัว ๆ ได้ แล้วเซิร์ฟเวอร์เสียเวลาไปค้นฐานข้อมูลทุกครั้ง
+ */
+async function signedIn() {
+  const sb = await serverSupabase();
+  if (!sb) return false;
+  const { data } = await sb.auth.getUser();
+  return Boolean(data.user);
+}
+
 export async function POST(request: Request) {
+  if (!(await signedIn())) {
+    return Response.json({ ok: false, reason: "no_session" }, { status: 401 });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
