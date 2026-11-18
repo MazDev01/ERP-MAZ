@@ -228,7 +228,12 @@ export async function notifyDoc(kind: Kind, id: string, asSystem = false): Promi
   const doc = data as
     | { id: string; no: string | null; employee_id: string; status: string; approver_role: string }
     | null;
-  if (!doc) return { ok: false, reason: "no_doc" };
+  if (!doc) {
+    /* ใบไม่มีอยู่แล้ว — ยิงซ้ำอีกกี่ครั้งก็ไม่เจอ ปิดงานในคิวทิ้งเลย */
+    const sv = adminSupabase();
+    if (sv) await sv.rpc("push_drop", { p_doc: id });
+    return { ok: false, reason: "no_doc" };
+  }
 
   /*
    * กันส่งซ้ำ — เรื่องเดียวกันมาได้สองทาง (หน้าจอบอกหลังกด และทริกเกอร์ของฐานข้อมูล)
