@@ -40,6 +40,23 @@ async function callerIsHr() {
   return data === true;
 }
 
+/**
+ * FIX-2 ด่านที่สอง: ฐานข้อมูลตอบด้วยสิทธิ์ของคนเรียกเองว่าแก้บัญชีนี้ได้ไหม (can_set_account)
+ * - ฝ่ายบุคคลแก้/สร้าง/ลบ/รีเซ็ตบัญชีของตัวเองไม่ได้
+ * - ให้หรือถอดบทบาท ceo ได้เฉพาะคนที่เป็น ceo
+ * เดิมตรวจแค่ "เป็น HR" แล้วใช้กุญแจ service role เขียนต่อ HR จึงเพิ่ม ceo ให้ตัวเองแล้วอนุมัติเงินเดือนเองได้
+ */
+async function guardAccount(employeeId: string, roles?: string[]): Promise<string | null> {
+  const sb = await serverSupabase();
+  if (!sb) return "no_backend";
+  const { data, error } = await sb.rpc("can_set_account", {
+    p_employee: employeeId,
+    p_roles: roles ?? null,
+  });
+  if (error) return "guard_failed";
+  return (data as string | null) ?? null;
+}
+
 const IS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -74,6 +91,10 @@ export async function createAccount(input: {
   const admin = adminAuth();
   if (!admin) return { ok: false, reason: "no_backend" };
   if (!(await callerIsHr())) return { ok: false, reason: "not_hr" };
+  {
+    const denied = await guardAccount(input.employeeId, input.roles);
+    if (denied) return { ok: false, reason: denied };
+  }
 
   const username = input.username.trim();
   if (!/^[^\s@]{2,40}$/.test(username)) return { ok: false, reason: "bad_username" };
@@ -120,6 +141,10 @@ export async function resetPassword(input: {
   const admin = adminAuth();
   if (!admin) return { ok: false, reason: "no_backend" };
   if (!(await callerIsHr())) return { ok: false, reason: "not_hr" };
+  {
+    const denied = await guardAccount(input.employeeId);
+    if (denied) return { ok: false, reason: denied };
+  }
   if (input.tempPassword.length < 8) return { ok: false, reason: "weak_password" };
 
   const found = await employeeOf(admin, input.employeeId);
@@ -169,6 +194,10 @@ export async function removeAccount(input: { employeeId: string }): Promise<Acco
   const admin = adminAuth();
   if (!admin) return { ok: false, reason: "no_backend" };
   if (!(await callerIsHr())) return { ok: false, reason: "not_hr" };
+  {
+    const denied = await guardAccount(input.employeeId);
+    if (denied) return { ok: false, reason: denied };
+  }
 
   const found = await employeeOf(admin, input.employeeId);
   if (!found?.acc) return { ok: false, reason: "no_account" };
@@ -192,6 +221,10 @@ export async function setAccountRoles(input: {
   const admin = adminAuth();
   if (!admin) return { ok: false, reason: "no_backend" };
   if (!(await callerIsHr())) return { ok: false, reason: "not_hr" };
+  {
+    const denied = await guardAccount(input.employeeId, input.roles);
+    if (denied) return { ok: false, reason: denied };
+  }
   if (input.roles.length < 1 || input.roles.length > 2) return { ok: false, reason: "bad_roles" };
 
   const found = await employeeOf(admin, input.employeeId);
@@ -219,6 +252,10 @@ export async function setAccountStatus(input: {
   const admin = adminAuth();
   if (!admin) return { ok: false, reason: "no_backend" };
   if (!(await callerIsHr())) return { ok: false, reason: "not_hr" };
+  {
+    const denied = await guardAccount(input.employeeId);
+    if (denied) return { ok: false, reason: denied };
+  }
 
   const found = await employeeOf(admin, input.employeeId);
   if (!found?.acc) return { ok: false, reason: "no_account" };
