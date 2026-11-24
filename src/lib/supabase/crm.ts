@@ -8,8 +8,11 @@ import type {
   ChangeLog,
   Customer,
   CustomerStatus,
+  Deal,
+  JobOrder,
   PresalesRequest,
   PresalesRound,
+  Quotation,
 } from "../crm-data";
 
 /*
@@ -531,5 +534,334 @@ export async function sbAddPresalesRound(
     .update({ status: "ส่งกลับแล้ว", hours: sum })
     .eq("id", id);
   if (up.error) return { ok: false, reason: sayWhy(up.error.message) };
+  return { ok: true };
+}
+
+/* ─── ใบเสนอราคา · ดีล · ใบงาน ──────────────────────────────────── */
+
+type QuotationRow = {
+  id: string;
+  no: string;
+  customer_id: string;
+  issuer: string;
+  buyer_type: string;
+  service: string;
+  issued: string;
+  valid_days: number;
+  valid_until: string;
+  amount: number | string;
+  discount: number | string;
+  wht: boolean;
+  wht_pct: number | string | null;
+  body: string;
+  terms: string;
+  status: string;
+  revision: number;
+  sent_at: string | null;
+  presales_id: string | null;
+  replaces: string | null;
+  replaced_by: string | null;
+  rejected_at: string | null;
+  reject_reason: string;
+  created_at: string;
+};
+
+type DealRow = {
+  id: string;
+  no: string;
+  customer_id: string;
+  quotation_id: string | null;
+  total: number | string;
+  status: string;
+  po_ref: string;
+  start_on: string | null;
+  delivery: string | null;
+  scope: string;
+  closed_at: string | null;
+  lost_reason: string;
+  cancel_at: string | null;
+  cancel_by: string;
+  cancel_why: string;
+  seller: string;
+};
+
+type ContractRow = {
+  id: string;
+  deal_id: string;
+  no: string;
+  signed: string | null;
+  kind: string;
+  name: string;
+  url: string;
+  by_name: string;
+  at: string;
+};
+
+type JobRow = {
+  id: string;
+  no: string;
+  deal_id: string;
+  owner: string;
+  item: string;
+  due: string | null;
+  status: string;
+};
+
+const QUOTATION_COLS =
+  "id, no, customer_id, issuer, buyer_type, service, issued, valid_days, valid_until," +
+  " amount, discount, wht, wht_pct, body, terms, status, revision, sent_at, presales_id," +
+  " replaces, replaced_by, rejected_at, reject_reason, created_at";
+
+const DEAL_COLS =
+  "id, no, customer_id, quotation_id, total, status, po_ref, start_on, delivery, scope," +
+  " closed_at, lost_reason, cancel_at, cancel_by, cancel_why, seller";
+
+export type SalesDocs = {
+  quotations: Quotation[];
+  deals: Deal[];
+  jobOrders: JobOrder[];
+};
+
+export const EMPTY_DOCS: SalesDocs = { quotations: [], deals: [], jobOrders: [] };
+
+export async function fetchSalesDocs(
+  codeById: Record<string, string>,
+  psNoById: Record<string, string>,
+): Promise<SalesDocs> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return EMPTY_DOCS;
+
+  const [qs, ds] = await Promise.all([
+    sb.from("quotations").select(QUOTATION_COLS).order("no", { ascending: false }),
+    sb.from("deals").select(DEAL_COLS).order("no", { ascending: false }),
+  ]);
+  const qRows = (qs.data ?? []) as unknown as QuotationRow[];
+  const dRows = (ds.data ?? []) as unknown as DealRow[];
+  const qNoById: Record<string, string> = {};
+  for (const r of qRows) qNoById[r.id] = r.no;
+  const dNoById: Record<string, string> = {};
+  for (const r of dRows) dNoById[r.id] = r.no;
+
+  const [ct, jb] = await Promise.all([
+    sb.from("deal_contracts").select("id, deal_id, no, signed, kind, name, url, by_name, at").order("at"),
+    sb.from("job_orders").select("id, no, deal_id, owner, item, due, status").order("no"),
+  ]);
+
+  const byDeal: Record<string, NonNullable<Deal["contracts"]>> = {};
+  for (const r of (ct.data ?? []) as unknown as ContractRow[]) {
+    (byDeal[r.deal_id] ??= []).push({
+      no: r.no,
+      signed: r.signed ?? "",
+      kind: r.kind === "link" ? "link" : "pdf",
+      name: r.name,
+      url: r.url,
+      by: r.by_name,
+      at: r.at,
+    });
+  }
+
+  const quotations = qRows.map<Quotation>((r) => ({
+    id: r.id,
+    no: r.no,
+    customerCode: codeById[r.customer_id] ?? "",
+    issuer: r.issuer,
+    buyer: (r.buyer_type === "individual" ? "individual" : "juristic") as BuyerType,
+    service: (r.service || undefined) as Quotation["service"],
+    issued: r.issued,
+    validDays: r.valid_days,
+    validUntil: r.valid_until,
+    amount: Number(r.amount),
+    discount: Number(r.discount),
+    wht: r.wht,
+    whtPct: r.wht_pct === null ? undefined : Number(r.wht_pct),
+    body: r.body,
+    terms: r.terms,
+    status: r.status as Quotation["status"],
+    revision: r.revision,
+    createdAt: thaiDay(r.created_at),
+    sentAt: r.sent_at ?? undefined,
+    ps: r.presales_id ? psNoById[r.presales_id] : undefined,
+    replaces: r.replaces ?? undefined,
+    replacedBy: r.replaced_by ?? undefined,
+    rejectedAt: r.rejected_at ?? undefined,
+    rejectReason: r.reject_reason || undefined,
+  }));
+
+  const deals = dRows.map<Deal>((r) => ({
+    id: r.id,
+    no: r.no,
+    customerCode: codeById[r.customer_id] ?? "",
+    quotationNo: r.quotation_id ? (qNoById[r.quotation_id] ?? "") : "",
+    total: Number(r.total),
+    status: r.status as Deal["status"],
+    poRef: r.po_ref,
+    start: r.start_on ?? "",
+    delivery: r.delivery ?? "",
+    scope: r.scope,
+    closedAt: r.closed_at ?? "",
+    lostReason: r.lost_reason,
+    cancelled: r.cancel_at ? { at: r.cancel_at, by: r.cancel_by, why: r.cancel_why } : undefined,
+    seller: r.seller || undefined,
+    contracts: byDeal[r.id],
+  }));
+
+  const jobOrders = ((jb.data ?? []) as unknown as JobRow[]).map<JobOrder>((r) => ({
+    id: r.id,
+    dealNo: dNoById[r.deal_id] ?? "",
+    no: r.no,
+    owner: r.owner,
+    item: r.item,
+    due: r.due ?? "",
+    status: r.status as JobOrder["status"],
+  }));
+
+  return { quotations, deals, jobOrders };
+}
+
+/** ออกใบเสนอราคา — เลขที่ออกจากฐานข้อมูลตามคำนำหน้าของผู้ออกเอกสาร */
+export async function sbAddQuotation(input: {
+  customerCode: string;
+  issuer: string;
+  prefixKey: string;
+  prefix: string;
+  buyer: string;
+  service: string;
+  issued: string;
+  validDays: number;
+  validUntil: string;
+  amount: number;
+  discount: number;
+  wht: boolean;
+  whtPct?: number;
+  body: string;
+  terms: string;
+  psNo?: string;
+  replaces?: string;
+}): Promise<CrmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const customer = await idOf(input.customerCode);
+  if (!customer) return { ok: false, reason: "not_found" };
+  const ps = input.psNo ? await presalesIdOf(input.psNo) : null;
+
+  const no = await sb.rpc("next_sales_no", { p_key: input.prefixKey, p_fallback: input.prefix });
+  if (no.error || !no.data) return { ok: false, reason: sayWhy(no.error?.message ?? "no_number") };
+
+  const got = await sb
+    .from("quotations")
+    .insert({
+      no: no.data as string,
+      customer_id: customer,
+      issuer: input.issuer,
+      buyer_type: input.buyer,
+      service: input.service,
+      issued: input.issued,
+      valid_days: input.validDays,
+      valid_until: input.validUntil,
+      amount: input.amount,
+      discount: input.discount,
+      wht: input.wht,
+      wht_pct: input.whtPct ?? null,
+      body: input.body,
+      terms: input.terms,
+      presales_id: ps,
+      sent_at: input.issued,
+      replaces: input.replaces ?? null,
+      created_by: myId(),
+    })
+    .select("no")
+    .single();
+  if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
+
+  /* ใบเดิมกลายเป็น "แทนที่แล้ว" และจำว่าถูกแทนด้วยใบไหน */
+  if (input.replaces) {
+    await sb
+      .from("quotations")
+      .update({ status: "แทนที่แล้ว", replaced_by: no.data as string })
+      .eq("no", input.replaces);
+  }
+  return { ok: true, code: (got.data as { no: string }).no };
+}
+
+/** ลูกค้าปฏิเสธใบเสนอราคา — ไม่เกิดดีล */
+export async function sbRejectQuotation(no: string, reason: string): Promise<CrmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const got = await sb
+    .from("quotations")
+    .update({
+      status: "ปฏิเสธ",
+      rejected_at: new Date().toISOString().slice(0, 10),
+      reject_reason: reason,
+    })
+    .eq("no", no)
+    .eq("status", "ส่งแล้ว")
+    .select("no");
+  if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
+  if (!got.data?.length) return { ok: false, reason: "not_found" };
+  return { ok: true };
+}
+
+/** ลูกค้าตอบรับ — ฐานข้อมูลทำทั้งชุดในคำสั่งเดียว (รอบที่ 98) */
+export async function sbAcceptQuotation(input: {
+  no: string;
+  scope: string;
+  delivery: string;
+  jobOwner: string;
+}): Promise<{ ok: boolean; deal?: string; reason?: string }> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return { ok: false, reason: "no_backend" };
+  const got = await sb.rpc("accept_quotation", {
+    p_no: input.no,
+    p_scope: input.scope,
+    p_delivery: input.delivery,
+    p_job_owner: input.jobOwner,
+  });
+  if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
+  return got.data as { ok: boolean; deal?: string; reason?: string };
+}
+
+export async function sbCancelDeal(no: string, why: string, by: string): Promise<CrmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const got = await sb.rpc("cancel_deal", { p_no: no, p_why: why, p_by: by });
+  if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
+  const r = got.data as { ok: boolean; reason?: string };
+  return r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "denied" };
+}
+
+export async function sbAttachContract(
+  dealNo: string,
+  c: { no: string; signed: string; kind: "pdf" | "link"; name: string; url: string; by: string; at: string },
+): Promise<CrmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const deal = await sb.from("deals").select("id").eq("no", dealNo).maybeSingle();
+  const id = (deal.data as { id?: string } | null)?.id;
+  if (!id) return { ok: false, reason: "not_found" };
+  const got = await sb.from("deal_contracts").insert({
+    deal_id: id,
+    no: c.no,
+    signed: c.signed || null,
+    kind: c.kind,
+    name: c.name,
+    url: c.url,
+    by_name: c.by,
+    by_id: myId(),
+    at: c.at,
+  });
+  if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
+  return { ok: true };
+}
+
+/** งานฝั่งโปรเจคส่งมอบครบ — ปิดใบงานของดีลนั้นทั้งหมด */
+export async function sbMarkJobsDelivered(dealNo: string): Promise<CrmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const deal = await sb.from("deals").select("id").eq("no", dealNo).maybeSingle();
+  const id = (deal.data as { id?: string } | null)?.id;
+  if (!id) return { ok: false, reason: "not_found" };
+  const got = await sb.from("job_orders").update({ status: "ส่งมอบ" }).eq("deal_id", id);
+  if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
   return { ok: true };
 }

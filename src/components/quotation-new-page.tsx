@@ -312,10 +312,11 @@ function QuotationForm({
   }
 
   /* ออกใบเสนอราคา — ออกเลขที่ทันที แก้ไม่ได้อีก (เจ้าของแจ้ง 5 ต.ค. 2569 จึงไม่มีกล่องยืนยันคั่น) */
-  function issueNow() {
+  async function issueNow() {
     const ok = ready();
     if (!ok) return;
-    const no = addQuotation(inputOf(ok.customer, ok.issuer, ok.service));
+    /* เลขที่ใบออกจากฐานข้อมูล ต้องรอคำตอบก่อนจึงบอกผู้ใช้ได้ */
+    const no = await addQuotation(inputOf(ok.customer, ok.issuer, ok.service));
     onSaved(
       <>
         ออกเลขที่ <b className="num">{no}</b> แล้ว · รวมทั้งสิ้น {baht(totals.grand)} บาท · แก้ไขไม่ได้อีก
@@ -332,7 +333,7 @@ function QuotationForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    issueNow();
+    void issueNow();
   }
 
   const card = "glass rounded-2xl px-4 py-5 sm:px-6";

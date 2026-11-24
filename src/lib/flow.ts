@@ -111,8 +111,9 @@ export function cancelDealFlow(dealNo: string, why: string, by: CancelBy, note =
  * ลูกค้าตอบรับใบเสนอราคา → เกิดดีลฝั่งขาย แล้วส่งต่อให้บัญชีวางบิล
  * คืนเลขที่ดีลให้หน้าจอเอาไปแสดงผลต่อ
  */
-export function acceptQuotationFlow(quotationId: string) {
-  const dealNo = acceptQuotation(quotationId);
+export async function acceptQuotationFlow(quotationId: string) {
+  /* ต่อฐานข้อมูลแล้วดีลเกิดที่ฐานข้อมูล ต้องรอเลขที่ดีลกลับมาก่อนจึงส่งต่อให้บัญชีได้ */
+  const dealNo = await acceptQuotation(quotationId);
   if (!dealNo) return "";
 
   const crm = crmSnapshot();

@@ -214,9 +214,10 @@ export function BillQuotationDialog({
       rows={rows}
       go="ส่งไปวางบิล"
       onGo={() => {
-        const dealNo = acceptQuotationFlow(quotation.id);
-        onClose();
-        if (dealNo) onDone?.(dealNo);
+        void acceptQuotationFlow(quotation.id).then((dealNo) => {
+          onClose();
+          if (dealNo) onDone?.(dealNo);
+        });
       }}
       onClose={onClose}
     />

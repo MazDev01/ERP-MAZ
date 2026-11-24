@@ -53,6 +53,15 @@ import {
   sbMoveCustomer,
   sbRemoveLead,
   sbUpdateCustomer,
+  EMPTY_DOCS,
+  fetchSalesDocs,
+  sbAcceptQuotation,
+  sbAddQuotation,
+  sbAttachContract,
+  sbCancelDeal,
+  sbMarkJobsDelivered,
+  sbRejectQuotation,
+  type SalesDocs,
   type SalesParties,
   type SalesPresales,
 } from "./supabase/crm";
@@ -166,6 +175,7 @@ const store = createPersistedStore<CrmState>(
 const live = hasBackend;
 let parties: SalesParties | null = null;
 let presalesData: SalesPresales | null = null;
+let docsData: SalesDocs | null = null;
 let loading = false;
 const watchers = new Set<() => void>();
 
@@ -183,11 +193,15 @@ function loadParties() {
       const codeById: Record<string, string> = {};
       for (const [code, id] of Object.entries(got.idByCode)) codeById[id] = code;
       presalesData = await fetchPresales(codeById);
+      const psNoById: Record<string, string> = {};
+      for (const [no, id] of Object.entries(presalesData.idByNo)) psNoById[id] = no;
+      docsData = await fetchSalesDocs(codeById, psNoById);
     })
     .catch(() => {
       /* อ่านไม่ได้ — ให้เป็นกองว่าง ไม่ปล่อยเป็น null ไม่งั้นจะวนยิงใหม่ทุกครั้งที่ React อ่าน */
       parties = EMPTY_PARTIES;
       presalesData = EMPTY_PRESALES;
+      docsData = EMPTY_DOCS;
     })
     .finally(() => {
       loading = false;
@@ -200,6 +214,7 @@ function refreshParties() {
   if (!live) return;
   parties = null;
   presalesData = null;
+  docsData = null;
   loading = false;
   loadParties();
   tell();
@@ -209,18 +224,26 @@ function refreshParties() {
 let lastLocal: CrmState | null = null;
 let lastParties: SalesParties | null = null;
 let lastPresales: SalesPresales | null = null;
+let lastDocs: SalesDocs | null = null;
 let lastMerged: CrmState | null = null;
 
 function snapshot(): CrmState {
   const local = store.get();
   if (!live) return local;
   loadParties();
-  if (lastMerged && lastLocal === local && lastParties === parties && lastPresales === presalesData) {
+  if (
+    lastMerged &&
+    lastLocal === local &&
+    lastParties === parties &&
+    lastPresales === presalesData &&
+    lastDocs === docsData
+  ) {
     return lastMerged;
   }
   lastLocal = local;
   lastParties = parties;
   lastPresales = presalesData;
+  lastDocs = docsData;
   lastMerged = {
     ...local,
     customers: parties?.customers ?? [],
@@ -228,6 +251,10 @@ function snapshot(): CrmState {
     changeLogs: parties?.changeLogs ?? [],
     presales: presalesData?.presales ?? [],
     presalesRounds: presalesData?.presalesRounds ?? [],
+    quotations: docsData?.quotations ?? [],
+    quotationRevisions: [],
+    deals: docsData?.deals ?? [],
+    jobOrders: docsData?.jobOrders ?? [],
   };
   return lastMerged;
 }
@@ -677,7 +704,32 @@ export type QuotationInput = {
  * บันทึกใบเสนอราคาใหม่ — ออกเลขที่เอกสารทันทีและนับว่าส่งให้ลูกค้าแล้ว (วันยืนราคาเริ่มนับวันนี้)
  * ออกแทนใบเดิมได้ ใบเดิมจะกลายเป็น "แทนที่แล้ว" · คืนเลขที่ที่ออก
  */
-export function addQuotation(input: QuotationInput) {
+export async function addQuotation(input: QuotationInput) {
+  if (live) {
+    const issuer = issuerOf(input.issuer);
+    const issued = today();
+    const made = await sbAddQuotation({
+      customerCode: input.customerCode,
+      issuer: input.issuer,
+      /* คำนำหน้าเลขใบแยกตามผู้ออกเอกสาร — ตัวนับของฐานข้อมูลจึงเดินคนละชุด */
+      prefixKey: issuer.prefix === settings().docs.quotationB1 ? "quotationB1" : "quotationMaz",
+      prefix: issuer.prefix,
+      buyer: input.buyer,
+      service: input.service,
+      issued,
+      validDays: input.validDays,
+      validUntil: addDays(issued, input.validDays),
+      amount: input.amount,
+      discount: input.discount,
+      wht: input.wht,
+      body: input.body,
+      terms: input.terms,
+      psNo: input.ps,
+      replaces: input.replaces,
+    });
+    refreshParties();
+    return made.ok && made.code ? made.code : "";
+  }
   let no = "";
   store.update((s) => {
     /* ตัวนำหน้าเลขใบเสนอราคาแยกตามผู้ออกเอกสาร (/admin/company) */
@@ -741,7 +793,20 @@ export function customerCodeOf(code: string) {
  * ส่งใบเสนอราคาไปวางบิล = ลูกค้าตกลง → เกิดดีลปิดการขายและใบงานตั้งต้นทันที
  * ผู้สนใจกลายเป็นลูกค้า (เปลี่ยนรหัสเป็น CUS-) · เรียกผ่าน acceptQuotationFlow (flow.ts) เท่านั้น
  */
-export function acceptQuotation(id: string) {
+export async function acceptQuotation(id: string) {
+  if (live) {
+    /* ตอบรับแล้วต้องเปลี่ยนสี่ตารางพร้อมกัน จึงให้ฐานข้อมูลทำทั้งชุดในคำสั่งเดียว (รอบที่ 98) */
+    const q = snapshot().quotations.find((x) => x.id === id);
+    if (!q) return "";
+    const got = await sbAcceptQuotation({
+      no: q.no,
+      scope: firstLine(q.body),
+      delivery: addDays(today(), 45),
+      jobOwner: "ศิริกร (AE)",
+    });
+    refreshParties();
+    return got.ok && got.deal ? got.deal : "";
+  }
   /* คืนเลขที่ดีลที่เพิ่งเกิด เพื่อให้ชั้นส่งงานข้ามฝ่ายหยิบไปเปิดงานฝั่งบัญชีต่อได้ */
   let created = "";
   store.update((s0) => {
@@ -797,14 +862,24 @@ export function acceptQuotation(id: string) {
  * ฝ่ายบัญชีกับ PM ต้องหยุดตามไปด้วย ถ้าเรียกตรงจะเหลือใบแจ้งหนี้และโปรเจคค้างอยู่
  */
 /** ฝ่ายขายแนบสัญญาเข้าดีล — แนบเพิ่มได้ตลอด ไม่มีการลบ */
-export function attachContract(dealNo: string, c: DealContract) {
+export async function attachContract(dealNo: string, c: DealContract) {
+  if (live) {
+    await sbAttachContract(dealNo, c);
+    refreshParties();
+    return;
+  }
   store.update((s) => ({
     ...s,
     deals: s.deals.map((d) => (d.no === dealNo ? { ...d, contracts: [...(d.contracts ?? []), c] } : d)),
   }));
 }
 
-export function cancelDeal(no: string, c: DealCancel) {
+export async function cancelDeal(no: string, c: DealCancel) {
+  if (live) {
+    await sbCancelDeal(no, c.why, c.by);
+    refreshParties();
+    return;
+  }
   store.update((s) => {
     const deal = s.deals.find((d) => d.no === no && d.status === "ปิดการขาย");
     if (!deal) return s;
@@ -833,7 +908,12 @@ export function cancelDeal(no: string, c: DealCancel) {
  * งานฝั่ง PM ส่งมอบครบแล้ว — ปิดใบงานของดีลนั้นทั้งหมด
  * ฝ่ายขายจะได้เห็นว่างานที่ตัวเองปิดการขายไว้เดินไปถึงไหนโดยไม่ต้องไปถาม PM
  */
-export function markJobsDelivered(dealNo: string) {
+export async function markJobsDelivered(dealNo: string) {
+  if (live) {
+    await sbMarkJobsDelivered(dealNo);
+    refreshParties();
+    return;
+  }
   store.update((s) => ({
     ...s,
     jobOrders: s.jobOrders.map((j) =>
@@ -846,7 +926,14 @@ export function markJobsDelivered(dealNo: string) {
  * ลูกค้าปฏิเสธ — บันทึกวันที่และเหตุผล (ต้นแบบ quotations.html) ไม่เกิดดีล
  * เหตุผลไปขึ้นในรายงาน "เหตุผลที่ไม่ตกลง" คู่กับดีลที่ถูกยกเลิก
  */
-export function rejectQuotation(id: string, reason: string) {
+export async function rejectQuotation(id: string, reason: string) {
+  if (live) {
+    const q = snapshot().quotations.find((x) => x.id === id);
+    if (!q) return;
+    await sbRejectQuotation(q.no, reason);
+    refreshParties();
+    return;
+  }
   store.update((s) => {
     const q = s.quotations.find((x) => x.id === id);
     if (!q || !canBillQuotation(q, s.deals.some((d) => d.quotationNo === q.no), today())) return s;
