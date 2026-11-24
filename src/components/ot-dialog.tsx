@@ -96,6 +96,9 @@ export function OtDialog({
   const [reason, setReason] = useState("");
   /* เหตุที่ยื่นไม่ผ่าน — ขึ้นในรายการปัญหาเดิมของกล่อง ไม่ปิดกล่องทิ้ง */
   const [failed, setFailed] = useState("");
+  /* กำลังส่งอยู่ — กันกดซ้ำระหว่างรอฐานข้อมูลตอบ (ref กันคลิกรัวก่อน state อัปเดต) */
+  const sending = useRef(false);
+  const [busy, setBusy] = useState(false);
   /* ไฟล์ประกอบที่เลือกไว้ — ส่งขึ้นถังตอนยื่นสำเร็จ */
   const [picked, setPicked] = useState<File[]>([]);
   const [fileWarn, setFileWarn] = useState("");
@@ -216,27 +219,34 @@ export function OtDialog({
   const canSubmit = Boolean(date) && hours >= OT_MIN_HOURS && !problems.length && reason.trim().length > 0;
 
   function submit() {
-    if (!canSubmit) return;
+    if (!canSubmit || sending.current) return;
+    sending.current = true;
+    setBusy(true);
     /* ออกใบแยกทีละวัน — เรตของแต่ละวันไม่เท่ากัน และผู้อนุมัติต้องตัดสินได้ทีละวัน
        ยื่นเรียงทีละใบ ไม่ใช่ยิงพร้อมกัน เพราะเลขที่ใบต้องเดินต่อกันตามลำดับวัน */
     void (async () => {
-      for (const d of days) {
-        const { s, e } = timeOf(d);
-        const rec = await addOtRequest({
-          date: d,
-          startMin: s,
-          endMin: e,
-          hours: otHours(s, e),
-          reason: reason.trim(),
-          /* แนบไฟล์ชุดเดียวกับทุกวันที่ยื่นในครั้งนี้ */
-          upload: picked,
-        });
-        /* ใบไหนพลาดก็หยุดทันที ใบที่ยื่นผ่านแล้วยังอยู่ในระบบ
-           ปิดกล่องไปทั้งที่ยื่นไม่ครบจะเข้าใจผิดว่าได้ทุกวัน */
-        if (!rec) return setFailed(`ยื่นใบโอทีของวันที่ ${d} ไม่สำเร็จ ลองใหม่อีกครั้ง`);
+      try {
+        for (const d of days) {
+          const { s, e } = timeOf(d);
+          const rec = await addOtRequest({
+            date: d,
+            startMin: s,
+            endMin: e,
+            hours: otHours(s, e),
+            reason: reason.trim(),
+            /* แนบไฟล์ชุดเดียวกับทุกวันที่ยื่นในครั้งนี้ */
+            upload: picked,
+          });
+          /* ใบไหนพลาดก็หยุดทันที ใบที่ยื่นผ่านแล้วยังอยู่ในระบบ
+             ปิดกล่องไปทั้งที่ยื่นไม่ครบจะเข้าใจผิดว่าได้ทุกวัน */
+          if (!rec) return setFailed(`ยื่นใบโอทีของวันที่ ${d} ไม่สำเร็จ ลองใหม่อีกครั้ง`);
+        }
+        onSubmitted(totalHours, date);
+        onClose();
+      } finally {
+        sending.current = false;
+        setBusy(false);
       }
-      onSubmitted(totalHours, date);
-      onClose();
     })();
   }
 
@@ -473,10 +483,10 @@ export function OtDialog({
           <button
             type="button"
             className="btn solid btn-solid flex-1 justify-center sm:flex-none"
-            disabled={!canSubmit}
+            disabled={!canSubmit || busy}
             onClick={submit}
           >
-            ส่งคำขอ
+            {busy ? "กำลังส่ง…" : "ส่งคำขอ"}
           </button>
         </div>
       </div>
