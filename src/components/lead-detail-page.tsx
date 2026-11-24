@@ -536,7 +536,10 @@ export function LeadDetailPage({ code }: { code: string }) {
         onCancel={() => setDelOpen(false)}
         onConfirm={() => {
           setDelOpen(false);
-          if (removeLead(code)) router.push("/leads");
+          /* ต่อฐานข้อมูลแล้วการลบต้องรอคำตอบก่อน ลบไม่ผ่าน (มีเอกสารผูกอยู่) จะได้ไม่เด้งออกจากหน้า */
+          void removeLead(code).then((done) => {
+            if (done) router.push("/leads");
+          });
         }}
       />
     </div>

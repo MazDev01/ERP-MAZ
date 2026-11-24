@@ -39,6 +39,17 @@ import { addDays, bkkNow, nextDocNo, todayIso } from "./format";
 import { firstLine } from "./rich-text";
 import { CURRENT_USER } from "./mock-data";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+import {
+  EMPTY_PARTIES,
+  fetchSalesParties,
+  sbAddLead,
+  sbLogActivity,
+  sbMoveCustomer,
+  sbRemoveLead,
+  sbUpdateCustomer,
+  type SalesParties,
+} from "./supabase/crm";
 
 /*
  * งานขายทั้งสายอยู่ในสโตร์เดียว เพราะแต่ละขั้นส่งงานต่อกัน:
@@ -138,17 +149,91 @@ const store = createPersistedStore<CrmState>(
   migrateCrm,
 );
 
+/* ─── สายผู้สนใจ/ลูกค้าจากฐานข้อมูล (รอบที่ 95–97) ────────────────────
+ *
+ * ต่อฐานข้อมูลแล้ว สามกองนี้ (ลูกค้า · บันทึกการติดต่อ · ประวัติ) อ่านจากฐานข้อมูลแทนเครื่อง
+ * กองที่เหลือ (คำขอก่อนการขาย · ใบเสนอราคา · ดีล · ใบงาน) ยังอยู่ที่เครื่องจนกว่าจะต่อในรอบถัดไป
+ *
+ * ระหว่างยังโหลดไม่เสร็จให้เป็นกองว่างไว้ก่อน ไม่ใช่ข้อมูลตัวอย่างในเครื่อง
+ * ไม่งั้นหน้าจอจะโชว์ลูกค้าสมมติแวบหนึ่งแล้วค่อยหายไป
+ */
+const live = hasBackend;
+let parties: SalesParties | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function loadParties() {
+  if (!live || loading || parties !== null) return;
+  loading = true;
+  void fetchSalesParties()
+    .then((got) => {
+      parties = got;
+    })
+    .catch(() => {
+      /* อ่านไม่ได้ — ให้เป็นกองว่าง ไม่ปล่อยเป็น null ไม่งั้นจะวนยิงใหม่ทุกครั้งที่ React อ่าน */
+      parties = EMPTY_PARTIES;
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+/** ขอข้อมูลใหม่หลังเขียน — ตัวเลขบนจอจะได้ตรงกับฐานข้อมูลเสมอ */
+function refreshParties() {
+  if (!live) return;
+  parties = null;
+  loading = false;
+  loadParties();
+  tell();
+}
+
+/* useSyncExternalStore ต้องได้ snapshot ตัวเดิมเมื่อข้อมูลไม่เปลี่ยน ไม่งั้นวาดวนไม่หยุด */
+let lastLocal: CrmState | null = null;
+let lastParties: SalesParties | null = null;
+let lastMerged: CrmState | null = null;
+
+function snapshot(): CrmState {
+  const local = store.get();
+  if (!live) return local;
+  loadParties();
+  if (lastMerged && lastLocal === local && lastParties === parties) return lastMerged;
+  lastLocal = local;
+  lastParties = parties;
+  lastMerged = {
+    ...local,
+    customers: parties?.customers ?? [],
+    activities: parties?.activities ?? [],
+    changeLogs: parties?.changeLogs ?? [],
+  };
+  return lastMerged;
+}
+
+function subscribeAll(onChange: () => void) {
+  const off = store.subscribe(onChange);
+  watchers.add(onChange);
+  return () => {
+    off();
+    watchers.delete(onChange);
+  };
+}
+
 export function useCrm() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return useSyncExternalStore(subscribeAll, snapshot, store.getServer);
 }
 
 export function resetCrm() {
   store.reset();
+  refreshParties();
 }
 
 /** อ่านค่าปัจจุบันนอกคอมโพเนนต์ — ใช้ตอนส่งงานข้ามฝ่าย (ดู flow.ts) */
 export function crmSnapshot() {
-  return store.get();
+  return snapshot();
 }
 
 /**
@@ -240,7 +325,14 @@ function moveCustomer(
  * เกิดตอนคนเดิมลาออก ย้ายทีม หรือลายาว งานที่ค้างต้องมีคนรับต่อ ไม่งั้นลูกค้าหลุด
  * บันทึกลงประวัติเดียวกับการเปลี่ยนสถานะ จะได้เห็นเรียงตามเวลาในที่เดียว
  */
-export function takeOverLead(code: string, reason: string) {
+export async function takeOverLead(code: string, reason: string) {
+  if (live) {
+    const now = snapshot().customers.find((c) => c.code === code);
+    if (!now || now.owner === CURRENT_USER.name) return;
+    await sbMoveCustomer({ code, kind: "owner", from: now.owner, to: CURRENT_USER.name, reason });
+    refreshParties();
+    return;
+  }
   store.update((s) => {
     const current = s.customers.find((c) => c.code === code);
     if (!current || current.owner === CURRENT_USER.name) return s;
@@ -265,7 +357,7 @@ export function takeOverLead(code: string, reason: string) {
 }
 
 // ─── ผู้สนใจ ──────────────────────────────────────────────────────
-export function addLead(input: {
+export async function addLead(input: {
   name: string;
   contact: string;
   phone: string;
@@ -284,6 +376,25 @@ export function addLead(input: {
     followUp: string;
   };
 }) {
+  if (live) {
+    /* รหัสผู้สนใจออกจากฐานข้อมูล ไม่ใช่จากเบราว์เซอร์ — สองเครื่องกดพร้อมกันจะได้ไม่ซ้ำ */
+    const made = await sbAddLead({
+      name: input.name,
+      contact: input.contact,
+      phone: input.phone,
+      email: input.email,
+      address: input.address,
+      source: input.source,
+      taxId: input.taxId,
+      type: input.type,
+      legalName: input.type === "juristic" ? input.legalName : "",
+      branch: input.type === "juristic" ? input.branch : "",
+      owner: CURRENT_USER.name,
+    });
+    if (made.ok && made.code) await sbLogActivity({ code: made.code, ...input.activity });
+    refreshParties();
+    return made.ok && made.code ? made.code : "";
+  }
   let code = "";
   store.update((s) => {
     code = nextLeadCode(s.customers);
@@ -318,7 +429,7 @@ export function addLead(input: {
   return code;
 }
 
-export function logActivity(input: {
+export async function logActivity(input: {
   customerCode: string;
   date: string;
   channel: string;
@@ -326,22 +437,38 @@ export function logActivity(input: {
   nextAction: string;
   followUp: string;
 }) {
+  if (live) {
+    await sbLogActivity({ code: input.customerCode, ...input });
+    refreshParties();
+    return;
+  }
   store.update((s) => ({
     ...s,
     activities: [{ id: newId("AC"), ...input }, ...s.activities],
   }));
 }
 
-export function closeLead(code: string, reason: string) {
+/* ต่อฐานข้อมูลแล้วเปลี่ยนสถานะที่เดียว แล้วลงประวัติในคำสั่งเดียวกัน (sbMoveCustomer) */
+async function moveLead(code: string, to: CustomerStatus, reason: string) {
+  const now = snapshot().customers.find((c) => c.code === code);
+  if (!now || now.status === to) return;
+  await sbMoveCustomer({ code, kind: "status", from: now.status, to, reason });
+  refreshParties();
+}
+
+export async function closeLead(code: string, reason: string) {
+  if (live) return moveLead(code, "ปฏิเสธ", reason);
   store.update((s) => moveCustomer(s, code, "ปฏิเสธ", reason));
 }
 
-export function reopenLead(code: string) {
+export async function reopenLead(code: string) {
+  if (live) return moveLead(code, "รอนัดหมาย", "เปิดรับพิจารณาใหม่");
   store.update((s) => moveCustomer(s, code, "รอนัดหมาย", "เปิดรับพิจารณาใหม่"));
 }
 
 /** เปลี่ยนเป็นปิดงานเองจากดรอปดาวน์สถานะ — ปกติเกิดเองเมื่อลูกค้าตอบรับใบเสนอราคา */
-export function markLeadWon(code: string, reason: string) {
+export async function markLeadWon(code: string, reason: string) {
+  if (live) return moveLead(code, "ปิดงาน", reason);
   store.update((s) => moveCustomer(s, code, "ปิดงาน", reason));
 }
 
@@ -681,7 +808,13 @@ export function leadDeleteBlock(s: CrmState, code: string) {
 }
 
 /** ลบผู้สนใจพร้อมบันทึกการติดต่อและประวัติการเปลี่ยนแปลงของรายนั้น — คืน true เมื่อลบจริง */
-export function removeLead(code: string) {
+export async function removeLead(code: string) {
+  if (live) {
+    if (leadDeleteBlock(snapshot(), code)) return false;
+    const got = await sbRemoveLead(code);
+    refreshParties();
+    return got.ok;
+  }
   let done = false;
   store.update((s) => {
     if (leadDeleteBlock(s, code)) return s;
@@ -718,7 +851,7 @@ export function savePresalesPlan(no: string, plan: ProposalPlanPhase[]) {
   }));
 }
 
-export function updateCustomer(
+export async function updateCustomer(
   code: string,
   patch: Partial<
     Pick<
@@ -728,6 +861,11 @@ export function updateCustomer(
     >
   >,
 ) {
+  if (live) {
+    await sbUpdateCustomer(code, patch);
+    refreshParties();
+    return;
+  }
   store.update((s) => ({
     ...s,
     customers: s.customers.map((c) => (c.code === code ? { ...c, ...patch } : c)),

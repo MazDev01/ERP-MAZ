@@ -80,7 +80,7 @@ export function LeadForm({
   };
   const blocked = Object.values(problems).some(Boolean);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setTouched(true);
     if (blocked || busy) {
@@ -97,7 +97,7 @@ export function LeadForm({
       return;
     }
     setBusy(true);
-    const code = addLead({
+    const code = await addLead({
       name: name.trim(),
       contact: contact.trim(),
       phone,
