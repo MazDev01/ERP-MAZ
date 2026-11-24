@@ -837,9 +837,11 @@ export type LateRow = { d: string; min: number; was?: number };
  * hours = ชั่วโมงที่ลาจริงของวันนั้น (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1 — ลาไม่เต็มวันนับตามชั่วโมง)
  * ไม่มีค่า = ใช้ span เหมือนเดิม (เต็มวัน หรือครึ่งวัน)
  */
-/* unpaid = วันลาที่ไม่ได้ค่าจ้าง — ลาเกินสิทธิ์ และลาคลอดส่วนที่เกินวันที่บริษัทจ่าย
+/* unpaid = วันลาประเภทที่ไม่รับค่าจ้าง หักทุกวัน
+   over   = วันลาที่เกินสิทธิ์ของประเภทที่รับค่าจ้าง — นับเป็นขาดงาน (SRS 1.5 · ฐานข้อมูลรอบที่ 94)
+   ลาคลอดส่วนที่เกินวันที่บริษัทจ่ายก็เข้ากอง over เพราะเป็นประเภทที่รับค่าจ้าง
    (เจ้าของตัดสิน 6 ต.ค. 2569 — ลาคลอดบริษัทจ่าย 45 วันแรก ที่เหลือประกันสังคมจ่าย) */
-export type LeaveRow = { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no?: string; unpaid?: boolean };
+export type LeaveRow = { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no?: string; unpaid?: boolean; over?: boolean };
 export type OtRow = { d: string; h: number; kind: OtKind; was?: number; no?: string };
 /* absent = ฝ่ายบุคคลตรวจแล้วสรุปว่า "ขาดงานจริง" → หักเต็มวัน (เจ้าของตัดสิน 6 ต.ค. 2569)
    ไม่ติดธง = ตรวจแล้วมาทำงานจริง (ลืมตอกบัตร) ไม่หักเงิน */
@@ -1441,12 +1443,17 @@ function perDayOf(e: Employee, c: Cycle) {
  */
 export function absentDeduction(e: Employee, c: Cycle, r: TimeRec) {
   if (isDaily(e)) return { days: 0, amount: 0 };
-  const days = r.issues.filter((x) => x.absent).length;
+  /* ขาดงานที่ฝ่ายบุคคลตรวจเจอ + วันลาที่อนุมัติเกินสิทธิ์ (SRS 1.5)
+     สูตรเดียวกับ payroll_lines ในฐานข้อมูล — วันที่มีใบลาไม่เคยถูกตั้งเป็นขาดงาน จึงไม่นับซ้ำกัน */
+  const days =
+    r.issues.filter((x) => x.absent).length +
+    r.leave.filter((x) => x.over).reduce((a, x) => a + (x.span === "half" ? 0.5 : 1), 0);
   return { days, amount: round2(days * perDayOf(e, c)) };
 }
 
 /*
- * วันลาที่ไม่ได้ค่าจ้าง — ลาเกินสิทธิ์ และลาคลอดส่วนที่เกินวันที่บริษัทจ่าย
+ * วันลาประเภทที่ไม่รับค่าจ้าง — หักทุกวัน
+ * ส่วนวันที่ลาเกินสิทธิ์ของประเภทที่รับค่าจ้างไปอยู่กับ "ขาดงาน" แทน (SRS 1.5)
  * วันที่ถูกทำเครื่องหมายไว้ตั้งแต่ตอนรวมใบลาเข้าเวลาทำงาน (hr-link) ที่นี่แค่คิดเป็นเงิน
  * คนจ่ายรายวันไม่ต้องหัก เพราะจ่ายตามวันที่มาทำงานอยู่แล้ว
  */

@@ -78,9 +78,9 @@ export const EMPLOYEE_ROLE: Record<string, Role> = Object.fromEntries(
  * ประเภทการลาในใบลามี 5 แบบ แต่ฝ่ายบุคคลสรุปเหลือ 3 กลุ่มในตารางเวลาทำงาน
  * ลาคลอดกับลาไม่รับค่าจ้างจึงอยู่กลุ่ม "ลากิจ" — ต่างกันที่เรื่องเงิน ไม่ใช่ชื่อกลุ่ม
  *
- * เรื่องเงินแยกด้วยธง unpaid รายวัน (เจ้าของตัดสิน 6 ต.ค. 2569)
+ * เรื่องเงินแยกด้วยธงรายวัน unpaid กับ over (เจ้าของตัดสิน 6 ต.ค. 2569 · SRS 1.5)
  *   ลาในสิทธิ์        ได้ค่าจ้างเต็ม
- *   ลาเกินสิทธิ์       ไม่ได้ค่าจ้าง หักตามจำนวนวันที่เกิน
+ *   ลาเกินสิทธิ์       นับเป็นขาดงาน หักตามจำนวนวันที่เกิน (ธง over)
  *   ลาคลอด           บริษัทจ่าย 45 วันแรก (ตั้งที่สิทธิ์วันลา) ส่วนที่เหลือประกันสังคมจ่าย
  *   ลาไม่รับค่าจ้าง    ไม่ได้ค่าจ้างทุกวัน
  */
@@ -130,12 +130,15 @@ function counted(r: LeaveRecord) {
 }
 
 /*
- * วันลาที่ไม่ได้ค่าจ้างของคนหนึ่ง — คืนชุดวันที่ที่ต้องหักเงิน
+ * วันลาที่ต้องหักเงินของคนหนึ่ง — แยกเป็นสองกอง ให้ตรงกับสูตรในฐานข้อมูล (รอบที่ 94)
+ *   unpaid = ลาประเภทที่ไม่รับค่าจ้าง หักทุกวันอยู่แล้ว
+ *   over   = วันที่ลาเกินสิทธิ์ของประเภทที่รับค่าจ้าง — นับเป็นขาดงาน (SRS 1.5)
  * ไล่ใบที่อนุมัติแล้วของแต่ละประเภทตามลำดับวัน นับสะสมเทียบกับสิทธิ์ของรอบปีนั้น
- * วันที่เกินสิทธิ์ขึ้นไปถือว่าไม่ได้ค่าจ้าง — ลาคลอดใช้กติกาเดียวกัน เพราะวันที่บริษัทจ่ายตั้งไว้ที่สิทธิ์วันลา
+ * ลาคลอดใช้กติกาเดียวกัน เพราะวันที่บริษัทจ่ายตั้งไว้ที่สิทธิ์วันลา
  */
 function unpaidDaysOf(records: LeaveRecord[], empId: string) {
   const out = new Set<string>();
+  const over = new Set<string>();
   const byType = new Map<string, LeaveRecord[]>();
   for (const r of records.filter(counted)) byType.set(r.type, [...(byType.get(r.type) ?? []), r]);
   for (const [type, list] of byType) {
@@ -153,18 +156,18 @@ function unpaidDaysOf(records: LeaveRecord[], empId: string) {
         for (let d = r.date; d <= r.toDate; d = addDays(d, 1)) {
           const step = r.half ? 0.5 : 1;
           used += step;
-          if (used > quota + 1e-9) out.add(d);
-          if (out.size > 400) break;
+          if (used > quota + 1e-9) (always ? out : over).add(d);
+          if (out.size + over.size > 400) break;
         }
       }
     }
   }
-  return out;
+  return { unpaid: out, over };
 }
 
 /** ใบลาหนึ่งใบกินหลายวันได้ กางออกเป็นรายวันเพื่อให้ตรงกับที่ฝ่ายบุคคลนับ */
-function spread(r: LeaveRecord, unpaid?: Set<string>) {
-  const out: { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no: string; unpaid?: boolean }[] = [];
+function spread(r: LeaveRecord, cut?: { unpaid: Set<string>; over: Set<string> }) {
+  const out: { d: string; type: LeaveKind; span: "full" | "half"; hours?: number; no: string; unpaid?: boolean; over?: boolean }[] = [];
   const type = LEAVE_GROUP[r.type] ?? "personal";
   const span = r.half ? ("half" as const) : ("full" as const);
   /* ลาไม่เต็มวันส่งชั่วโมงจริงไปให้ฝ่ายบุคคลด้วย (เอกสารฝ่ายบุคคล 30 ก.ย. 2569 ข้อ 3.1)
@@ -175,7 +178,11 @@ function spread(r: LeaveRecord, unpaid?: Set<string>) {
       : undefined;
   for (let d = r.date; d <= r.toDate; d = addDays(d, 1)) {
     /* ติดเลขที่ใบไปกับทุกวัน — ใบเดียวกันที่มาถึงอีกทางจะได้ไม่ถูกนับซ้ำ */
-    out.push({ d, type, span, hours, no: r.id, unpaid: unpaid?.has(d) || undefined });
+    out.push({
+      d, type, span, hours, no: r.id,
+      unpaid: cut?.unpaid.has(d) || undefined,
+      over: cut?.over.has(d) || undefined,
+    });
     /* กันวนไม่รู้จบถ้าเจอใบที่วันสิ้นสุดมาก่อนวันเริ่ม */
     if (out.length > 90) break;
   }
@@ -270,9 +277,9 @@ export function useHrTime(): Record<string, TimeRec> {
       const days = new Set<string>();
       /* วันที่ไม่ได้ค่าจ้างคิดจากใบของทุกบทบาทรวมกัน สิทธิ์เป็นของ "คน" ไม่ใช่ของบทบาท */
       const mineLeave = roles.flatMap((r) => leave[r]);
-      const unpaid = unpaidDaysOf(mineLeave, id);
+      const cut = unpaidDaysOf(mineLeave, id);
       const lv = roles
-        .flatMap((r) => leave[r].filter(counted).flatMap((x) => spread(x, unpaid)))
+        .flatMap((r) => leave[r].filter(counted).flatMap((x) => spread(x, cut)))
         .filter((x) => !days.has(x.d) && days.add(x.d));
       /* วันที่ต้องให้ฝ่ายบุคคลตรวจ — คิดจากการตอกบัตรจริง ไม่ใช่รายการที่ฝังมากับข้อมูลตัวอย่าง
          (ของเดิมมาจาก hr.time เท่านั้น พนักงานจริงที่ลืมตอกออกจึงไม่เคยโผล่ให้ตรวจเลย) */
