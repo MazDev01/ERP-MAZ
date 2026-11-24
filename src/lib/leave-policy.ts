@@ -38,7 +38,7 @@ const POLICY: Record<EmpType, LeavePolicy> = {
     quota: true,
     paid: true,
     hrApproves: false,
-    note: "ลาในสิทธิ์ได้รับเงินเดือนเต็ม · ส่วนที่เกินสิทธิ์หักตามจำนวนวันที่เกิน",
+    note: "ลาในสิทธิ์ได้รับเงินเดือนเต็ม · ส่วนที่เกินสิทธิ์นับเป็นขาดงาน หักตามจำนวนวันที่เกิน",
   },
   probat: {
     type: "probat",

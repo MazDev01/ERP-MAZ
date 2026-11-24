@@ -917,7 +917,7 @@ function RequestDialog({
               item.quota >= 0 ? (
                 <span className="num font-semibold">{num2(item.quota)} วัน</span>
               ) : (
-                <span className="num font-semibold text-destructive">เกินสิทธิ์ {num2(-item.quota)} วัน — ส่วนที่เกินเป็นลาไม่รับค่าจ้าง หักเงินเดือน</span>
+                <span className="num font-semibold text-destructive">เกินสิทธิ์ {num2(-item.quota)} วัน — ส่วนที่เกินนับเป็นขาดงาน หักจากเงินเดือน</span>
               )
             }
           />

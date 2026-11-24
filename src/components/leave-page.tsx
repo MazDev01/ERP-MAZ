@@ -252,10 +252,10 @@ export function LeavePage() {
                   รออนุมัติ {round1(q.pending)} วัน · อนุมัติครบจะเหลือ {round1(q.afterPending)} วัน
                 </p>
               )}
-              {/* ลาเกินสิทธิ์ไปแล้ว — ส่วนที่เกินเป็นลาไม่รับค่าจ้าง พูดให้ตรงกับกล่องยื่นใบลา */}
+              {/* ลาเกินสิทธิ์ไปแล้ว — ส่วนที่เกินนับเป็นขาดงาน พูดให้ตรงกับกล่องยื่นใบลา */}
               {q.over > 0 && (
                 <p className="num mt-0.5 text-xs font-medium text-destructive">
-                  ลาเกินสิทธิ์ {round1(q.over)} วัน — ส่วนที่เกินถูกหักจากเงินเดือน
+                  ลาเกินสิทธิ์ {round1(q.over)} วัน — ส่วนที่เกินนับเป็นขาดงาน หักจากเงินเดือน
                 </p>
               )}
               <span className="mt-auto block h-[5px] translate-y-0 overflow-hidden rounded bg-black/10">

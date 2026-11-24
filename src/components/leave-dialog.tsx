@@ -199,7 +199,7 @@ export function LeaveDialog({
   const over = excessDays(records, type, days, period);
   if (over > 0) {
     problems.push(
-      `เกินสิทธิ์คงเหลือ ${fmt(over)} วัน — ส่วนที่เกินถือเป็นลาไม่รับค่าจ้าง หักจากเงินเดือน`,
+      `เกินสิทธิ์คงเหลือ ${fmt(over)} วัน — ยื่นได้ แต่ส่วนที่เกินนับเป็นขาดงาน หักจากเงินเดือน`,
     );
   }
   if (quota.pending > 0 && days > 0) {
