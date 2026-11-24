@@ -64,6 +64,9 @@ export function LeaveDialog({
   const [tried, setTried] = useState(false);
   /* เหตุที่ยื่นไม่ผ่าน — ขึ้นในกล่องเดิม ไม่ปิดกล่องทิ้ง */
   const [failed, setFailed] = useState("");
+  /* กำลังส่งอยู่ — กันกดซ้ำระหว่างรอฐานข้อมูลตอบ */
+  const sending = useRef(false);
+  const [busy, setBusy] = useState(false);
   /* ไฟล์ที่เลือกมาแนบไม่ได้ — บอกตั้งแต่ตอนเลือก */
   const [fileWarn, setFileWarn] = useState("");
   /* เปิดมาให้เริ่มที่วันนี้ก่อน — ลาย้อนหลังหรือล่วงหน้าค่อยเลื่อนเอง
@@ -222,6 +225,9 @@ export function LeaveDialog({
       setTried(true);
       return;
     }
+    if (sending.current) return;
+    sending.current = true;
+    setBusy(true);
     /* เลขที่ใบและเวลาที่ยื่นออกจากฐานข้อมูลเมื่อต่อแล้ว จึงต้องรอคำตอบก่อนปิดกล่อง
        ยื่นไม่ผ่านแล้วปิดกล่องไปเลยจะเข้าใจว่ายื่นสำเร็จ แล้วไม่มีใบในระบบ */
     void addLeaveRequest({
@@ -241,6 +247,9 @@ export function LeaveDialog({
       if (!rec) return setFailed("ยื่นใบลาไม่สำเร็จ ลองใหม่อีกครั้ง");
       onSubmitted(days);
       onClose();
+    }).finally(() => {
+      sending.current = false;
+      setBusy(false);
     });
   }
 
@@ -496,9 +505,10 @@ export function LeaveDialog({
           <button
             type="button"
             className="btn solid btn-solid flex-1 justify-center md:flex-none"
+            disabled={busy}
             onClick={submit}
           >
-            ส่งคำขอ
+            {busy ? "กำลังส่ง…" : "ส่งคำขอ"}
           </button>
         </div>
       </div>
