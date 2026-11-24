@@ -42,13 +42,19 @@ import { createPersistedStore } from "./persisted-store";
 import { hasBackend } from "./supabase/env";
 import {
   EMPTY_PARTIES,
+  EMPTY_PRESALES,
+  fetchPresales,
   fetchSalesParties,
   sbAddLead,
+  sbAddPresales,
+  sbAddPresalesRound,
+  sbEditPresales,
   sbLogActivity,
   sbMoveCustomer,
   sbRemoveLead,
   sbUpdateCustomer,
   type SalesParties,
+  type SalesPresales,
 } from "./supabase/crm";
 
 /*
@@ -159,6 +165,7 @@ const store = createPersistedStore<CrmState>(
  */
 const live = hasBackend;
 let parties: SalesParties | null = null;
+let presalesData: SalesPresales | null = null;
 let loading = false;
 const watchers = new Set<() => void>();
 
@@ -170,12 +177,17 @@ function loadParties() {
   if (!live || loading || parties !== null) return;
   loading = true;
   void fetchSalesParties()
-    .then((got) => {
+    .then(async (got) => {
       parties = got;
+      /* คำขอก่อนการขายอ้างลูกค้าด้วย id ต้องมีตารางแปลง id → รหัส ก่อนจึงอ่านได้ */
+      const codeById: Record<string, string> = {};
+      for (const [code, id] of Object.entries(got.idByCode)) codeById[id] = code;
+      presalesData = await fetchPresales(codeById);
     })
     .catch(() => {
       /* อ่านไม่ได้ — ให้เป็นกองว่าง ไม่ปล่อยเป็น null ไม่งั้นจะวนยิงใหม่ทุกครั้งที่ React อ่าน */
       parties = EMPTY_PARTIES;
+      presalesData = EMPTY_PRESALES;
     })
     .finally(() => {
       loading = false;
@@ -187,6 +199,7 @@ function loadParties() {
 function refreshParties() {
   if (!live) return;
   parties = null;
+  presalesData = null;
   loading = false;
   loadParties();
   tell();
@@ -195,20 +208,26 @@ function refreshParties() {
 /* useSyncExternalStore ต้องได้ snapshot ตัวเดิมเมื่อข้อมูลไม่เปลี่ยน ไม่งั้นวาดวนไม่หยุด */
 let lastLocal: CrmState | null = null;
 let lastParties: SalesParties | null = null;
+let lastPresales: SalesPresales | null = null;
 let lastMerged: CrmState | null = null;
 
 function snapshot(): CrmState {
   const local = store.get();
   if (!live) return local;
   loadParties();
-  if (lastMerged && lastLocal === local && lastParties === parties) return lastMerged;
+  if (lastMerged && lastLocal === local && lastParties === parties && lastPresales === presalesData) {
+    return lastMerged;
+  }
   lastLocal = local;
   lastParties = parties;
+  lastPresales = presalesData;
   lastMerged = {
     ...local,
     customers: parties?.customers ?? [],
     activities: parties?.activities ?? [],
     changeLogs: parties?.changeLogs ?? [],
+    presales: presalesData?.presales ?? [],
+    presalesRounds: presalesData?.presalesRounds ?? [],
   };
   return lastMerged;
 }
@@ -473,7 +492,7 @@ export async function markLeadWon(code: string, reason: string) {
 }
 
 // ─── คำขอก่อนการขาย ───────────────────────────────────────────────
-export function addPresalesRequest(input: {
+export async function addPresalesRequest(input: {
   customerCode: string;
   kind: "BD" | "SA";
   problem: string;
@@ -483,6 +502,23 @@ export function addPresalesRequest(input: {
   budget: number;
   attachments: string[];
 }) {
+  /* ผู้รับผิดชอบตั้งต้นตามคิวของแต่ละประเภท (ต้นแบบ presales.html) */
+  const firstAssignee = input.kind === "SA" ? "ปิยะวัฒน์ (SA)" : "ธนดล (BD)";
+  if (live) {
+    /* เลขที่คำขอออกจากฐานข้อมูล ไม่ใช่จากเบราว์เซอร์ */
+    const made = await sbAddPresales({
+      customerCode: input.customerCode,
+      kind: input.kind,
+      problem: input.problem,
+      assignee: firstAssignee,
+      due: input.due,
+      urgency: input.urgency,
+      urgentReason: input.urgentReason,
+      budget: input.budget,
+    });
+    refreshParties();
+    return made.ok && made.code ? made.code : "";
+  }
   let no = "";
   store.update((s) => {
     no = nextNo(settings().docs.presales, s.presales.map((p) => p.no));
@@ -518,13 +554,28 @@ function editPresales(no: string, fn: (p: PresalesRequest) => PresalesRequest) {
 }
 
 /** รับงาน — by = ชื่อในคิวของคนที่กดรับ (เช่น "ปิยะวัฒน์ (SA)") ไม่ส่งมาคงผู้รับผิดชอบเดิม */
-export function acceptPresales(no: string, by?: string) {
+export async function acceptPresales(no: string, by?: string) {
+  if (live) {
+    const now = snapshot().presales.find((p) => p.no === no);
+    if (!now || now.status !== "รอรับงาน") return;
+    await sbEditPresales(no, { status: "กำลังทำ", ...(by ? { assignee: by } : {}) });
+    refreshParties();
+    return;
+  }
   editPresales(no, (p) =>
     p.status === "รอรับงาน" ? { ...p, status: "กำลังทำ", ...(by ? { assignee: by } : {}) } : p,
   );
 }
 
-export function askPresalesInfo(no: string, ask: string) {
+export async function askPresalesInfo(no: string, ask: string) {
+  if (live) {
+    const now = snapshot().presales.find((p) => p.no === no);
+    const can = now && ["กำลังทำ", "รอรับงาน", "รอข้อมูลเพิ่ม"].includes(now.status);
+    if (!can) return;
+    await sbEditPresales(no, { status: "รอข้อมูลเพิ่ม", ask });
+    refreshParties();
+    return;
+  }
   editPresales(no, (p) =>
     p.status === "กำลังทำ" || p.status === "รอรับงาน" || p.status === "รอข้อมูลเพิ่ม"
       ? { ...p, status: "รอข้อมูลเพิ่ม", ask }
@@ -533,7 +584,14 @@ export function askPresalesInfo(no: string, ask: string) {
 }
 
 /** ฝ่ายขายตอบข้อมูลที่ขอ — งานกลับไปที่ผู้รับคำขอ */
-export function replyPresalesInfo(no: string, reply: string) {
+export async function replyPresalesInfo(no: string, reply: string) {
+  if (live) {
+    const now = snapshot().presales.find((p) => p.no === no);
+    if (!now || now.status !== "รอข้อมูลเพิ่ม") return;
+    await sbEditPresales(no, { status: "กำลังทำ", reply });
+    refreshParties();
+    return;
+  }
   editPresales(no, (p) => (p.status === "รอข้อมูลเพิ่ม" ? { ...p, status: "กำลังทำ", reply } : p));
 }
 
@@ -541,7 +599,7 @@ export function replyPresalesInfo(no: string, reply: string) {
  * ส่งข้อเสนอกลับ — เป็นรอบใหม่ต่อจากรอบเดิมเสมอ ไม่ทับรอบก่อน
  * ชั่วโมงของรอบนี้บวกเข้าชั่วโมงรวมของคำขอ · ส่งได้ระหว่างรอข้อมูลเพิ่มด้วย (ต้นแบบ presales-work.html)
  */
-export function submitPresalesRound(
+export async function submitPresalesRound(
   no: string,
   input: {
     by: string;
@@ -553,6 +611,14 @@ export function submitPresalesRound(
     files?: { name: string; url?: string }[];
   },
 ) {
+  if (live) {
+    const now = snapshot().presales.find((p) => p.no === no);
+    const can = now && ["กำลังทำ", "รอข้อมูลเพิ่ม", "ส่งกลับแล้ว"].includes(now.status);
+    if (!can) return;
+    await sbAddPresalesRound(no, input);
+    refreshParties();
+    return;
+  }
   store.update((s) => {
     const req = s.presales.find((p) => p.no === no);
     if (!req || (req.status !== "กำลังทำ" && req.status !== "รอข้อมูลเพิ่ม" && req.status !== "ส่งกลับแล้ว")) return s;
@@ -568,7 +634,12 @@ export function submitPresalesRound(
   });
 }
 
-export function closePresales(no: string) {
+export async function closePresales(no: string) {
+  if (live) {
+    await sbEditPresales(no, { status: "ปิดคำขอ" });
+    refreshParties();
+    return;
+  }
   store.update((s) => ({
     ...s,
     presales: s.presales.map((p) =>
@@ -834,7 +905,7 @@ export async function removeLead(code: string) {
  * บันทึกแผนงานของข้อเสนอ (Full Proposal · M2) — แก้ได้ตราบที่คำขอยังไม่เกิดดีล
  * เรียงตามสัปดาห์เริ่มให้เสมอ จะได้อ่านไล่ลำดับได้ และกันช่วงสัปดาห์กลับหัว
  */
-export function savePresalesPlan(no: string, plan: ProposalPlanPhase[]) {
+export async function savePresalesPlan(no: string, plan: ProposalPlanPhase[]) {
   const clean = plan
     .filter((p) => p.name.trim())
     .map((p) => ({
@@ -845,6 +916,11 @@ export function savePresalesPlan(no: string, plan: ProposalPlanPhase[]) {
       tasks: p.tasks.map((t) => t.trim()).filter(Boolean),
     }))
     .sort((a, b) => a.fromWeek - b.fromWeek || a.toWeek - b.toWeek);
+  if (live) {
+    await sbEditPresales(no, { plan: clean });
+    refreshParties();
+    return;
+  }
   store.update((s) => ({
     ...s,
     presales: s.presales.map((r) => (r.no === no ? { ...r, plan: clean } : r)),

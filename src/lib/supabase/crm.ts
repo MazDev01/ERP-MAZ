@@ -2,7 +2,15 @@
 
 import { signedIn, supabase } from "./client";
 import { myId, nameById } from "./people";
-import type { Activity, BuyerType, ChangeLog, Customer, CustomerStatus } from "../crm-data";
+import type {
+  Activity,
+  BuyerType,
+  ChangeLog,
+  Customer,
+  CustomerStatus,
+  PresalesRequest,
+  PresalesRound,
+} from "../crm-data";
 
 /*
  * สายผู้สนใจ/ลูกค้าจากฐานข้อมูล (รอบที่ 95 · SRS 1.5 M1)
@@ -317,4 +325,211 @@ export async function sbRemoveLead(code: string): Promise<CrmWrite> {
   if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
   if (!got.data?.length) return { ok: false, reason: "denied" };
   return { ok: true, code };
+}
+
+/* ─── คำขอก่อนการขาย ─────────────────────────────────────────────── */
+
+type PresalesRow = {
+  id: string;
+  no: string;
+  customer_id: string;
+  kind: "BD" | "SA";
+  problem: string;
+  assignee: string;
+  due: string | null;
+  urgency: string;
+  urgent_reason: string;
+  budget: number | string;
+  status: string;
+  ask: string;
+  reply: string;
+  hours: number | string;
+  plan: unknown;
+  created_at: string;
+};
+
+type RoundRow = {
+  id: string;
+  request_id: string;
+  round: number;
+  at: string;
+  by_name: string;
+  hours: number | string;
+  note: string;
+  kind: string;
+  name: string;
+  url: string;
+  files: unknown;
+};
+
+const PRESALES_COLS =
+  "id, no, customer_id, kind, problem, assignee, due, urgency, urgent_reason," +
+  " budget, status, ask, reply, hours, plan, created_at";
+
+export type SalesPresales = {
+  presales: PresalesRequest[];
+  presalesRounds: PresalesRound[];
+  /** เลขที่คำขอ → id ของฐานข้อมูล */
+  idByNo: Record<string, string>;
+};
+
+export const EMPTY_PRESALES: SalesPresales = { presales: [], presalesRounds: [], idByNo: {} };
+
+export async function fetchPresales(codeById: Record<string, string>): Promise<SalesPresales> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return EMPTY_PRESALES;
+  const got = await sb.from("presales_requests").select(PRESALES_COLS).order("no", { ascending: false });
+  if (got.error || !got.data) return EMPTY_PRESALES;
+  const rows = got.data as unknown as PresalesRow[];
+  const noById: Record<string, string> = {};
+  const idByNo: Record<string, string> = {};
+  for (const r of rows) {
+    noById[r.id] = r.no;
+    idByNo[r.no] = r.id;
+  }
+
+  const rd = await sb
+    .from("presales_rounds")
+    .select("id, request_id, round, at, by_name, hours, note, kind, name, url, files")
+    .order("round", { ascending: false });
+
+  const presales = rows.map<PresalesRequest>((r) => ({
+    id: r.id,
+    no: r.no,
+    customerCode: codeById[r.customer_id] ?? "",
+    kind: r.kind,
+    problem: r.problem,
+    assignee: r.assignee,
+    due: r.due ?? "",
+    urgency: r.urgency as PresalesRequest["urgency"],
+    urgentReason: r.urgent_reason,
+    budget: Number(r.budget),
+    attachments: [],
+    status: r.status as PresalesRequest["status"],
+    createdAt: thaiDay(r.created_at),
+    ask: r.ask || undefined,
+    reply: r.reply || undefined,
+    hours: Number(r.hours),
+    plan: (r.plan as PresalesRequest["plan"]) ?? undefined,
+  }));
+
+  const presalesRounds = ((rd.data ?? []) as unknown as RoundRow[]).map<PresalesRound>((r) => ({
+    id: r.id,
+    requestNo: noById[r.request_id] ?? "",
+    round: r.round,
+    at: r.at,
+    by: r.by_name,
+    hours: Number(r.hours),
+    note: r.note,
+    file: r.name,
+    kind: r.kind === "canva" ? "canva" : "pdf",
+    url: r.url || undefined,
+    files: (r.files as PresalesRound["files"]) ?? undefined,
+  }));
+
+  return { presales, presalesRounds, idByNo };
+}
+
+async function presalesIdOf(no: string): Promise<string | null> {
+  const sb = supabase();
+  if (!sb) return null;
+  const got = await sb.from("presales_requests").select("id").eq("no", no).maybeSingle();
+  return (got.data as { id?: string } | null)?.id ?? null;
+}
+
+/** เปิดคำขอก่อนการขาย — เลขที่ออกจากฐานข้อมูล */
+export async function sbAddPresales(input: {
+  customerCode: string;
+  kind: "BD" | "SA";
+  problem: string;
+  assignee: string;
+  due: string;
+  urgency: string;
+  urgentReason: string;
+  budget: number;
+}): Promise<CrmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const customer = await idOf(input.customerCode);
+  if (!customer) return { ok: false, reason: "not_found" };
+  const got = await sb
+    .from("presales_requests")
+    .insert({
+      customer_id: customer,
+      kind: input.kind,
+      problem: input.problem,
+      assignee: input.assignee,
+      due: input.due || null,
+      urgency: input.urgency,
+      urgent_reason: input.urgentReason,
+      budget: input.budget,
+      created_by: myId(),
+    })
+    .select("no")
+    .single();
+  if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
+  return { ok: true, code: (got.data as { no: string }).no };
+}
+
+export async function sbEditPresales(no: string, patch: Record<string, unknown>): Promise<CrmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const id = await presalesIdOf(no);
+  if (!id) return { ok: false, reason: "not_found" };
+  const got = await sb.from("presales_requests").update(patch).eq("id", id);
+  if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
+  return { ok: true };
+}
+
+/**
+ * ส่งข้อเสนอกลับหนึ่งรอบ — เลขรอบนับต่อจากรอบล่าสุดของคำขอนั้น
+ * ชั่วโมงของรอบนี้บวกเข้าชั่วโมงรวมของคำขอ แล้วสถานะกลายเป็น "ส่งกลับแล้ว"
+ */
+export async function sbAddPresalesRound(
+  no: string,
+  input: {
+    by: string;
+    hours: number;
+    note: string;
+    file: string;
+    kind: "pdf" | "canva";
+    url?: string;
+    files?: { name: string; url?: string }[];
+  },
+): Promise<CrmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const id = await presalesIdOf(no);
+  if (!id) return { ok: false, reason: "not_found" };
+
+  const last = await sb
+    .from("presales_rounds")
+    .select("round, hours")
+    .eq("request_id", id)
+    .order("round", { ascending: false });
+  const rows = (last.data ?? []) as { round: number; hours: number | string }[];
+  const round = rows.reduce((m, r) => Math.max(m, r.round), 0) + 1;
+
+  const add = await sb.from("presales_rounds").insert({
+    request_id: id,
+    round,
+    at: new Date().toISOString().slice(0, 10),
+    by_name: input.by,
+    by_id: myId(),
+    hours: input.hours,
+    note: input.note,
+    kind: input.kind,
+    name: input.file,
+    url: input.url ?? "",
+    files: input.files ?? null,
+  });
+  if (add.error) return { ok: false, reason: sayWhy(add.error.message) };
+
+  const sum = rows.reduce((a, r) => a + Number(r.hours), 0) + input.hours;
+  const up = await sb
+    .from("presales_requests")
+    .update({ status: "ส่งกลับแล้ว", hours: sum })
+    .eq("id", id);
+  if (up.error) return { ok: false, reason: sayWhy(up.error.message) };
+  return { ok: true };
 }

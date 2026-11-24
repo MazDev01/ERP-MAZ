@@ -134,12 +134,13 @@ function PresalesForm({
     setSaving(true);
     window.setTimeout(() => {
       setSaving(false);
-      save(customer, kind);
+      void save(customer, kind);
     }, 1200);
   }
 
-  function save(customer: Customer, kind: "BD" | "SA") {
-    const no = addPresalesRequest({
+  async function save(customer: Customer, kind: "BD" | "SA") {
+    /* ต่อฐานข้อมูลแล้วเลขที่คำขอมาจากฐานข้อมูล ต้องรอคำตอบก่อนจึงบอกผู้ใช้ได้ */
+    const no = await addPresalesRequest({
       customerCode: customer.code,
       kind,
       problem: problem.trim(),
