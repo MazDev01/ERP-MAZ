@@ -23,7 +23,7 @@ import {
   type AdMetric,
   type AdRun,
 } from "@/lib/ads-data";
-import { addRun, markRun, saveMetric, useAds } from "@/lib/ads-store";
+import { addContent, addRun, markRun, saveMetric, useAds } from "@/lib/ads-store";
 import { baht, thaiDate, thaiMonth, thaiStamp, todayIso, commaInput } from "@/lib/format";
 import { currentProfile } from "@/lib/profile-data";
 import { memberOf, usePm } from "@/lib/pm-store";
@@ -695,6 +695,8 @@ function RunSheet({ run, onClose }: { run: AdRun; onClose: () => void }) {
 
 function ReportTab({ pj, contents }: { pj: string; contents: AdContent[] }) {
   const [open, setOpen] = useState<AdContent | null>(null);
+  /* เพิ่มชิ้นงานเองได้ — ปลายทางคือขึ้นเองจากเฟสผลิตชิ้นงาน แต่ยังไม่ได้เชื่อม (ดู addContent) */
+  const [adding, setAdding] = useState(false);
   const done = contents.filter((c) => c.m);
 
   /* ยอดรวมคิดจากชิ้นที่กรอกผลแล้วเท่านั้น ชิ้นที่ยังว่างไม่นับเป็นศูนย์ */
@@ -709,6 +711,18 @@ function ReportTab({ pj, contents }: { pj: string; contents: AdContent[] }) {
 
   return (
     <>
+      <div className="flex justify-end px-3.5 pt-3.5 sm:px-4">
+        <button
+          type="button"
+          className="btn glass-thin max-sm:h-10 max-sm:w-full max-sm:justify-center"
+          onClick={() => setAdding(true)}
+        >
+          <PlusIcon className="size-3.5" strokeWidth={2.4} />
+          เพิ่มชิ้นงาน
+        </button>
+      </div>
+      {adding && <AddContentDialog pj={pj} onClose={() => setAdding(false)} />}
+
       {/* มือถือ: การ์ดต่อชิ้นงาน ตัวเลขผลเรียงเป็นตาราง 3 ช่อง กดทั้งใบเปิดฟอร์มกรอกหรือแก้ผล */}
       <ul className="space-y-2.5 px-3.5 py-3.5 sm:hidden">
         {contents.length === 0 ? (
@@ -950,6 +964,65 @@ function MetricSheet({
           "กรอกได้เฉพาะตัวเลขจำนวนเต็มไม่ติดลบ · กรอกให้ครบทุกช่องเพื่อดูค่าที่ระบบคำนวณให้"
         )}
       </p>
+    </Sheet>
+  );
+}
+
+/** เพิ่มชิ้นงานของรอบหนึ่ง — ชื่อกับชนิด ผลกรอกทีหลัง */
+function AddContentDialog({ pj, onClose }: { pj: string; onClose: () => void }) {
+  const [round, setRound] = useState(() => todayIso().slice(0, 7));
+  const [name, setName] = useState("");
+  const [type, setType] = useState<AdContent["type"]>("Single");
+  const [warn, setWarn] = useState(false);
+
+  return (
+    <Sheet
+      title="เพิ่มชิ้นงาน"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn glass-thin" onClick={onClose}>
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            className="btn solid btn-solid"
+            onClick={() => {
+              if (!name.trim() || !round) {
+                setWarn(true);
+                return;
+              }
+              addContent(pj, round, name, type);
+              onClose();
+            }}
+          >
+            เพิ่มชิ้นงาน
+          </button>
+        </>
+      }
+    >
+      <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+        <Field label="รอบเดือน" htmlFor="ct-round" required hint={warn && !round ? "เลือกรอบเดือน" : undefined}>
+          <MonthField id="ct-round" label="รอบเดือน" value={round} onChange={setRound} />
+        </Field>
+        <Field label="ชนิดชิ้นงาน" htmlFor="ct-type" required>
+          <Select id="ct-type" value={type} onChange={(e) => setType(e.target.value as AdContent["type"])}>
+            <option value="Single">Single</option>
+            <option value="Album">Album</option>
+            <option value="VDO">VDO</option>
+          </Select>
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="ชื่อชิ้นงาน" htmlFor="ct-name" required hint={warn && !name.trim() ? "ตั้งชื่อชิ้นงาน" : undefined}>
+            <Input
+              id="ct-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="เช่น โพสต์โปรโมชันต้นเดือน"
+            />
+          </Field>
+        </div>
+      </div>
     </Sheet>
   );
 }
