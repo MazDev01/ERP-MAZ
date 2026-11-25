@@ -30,7 +30,7 @@ import {
   type AccState,
 } from "./acc-store";
 import type { AccDeal, Invoice } from "./acc-data";
-import { acceptQuotation, cancelDeal, crmSnapshot, markJobsDelivered } from "./crm-store";
+import { acceptQuotation, cancelDeal, crmSnapshot, markJobsDelivered, promoteCustomerOnPaid } from "./crm-store";
 import { issuerOf, quotationTotals, type Customer, type Deal } from "./crm-data";
 import { addDays, bkkStamp, daysBetween, round2, todayIso } from "./format";
 import {
@@ -162,6 +162,10 @@ export async function issueReceiptFlow(invoiceNo: string, date: string, received
    */
   const settledNow = round2(received + wht) >= round2(invoice.outstanding);
   if (!settledNow) return no;
+
+  /* ได้เงินจริงแล้วถึงเป็นลูกค้า — รหัสเปลี่ยนจาก LEAD- เป็น CUS- ตรงนี้ ไม่ใช่ตอนตอบรับใบเสนอราคา
+     ต่อฐานข้อมูลแล้วทริกเกอร์ของใบเสร็จทำให้เอง (รอบที่ 113) */
+  promoteCustomerOnPaid(invoice.deal);
 
   /* โปรเจคเกิดตรงนี้ — ผูกกับใบแจ้งหนี้งวดแรกใบนี้ ได้เลขที่โปรเจคของตัวเอง (ผู้ใช้สั่ง 5 ต.ค. 2569) */
   const deal = before.deals.find((d) => d.no === invoice.deal);

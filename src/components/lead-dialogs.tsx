@@ -286,12 +286,18 @@ export function ActivityDialog({
 export function CloseLeadDialog({
   customerName,
   code,
+  kind = "reject",
   onClose,
   onSubmit,
 }: {
   customerName: string;
   /** รหัสผู้สนใจ — ขึ้นคู่กับชื่อใต้หัวกล่อง ตามต้นแบบ lead-detail.html */
   code?: string;
+  /**
+   * reject = ลูกค้าเป็นฝ่ายไม่เอา · skip = เราเป็นฝ่ายไม่เสนอให้
+   * สองอย่างนี้ต่างกันที่ "ใครเป็นคนตัดสิน" รายงานจึงต้องแยกกัน (M1-F1)
+   */
+  kind?: "reject" | "skip";
   onClose: () => void;
   onSubmit: (reason: string) => void;
 }) {
@@ -300,9 +306,11 @@ export function CloseLeadDialog({
   const [note, setNote] = useState("");
   const [touched, setTouched] = useState(false);
 
+  const skip = kind === "skip";
+
   return (
     <Sheet
-      title="ปฏิเสธรายการนี้"
+      title={skip ? "ไม่เสนองานรายการนี้" : "ปฏิเสธรายการนี้"}
       onClose={onClose}
       footer={
         <>
@@ -322,7 +330,7 @@ export function CloseLeadDialog({
               onSubmit(note.trim() ? `${reason} — ${note.trim()}` : reason);
             }}
           >
-            ยืนยันปฏิเสธ
+            {skip ? "ยืนยันไม่เสนองาน" : "ยืนยันปฏิเสธ"}
           </button>
         </>
       }

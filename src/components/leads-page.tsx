@@ -27,7 +27,9 @@ type TabKey = "all" | CustomerStatus | "log";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "all", label: "ทั้งหมด" },
   { key: "รอนัดหมาย", label: "รอนัดหมาย" },
+  { key: "ติดราคา", label: "ติดราคา" },
   { key: "ปฏิเสธ", label: "ปฏิเสธ" },
+  { key: "ไม่เสนองาน", label: "ไม่เสนองาน" },
   { key: "ปิดงาน", label: "ปิดงาน" },
   { key: "log", label: "ประวัติการเปลี่ยนแปลง" },
 ];
@@ -96,8 +98,10 @@ export function LeadsPage() {
   const counts: Record<string, number> = {
     all: scoped.length,
     รอนัดหมาย: scoped.filter((c) => c.status === "รอนัดหมาย").length,
+    ติดราคา: scoped.filter((c) => c.status === "ติดราคา").length,
     ปิดงาน: scoped.filter((c) => c.status === "ปิดงาน").length,
     ปฏิเสธ: scoped.filter((c) => c.status === "ปฏิเสธ").length,
+    ไม่เสนองาน: scoped.filter((c) => c.status === "ไม่เสนองาน").length,
     log: logs.length,
   };
 

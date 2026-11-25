@@ -524,6 +524,18 @@ export async function reopenLead(code: string) {
   store.update((s) => moveCustomer(s, code, "รอนัดหมาย", "เปิดรับพิจารณาใหม่"));
 }
 
+/** เราเป็นฝ่ายไม่เสนองานให้ — ต่างจากปฏิเสธที่ลูกค้าเป็นฝ่ายไม่เอา (M1-F1) */
+export async function skipLead(code: string, reason: string) {
+  if (live) return moveLead(code, "ไม่เสนองาน", reason);
+  store.update((s) => moveCustomer(s, code, "ไม่เสนองาน", reason));
+}
+
+/** เสนอราคาไปแล้ว รอลูกค้าตัดสินใจ — ปกติเกิดเองตอนออกใบเสนอราคา */
+export async function markLeadQuoted(code: string, reason: string) {
+  if (live) return moveLead(code, "ติดราคา", reason);
+  store.update((s) => moveCustomer(s, code, "ติดราคา", reason));
+}
+
 /** เปลี่ยนเป็นปิดงานเองจากดรอปดาวน์สถานะ — ปกติเกิดเองเมื่อลูกค้าตอบรับใบเสนอราคา */
 export async function markLeadWon(code: string, reason: string) {
   if (live) return moveLead(code, "ปิดงาน", reason);
@@ -763,7 +775,7 @@ export async function addQuotation(input: QuotationInput) {
       ...(ps ? { ps } : {}),
       ...(old ? { replaces: old.no } : {}),
     };
-    return {
+    const next: CrmState = {
       ...s,
       quotations: [
         quotation,
@@ -772,6 +784,12 @@ export async function addQuotation(input: QuotationInput) {
         ),
       ],
     };
+    /* ออกใบเสนอราคาแล้วผู้สนใจที่ยังรอนัดหมายกลายเป็น "ติดราคา"
+       (ตรงกับทริกเกอร์ของฐานข้อมูล รอบที่ 113) */
+    const cus = next.customers.find((c) => c.code === input.customerCode);
+    return cus?.status === "รอนัดหมาย"
+      ? moveCustomer(next, input.customerCode, "ติดราคา", "ออกใบเสนอราคา " + no)
+      : next;
   });
   return no;
 }
@@ -793,6 +811,21 @@ function renameCustomer(s: CrmState, from: string, to: string): CrmState {
     quotations: s.quotations.map(fix),
     deals: s.deals.map(fix),
   };
+}
+
+/**
+ * ลูกค้าชำระเงินแล้วถึงเปลี่ยนหัวรหัสเป็น CUS- (ผู้ใช้สั่ง 25 พ.ย. 2569)
+ *
+ * ต่อฐานข้อมูลแล้วทริกเกอร์ของใบเสร็จทำให้เอง (รอบที่ 113) ตรงนี้จึงเป็นทางของเครื่องที่ยังไม่ต่อ
+ * เรียกผ่าน issueReceiptFlow (flow.ts) เท่านั้น — เรียกเองจะเปลี่ยนรหัสก่อนได้เงิน
+ */
+export function promoteCustomerOnPaid(dealNo: string) {
+  if (live) return;
+  store.update((s) => {
+    const deal = s.deals.find((d) => d.no === dealNo);
+    if (!deal) return s;
+    return renameCustomer(s, deal.customerCode, customerCodeOf(deal.customerCode));
+  });
 }
 
 /** รหัสลูกค้าของผู้สนใจรายนี้เมื่อปิดการขายได้ — LEAD-6908-030 → CUS-6908-030 */
@@ -825,7 +858,8 @@ export async function acceptQuotation(id: string) {
     const q0 = s0.quotations.find((x) => x.id === id);
     if (!q0 || !canBillQuotation(q0, s0.deals.some((d) => d.quotationNo === q0.no), today())) return s0;
 
-    const s = renameCustomer(s0, q0.customerCode, customerCodeOf(q0.customerCode));
+    /* รหัสยังเป็น LEAD- จนลูกค้าชำระงวดแรก (ผู้ใช้สั่ง 25 พ.ย. 2569 ตามข้อกำหนด) */
+    const s = s0;
     const q = s.quotations.find((x) => x.id === id)!;
     const dealNo = nextNo(settings().docs.deal, s.deals.map((d) => d.no));
     created = dealNo;
