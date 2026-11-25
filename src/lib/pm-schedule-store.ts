@@ -11,7 +11,9 @@
  * กิจกรรมที่ยังไม่เคยแตะจะอ่านค่าตั้งต้นจาก todo ของมันเอง
  * จึงแยกออกได้ว่า "ยังไม่เคยเขียน" กับ "เขียนแล้วลบจนว่าง"
  *
- * ยังไม่ต่อ backend ทุกอย่างอยู่ใน localStorage ของเครื่องที่เปิดอยู่
+ * ต่อฐานข้อมูลแล้ว (รอบที่ 110) — นัดหมายเป็นของทีม ผู้เข้าร่วมบนเครื่องอื่นต้องเห็นด้วย
+ * รายละเอียดที่พิมพ์เองอยู่ในคอลัมน์ note ของใบนั้น (null = ยังไม่เคยเขียน)
+ * ยังไม่ได้ต่อฐานข้อมูล (dev ที่ไม่มีคีย์) ถอยไปเก็บในเบราว์เซอร์เหมือนเดิม
  */
 
 import { useSyncExternalStore } from "react";
@@ -24,6 +26,14 @@ import {
   type PmEvent,
 } from "./pm-schedule-data";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+import {
+  fetchSchedule,
+  sbAddEvent,
+  sbCancelEvent,
+  sbEditEvent,
+  sbSaveNote,
+} from "./supabase/schedule";
 
 export type ScheduleState = {
   events: PmEvent[];
@@ -42,15 +52,79 @@ function isState(value: unknown): value is ScheduleState {
 /* v5 — นัดหมายเก็บประวัติการแก้ (edits) เพิ่มจาก v4 ที่มีแค่ผู้สร้างกับการยกเลิก */
 const store = createPersistedStore<ScheduleState>("maz-erp.pm-schedule.v5", INITIAL, isState);
 
+/* ─── ชั้นต่อฐานข้อมูล ───────────────────────────────────────────── */
+const live = hasBackend;
+let fromDb: ScheduleState | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+const EMPTY: ScheduleState = { events: [], notes: {} };
+
+function load() {
+  if (!live || loading || fromDb !== null) return;
+  loading = true;
+  void fetchSchedule()
+    .then((got) => {
+      fromDb = got;
+    })
+    .catch(() => {
+      fromDb = EMPTY;
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+function refresh() {
+  if (!live) return;
+  fromDb = null;
+  loading = false;
+  load();
+  tell();
+}
+
+/** หน้าจอไม่รอผลลัพธ์ — เขียนแล้วค่อยอ่านตารางใหม่เมื่อฐานข้อมูลตอบ */
+function after(job: Promise<unknown>) {
+  void job.then(refresh, refresh);
+}
+
+function snapshot(): ScheduleState {
+  if (!live) return store.get();
+  load();
+  return fromDb ?? EMPTY;
+}
+
+function subscribeAll(onChange: () => void) {
+  const off = store.subscribe(onChange);
+  watchers.add(onChange);
+  return () => {
+    off();
+    watchers.delete(onChange);
+  };
+}
+
 export function useSchedule() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return useSyncExternalStore(subscribeAll, snapshot, store.getServer);
 }
 
 export function resetSchedule() {
+  if (live) {
+    refresh();
+    return;
+  }
   store.reset();
 }
 
 export function saveNote(id: string, text: string) {
+  if (live) {
+    after(sbSaveNote(id, text));
+    return;
+  }
   store.update((s) => ({ ...s, notes: { ...s.notes, [id]: text } }));
 }
 
@@ -80,6 +154,12 @@ export type EventDraft = {
  * ทำให้ผลลัพธ์ต่างกันทุกครั้งที่รัน ซึ่งกฎ purity ของโปรเจคนี้ห้ามไว้
  */
 export function addEvent(d: EventDraft) {
+  if (live) {
+    /* รหัสออกจากฝั่งนี้ เพราะหน้าจอต้องเลือกใบที่เพิ่งสร้างต่อทันที ไม่รอฐานข้อมูลตอบ */
+    const id = crypto.randomUUID();
+    after(sbAddEvent(id, d));
+    return id;
+  }
   const id = `EVN${store.get().events.length + 1}`;
   store.update((s) => ({
     ...s,
@@ -143,6 +223,11 @@ function diffEvent(before: PmEvent, d: EventDraft, by: string): EventChange | un
  * ที่ยังจำได้ว่าเขาเคยถูกเชิญ — กระดิ่งแจ้งเตือนอ่านจากตรงนี้
  */
 export function editEvent(id: string, d: EventDraft, by: string) {
+  if (live) {
+    const before = snapshot().events.find((e) => e.id === id);
+    after(sbEditEvent(id, d, before ? diffEvent(before, d, by) : undefined));
+    return;
+  }
   store.update((s) => ({
     ...s,
     events: s.events.map((e) => {
@@ -180,6 +265,10 @@ export function editEvent(id: string, d: EventDraft, by: string) {
  * หน้าจอกันไว้ตั้งแต่ปุ่มบันทึก ที่นี่จึงแค่ตัดช่องว่างหัวท้าย
  */
 export function cancelEvent(id: string, by: string, why: string) {
+  if (live) {
+    after(sbCancelEvent(id, by, why.trim()));
+    return;
+  }
   store.update((s) => ({
     ...s,
     events: s.events.map((e) =>
