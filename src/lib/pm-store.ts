@@ -34,6 +34,24 @@ import { hrSnapshot, subscribeHr } from "./hr-store";
 import type { Employee } from "./hr-data";
 import { TEAM_ROLES_BY_POSITION } from "./pm-data";
 import { USERS } from "./mock-data";
+import { hasBackend } from "./supabase/env";
+import {
+  EMPTY_PM,
+  fetchPm,
+  sbAcceptInbox,
+  sbCreateProject,
+  sbAddAct,
+  sbAddDocs,
+  sbClearDraft,
+  sbMarkInboxSeen,
+  sbPatchProject,
+  sbPatchTask,
+  sbPostChat,
+  sbPostTaskTalk,
+  sbSaveDraft,
+  sbTransferProject,
+  type PmData,
+} from "./supabase/pm";
 
 /* ─── ร่างแผนงานที่ยังไม่ยืนยัน ─────────────────────────────────────
  * เฟสและงานย่อยระหว่างวางแผน เก็บรูปเดียวกับกระดานในหน้าจัดคิวงาน
@@ -326,10 +344,81 @@ export function cancelDealWork(deal: string, c: { at: string; by: string; why: s
  */
 let rendering: "server" | "client" = "server";
 
+/* ─── งานฝ่ายโครงการจากฐานข้อมูล (รอบที่ 102–104) ─────────────────
+ *
+ * ต่อฐานข้อมูลแล้ว งานเข้าใหม่ · โปรเจค · ร่างแผน · ข้อความของงานย่อย อ่านจากฐานข้อมูล
+ * ส่วน team ยังมาจากทะเบียนพนักงานเหมือนเดิม (teamFrom) ไม่ได้เก็บแยก
+ *
+ * ระหว่างยังโหลดไม่เสร็จให้เป็นกองว่างไว้ก่อน ไม่ใช่ข้อมูลตัวอย่างในเครื่อง
+ */
+const live = hasBackend;
+let pmData: PmData | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function loadPm() {
+  if (!live || loading || pmData !== null) return;
+  loading = true;
+  void fetchPm()
+    .then((got) => {
+      pmData = got;
+    })
+    .catch(() => {
+      pmData = EMPTY_PM;
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+/** ขอข้อมูลใหม่หลังเขียน */
+function refreshPm() {
+  if (!live) return;
+  pmData = null;
+  loading = false;
+  loadPm();
+  tell();
+}
+
+let lastLocal: PmState | null = null;
+let lastPm: PmData | null = null;
+let lastMerged: PmState | null = null;
+
+function mergedState(): PmState {
+  const local = store.get();
+  if (!live) return local;
+  loadPm();
+  if (lastMerged && lastLocal === local && lastPm === pmData) return lastMerged;
+  lastLocal = local;
+  lastPm = pmData;
+  lastMerged = {
+    ...local,
+    inbox: pmData?.inbox ?? [],
+    projects: pmData?.projects ?? [],
+    talks: (pmData?.talks ?? {}) as PmState["talks"],
+    drafts: (pmData?.drafts ?? {}) as PmState["drafts"],
+  };
+  return lastMerged;
+}
+
+function subscribeAll(onChange: () => void) {
+  const off = store.subscribe(onChange);
+  watchers.add(onChange);
+  return () => {
+    off();
+    watchers.delete(onChange);
+  };
+}
+
 /* React เรียก getServer ตอน hydrate และ get หลังจากนั้น — จำไว้ว่ารอบวาดนี้ใช้ชุดไหน */
 const readClient = () => {
   rendering = "client";
-  return store.get();
+  return mergedState();
 };
 const readServer = () => {
   rendering = "server";
@@ -337,16 +426,23 @@ const readServer = () => {
 };
 
 export function usePm() {
-  return useSyncExternalStore(store.subscribe, readClient, readServer);
+  return useSyncExternalStore(subscribeAll, readClient, readServer);
+}
+
+/** ข้อมูลจากฐานข้อมูลมาถึงหรือยัง — หน้าที่ตั้งค่าเริ่มต้นของฟอร์มครั้งเดียวต้องรอตัวนี้ */
+export function usePmReady() {
+  useSyncExternalStore(subscribeAll, readClient, readServer);
+  return !live || pmData !== null;
 }
 
 export function resetPm() {
   store.reset();
+  refreshPm();
 }
 
 /** อ่านค่าปัจจุบันนอกคอมโพเนนต์ — ใช้ตอนส่งงานข้ามฝ่าย (ดู flow.ts) */
 export function pmSnapshot() {
-  return store.get();
+  return mergedState();
 }
 
 /*
@@ -421,7 +517,12 @@ function today() {
 }
 
 /** เปิดดูเอกสารของงานแล้ว — จุดแดงหน้าแถวในกล่องงานเข้าใหม่หายไป */
-export function markInboxSeen(pj: string) {
+export async function markInboxSeen(pj: string) {
+  if (live) {
+    await sbMarkInboxSeen(pj);
+    refreshPm();
+    return;
+  }
   store.update((s) => ({
     ...s,
     inbox: s.inbox.map((j) => (isRef(j, pj) && !j.seen ? { ...j, seen: true } : j)),
@@ -441,12 +542,39 @@ export type AcceptResult = { ok: true } | { ok: false; reason: "taken" | "start"
  * กระดานรับงาน (ผู้ใช้สั่ง 5 ต.ค. 2569) — ใครรับก่อนได้งาน จดชื่อคนรับไว้
  * งานที่ไม่อยู่ขั้น "new" แล้วคือมีคนรับไปก่อน (เช่นเปิดแท็บค้างไว้) ปฏิเสธและบอกชื่อคนที่รับไป
  */
-export function acceptInboxJob(pj: string, start: string, name = ""): AcceptResult {
-  const cur = store.get().inbox.find((j) => isRef(j, pj));
+export async function acceptInboxJob(pj: string, start: string, name = ""): Promise<AcceptResult> {
+  const cur = mergedState().inbox.find((j) => isRef(j, pj));
   if (!cur || cur.stage !== "new") return { ok: false, reason: "taken", takenBy: cur?.takenBy ?? "" };
   if (!start) return { ok: false, reason: "start", takenBy: "" };
   const by = USERS[currentRole()]?.name ?? "";
   const at = today();
+  if (live) {
+    /* เลื่อนทุกเฟสไปทั้งชุดตามวันเริ่มที่เลือก ระยะของแต่ละเฟสเท่าเดิม */
+    const nm = name.trim() || cur.cus;
+    const shift = cur.phases.length && cur.planStart ? daysBetween(cur.planStart, start) : 0;
+    const patch: Record<string, unknown> = {
+      stage: "plan",
+      seen: true,
+      name: nm,
+      taken_by: by,
+      taken_at: at,
+      project_start: start,
+      plan_start: cur.phases.length && cur.planStart ? addDays(cur.planStart, shift) : start,
+    };
+    if (cur.phases.length && cur.planStart) {
+      patch.plan_end = cur.planEnd ? addDays(cur.planEnd, shift) : null;
+      patch.phases = cur.phases.map((ph) => ({
+        ...ph,
+        start: addDays(ph.start, shift),
+        end: addDays(ph.end, shift),
+      }));
+    }
+    const got = await sbAcceptInbox(cur.pj, patch);
+    refreshPm();
+    /* กระดานรับงานกลาง — คนอื่นอาจกดรับไปก่อนระหว่างที่เราเปิดหน้าค้างไว้ */
+    if (!got.ok) return { ok: false, reason: "taken", takenBy: cur.takenBy ?? "" };
+    return { ok: true };
+  }
   store.update((s) => ({
     ...s,
     inbox: s.inbox.map((j) => {
@@ -492,7 +620,13 @@ export type PlannedTask = {
  * กติกาเดียวกับใบเสนอราคา — แก้ปุ๊บบันทึกปั๊บ ไม่มีปุ่มบันทึก
  * "ยืนยันแผน" เปลี่ยนแค่สถานะ (ร่าง → โปรเจค) ไม่ใช่จุดที่เพิ่งเริ่มบันทึก
  */
-export function savePlanDraft(pj: string, draft: Omit<PlanDraft, "at" | "by">, by: string) {
+export async function savePlanDraft(pj: string, draft: Omit<PlanDraft, "at" | "by">, by: string) {
+  if (live) {
+    /* ร่างอยู่ที่ฐานข้อมูลแล้ว เปิดจากอีกเครื่องหรืออีกคนก็เห็นร่างเดียวกัน */
+    await sbSaveDraft(pj, { phases: draft.phases, plan: draft.plan, by });
+    refreshPm();
+    return;
+  }
   store.update((s) => ({
     ...s,
     drafts: { ...s.drafts, [pj]: { ...draft, at: bkkStamp(), by } },
@@ -500,7 +634,12 @@ export function savePlanDraft(pj: string, draft: Omit<PlanDraft, "at" | "by">, b
 }
 
 /** ทิ้งร่างของดีลนี้ — ยืนยันแผนแล้วร่างหมดหน้าที่ */
-export function clearPlanDraft(pj: string) {
+export async function clearPlanDraft(pj: string) {
+  if (live) {
+    await sbClearDraft(pj);
+    refreshPm();
+    return;
+  }
   store.update((s) => {
     if (!s.drafts[pj]) return s;
     const next = { ...s.drafts };
@@ -526,7 +665,7 @@ function stampAssign(t: ProjectTask, what: "assign" | "due" | "owner", at: strin
  *
  * โทนสีปกวนสามแบบตามจำนวนโปรเจคที่มีอยู่ จะได้ไม่ซ้ำกับใบก่อนหน้าติดกัน
  */
-export function confirmPlan(
+export async function confirmPlan(
   pj: string,
   tasks: PlannedTask[],
   pmName: string,
@@ -534,6 +673,62 @@ export function confirmPlan(
   phases: ProjectPhase[],
 ) {
   const at = bkkStamp();
+  if (live) {
+    const cur = mergedState();
+    const job = cur.inbox.find((j) => isRef(j, pj));
+    if (!job) return;
+    /* งานที่ไม่มีข้อเสนอไม่มีวันจบจากใบเสนอราคา ใช้วันจบของเฟสสุดท้ายที่ PM วางไว้แทน */
+    const lastEnd = phases.reduce((m, ph) => (ph.end > m ? ph.end : m), "");
+    const tones = ["a", "b", "c"] as const;
+    const made: ProjectTask[] = tasks.map((t) =>
+      stampAssign(
+        {
+          name: t.name,
+          phase: t.phase,
+          whos: [...t.whos],
+          start: t.start,
+          due: t.due,
+          status: "todo",
+          pct: 0,
+          files: (t.files ?? []).map((f) => ({ ...f })),
+          brief: t.brief?.trim() || undefined,
+        },
+        "assign",
+        at,
+        pmName,
+      ),
+    );
+    await sbCreateProject({
+      project: {
+        pj: job.pj,
+        bill: job.bill,
+        deal: job.deal,
+        service: job.service,
+        name: job.name,
+        cus: job.cus,
+        quo: job.quo,
+        net: job.net,
+        scope: job.scope,
+        pm: pmName,
+        start: job.projectStart || today(),
+        due: job.planEnd || lastEnd,
+        status: "running",
+        updated: today(),
+        tone: tones[cur.projects.length % tones.length],
+        phases: phases.map((ph) => ({ ...ph })),
+        source: job,
+        docs: (job.docs ?? []).map((d) => ({ ...d })),
+        tasks: made,
+        chat: [],
+        acts: [],
+      },
+      tasks: made,
+      /* เวลาที่กดจริงเหมือนกิจกรรมอื่นทุกรายการ ไม่ใช่ 09:00 ตายตัว */
+      firstAct: { kind: "status", who: "PM", at, tx: "เปิดโปรเจคและมอบหมายงานให้ทีม" },
+    });
+    refreshPm();
+    return;
+  }
   store.update((s) => {
     const job = s.inbox.find((j) => isRef(j, pj));
     if (!job) return s;
@@ -724,6 +919,18 @@ export function renameProject(pj: string, name: string) {
 export function addProjectDocs(pj: string, docs: ProjectDoc[]) {
   if (!docs.length) return;
   const at = bkkStamp();
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    /* ยังไม่ได้ยืนยันแผน เอกสารเก็บติดกับงานเข้าใหม่ไปก่อน แล้วค่อยติดไปกับโปรเจคตอนเปิด */
+    if (!p0) return;
+    const have = new Set((p0.docs ?? []).map((d) => d.n));
+    const add = docs.filter((d) => !have.has(d.n));
+    if (!add.length) return;
+    void sbAddDocs(p0.pj, add)
+      .then(() => sbAddAct(p0.pj, { kind: "file", who: "PM", at, tx: `แนบเอกสารโปรเจค ${add.length} ไฟล์` }))
+      .then(() => refreshPm());
+    return;
+  }
   const merge = (cur: ProjectDoc[] | undefined) => {
     const have = new Set((cur ?? []).map((d) => d.n));
     return [...docs.filter((d) => !have.has(d.n)), ...(cur ?? [])];
@@ -768,6 +975,17 @@ export function transferProject(pj: string, to: string, why: string, by: string)
   const name = to.trim();
   const reason = why.trim();
   if (!name || !reason) return false;
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    /* โอนให้คนเดิมไม่ใช่การโอน อย่าลงประวัติหลอก ๆ ไว้ */
+    if (!p0 || p0.pm === name) return false;
+    const at = bkkStamp();
+    void sbTransferProject(p0.pj, { from: p0.pm, to: name, by, why: reason })
+      .then(() => sbAddAct(p0.pj, { kind: "status", who: by, at, tx: `โอนโปรเจคให้ ${name}` }))
+      .then(() => sbPatchProject(p0.pj, { updated: today() }))
+      .then(() => refreshPm());
+    return true;
+  }
   let done = false;
   store.update((s) => ({
     ...s,
@@ -793,7 +1011,19 @@ export function transferProject(pj: string, to: string, why: string, by: string)
 }
 
 /** เลื่อนสถานะงานย่อย — เสร็จแล้วให้ความคืบหน้าเต็ม 100 เสมอ */
-export function setTaskStatus(pj: string, taskIndex: number, status: TaskStatus) {
+export async function setTaskStatus(pj: string, taskIndex: number, status: TaskStatus) {
+  if (live) {
+    const p0 = mergedState().projects.find((p) => isRef(p, pj));
+    const t0 = p0?.tasks[taskIndex];
+    if (!p0 || !t0) return;
+    const pct = status === "done" ? 100 : status === "todo" ? 0 : t0.pct;
+    await sbPatchTask(p0.pj, taskIndex, { status, pct });
+    /* งานครบทุกใบแล้วถือว่าโปรเจคส่งมอบเสร็จ ไม่ต้องมากดปิดซ้ำอีกที */
+    const allDone = p0.tasks.every((t, i) => (i === taskIndex ? status === "done" : t.status === "done"));
+    await sbPatchProject(p0.pj, { status: allDone ? "done" : "running", updated: today() });
+    refreshPm();
+    return;
+  }
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) => {
@@ -821,8 +1051,18 @@ export function setTaskStatus(pj: string, taskIndex: number, status: TaskStatus)
  * สถานะกับเปอร์เซ็นต์ต้องไม่ขัดกัน — 0 คือยังไม่เริ่ม 100 คือเสร็จ
  * จึงเลื่อนสถานะให้ตามค่าที่กรอกด้วย ไม่ให้เกิดงาน "เสร็จแล้ว 40%"
  */
-export function setTaskProgress(pj: string, taskIndex: number, pct: number) {
+export async function setTaskProgress(pj: string, taskIndex: number, pct: number) {
   const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+  if (live) {
+    const p0 = mergedState().projects.find((p) => isRef(p, pj));
+    if (!p0 || !p0.tasks[taskIndex]) return;
+    const status = clamped >= 100 ? "done" : clamped <= 0 ? "todo" : "doing";
+    await sbPatchTask(p0.pj, taskIndex, { pct: clamped, status });
+    const allDone = p0.tasks.every((t, i) => (i === taskIndex ? status === "done" : t.status === "done"));
+    await sbPatchProject(p0.pj, { status: allDone ? "done" : "running", updated: today() });
+    refreshPm();
+    return;
+  }
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) => {
@@ -923,7 +1163,7 @@ function patchTask(
  * เก็บทุกรอบไว้ต่อกัน ไม่ทับของเดิม เพราะตอน PM ตรวจต้องเทียบได้ว่ารอบก่อนตีกลับเพราะอะไร
  * แล้วรอบนี้แก้ตรงนั้นหรือยัง · ส่งใหม่แล้วเหตุผลที่ตีกลับถือว่าจบไป จึงล้าง back ทิ้ง
  */
-export function submitWork(
+export async function submitWork(
   pj: string,
   taskName: string,
   input: { by: string; files: string[]; note: string; at: string },
@@ -934,6 +1174,20 @@ export function submitWork(
     files: input.files,
     note: input.note,
   };
+  if (live) {
+    const p0 = mergedState().projects.find((p) => isRef(p, pj));
+    const i = p0?.tasks.findIndex((t) => t.name === taskName) ?? -1;
+    if (!p0 || i < 0) return;
+    const t0 = p0.tasks[i];
+    await sbPatchTask(p0.pj, i, {
+      status: "sent",
+      subs: [...(t0.subs ?? []), sub],
+      back: null,
+    });
+    await sbAddAct(p0.pj, { kind: "done", who: input.by, at: input.at, tx: `ส่งงาน ${taskName} ให้ตรวจ` });
+    refreshPm();
+    return;
+  }
   store.update((s) =>
     patchTask(
       s,
@@ -957,7 +1211,15 @@ export function submitWork(
 }
 
 /** PM ตรวจผ่าน — งานจบที่ 100% ไม่ต้องให้ทีมมากดปิดซ้ำอีกที */
-export function approveWork(pj: string, taskName: string, stamp: string) {
+export async function approveWork(pj: string, taskName: string, stamp: string) {
+  if (live) {
+    const hit = await pmTask(pj, taskName);
+    if (!hit) return;
+    await sbPatchTask(hit.pj, hit.i, { status: "done", pct: 100, done_at: stampToIso(stamp), back: null });
+    await sbAddAct(hit.pj, { kind: "status", who: "PM", at: stamp, tx: `ตรวจผ่าน ${taskName}` });
+    refreshPm();
+    return;
+  }
   store.update((s) =>
     patchTask(
       s,
@@ -975,8 +1237,30 @@ export function approveWork(pj: string, taskName: string, stamp: string) {
   );
 }
 
+/* หางานย่อยใบหนึ่งจากชื่อ — คืนเลขที่โปรเจคกับลำดับงาน เพราะฐานข้อมูลอ้างด้วยลำดับ */
+async function pmTask(pj: string, taskName: string) {
+  const p0 = mergedState().projects.find((p) => isRef(p, pj));
+  const i = p0?.tasks.findIndex((t) => t.name === taskName) ?? -1;
+  return p0 && i >= 0 ? { pj: p0.pj, i } : null;
+}
+
+/** "YYYY-MM-DD HH:mm" (เวลาไทย) เป็นเวลาแบบที่ฐานข้อมูลเก็บ */
+function stampToIso(stamp: string) {
+  const t = stamp.trim().replace(" ", "T");
+  const iso = new Date((t.length === 16 ? t + ":00" : t) + "+07:00");
+  return Number.isNaN(iso.getTime()) ? null : iso.toISOString();
+}
+
 /** PM ตีกลับให้แก้ — เหตุผลบังคับ ฝั่งที่เรียกต้องกันไว้ก่อนแล้ว */
-export function sendBackWork(pj: string, taskName: string, why: string, stamp: string) {
+export async function sendBackWork(pj: string, taskName: string, why: string, stamp: string) {
+  if (live) {
+    const hit = await pmTask(pj, taskName);
+    if (!hit) return;
+    await sbPatchTask(hit.pj, hit.i, { status: "revise", back: { why, at: stamp, by: "PM" } });
+    await sbAddAct(hit.pj, { kind: "status", who: "PM", at: stamp, tx: `ส่งกลับให้แก้ ${taskName}` });
+    refreshPm();
+    return;
+  }
   store.update((s) =>
     patchTask(
       s,
@@ -1016,7 +1300,7 @@ export function addProjectAct(pj: string, act: Activity) {
   }));
 }
 
-export function postChat(
+export async function postChat(
   pj: string,
   text: string,
   stamp: string,
@@ -1028,6 +1312,15 @@ export function postChat(
   const act = files.length ? `ส่งไฟล์ในแชทโปรเจค ${files.length} ไฟล์` : "ส่งข้อความในแชทโปรเจค";
   /* ไฟล์ที่ส่งในแชทเก็บเข้าไฟล์ของโปรเจคด้วย จะได้หาเจอโดยไม่ต้องไล่อ่านแชท (ตามต้นแบบ) */
   const kept: TaskFile[] = files.map((f) => ({ n: f.n, k: fileKind(f.n), sz: f.sz, at: stamp.slice(0, 10), by: who }));
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    if (!p0) return;
+    await sbPostChat(p0.pj, { who, tx: text, files: files.length ? files : undefined });
+    await sbAddAct(p0.pj, { kind: "chat", who, at: stamp, tx: act });
+    await sbPatchProject(p0.pj, { updated: today() });
+    refreshPm();
+    return;
+  }
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) =>
@@ -1058,7 +1351,7 @@ export function taskTalks(s: PmState, pj: string, taskName: string): TaskTalk[] 
  * ที่ต้องเข้าแชทโปรเจคด้วย เพราะ PM อ่านความเคลื่อนไหวของโปรเจคจากที่นั่น
  * ถ้าเก็บแยกอย่างเดียว PM จะไม่รู้ว่าทีมตอบกลับมาแล้ว ก็กลับไปตามกันในไลน์เหมือนเดิม
  */
-export function postTaskTalk(
+export async function postTaskTalk(
   pj: string,
   taskName: string,
   who: string,
@@ -1069,6 +1362,17 @@ export function postTaskTalk(
   const note: TaskTalk = { who, at: stamp, tx, ...(nudge ? { nudge: true } : {}) };
   const key = talkKey(pj, taskName);
   const act = nudge ? `ทวงงาน ${taskName}` : `ส่งข้อความเรื่อง ${taskName}`;
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    if (!p0) return;
+    await sbPostTaskTalk(p0.pj, taskName, { who, tx, nudge });
+    /* ติดชื่องานไว้หน้าข้อความ คนอ่านแชทโปรเจคจะได้รู้ว่าพูดถึงงานใบไหน */
+    await sbPostChat(p0.pj, { who, tx: `[${taskName}] ${tx}` });
+    await sbAddAct(p0.pj, { kind: "chat", who, at: stamp, tx: act });
+    await sbPatchProject(p0.pj, { updated: today() });
+    refreshPm();
+    return;
+  }
   store.update((s) => ({
     ...s,
     talks: { ...s.talks, [key]: [...(s.talks[key] ?? []), note] },

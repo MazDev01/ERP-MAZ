@@ -531,61 +531,103 @@ export async function sbAddDocs(pj: string, docs: ProjectDoc[]): Promise<PmWrite
 }
 
 /**
- * รับงานเข้าใหม่ → เปิดโปรเจคจริง
- * งานเข้าใหม่ยังอยู่ในกล่อง (stage = plan) เพราะหน้าวางแผนยังต้องอ่านข้อเสนอกับเฟสจากตรงนั้น
+ * รับงานเข้าใหม่ — งานออกจากขั้น "ยังไม่มีใครรับ" ไปรอจัดคิวในหน้าวางแผน
+ * ยังไม่เกิดโปรเจคตรงนี้ โปรเจคเกิดตอนยืนยันแผน
  */
-export async function sbAcceptInbox(input: {
-  pj: string;
-  name: string;
-  start: string;
-  job: InboxJob;
-  tone: "a" | "b" | "c";
+export async function sbAcceptInbox(
+  pj: string,
+  patch: Record<string, unknown>,
+): Promise<PmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  /* ใครกดรับก่อนได้งาน — เช็กที่ฐานข้อมูลด้วย ไม่ใช่เช็กแค่ที่จอของตัวเอง */
+  const got = await sb
+    .from("project_inbox")
+    .update(patch)
+    .eq("pj", pj)
+    .eq("stage", "new")
+    .select("pj");
+  if (got.error) return { ok: false, reason: why(got.error.message) };
+  if (!got.data?.length) return { ok: false, reason: "taken" };
+  return { ok: true, pj };
+}
+
+/** ยืนยันแผน → เปิดโปรเจคจริง พร้อมงานย่อยทั้งชุด แล้วเอางานออกจากกล่องกับทิ้งร่าง */
+export async function sbCreateProject(input: {
+  project: Project;
+  tasks: ProjectTask[];
+  firstAct: Activity;
 }): Promise<PmWrite> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
-  const { job } = input;
+  const p = input.project;
 
-  const inv = job.bill
-    ? await sb.from("invoices").select("id").eq("no", job.bill).maybeSingle()
-    : { data: null };
-  const deal = job.deal
-    ? await sb.from("deals").select("id, customer_id").eq("no", job.deal).maybeSingle()
-    : { data: null };
+  const inv = p.bill ? await sb.from("invoices").select("id").eq("no", p.bill).maybeSingle() : { data: null };
+  const deal = p.deal ? await sb.from("deals").select("id, customer_id").eq("no", p.deal).maybeSingle() : { data: null };
 
-  const got = await sb
+  const made = await sb
     .from("projects")
     .insert({
-      pj: input.pj,
+      pj: p.pj,
       invoice_id: (inv.data as { id?: string } | null)?.id ?? null,
       deal_id: (deal.data as { id?: string } | null)?.id ?? null,
       customer_id: (deal.data as { customer_id?: string } | null)?.customer_id ?? null,
-      service: job.service,
-      name: input.name,
-      cus: job.cus,
-      quo: job.quo,
-      net: job.net,
-      scope: job.scope,
-      pm: "",
+      service: p.service,
+      name: p.name ?? "",
+      cus: p.cus,
+      quo: p.quo,
+      net: p.net,
+      scope: p.scope,
+      pm: p.pm,
       pm_id: myId(),
-      start_on: input.start || null,
-      due: job.due || null,
-      status: "running",
-      tone: input.tone,
-      phases: [],
-      source: job,
-      updated: new Date().toISOString().slice(0, 10),
+      start_on: p.start || null,
+      due: p.due || null,
+      status: p.status,
+      tone: p.tone,
+      phases: p.phases,
+      source: p.source ?? null,
+      updated: p.updated || null,
       created_by: myId(),
     })
-    .select("pj")
+    .select("id, pj")
     .single();
-  if (got.error) return { ok: false, reason: why(got.error.message) };
+  if (made.error) return { ok: false, reason: why(made.error.message) };
+  const id = (made.data as { id: string }).id;
 
-  const up = await sb
-    .from("project_inbox")
-    .update({ stage: "plan", seen: true, project_start: input.start || null })
-    .eq("pj", input.pj);
-  if (up.error) return { ok: false, reason: why(up.error.message) };
-  return { ok: true, pj: (got.data as { pj: string }).pj };
+  if (input.tasks.length) {
+    const add = await sb.from("project_tasks").insert(
+      input.tasks.map((t, i) => ({
+        project_id: id,
+        idx: i,
+        name: t.name,
+        phase: t.phase,
+        whos: t.whos ?? [],
+        start_on: t.start || null,
+        due: t.due || null,
+        status: t.status,
+        pct: t.pct,
+        brief: t.brief ?? "",
+        files: t.files ?? [],
+        subs: t.subs ?? [],
+        back: t.back ?? null,
+        last_change: t.lastChange ?? null,
+      })),
+    );
+    if (add.error) return { ok: false, reason: why(add.error.message) };
+  }
+
+  if (p.docs?.length) await sbAddDocs(p.pj, p.docs);
+  await sb.from("project_acts").insert({
+    project_id: id,
+    kind: input.firstAct.kind,
+    who: input.firstAct.who,
+    tx: input.firstAct.tx,
+  });
+
+  /* ยืนยันแล้วงานออกจากกล่อง และร่างหมดหน้าที่ */
+  await sb.from("project_inbox").delete().eq("pj", p.pj);
+  await sb.from("project_drafts").delete().eq("pj", p.pj);
+  return { ok: true, pj: p.pj };
 }
 
 /**

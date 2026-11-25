@@ -387,18 +387,20 @@ export function PmInboxPage() {
           onAccept={(start) => {
             /* ไม่ส่งชื่อ — สโตร์ตั้งต้นเป็นชื่อลูกค้า แล้ว PM แก้ที่หน้าจัดคิวงาน/หน้าโปรเจค (ผู้ใช้สั่ง 5 ต.ค. 2569)
                รับไม่ทัน — อีกคนกดรับไปก่อน (แท็บค้าง) สโตร์ปฏิเสธ บอกชื่อคนที่รับไป ไม่พาไปหน้าวางแผน */
-            const res = acceptInboxJob(takeJob.pj, start);
-            if (!res.ok) {
-              if (res.reason === "taken") {
-                setTaking(null);
-                setNotice(res.takenBy ? `งานนี้ถูกรับไปแล้วโดย ${res.takenBy}` : "งานนี้ถูกรับไปแล้ว");
+            /* ต่อฐานข้อมูลแล้วต้องรอคำตอบก่อน เพราะคนอื่นอาจกดรับไปก่อนจริง ๆ */
+            void acceptInboxJob(takeJob.pj, start).then((res) => {
+              if (!res.ok) {
+                if (res.reason === "taken") {
+                  setTaking(null);
+                  setNotice(res.takenBy ? `งานนี้ถูกรับไปแล้วโดย ${res.takenBy}` : "งานนี้ถูกรับไปแล้ว");
+                }
+                return;
               }
-              return;
-            }
-            setTaking(null);
-            /* รับแล้วพาไปหน้าวางแผนของโปรเจคที่เพิ่งเปิด
-               เพราะจัดคิวงานคือขั้นถัดไปที่ต้องทำแน่ ๆ ไม่ใช่ให้ไปหาเองจากหน้าโปรเจค */
-            router.push(planHref(takeJob.pj));
+              setTaking(null);
+              /* รับแล้วพาไปหน้าวางแผนของโปรเจคที่เพิ่งเปิด
+                 เพราะจัดคิวงานคือขั้นถัดไปที่ต้องทำแน่ ๆ ไม่ใช่ให้ไปหาเองจากหน้าโปรเจค */
+              router.push(planHref(takeJob.pj));
+            });
           }}
         />
       )}
