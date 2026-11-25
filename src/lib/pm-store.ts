@@ -39,6 +39,8 @@ import {
   EMPTY_PM,
   fetchPm,
   sbAcceptInbox,
+  sbAddInbox,
+  sbConfirmPlan,
   sbCreateProject,
   sbAddAct,
   sbAddDocs,
@@ -48,6 +50,7 @@ import {
   sbPatchTask,
   sbPostChat,
   sbPostTaskTalk,
+  sbRemoveDoc,
   sbSaveDraft,
   sbTransferProject,
   type PmData,
@@ -501,9 +504,18 @@ export function memberName(id: string) {
  * กันซ้ำด้วยใบแจ้งหนี้งวดแรก (และเลขดีลถ้ามี) เผื่อบัญชีแก้แล้วบันทึกเงินเข้าซ้ำ
  * คืนเลขที่โปรเจค — ของที่มีอยู่แล้วคืนเลขเดิม
  */
-export function addInboxJob(job: Omit<InboxJob, "pj">): string {
+export async function addInboxJob(job: Omit<InboxJob, "pj">): Promise<string> {
   const same = (x: InboxJob | Project) =>
     (Boolean(job.bill) && x.bill === job.bill) || (Boolean(job.deal) && x.deal === job.deal);
+  if (live) {
+    /* กันซ้ำด้วยใบแจ้งหนี้งวดแรก (และเลขดีลถ้ามี) เผื่อบัญชีแก้แล้วบันทึกเงินเข้าซ้ำ */
+    const now = mergedState();
+    const had0 = now.inbox.find(same) ?? now.projects.find(same);
+    if (had0) return had0.pj;
+    const got = await sbAddInbox(job);
+    refreshPm();
+    return got.ok && got.pj ? got.pj : "";
+  }
   const cur = store.get();
   const had = cur.inbox.find(same) ?? cur.projects.find(same);
   if (had) return had.pj;
@@ -790,7 +802,7 @@ export async function confirmPlan(
   });
 }
 
-export function createOwnProject(input: {
+export async function createOwnProject(input: {
   name: string;
   cus: string;
   scope: string;
@@ -802,6 +814,50 @@ export function createOwnProject(input: {
 }) {
   const at = bkkStamp();
   const day = today();
+  if (live) {
+    /* เลขที่โปรเจคออกจากฐานข้อมูล ไม่ใช่จากเบราว์เซอร์ */
+    const cur = mergedState();
+    const tones = ["a", "b", "c"] as const;
+    const tasks = input.tasks.map<ProjectTask>((t) => ({
+      name: t.name,
+      phase: t.phase,
+      /* ยังไม่ได้มอบหมายให้ใคร — PM มอบหมายทีหลังในหน้าโปรเจค */
+      whos: [],
+      start: input.start || day,
+      due: t.due,
+      status: t.done ? "done" : "todo",
+      pct: t.done ? 100 : 0,
+      files: [],
+    }));
+    const got = await sbCreateProject({
+      project: {
+        pj: "",
+        /* โปรเจคที่ตั้งเองไม่ได้มาจากวางบิลและไม่มีดีล */
+        bill: "",
+        /* งานที่ตั้งเองยังไม่รู้ประเภทบริการ ใช้ค่าตั้งต้นให้การ์ดมีไอคอน แล้ว PM แก้ทีหลังได้ */
+        service: "website",
+        name: input.name,
+        cus: input.cus,
+        quo: "",
+        net: 0,
+        scope: input.scope,
+        pm: input.pm,
+        start: input.start || day,
+        due: input.due || input.phases.reduce((m, ph) => (ph.end > m ? ph.end : m), ""),
+        status: "running",
+        updated: day,
+        tone: tones[cur.projects.length % tones.length],
+        phases: input.phases.map((ph) => ({ name: ph.name, role: "ba", start: ph.start, end: ph.end })),
+        tasks,
+        chat: [],
+        acts: [],
+      },
+      tasks,
+      firstAct: { kind: "status", who: "PM", at, tx: "เปิดโปรเจคที่ตั้งเอง ยังไม่ได้มอบหมายงาน" },
+    });
+    refreshPm();
+    return got.ok && got.pj ? got.pj : "";
+  }
   let created = "";
   store.update((s) => {
     /* เลขที่โปรเจคชุดเดียวกับงานที่มาจากวางบิล (PJ-2569-xxxx) ออกเลขต่อจากที่มีอยู่ */
@@ -851,8 +907,40 @@ export function createOwnProject(input: {
  * งานเดิมเก็บสถานะ ความคืบหน้า ไฟล์ และรอบส่งงานไว้ทั้งหมด เปลี่ยนแค่ชื่อ เฟส คน และวัน
  * งานที่เพิ่มใหม่เริ่มที่ "ยังไม่เริ่ม"
  */
-export function replanProject(pj: string, tasks: PlannedTask[], phases: ProjectPhase[]) {
+export async function replanProject(pj: string, tasks: PlannedTask[], phases: ProjectPhase[]) {
   const at = bkkStamp();
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    if (!p0) return;
+    const lastEnd = phases.reduce((m, ph) => (ph.end > m ? ph.end : m), p0.due);
+    const made = tasks.map<ProjectTask>((t) => {
+      const old = t.from !== undefined ? p0.tasks[t.from] : undefined;
+      const base: ProjectTask =
+        old ?? { name: t.name, phase: t.phase, whos: [], start: "", due: "", status: "todo", pct: 0, files: [] };
+      const next: ProjectTask = {
+        ...base,
+        name: t.name,
+        phase: t.phase,
+        whos: [...t.whos],
+        start: t.start,
+        due: t.due,
+        files: t.files ? t.files.map((f) => ({ ...f })) : base.files,
+        brief: t.brief?.trim() || undefined,
+      };
+      /* งานเก่าที่ไม่ได้แตะไม่ต้องประทับใหม่ ไม่งั้นทุกใบจะขึ้นว่า "เพิ่งเปลี่ยน" ทั้งกระดาน */
+      if (!old) return stampAssign(next, "assign", at, p0.pm);
+      if (old.whos.join(",") !== next.whos.join(",")) return stampAssign(next, "owner", at, p0.pm);
+      if (old.due !== next.due) return stampAssign(next, "due", at, p0.pm);
+      return next;
+    });
+    await sbConfirmPlan(p0.pj, phases, made);
+    await sbPatchProject(p0.pj, { due: lastEnd, updated: today() });
+    /* เวลาที่กดจริง ไม่ใช่ 09:00 ตายตัว — นี่คือหลักฐานว่าใครแก้แผนตอนไหน */
+    await sbAddAct(p0.pj, { kind: "status", who: "PM", at, tx: "ปรับแผนงานของโปรเจค" });
+    await sbClearDraft(p0.pj);
+    refreshPm();
+    return;
+  }
   store.update((s) => {
     const drafts = { ...s.drafts };
     delete drafts[pj];
@@ -904,6 +992,15 @@ export function replanProject(pj: string, tasks: PlannedTask[], phases: ProjectP
 export function renameProject(pj: string, name: string) {
   const v = name.trim();
   if (!v) return;
+  if (live) {
+    const cur = mergedState();
+    /* ยังวางแผนอยู่ ชื่ออยู่ที่ใบงานในกล่องเข้า · เปิดโปรเจคแล้ว ชื่ออยู่ที่โปรเจค */
+    const p0 = cur.projects.find((x) => isRef(x, pj));
+    const j0 = cur.inbox.find((x) => isRef(x, pj));
+    if (p0) void sbPatchProject(p0.pj, { name: v, updated: today() }).then(() => refreshPm());
+    else if (j0) void sbAcceptInbox(j0.pj, { name: v }).then(() => refreshPm());
+    return;
+  }
   store.update((s) => ({
     ...s,
     inbox: s.inbox.map((j) => (isRef(j, pj) ? { ...j, name: v } : j)),
@@ -956,6 +1053,14 @@ export function addProjectDocs(pj: string, docs: ProjectDoc[]) {
 
 /** เอาเอกสารแนบของโปรเจคออก (PM/GM กดยืนยันก่อน) */
 export function removeProjectDoc(pj: string, name: string) {
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    if (!p0) return;
+    void sbRemoveDoc(p0.pj, name)
+      .then(() => sbPatchProject(p0.pj, { updated: today() }))
+      .then(() => refreshPm());
+    return;
+  }
   store.update((s) => ({
     ...s,
     inbox: s.inbox.map((j) => (isRef(j, pj) ? { ...j, docs: (j.docs ?? []).filter((d) => d.n !== name) } : j)),
@@ -1096,6 +1201,15 @@ export async function setTaskProgress(pj: string, taskIndex: number, pct: number
  * เมื่อต่อ backend ให้อัปโหลดขึ้น storage แล้วเก็บ URL แทน
  */
 export function attachFile(pj: string, taskIndex: number, file: TaskFile) {
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    const t0 = p0?.tasks[taskIndex];
+    if (!p0 || !t0) return;
+    void sbPatchTask(p0.pj, taskIndex, { files: [file, ...t0.files] })
+      .then(() => sbPatchProject(p0.pj, { updated: today() }))
+      .then(() => refreshPm());
+    return;
+  }
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) =>
@@ -1113,6 +1227,13 @@ export function attachFile(pj: string, taskIndex: number, file: TaskFile) {
 }
 
 export function removeFile(pj: string, taskIndex: number, name: string) {
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    const t0 = p0?.tasks[taskIndex];
+    if (!p0 || !t0) return;
+    void sbPatchTask(p0.pj, taskIndex, { files: t0.files.filter((f) => f.n !== name) }).then(() => refreshPm());
+    return;
+  }
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) =>
@@ -1217,6 +1338,11 @@ export async function approveWork(pj: string, taskName: string, stamp: string) {
     if (!hit) return;
     await sbPatchTask(hit.pj, hit.i, { status: "done", pct: 100, done_at: stampToIso(stamp), back: null });
     await sbAddAct(hit.pj, { kind: "status", who: "PM", at: stamp, tx: `ตรวจผ่าน ${taskName}` });
+    /* งานครบทุกใบแล้วถือว่าโปรเจคส่งมอบเสร็จ ไม่ต้องมากดปิดซ้ำอีกที
+       (ทางเดิมคิดให้ใน patchTask — ทางฐานข้อมูลต้องคิดตรงนี้เอง) */
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    const allDone = p0?.tasks.every((t, i) => (i === hit.i ? true : t.status === "done")) ?? false;
+    await sbPatchProject(hit.pj, { status: allDone ? "done" : "running", updated: today() });
     refreshPm();
     return;
   }
@@ -1258,6 +1384,8 @@ export async function sendBackWork(pj: string, taskName: string, why: string, st
     if (!hit) return;
     await sbPatchTask(hit.pj, hit.i, { status: "revise", back: { why, at: stamp, by: "PM" } });
     await sbAddAct(hit.pj, { kind: "status", who: "PM", at: stamp, tx: `ส่งกลับให้แก้ ${taskName}` });
+    /* ยังมีงานค้าง โปรเจคกลับมาเดินอยู่ */
+    await sbPatchProject(hit.pj, { status: "running", updated: today() });
     refreshPm();
     return;
   }
@@ -1280,7 +1408,20 @@ export async function sendBackWork(pj: string, taskName: string, why: string, st
  * PM ส่งงานที่ตรวจผ่านแล้วให้ลูกค้าตรวจผ่านลิงก์ (client-review-store) — งานเป็น "รอลูกค้าตรวจ"
  * ลูกค้าอนุมัติแล้ว PM ปิดด้วย approveWork · ลูกค้ามีความเห็นก็ตีกลับด้วย sendBackWork ตามทางเดิม
  */
-export function sendToClientWork(pj: string, taskName: string, round: number, stamp: string) {
+export async function sendToClientWork(pj: string, taskName: string, round: number, stamp: string) {
+  if (live) {
+    const hit = await pmTask(pj, taskName);
+    if (!hit) return;
+    await sbPatchTask(hit.pj, hit.i, { status: "wait", back: null });
+    await sbAddAct(hit.pj, {
+      kind: "status",
+      who: "PM",
+      at: stamp,
+      tx: `ส่ง ${taskName} ให้ลูกค้าตรวจ รอบที่ ${round}`,
+    });
+    refreshPm();
+    return;
+  }
   store.update((s) =>
     patchTask(
       s,
@@ -1294,6 +1435,12 @@ export function sendToClientWork(pj: string, taskName: string, round: number, st
 
 /** ลงกิจกรรมของโปรเจคจากนอกสโตร์ — ตอนนี้ใช้กับลูกค้าที่ส่งความเห็นผ่านลิงก์ตรวจงาน */
 export function addProjectAct(pj: string, act: Activity) {
+  if (live) {
+    const p0 = mergedState().projects.find((x) => isRef(x, pj));
+    if (!p0) return;
+    void sbAddAct(p0.pj, act).then(() => refreshPm());
+    return;
+  }
   store.update((s) => ({
     ...s,
     projects: s.projects.map((p) => (isRef(p, pj) ? { ...p, acts: [act, ...p.acts], updated: today() } : p)),

@@ -87,11 +87,12 @@ function Body() {
   /* ต้องมีชื่อโปรเจคกับงานอย่างน้อยหนึ่งงาน ไม่งั้นเปิดไปก็เป็นโปรเจคเปล่า */
   const missing = !project.name.trim() ? "ตั้งชื่อโปรเจคก่อน" : count.tasks === 0 ? "เพิ่มงานอย่างน้อยหนึ่งงานก่อน" : "";
 
-  function openProject() {
+  async function openProject() {
     if (missing || opening) return;
     setOpening(true);
-    /* เฟสของร่างไม่มีวันเริ่ม-จบของตัวเอง ใช้ช่วงของโปรเจคไปก่อน แก้ได้ในหน้าวางแผน */
-    const pj = createOwnProject({
+    /* เฟสของร่างไม่มีวันเริ่ม-จบของตัวเอง ใช้ช่วงของโปรเจคไปก่อน แก้ได้ในหน้าวางแผน
+       ต่อฐานข้อมูลแล้วเลขที่โปรเจคมาจากฐานข้อมูล ต้องรอคำตอบก่อนจึงพาไปหน้าโปรเจคได้ */
+    const pj = await createOwnProject({
       name: project.name.trim(),
       cus: project.cus.trim(),
       scope: project.desc.trim() || project.note.trim(),
@@ -104,7 +105,8 @@ function Body() {
       ),
     });
     resetNewProject();
-    router.push(projectHref(pj));
+    if (pj) router.push(projectHref(pj));
+    else setOpening(false);
   }
 
   return (

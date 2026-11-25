@@ -160,7 +160,9 @@ export async function issueReceiptFlow(invoiceNo: string, date: string, received
 
   /* โปรเจคเกิดตรงนี้ — ผูกกับใบแจ้งหนี้งวดแรกใบนี้ ได้เลขที่โปรเจคของตัวเอง (ผู้ใช้สั่ง 5 ต.ค. 2569) */
   const deal = before.deals.find((d) => d.no === invoice.deal);
-  if (deal) addInboxJob(buildInboxJob(deal, date, invoice.no));
+  /* งานเข้ากล่องของผู้จัดการโครงการ — ต่อฐานข้อมูลแล้วเป็นการเขียนที่ต้องรอคำตอบ
+     แต่ใบเสร็จออกไปแล้ว ถ้าตรงนี้พลาดจึงไม่ถอนใบเสร็จ ให้ขึ้นกล่องช้าหน่อยแทน */
+  if (deal) await addInboxJob(buildInboxJob(deal, date, invoice.no));
   return no;
 }
 

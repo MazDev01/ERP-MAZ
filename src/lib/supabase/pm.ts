@@ -676,3 +676,57 @@ export async function sbConfirmPlan(
   if (drop.error) return { ok: false, reason: why(drop.error.message) };
   return { ok: true };
 }
+
+/** ลบเอกสารของโปรเจค — ชื่อไฟล์เป็นตัวระบุ ตามที่หน้าจอใช้อยู่ */
+export async function sbRemoveDoc(pj: string, name: string): Promise<PmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const id = await projIdOf(pj);
+  if (!id) return { ok: false, reason: "not_found" };
+  const got = await sb.from("project_docs").delete().eq("project_id", id).eq("name", name).select("id");
+  if (got.error) return { ok: false, reason: why(got.error.message) };
+  if (!got.data?.length) return { ok: false, reason: "denied" };
+  return { ok: true };
+}
+
+/** งานใหม่เข้ากล่องของผู้จัดการโครงการ — เกิดตอนบัญชีรับเงินงวดแรก */
+export async function sbAddInbox(job: Omit<InboxJob, "pj">): Promise<PmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const inv = job.bill ? await sb.from("invoices").select("id").eq("no", job.bill).maybeSingle() : { data: null };
+  const deal = job.deal ? await sb.from("deals").select("id, customer_id").eq("no", job.deal).maybeSingle() : { data: null };
+  const got = await sb
+    .from("project_inbox")
+    .insert({
+      invoice_id: (inv.data as { id?: string } | null)?.id ?? null,
+      deal_id: (deal.data as { id?: string } | null)?.id ?? null,
+      customer_id: (deal.data as { customer_id?: string } | null)?.customer_id ?? null,
+      service: job.service,
+      cus: job.cus,
+      quo: job.quo,
+      quo_date: job.quoDate || null,
+      net: job.net,
+      seqs: job.seqs,
+      paid_at: job.paidAt || null,
+      sent_at: job.sentAt || null,
+      scope: job.scope,
+      items: job.items ?? [],
+      due: job.due || null,
+      stage: job.stage,
+      plan_start: job.planStart || null,
+      plan_end: job.planEnd || null,
+      duration_days: job.durationDays,
+      phases: job.phases ?? [],
+      proposal: job.proposal ?? null,
+      contact: job.contact ?? "",
+      phone: job.phone ?? "",
+      tax_id: job.taxId ?? "",
+      address: job.address ?? "",
+      terms: job.terms ?? "",
+      valid_days: job.validDays ?? 0,
+    })
+    .select("pj")
+    .single();
+  if (got.error) return { ok: false, reason: why(got.error.message) };
+  return { ok: true, pj: (got.data as { pj: string }).pj };
+}
