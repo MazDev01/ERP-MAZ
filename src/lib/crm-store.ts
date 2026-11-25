@@ -272,6 +272,18 @@ export function useCrm() {
   return useSyncExternalStore(subscribeAll, snapshot, store.getServer);
 }
 
+/**
+ * ข้อมูลจากฐานข้อมูลมาถึงหรือยัง
+ *
+ * หน้าที่ตั้งค่าเริ่มต้นของฟอร์มจากข้อมูลในสโตร์ "ครั้งเดียวตอนเปิดหน้า" ต้องรอตัวนี้ก่อน
+ * ไม่งั้นรอบแรกยังไม่มีข้อมูล ฟอร์มจะตั้งต้นว่างแล้วไม่กลับมาเติมอีกเลย
+ * (เจอตอนต่อฐานข้อมูล 25 พ.ย. 2569 — ลิงก์ "ออกใบใหม่แทนใบนี้" เปิดมาเป็นฟอร์มเปล่า)
+ */
+export function useCrmReady() {
+  const s = useSyncExternalStore(subscribeAll, snapshot, store.getServer);
+  return !live || (parties !== null && presalesData !== null && docsData !== null && s !== null);
+}
+
 export function resetCrm() {
   store.reset();
   refreshParties();

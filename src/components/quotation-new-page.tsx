@@ -20,7 +20,7 @@ import {
   type Quotation,
 } from "@/lib/crm-data";
 import { NO_WHT_NOTE } from "@/lib/acc-data";
-import { addQuotation, useCrm, type CrmState } from "@/lib/crm-store";
+import { addQuotation, useCrm, useCrmReady, type CrmState } from "@/lib/crm-store";
 import { services, type ServiceKey } from "@/lib/pm-data";
 import { addDays, baht, commaInput, round2, thaiDate, todayIso } from "@/lib/format";
 import { cleanHtml, htmlToText } from "@/lib/rich-text";
@@ -76,9 +76,14 @@ function initialOf(crm: CrmState, mode: Mode, presetCustomer?: string, ps?: stri
 /** acc = ฝั่งบัญชี เลือกได้เฉพาะลูกค้าที่ปิดการขายแล้ว ห้ามมีผู้สนใจปน และลิงก์อยู่ในหน้าของบัญชี */
 export function QuotationNewPage({ acc = false }: { acc?: boolean }) {
   /* รอ hydrate ก่อน — ร่างและใบที่สร้างในเครื่องอยู่ใน localStorage ตอนเรนเดอร์ฝั่งเซิร์ฟเวอร์ยังหาไม่เจอ
-     แล้วโหมด/ค่าตั้งต้นของฟอร์มจะถูกจำเป็นค่าว่างไปตลอด */
+     แล้วโหมด/ค่าตั้งต้นของฟอร์มจะถูกจำเป็นค่าว่างไปตลอด
+
+     ต่อฐานข้อมูลแล้วต้องรอข้อมูลมาถึงด้วย เพราะเหตุผลเดียวกันเป๊ะ
+     ไม่งั้นลิงก์ "ออกใบใหม่แทนใบนี้" จะเปิดมาเป็นฟอร์มเปล่า กดบันทึกก็ไม่ไปไหน
+     (เจอตอนไล่ทดสอบ 25 พ.ย. 2569) */
   const hydrated = useHydrated();
-  return hydrated ? <NewPageBody acc={acc} /> : null;
+  const ready = useCrmReady();
+  return hydrated && ready ? <NewPageBody acc={acc} /> : null;
 }
 
 function NewPageBody({ acc }: { acc: boolean }) {
