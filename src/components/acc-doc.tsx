@@ -380,7 +380,7 @@ function NotFound({ back, backLabel, no, what }: { back: string; backLabel: stri
   );
 }
 
-function BackLink({ href, label }: { href: string; label: string }) {
+export function BackLink({ href, label }: { href: string; label: string }) {
   return (
     /* ปุ่มไอคอนล้วน — ต้องมีทั้งชื่อให้โปรแกรมอ่านหน้าจอและคำอธิบายตอนชี้ ไม่งั้นไม่มีใครเดาออกว่ากดแล้วไปไหน */
     <Link href={href} aria-label={label} title={label} className="mt-0.5 grid size-9 flex-none place-items-center rounded-[10px] border border-border bg-card text-foreground hover:border-primary hover:text-primary">

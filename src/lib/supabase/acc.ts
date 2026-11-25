@@ -98,9 +98,18 @@ type WhtDbRow = {
   name: string;
   tax_id: string;
   kind: string;
+  payee_type: string;
   pay_type: string;
   base: number | string;
   rate: number | string;
+  no: string;
+  addr: string;
+  cond: number | null;
+  cond_note: string;
+  issued: string | null;
+  gpf: number | string;
+  sso: number | string;
+  pvd: number | string;
 };
 
 const n = (v: number | string | null | undefined) => Number(v ?? 0);
@@ -157,7 +166,12 @@ export async function fetchAccBilling(): Promise<AccBilling> {
           " cancel_at, cancel_by, cancel_why, cancel_note",
       )
       .order("no"),
-    sb.from("wht_rows").select("id, on_date, name, tax_id, kind, pay_type, base, rate").order("on_date", { ascending: false }),
+    sb
+      .from("wht_rows")
+      .select(
+        "id, on_date, name, tax_id, kind, payee_type, pay_type, base, rate," +
+          " no, addr, cond, cond_note, issued, gpf, sso, pvd",
+      ).order("on_date", { ascending: false }),
   ]);
 
   const planByDeal: Record<string, Installment[]> = {};
@@ -286,6 +300,15 @@ export async function fetchAccBilling(): Promise<AccBilling> {
     type: r.pay_type,
     base: n(r.base),
     rate: n(r.rate),
+    payeeType: (r.payee_type === "individual" ? "individual" : "juristic") as WhtRow["payeeType"],
+    no: r.no || undefined,
+    addr: r.addr || undefined,
+    cond: (r.cond ?? undefined) as WhtRow["cond"],
+    condNote: r.cond_note || undefined,
+    issued: r.issued ?? undefined,
+    gpf: n(r.gpf) || undefined,
+    sso: n(r.sso) || undefined,
+    pvd: n(r.pvd) || undefined,
   }));
 
   return { deals, invoices, payments: Object.values(sum), receipts, wht, invIdByNo, dealIdByNo };
@@ -538,4 +561,45 @@ export async function sbRemoveWht(id: string): Promise<AccWrite> {
   if (got.error) return { ok: false, reason: why(got.error.message) };
   if (!got.data?.length) return { ok: false, reason: "denied" };
   return { ok: true };
+}
+
+/**
+ * ออกหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)
+ * ยังไม่มีเลข — ฐานข้อมูลออกเลขให้ · มีเลขแล้ว — แก้เนื้อหาได้แต่เลขเดิมคงไว้
+ */
+export async function sbIssueWht(row: WhtRow): Promise<{ ok: boolean; no?: string; reason?: string }> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return { ok: false, reason: "no_backend" };
+
+  let no = row.no ?? "";
+  if (!no) {
+    const got = await sb.rpc("next_wht_no", { p_issued: row.issued ?? null });
+    if (got.error || !got.data) return { ok: false, reason: why(got.error?.message ?? "no_number") };
+    no = got.data as string;
+  }
+
+  const data = {
+    on_date: row.date,
+    name: row.name,
+    tax_id: row.tax,
+    kind: row.kind,
+    payee_type: row.payeeType ?? (row.kind === "3" ? "individual" : "juristic"),
+    pay_type: row.type,
+    base: row.base,
+    rate: row.rate,
+    no,
+    addr: row.addr ?? "",
+    cond: row.cond ?? null,
+    cond_note: row.condNote ?? "",
+    issued: row.issued ?? null,
+    gpf: row.gpf ?? 0,
+    sso: row.sso ?? 0,
+    pvd: row.pvd ?? 0,
+  };
+  const isDbId = /^[0-9a-f-]{36}$/.test(row.id);
+  const res = isDbId
+    ? await sb.from("wht_rows").update(data).eq("id", row.id)
+    : await sb.from("wht_rows").insert({ ...data, created_by: myId() });
+  if (res.error) return { ok: false, reason: why(res.error.message) };
+  return { ok: true, no };
 }

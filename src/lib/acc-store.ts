@@ -32,7 +32,7 @@ import {
   type Refund,
   type WhtRow,
 } from "./acc-data";
-import { bkkNow, bkkStamp, nextDocNo, pad2, round2, toIsoDate } from "./format";
+import { bkkNow, bkkStamp, nextDocNo, pad2, round2, toIsoDate, todayIso } from "./format";
 import { createPersistedStore } from "./persisted-store";
 import { hasBackend } from "./supabase/env";
 import {
@@ -45,6 +45,7 @@ import {
   sbMarkDealsSeen,
   sbRemoveWht,
   sbSavePlan,
+  sbIssueWht,
   sbSaveWht,
   type AccBilling,
 } from "./supabase/acc";
@@ -1161,6 +1162,40 @@ export async function issueReceipt(invoiceNo: string, date: string, received: nu
     };
   });
   return issued;
+}
+
+/**
+ * บันทึกหนังสือรับรอง 50 ทวิ — รายการที่ยังไม่มีเลขได้เลขใหม่และวันที่ออกเป็นวันนี้
+ * รายการที่มีเลขแล้วแก้ข้อมูลได้แต่เลขเดิมคงไว้ · คืนเลขที่ของรายการ
+ *
+ * เลขออกจากฐานข้อมูล ไม่ใช่จากเบราว์เซอร์ สองเครื่องกดพร้อมกันจะได้ไม่ซ้ำกัน
+ */
+export async function issueWht(row: WhtRow): Promise<string> {
+  const issued = row.issued || todayIso();
+  if (live) {
+    const got = await sbIssueWht({ ...row, issued });
+    refreshBilling();
+    return got.ok && got.no ? got.no : "";
+  }
+  let no = row.no ?? "";
+  store.update((s) => {
+    if (!no) {
+      const head = `MAZ-WHT-${Number(issued.slice(0, 4)) + 543}-`;
+      const max = s.wht
+        .map((w) => w.no ?? "")
+        .filter((n) => n.startsWith(head))
+        .reduce((m, n) => Math.max(m, Number(n.slice(head.length)) || 0), 0);
+      no = head + String(max + 1).padStart(4, "0");
+    }
+    const next = { ...row, no, issued };
+    return {
+      ...s,
+      wht: s.wht.some((w) => w.id === row.id)
+        ? s.wht.map((w) => (w.id === row.id ? next : w))
+        : [...s.wht, next],
+    };
+  });
+  return no;
 }
 
 export async function saveWht(row: WhtRow) {

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState } from "react";
 import {
   WHT_KIND,
@@ -121,12 +123,13 @@ export function AccWhtPage() {
                 <th style={{ width: 200 }}>ประเภทเงินได้</th>
                 <th className="r" style={{ width: 130 }}>ยอดก่อนภาษี</th>
                 <th className="r" style={{ width: 120 }}>ภาษีที่หัก</th>
+                <th className="r" style={{ width: 170 }}>หนังสือรับรอง</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-10 text-center text-muted-foreground">
+                  <td colSpan={6} className="py-10 text-center text-muted-foreground">
                     ไม่มีรายการในเดือนนี้
                   </td>
                 </tr>
@@ -150,6 +153,17 @@ export function AccWhtPage() {
                     </td>
                     <td data-label="ยอดก่อนภาษี" className="r num">{baht(r.base)}</td>
                     <td data-label="ภาษีที่หัก" className="r num font-semibold">{baht(whtAmount(r))}</td>
+                    {/* หนังสือรับรอง 50 ทวิ — ออกให้ผู้รับเงินถือไว้ยื่นภาษีของเขา
+                        ยังไม่ออก = ไปหน้าออกใหม่ · ออกแล้ว = เปิดดูเลขเดิม */}
+                    <td data-label="หนังสือรับรอง" className="r" onClick={(e) => e.stopPropagation()}>
+                      <Link
+                        href={`/acc/wht/cert?id=${encodeURIComponent(r.id)}`}
+                        className="lnk num whitespace-nowrap"
+                        title="หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)"
+                      >
+                        {r.no || "ออกหนังสือรับรอง"}
+                      </Link>
+                    </td>
                   </tr>
                 ))
               )}

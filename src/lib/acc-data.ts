@@ -464,6 +464,20 @@ export const WHT_KIND: Record<WhtKind, string> = {
 };
 
 /** รหัสประเภทเงินได้ที่หัก ณ ที่จ่าย — ชุดตั้งต้นด้านล่าง + ที่ผู้ดูแลระบบเพิ่ม (whtTypes()) */
+/*
+ * ประเภทผู้ถูกหักภาษี — เอกสารที่บริษัทใช้มีแค่หนังสือรับรอง 50 ทวิ แยกตามประเภทนี้ (ผู้ใช้สั่ง 16 ต.ค. 2569)
+ * juristic = นิติบุคคล (ภ.ง.ด.53) · individual = บุคคลธรรมดา (ภ.ง.ด.3)
+ */
+export type WhtPayee = "juristic" | "individual";
+
+export const WHT_PAYEE: Record<WhtPayee, string> = {
+  juristic: "นิติบุคคล",
+  individual: "บุคคลธรรมดา",
+};
+
+export const payeeOfKind = (k: WhtKind): WhtPayee => (k === "3" ? "individual" : "juristic");
+export const kindOfPayee = (p: WhtPayee): WhtKind => (p === "individual" ? "3" : "53");
+
 export type WhtType = string;
 
 export const BUILTIN_WHT_TYPES: { key: WhtType; label: string; rate: number }[] = [
@@ -505,10 +519,57 @@ export type WhtRow = {
   name: string;
   tax: string;
   kind: WhtKind;
+  /** ประเภทผู้ถูกหักภาษี — ตรงกับ kind เสมอ (53 = นิติบุคคล · 3 = บุคคลธรรมดา) */
+  payeeType?: WhtPayee;
   type: WhtType;
   base: number;
   rate: number;
+  /** เลขที่หนังสือรับรองที่ออกให้ผู้ให้บริการ — ว่างแปลว่ายังไม่ได้ออก · ฐานข้อมูลออกเลขให้ */
+  no?: string;
+  /* ช่องของแบบ 50 ทวิ — ไม่บังคับ ข้อมูลเก่าไม่มีก็เปิดได้ */
+  /** ที่อยู่ผู้ถูกหักภาษี */
+  addr?: string;
+  /** ผู้จ่ายเงิน — 1 หัก ณ ที่จ่าย (ค่าตั้งต้น) · 2 ออกให้ตลอดไป · 3 ออกให้ครั้งเดียว · 4 อื่น ๆ */
+  cond?: WhtCond;
+  /** ข้อความของเงื่อนไข "อื่น ๆ" */
+  condNote?: string;
+  /** วันที่ออกหนังสือรับรอง (yyyy-mm-dd) — รายการเก่าที่ไม่มีใช้วันที่จ่าย */
+  issued?: string;
+  /** เงินที่จ่ายเข้า กบข./กสจ./กองทุนสงเคราะห์ · ประกันสังคม · กองทุนสำรองเลี้ยงชีพ */
+  gpf?: number;
+  sso?: number;
+  pvd?: number;
 };
+
+export type WhtCond = 1 | 2 | 3 | 4;
+
+export const WHT_COND: Record<WhtCond, string> = {
+  1: "หัก ณ ที่จ่าย",
+  2: "ออกให้ตลอดไป",
+  3: "ออกให้ครั้งเดียว",
+  4: "อื่น ๆ",
+};
+
+/** แถวในตารางประเภทเงินได้ของแบบ 50 ทวิ */
+export type WhtFormRow = "1" | "2" | "3" | "4a" | "4b" | "5" | "6";
+
+/**
+ * ประเภทเงินได้ของระบบ → แถวในแบบ 50 ทวิ
+ * ค่าบริการ ค่าเช่า ค่าโฆษณา ค่าขนส่ง ค่าวิชาชีพ หักตามคำสั่งกรมสรรพากรที่ออกตามมาตรา 3 เตรส = แถว 5
+ * ประเภทที่ผู้ดูแลเพิ่มเองดูจากชื่อ ไม่เข้าข่ายไปแถว 6 อื่น ๆ
+ */
+export function whtFormRow(key: WhtType): WhtFormRow {
+  if (["service", "rent", "ads", "transport", "pro"].includes(key)) return "5";
+  if (key === "other") return "6";
+  const label = whtType(key)?.label ?? "";
+  if (/นายหน้า|ค่าธรรมเนียม/.test(label)) return "2";
+  if (/ลิขสิทธิ์|กู๊ดวิล/.test(label)) return "3";
+  if (/ดอกเบี้ย/.test(label)) return "4a";
+  if (/ปันผล/.test(label)) return "4b";
+  if (/เงินเดือน|ค่าจ้าง(?!ทำ)|โบนัส/.test(label) && !/รับจ้าง/.test(label)) return "1";
+  if (/บริการ|เช่า|โฆษณา|ขนส่ง|จ้างทำของ|รับเหมา|วิชาชีพ/.test(label)) return "5";
+  return "6";
+}
 
 export const ACC_WHT: WhtRow[] = [
   { id: "W1", date: "2026-09-03", name: "บริษัท ทรู คอร์ปอเรชั่น จำกัด (มหาชน)", tax: "0107536000081", kind: "53", type: "service", base: 2500, rate: 3 },
