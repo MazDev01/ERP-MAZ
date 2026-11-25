@@ -10,8 +10,7 @@
  *   ใบสัญญา (ทุกฉบับ) — ใบแจ้งหนี้และใบเสร็จเป็นงานบัญชี ไม่แสดงในหน้านี้ (ผู้ใช้สั่ง 15 ต.ค. 2569)
  * ทุกไฟล์: ดู (หน้าเอกสารในระบบ) · ดาวน์โหลด (?pdf=1 สำหรับเอกสารที่ระบบออก · ลิงก์เปิดลิงก์ · ไฟล์ที่เก็บแค่ชื่อกดไม่ได้)
  *   และ "รายละเอียด" เปิดแผงสรุปยอด/เนื้อหาใต้กริดไฟล์
- *
- * ยังไม่ยกมา: ประวัติแผนติดตามท้ายหน้า (รอกระดานแผนติดตามของฝ่ายขาย)
+ * ท้ายหน้า: ประวัติแผนติดตาม — ผู้สนใจรายนี้อยู่คอลัมน์ไหนมากี่วัน ก่อนจะปิดการขาย
  */
 
 import Link from "next/link";
@@ -38,6 +37,7 @@ import { BanIcon, ChevronLeftIcon, DownloadIcon, EyeIcon } from "./icons";
 import { FOLDER_TONE, FolderArt } from "./folder-art";
 import { BackLink } from "./acc-doc";
 import { CancelDealDialog } from "./cancel-deal-dialog";
+import { FollowupTrail } from "./followup-trail";
 import { ProposalDialog, isCanva } from "./proposal-doc";
 import { fileSize } from "./file-drop";
 import { ContractAction, ContractHint, WorkProgress, contractHref, dealsHref } from "./deals-page";
@@ -132,6 +132,12 @@ export function DealDetailPage({ no, ceo = false }: { no: string; ceo?: boolean 
       <Suspense>
         <DealFolders deal={deal} cus={name} ceo={ceo} />
       </Suspense>
+
+      <section className="panel glass px-4 py-4 md:px-5">
+        <div className="max-w-[720px]">
+          <FollowupTrail customerCode={deal.customerCode} until={deal.closedAt} />
+        </div>
+      </section>
 
       {cancelling && (
         <CancelDealDialog

@@ -45,6 +45,7 @@ type CustomerRow = {
   status: string;
   closed_reason: string;
   owner: string;
+  created_at: string;
 };
 
 type ActivityRow = {
@@ -70,7 +71,7 @@ type ChangeRow = {
 
 const CUSTOMER_COLS =
   "id, code, lead_code, name, legal_name, contact, phone, email, address, legal_address," +
-  " branch, tax_id, source, buyer_type, status, closed_reason, owner";
+  " branch, tax_id, source, buyer_type, status, closed_reason, owner, created_at";
 
 /** yyyy-mm-dd ตามเวลาไทยของเวลาที่ฐานข้อมูลคืนมา */
 function thaiDay(at: string) {
@@ -97,6 +98,7 @@ function toCustomer(r: CustomerRow): Customer {
     leadCode: r.lead_code ?? undefined,
     closedReason: r.closed_reason,
     owner: r.owner,
+    createdAt: r.created_at ? thaiDay(r.created_at) : undefined,
   };
 }
 

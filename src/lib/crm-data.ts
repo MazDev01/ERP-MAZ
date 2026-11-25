@@ -57,6 +57,8 @@ export type Customer = {
   /** เหตุผลที่ปิดเสนอ — ว่างถ้ายังไม่ปิด */
   closedReason: string;
   owner: string;
+  /** วันที่เข้าระบบ "yyyy-mm-dd" — ข้อมูลตั้งต้นในเครื่องไม่มี ใช้วันติดต่อครั้งแรกแทน */
+  createdAt?: string;
 };
 
 export type Activity = {

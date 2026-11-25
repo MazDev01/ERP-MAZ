@@ -12,9 +12,12 @@ import {
   CUSTOMER_STATUS,
 } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
+import { useProfile } from "@/lib/profile-data";
+import { useRole } from "@/lib/role";
 import { daysBetween, thaiDate, todayIso } from "@/lib/format";
 import { ClockIcon, PhoneIcon, PlusIcon } from "./icons";
 import { LeadNewDialog } from "./lead-form";
+import { LeadsFollowup } from "./leads-followup";
 import { ChangeFromTo, Pager, SearchBox, TabStrip, Who, usePaged } from "./sales-ui";
 
 const PER_PAGE = 7;
@@ -35,6 +38,14 @@ export function LeadsPage() {
   const [query, setQuery] = useState("");
   const [staleOnly, setStaleOnly] = useState(false);
   const [adding, setAdding] = useState(false);
+  /*
+   * มุมมอง "แผนติดตาม" เป็นกระดานส่วนตัวของพนักงานขาย (ผู้ใช้สั่ง 14 ต.ค. 2569)
+   * เป็นโหมดแสดงผลของหน้าเดียวกัน ไม่ใช่เมนูนำทาง · บทบาทอื่นไม่เห็นปุ่มนี้
+   */
+  const isSales = useRole() === "sales";
+  const [viewPick, setView] = useState<"list" | "followup">("list");
+  const view = viewPick === "followup" && !isSales ? "list" : viewPick;
+  const profile = useProfile();
   const router = useRouter();
   const today = todayIso();
 
@@ -78,6 +89,8 @@ export function LeadsPage() {
   }, [crm.changeLogs, crm.customers, query]);
 
   const rows = tab === "all" || tab === "log" ? scoped : scoped.filter((c) => c.status === tab);
+  /* การ์ดบนกระดาน — รายที่ปิดงานกลายเป็นดีลแล้ว ไม่ต้องติดตามต่อ */
+  const open = useMemo(() => scoped.filter((c) => c.status !== "ปิดงาน"), [scoped]);
   const paged = usePaged<Customer | LogRow>(tab === "log" ? logs : rows, PER_PAGE);
 
   const counts: Record<string, number> = {
@@ -103,9 +116,29 @@ export function LeadsPage() {
       <div className="bar">
         <div>
           <h1>ผู้สนใจ</h1>
-          <p>พบ {tab === "log" ? logs.length : rows.length} รายการ</p>
+          <p>พบ {view === "followup" ? open.length : tab === "log" ? logs.length : rows.length} รายการ</p>
         </div>
         <div className="tools w-full flex-wrap sm:w-auto">
+          {isSales && (
+            <div className="seg glass-thin shrink-0" role="group" aria-label="มุมมอง">
+              <button
+                type="button"
+                className={view === "list" ? "on" : ""}
+                aria-pressed={view === "list"}
+                onClick={() => setView("list")}
+              >
+                รายการ
+              </button>
+              <button
+                type="button"
+                className={view === "followup" ? "on" : ""}
+                aria-pressed={view === "followup"}
+                onClick={() => setView("followup")}
+              >
+                แผนติดตาม
+              </button>
+            </div>
+          )}
           <SearchBox
             value={query}
             onChange={(v) => {
@@ -125,6 +158,23 @@ export function LeadsPage() {
         </div>
       </div>
 
+      {view === "followup" ? (
+        <>
+          {/* กระดานใช้ตัวค้นหาและตัวกรองชุดเดียวกับรายการ แต่ไม่มีแท็บสถานะ เพราะคอลัมน์แทนแท็บแล้ว */}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setStaleOnly((v) => !v)}
+              aria-pressed={staleOnly}
+              className={`btn ${staleOnly ? "bg-accent font-semibold text-primary" : "glass-thin"}`}
+            >
+              <ClockIcon className="size-[13px]" strokeWidth={2} />
+              ค้างติดตาม
+            </button>
+          </div>
+          <LeadsFollowup crm={crm} rows={open} today={today} user={profile.employeeId} by={profile.name} />
+        </>
+      ) : (
       <section className="panel glass flex flex-col">
         <div className="strip">
           <TabStrip
@@ -172,6 +222,7 @@ export function LeadsPage() {
           )}
         </div>
       </section>
+      )}
     </div>
   );
 }
