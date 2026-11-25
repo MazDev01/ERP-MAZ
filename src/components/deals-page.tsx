@@ -21,12 +21,76 @@ import { usePm } from "@/lib/pm-store";
 import { baht, initials, thaiDate, todayIso } from "@/lib/format";
 import { USERS } from "@/lib/mock-data";
 import { useRole } from "@/lib/role";
+import { contractsOf, useContracts } from "@/lib/contract-store";
 import { BanIcon, CalendarIcon, FileIcon, PaperclipIcon } from "./icons";
 import { CancelDealDialog } from "./cancel-deal-dialog";
 import { Sheet } from "./lead-dialogs";
 import { Pager, SearchBox, TabStrip, Who, usePaged } from "./sales-ui";
 import { ThaiDatePicker } from "./thai-date-picker";
 import "@/styles/mobile/deals.css";
+
+/* ที่อยู่หน้าต่าง ๆ ของดีล แยกตามฝั่งที่เปิด — CEO อยู่ใต้ /ceo (ผู้ใช้สั่ง 14-15 ต.ค. 2569) */
+export const dealsHref = (ceo: boolean) => (ceo ? "/ceo/deals" : "/deals");
+export const dealHref = (no: string, ceo: boolean) =>
+  ceo ? `/ceo/sales/deals/${encodeURIComponent(no)}` : `/deals/${encodeURIComponent(no)}`;
+export const contractHref = (no: string, ceo: boolean) =>
+  ceo ? `/ceo/sales/contracts/${encodeURIComponent(no)}` : `/deals/${encodeURIComponent(no)}/contract`;
+
+/**
+ * ปุ่มใบสัญญาบนหัวหน้ารายละเอียดดีล
+ * มีสัญญาแล้ว → ดูใบสัญญา (ทุกคนที่เปิดหน้านี้ได้) · ยังไม่มี → ออกใบสัญญา เฉพาะฝ่ายขาย
+ * ลูกค้ายังไม่ชำระงวดแรก → ปุ่มกดไม่ได้ พร้อมบอกเหตุผล
+ */
+export function ContractAction({ deal: d, ceo }: { deal: Deal; ceo: boolean }) {
+  const all = useContracts();
+  const acc = useAcc();
+  const role = useRole();
+  const has = contractsOf(all, d.no).length > 0;
+  const cls = "btn glass-thin btn-mini whitespace-nowrap";
+  if (has) {
+    return (
+      <Link href={contractHref(d.no, ceo)} className={cls}>
+        <FileIcon className="size-3.5" strokeWidth={2} />
+        ดูใบสัญญา
+      </Link>
+    );
+  }
+  if (ceo || role !== "sales" || d.status !== "ปิดการขาย") return null;
+  if (!dealPaid(acc, d.no)) {
+    return (
+      <button
+        type="button"
+        className={cls}
+        disabled
+        title="ยังไม่ได้รับเงินงวดแรก"
+        aria-label="ออกใบสัญญา — ยังไม่ได้รับเงินงวดแรก"
+      >
+        <FileIcon className="size-3.5" strokeWidth={2} />
+        ออกใบสัญญา
+      </button>
+    );
+  }
+  return (
+    <Link href={contractHref(d.no, ceo)} className={cls}>
+      <FileIcon className="size-3.5" strokeWidth={2} />
+      ออกใบสัญญา
+    </Link>
+  );
+}
+
+/** บอกฝ่ายขายว่าทำไมยังออกใบสัญญาไม่ได้ — ลูกค้ายังไม่ชำระงวดแรก (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+export function ContractHint({ deal: d, ceo }: { deal: Deal; ceo: boolean }) {
+  const all = useContracts();
+  const acc = useAcc();
+  const role = useRole();
+  if (ceo || role !== "sales" || d.status !== "ปิดการขาย" || dealPaid(acc, d.no)) return null;
+  if (contractsOf(all, d.no).length) return null;
+  return (
+    <p className="text-[12.5px] text-[var(--warning)]">
+      ยังไม่ได้รับเงินงวดแรก — ออกใบสัญญาได้หลังลูกค้าชำระงวดแรก
+    </p>
+  );
+}
 
 const PER_PAGE = 7;
 
@@ -120,6 +184,7 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
           open={open}
           canOpen={canOpen}
           canCancel={canCancel}
+          ceo={ceo}
           quoHref={quoHref}
           onToggle={(no) => setOpen((o) => ({ ...o, [no]: !o[no] }))}
           onAttach={setAttaching}
@@ -161,7 +226,19 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
                         onClick={() => canOpen(d) && setOpen((o) => ({ ...o, [d.no]: !o[d.no] }))}
                       >
                         <td data-label="เลขที่ดีล" className="num muted whitespace-nowrap">
-                          {d.no}
+                          {/* กดเลขที่ดีล = เปิดหน้ารายละเอียดดีล (แฟ้มเอกสารทั้งหมดของดีลอยู่ที่นั่น)
+                              ฝั่ง CEO ยังไม่มีหน้านี้ จึงเป็นข้อความเฉย ๆ — ห้ามลิงก์ข้ามไปหน้าของฝ่ายอื่น */}
+                          {ceo ? (
+                            d.no
+                          ) : (
+                            <Link
+                              href={dealHref(d.no, false)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-primary hover:underline"
+                            >
+                              {d.no}
+                            </Link>
+                          )}
                           {cons.length > 0 && (
                             <span className="mt-[3px] block text-[11.5px] text-muted-foreground">
                               มีสัญญา {cons.length} ฉบับ
@@ -296,7 +373,7 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
  * คิดสดจากสโตร์ของบัญชีกับ PM ผ่าน lib/flow.ts ไม่เก็บสถานะซ้ำ
  * เป็นข้อความอย่างเดียว ไม่ทำเป็นลิงก์ เพราะหน้าปลายทางเป็นหน้าของฝ่ายอื่น
  */
-function WorkProgress({ deal, className = "" }: { deal: Deal; className?: string }) {
+export function WorkProgress({ deal, className = "" }: { deal: Deal; className?: string }) {
   const acc = useAcc();
   const pm = usePm();
   /* ดีลที่ยังไม่ปิดการขายยังไม่มีงานให้ติดตาม — เหตุผลอยู่ในรายละเอียดที่กางอยู่แล้ว */
@@ -324,6 +401,7 @@ function DealCards({
   open,
   canOpen,
   canCancel,
+  ceo,
   quoHref,
   onToggle,
   onAttach,
@@ -334,6 +412,7 @@ function DealCards({
   open: Record<string, boolean>;
   canOpen: (d: Deal) => boolean;
   canCancel: (d: Deal) => boolean;
+  ceo: boolean;
   quoHref: (no: string) => string;
   onToggle: (no: string) => void;
   onAttach: (no: string) => void;
@@ -371,7 +450,13 @@ function DealCards({
             <b className="dl-cus">{name}</b>
             <span className="dl-amt num">{baht(d.total)} ฿</span>
             <span className="dl-no num">
-              {d.no}
+              {ceo ? (
+                d.no
+              ) : (
+                <Link href={dealHref(d.no, false)} onClick={(e) => e.stopPropagation()}>
+                  {d.no}
+                </Link>
+              )}
               {cons.length > 0 && <span className="dl-has">มีสัญญา {cons.length} ฉบับ</span>}
             </span>
             <span className={`dl-st tag ${DEAL_STATUS[d.status]}`}>
