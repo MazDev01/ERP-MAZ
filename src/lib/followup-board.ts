@@ -4,12 +4,25 @@
  * กระดาน "แผนติดตาม" ของพนักงานขาย (ผู้ใช้สั่ง 14 ต.ค. 2569)
  * คอลัมน์อิสระที่พนักงานตั้งเอง ไม่ผูกกับขั้นการขาย ไม่เปิดงานจริง ไม่นับในรายงาน
  * เก็บแยกตามรหัสพนักงานที่ล็อกอิน · ตำแหน่งการ์ดและประวัติการย้ายเก็บตามรหัสผู้สนใจ
- * TODO: ย้ายไปตารางของพนักงานเมื่อต่อ backend
+ *
+ * ต่อฐานข้อมูลแล้ว (รอบที่ 108) — คอลัมน์ ตำแหน่งการ์ด และประวัติอยู่ในตารางของพนักงาน
+ * เปลี่ยนเครื่องแล้วกระดานตามไปด้วย · นโยบายปล่อยให้เห็นเฉพาะกระดานของตัวเอง
+ * ยังไม่ได้ต่อฐานข้อมูล (dev ที่ไม่มีคีย์) ถอยไปเก็บในเบราว์เซอร์เหมือนเดิม
  */
 
 import { useSyncExternalStore } from "react";
 import { bkkOf, bkkStamp, daysBetween, pad2, toIsoDate } from "./format";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+import {
+  fetchBoard,
+  sbAddCol,
+  sbDropCol,
+  sbMarkSeen,
+  sbMoveCard,
+  sbOrderCols,
+  sbUpdateCol,
+} from "./supabase/followup";
 
 /** คอลัมน์ตั้งต้น — ลบไม่ได้ การ์ดที่ยังไม่ได้วางอยู่ที่นี่ (ผู้ใช้สั่ง 14 ต.ค. 2569) */
 export const UNSORTED = "unsorted";
@@ -62,14 +75,94 @@ const store = createPersistedStore<AllBoards>("maz-erp.followup-board.v1", {}, i
 });
 
 const SERVER: AllBoards = {};
+const serverSnapshot = () => SERVER;
+
+/* ─── ชั้นต่อฐานข้อมูล ──────────────────────────────────────────────
+   กระดานที่อ่านมาเป็นของคนที่ล็อกอินเสมอ (นโยบายปล่อยให้เห็นแค่ของตัวเอง)
+   จึงเก็บเป็นก้อนเดียว ไม่ต้องแยกตามรหัสพนักงานเหมือนตอนเก็บในเบราว์เซอร์ */
+const live = hasBackend;
+const ONE_KEY = "me";
+let mine: UserBoard | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function load() {
+  if (!live || loading || mine !== null) return;
+  loading = true;
+  void fetchBoard()
+    .then((got) => {
+      mine = got;
+    })
+    .catch(() => {
+      mine = EMPTY;
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+function refresh() {
+  if (!live) return;
+  mine = null;
+  loading = false;
+  load();
+  tell();
+}
+
+/** กระดานชุดที่ใช้ตอนนี้ — ฐานข้อมูลถ้าต่อแล้ว ไม่งั้นของในเบราว์เซอร์ */
+function boardOf(user: string): UserBoard {
+  if (!live) return store.get()[user] ?? EMPTY;
+  load();
+  return mine ?? EMPTY;
+}
+
+function subscribeAll(onChange: () => void) {
+  const off = store.subscribe(onChange);
+  watchers.add(onChange);
+  return () => {
+    off();
+    watchers.delete(onChange);
+  };
+}
+
+const EMPTY_ALL: AllBoards = {};
+/* ก้อนที่ส่งให้ useSyncExternalStore ต้องเป็นวัตถุเดิมถ้าข้อมูลไม่เปลี่ยน
+   ไม่งั้น React จะเห็นว่าเปลี่ยนทุกครั้งที่เรนเดอร์ — และต้องเปลี่ยนเมื่อกระดานใหม่มาถึง
+   ไม่งั้นหน้าที่ไม่มีอะไรมากระตุ้นจะค้างอยู่กับกระดานเปล่า */
+let snapOf: UserBoard | null = null;
+let snapAll: AllBoards = EMPTY_ALL;
+
+function allSnapshot(): AllBoards {
+  if (!live) return store.get();
+  load();
+  if (!mine) return EMPTY_ALL;
+  if (snapOf !== mine) {
+    snapOf = mine;
+    snapAll = { [ONE_KEY]: mine };
+  }
+  return snapAll;
+}
+
+/* การ์ดที่จดวันแล้วในรอบนี้ — กันวนอ่านซ้ำเมื่อหา id ของผู้สนใจไม่เจอ */
+const markTried = new Set<string>();
 
 export function useBoard(user: string): UserBoard {
-  const all = useSyncExternalStore(store.subscribe, store.get, () => SERVER);
-  return all[user] ?? EMPTY;
+  const all = useSyncExternalStore(subscribeAll, allSnapshot, serverSnapshot);
+  return (live ? all[ONE_KEY] : all[user]) ?? EMPTY;
 }
 
 function edit(user: string, fn: (u: UserBoard) => UserBoard) {
   store.update((all) => ({ ...all, [user]: fn(all[user] ?? EMPTY) }));
+}
+
+/** รอให้ฐานข้อมูลตอบแล้วอ่านกระดานใหม่ — หน้าจอไม่รอผลลัพธ์ จึงปล่อยให้วิ่งเอง */
+function after(job: Promise<unknown>) {
+  void job.then(refresh, refresh);
 }
 
 const newId = () => `fc${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
@@ -84,14 +177,32 @@ export function colOf(u: UserBoard, code: string): string {
 }
 
 export function addCol(user: string, c: Omit<FCol, "id">) {
+  if (live) {
+    after(sbAddCol(c, boardOf(user).cols.length));
+    return;
+  }
   edit(user, (u) => ({ ...u, cols: [...u.cols, { ...c, id: newId() }] }));
 }
 
 export function updateCol(user: string, id: string, patch: Partial<Omit<FCol, "id">>) {
+  if (live) {
+    after(sbUpdateCol(id, patch));
+    return;
+  }
   edit(user, (u) => ({ ...u, cols: u.cols.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
 }
 
 export function shiftCol(user: string, id: string, dir: -1 | 1) {
+  if (live) {
+    const cols = boardOf(user).cols;
+    const i = cols.findIndex((c) => c.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= cols.length) return;
+    const ids = cols.map((c) => c.id);
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    after(sbOrderCols(ids));
+    return;
+  }
   edit(user, (u) => {
     const i = u.cols.findIndex((c) => c.id === id);
     const j = i + dir;
@@ -104,6 +215,10 @@ export function shiftCol(user: string, id: string, dir: -1 | 1) {
 
 /** ลบคอลัมน์ — การ์ดในคอลัมน์กลับไปยังไม่จัด และบันทึกเป็นการย้ายหนึ่งครั้ง (ผู้ใช้สั่ง 14 ต.ค. 2569) */
 export function removeCol(user: string, id: string, by: string) {
+  if (live) {
+    after(sbDropCol(id, by));
+    return;
+  }
   edit(user, (u) => {
     const name = nameOf(u, id);
     const at = bkkStamp();
@@ -120,6 +235,12 @@ export function removeCol(user: string, id: string, by: string) {
 
 /** ย้ายการ์ด — ต่อท้ายประวัติทุกครั้ง (ผู้ใช้สั่ง 14 ต.ค. 2569) */
 export function moveCard(user: string, code: string, to: string, by: string) {
+  if (live) {
+    const u = boardOf(user);
+    if (colOf(u, code) === to) return;
+    after(sbMoveCard(code, to === UNSORTED ? null : to, by));
+    return;
+  }
   edit(user, (u) => {
     const from = colOf(u, code);
     if (from === to) return u;
@@ -133,7 +254,14 @@ export function moveCard(user: string, code: string, to: string, by: string) {
 
 /** จดวันที่การ์ดโผล่ครั้งแรก — แตะสโตร์เฉพาะเมื่อมีการ์ดใหม่ กันวนเรนเดอร์ */
 export function markSeen(user: string, codes: string[]) {
-  const u = store.get()[user] ?? EMPTY;
+  const u = boardOf(user);
+  if (live) {
+    const fresh = codes.filter((c) => !u.seen[c] && !u.history[c]?.length && !markTried.has(c));
+    if (!fresh.length) return;
+    for (const c of fresh) markTried.add(c);
+    after(sbMarkSeen(fresh));
+    return;
+  }
   const fresh = codes.filter((c) => !u.seen[c] && !u.history[c]?.length);
   if (!fresh.length) return;
   const at = bkkStamp();
@@ -164,9 +292,9 @@ export function enteredAt(u: UserBoard, code: string, entry = ""): string {
   return u.history[code]?.at(-1)?.at ?? (entry || u.seen[code] || "");
 }
 
-/** ทุกกระดานในเครื่องนี้ ใช้รวมประวัติจากพนักงานทุกคน (ผู้ใช้สั่ง 14 ต.ค. 2569) */
+/** ทุกกระดานที่เห็นได้ — ต่อฐานข้อมูลแล้วเห็นได้แค่ของตัวเอง ประวัติที่รวมได้จึงมีก้อนเดียว */
 export function useAllBoards(): Record<string, UserBoard> {
-  return useSyncExternalStore(store.subscribe, store.get, () => SERVER);
+  return useSyncExternalStore(subscribeAll, allSnapshot, serverSnapshot);
 }
 
 export const DELETED_COL = "(คอลัมน์ที่ลบแล้ว)";
