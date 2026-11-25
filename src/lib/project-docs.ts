@@ -1,0 +1,50 @@
+"use client";
+
+/*
+ * ไฟล์ของโปรเจค — สะพานระหว่างไฟล์ที่เก็บไว้ในเครื่องกับถังของระบบ (รอบที่ 111)
+ *
+ * ของเดิมไฟล์อยู่ใน IndexedDB ของเครื่องที่แนบ ทีมบนเครื่องอื่นเห็นชื่อไฟล์แต่เปิดไม่ได้
+ * ตอนนี้ตอนแนบจะส่งขึ้นถัง "docs" ด้วย แล้วเก็บที่อยู่ไฟล์ไว้ในแถวของเอกสาร
+ *
+ * เปิดไฟล์: มีที่อยู่ในถัง → ขอลิงก์ชั่วคราวแล้วเปิด · ไม่มี → เปิดจากไฟล์ในเครื่องเหมือนเดิม
+ * (แถวเก่าที่แนบไว้ก่อนรอบที่ 111 มีแต่ไฟล์ในเครื่อง)
+ */
+
+import { getFile } from "./file-store";
+import type { ProjectDoc } from "./pm-data";
+import { openStoredFile } from "./file-store";
+import { fileUrl } from "./supabase/files";
+import { sbUploadProjectFile } from "./supabase/pm";
+import { hasBackend } from "./supabase/env";
+
+/**
+ * ส่งไฟล์ที่เก็บไว้ในเครื่องขึ้นถังของระบบ — คืนที่อยู่ไฟล์ หรือ undefined ถ้าส่งไม่ได้
+ * ส่งไม่ได้ไม่ใช่เรื่องคอขวด แถวเอกสารยังถูกบันทึกพร้อมไฟล์ในเครื่องเหมือนเดิม
+ */
+export async function uploadProjectFile(pj: string, fileId: string): Promise<string | undefined> {
+  if (!hasBackend) return undefined;
+  const saved = await getFile(fileId);
+  if (!saved?.blob) return undefined;
+  /* ที่เก็บในเครื่องเก็บเป็น Blob — ประกอบกลับเป็นไฟล์พร้อมชื่อและชนิดเดิมก่อนส่งขึ้นถัง */
+  const file = new File([saved.blob], saved.name, { type: saved.type || saved.blob.type });
+  return uploadProjectFileBlob(pj, file);
+}
+
+/** ส่งไฟล์ที่มีอยู่ในมือแล้วขึ้นถัง — ใช้กับไฟล์ของร่างโปรเจคใหม่ที่เก็บ Blob ไว้เอง */
+export async function uploadProjectFileBlob(pj: string, file: File): Promise<string | undefined> {
+  if (!hasBackend) return undefined;
+  return (await sbUploadProjectFile(pj, file)) ?? undefined;
+}
+
+/** เปิดไฟล์ของเอกสารโปรเจค — คืนข้อความบอกเหตุถ้าเปิดไม่ได้ */
+export async function openProjectDoc(d: ProjectDoc): Promise<string | null> {
+  if (d.path) {
+    const url = await fileUrl(d.path);
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return null;
+    }
+  }
+  if (d.fileId) return openStoredFile(d.fileId);
+  return "ไฟล์นี้ยังไม่ได้อัปโหลดจริง";
+}

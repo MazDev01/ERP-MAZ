@@ -10,13 +10,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createOwnProject } from "@/lib/pm-store";
-import { projectHref } from "@/lib/pm-data";
+import { addProjectDocs, createOwnProject } from "@/lib/pm-store";
+import { projectHref, type ProjectDoc } from "@/lib/pm-data";
 import { useProfile } from "@/lib/profile-data";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { useHydrated } from "@/lib/pwa";
-import { thaiDate } from "@/lib/format";
+import { bkkStamp, thaiDate } from "@/lib/format";
+import { uploadProjectFileBlob } from "@/lib/project-docs";
 import {
   addFiles,
   extOf,
@@ -104,6 +105,9 @@ function Body() {
         ph.tasks.map((t) => ({ name: t.name.trim() || "งาน", phase: i, due: t.due || project.due, done: t.done })),
       ),
     });
+    /* ไฟล์กับรูปที่แนบไว้ในร่าง — ส่งขึ้นถังของระบบแล้วผูกกับโปรเจคที่เพิ่งเปิด (รอบที่ 111)
+       ของเดิมไฟล์ค้างอยู่ใน IndexedDB ของเครื่องนี้ ทีมบนเครื่องอื่นไม่เคยได้เห็น */
+    if (pj) await handOverFiles(pj, me.name);
     resetNewProject();
     if (pj) router.push(projectHref(pj));
     else setOpening(false);
@@ -684,4 +688,23 @@ export function NewProjectButton() {
       <span className="lbl">โปรเจคใหม่</span>
     </Link>
   );
+}
+
+/**
+ * ย้ายไฟล์ของร่างไปเป็นเอกสารของโปรเจคจริง
+ * อัปโหลดไม่ผ่านก็ยังบันทึกชื่อไฟล์ไว้ให้ทีมเห็น (เหมือนไฟล์แนบอื่นในระบบ)
+ * ไฟล์ในเครื่องลบทิ้งหลังย้ายเสร็จ จะได้ไม่ค้างไว้ให้ร่างใบถัดไป
+ */
+async function handOverFiles(pj: string, by: string) {
+  const { files } = await listFiles();
+  if (!files.length) return;
+  const at = bkkStamp();
+  const docs: ProjectDoc[] = [];
+  for (const f of files) {
+    const file = new File([f.blob], f.name, { type: f.type || f.blob.type });
+    const path = await uploadProjectFileBlob(pj, file);
+    docs.push({ n: f.name, sz: fileSize(f.size), by, at, path });
+  }
+  addProjectDocs(pj, docs);
+  for (const f of files) await removeFile(f.id);
 }

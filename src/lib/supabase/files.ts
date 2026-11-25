@@ -17,7 +17,8 @@ import { loadPeople, myId } from "./people";
  * ผู้อนุมัติจึงเห็นชื่อไฟล์แต่เปิดดูไม่ได้
  */
 
-export type OwnerKind = "leave" | "ot" | "expense" | "employee" | "payroll";
+/* project = ไฟล์และรูปของโปรเจคฝ่ายโครงการ (เพิ่มรอบที่ 111) */
+export type OwnerKind = "leave" | "ot" | "expense" | "employee" | "payroll" | "project";
 
 export type Attachment = {
   id: string;
@@ -136,12 +137,19 @@ export async function fileUrl(path: string): Promise<string> {
   return data?.signedUrl ?? "";
 }
 
-/** เอาไฟล์ออก — เจ้าของไฟล์หรือฝ่ายบุคคลเท่านั้น (RLS) */
+/**
+ * เอาไฟล์ออก — เจ้าของไฟล์หรือฝ่ายบุคคลเท่านั้น (RLS)
+ *
+ * ลบไฟล์ในถังก่อน แล้วค่อยลบแถว — ห้ามสลับลำดับ
+ * นโยบายลบของถังตรวจว่า "มีแถวที่ชี้มาที่ไฟล์นี้ และคนลบเป็นคนอัปโหลด"
+ * ลบแถวก่อนจึงลบไฟล์ไม่ได้อีกเลย ไบต์ค้างอยู่ในถังตลอดไปโดยไม่มีใครรู้
+ * (เจอตอนทดสอบ 25 พ.ย. 2569 — ไฟล์ที่ "เอาออก" ไปแล้วยังอยู่ในถังทุกใบ)
+ */
 export async function removeAttachment(id: string, path: string): Promise<boolean> {
   const sb = supabase();
   if (!sb) return false;
+  const gone = await sb.storage.from(BUCKET).remove([path]);
+  if (gone.error) return false;
   const { error } = await sb.from("attachments").delete().eq("id", id);
-  if (error) return false;
-  await sb.storage.from(BUCKET).remove([path]);
-  return true;
+  return !error;
 }

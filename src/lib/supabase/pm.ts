@@ -2,6 +2,7 @@
 
 import { signedIn, supabase } from "./client";
 import { myId } from "./people";
+import { uploadAttachment } from "./files";
 import type {
   Activity,
   ChatMessage,
@@ -178,7 +179,7 @@ export async function fetchPm(): Promise<PmData> {
       .order("idx"),
     sb.from("project_chat").select("project_id, who, at, tx, files").order("at"),
     sb.from("project_acts").select("project_id, kind, who, at, tx").order("at", { ascending: false }),
-    sb.from("project_docs").select("project_id, name, size_text, by_name, at, url, file_id").order("at"),
+    sb.from("project_docs").select("project_id, name, size_text, by_name, at, url, file_id, path").order("at"),
     sb.from("project_transfers").select("project_id, at, from_name, to_name, by_name, why").order("at"),
     sb.from("task_talks").select("pj, task_name, who, at, tx, nudge").order("at"),
     sb.from("project_drafts").select("pj, phases, plan, at, by_name"),
@@ -231,7 +232,8 @@ export async function fetchPm(): Promise<PmData> {
 
   const docsByProj: Record<string, ProjectDoc[]> = {};
   for (const r of (dc.data ?? []) as {
-    project_id: string; name: string; size_text: string; by_name: string; at: string; url: string; file_id: string;
+    project_id: string; name: string; size_text: string; by_name: string; at: string; url: string;
+    file_id: string; path: string | null;
   }[]) {
     (docsByProj[r.project_id] ??= []).push({
       n: r.name,
@@ -240,6 +242,7 @@ export async function fetchPm(): Promise<PmData> {
       at: stampOf(r.at),
       url: r.url || undefined,
       fileId: r.file_id || undefined,
+      path: r.path || undefined,
     });
   }
 
@@ -524,6 +527,7 @@ export async function sbAddDocs(pj: string, docs: ProjectDoc[]): Promise<PmWrite
       by_name: d.by,
       url: d.url ?? "",
       file_id: d.fileId ?? "",
+      path: d.path ?? null,
     })),
   );
   if (got.error) return { ok: false, reason: why(got.error.message) };
@@ -593,6 +597,9 @@ export async function sbCreateProject(input: {
     .single();
   if (made.error) return { ok: false, reason: why(made.error.message) };
   const id = (made.data as { id: string }).id;
+  /* โปรเจคที่ตั้งเองส่ง pj ว่างมา เลขที่ออกจากฐานข้อมูล — ต้องอ่านเลขจริงกลับไปใช้
+     ไม่งั้นหน้าจอได้เลขว่าง แล้วไม่พาไปหน้าโปรเจคที่เพิ่งเปิด (เจอตอนทดสอบ 25 พ.ย. 2569) */
+  const pj = (made.data as { pj?: string }).pj || p.pj;
 
   if (input.tasks.length) {
     const add = await sb.from("project_tasks").insert(
@@ -616,7 +623,7 @@ export async function sbCreateProject(input: {
     if (add.error) return { ok: false, reason: why(add.error.message) };
   }
 
-  if (p.docs?.length) await sbAddDocs(p.pj, p.docs);
+  if (p.docs?.length) await sbAddDocs(pj, p.docs);
   await sb.from("project_acts").insert({
     project_id: id,
     kind: input.firstAct.kind,
@@ -625,9 +632,9 @@ export async function sbCreateProject(input: {
   });
 
   /* ยืนยันแล้วงานออกจากกล่อง และร่างหมดหน้าที่ */
-  await sb.from("project_inbox").delete().eq("pj", p.pj);
-  await sb.from("project_drafts").delete().eq("pj", p.pj);
-  return { ok: true, pj: p.pj };
+  await sb.from("project_inbox").delete().eq("pj", pj);
+  await sb.from("project_drafts").delete().eq("pj", pj);
+  return { ok: true, pj };
 }
 
 /**
@@ -729,4 +736,19 @@ export async function sbAddInbox(job: Omit<InboxJob, "pj">): Promise<PmWrite> {
     .single();
   if (got.error) return { ok: false, reason: why(got.error.message) };
   return { ok: true, pj: (got.data as { pj: string }).pj };
+}
+
+/**
+ * อัปโหลดไฟล์ของโปรเจคขึ้นถังของระบบ (รอบที่ 111) — คืนที่อยู่ไฟล์ในถัง
+ *
+ * ของเดิมเก็บไบต์ไว้ใน IndexedDB ของเครื่องที่แนบ ทีมบนเครื่องอื่นเห็นชื่อไฟล์
+ * แต่เปิดไม่ได้ · ใช้ถังและตารางไฟล์แนบชุดเดียวกับใบรับรองแพทย์
+ */
+export async function sbUploadProjectFile(pj: string, file: File): Promise<string | null> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return null;
+  const id = await projIdOf(pj);
+  if (!id) return null;
+  const got = await uploadAttachment("project", id, file);
+  return got.ok ? got.attachment.path : null;
 }

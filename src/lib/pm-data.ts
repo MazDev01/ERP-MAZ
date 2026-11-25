@@ -577,6 +577,8 @@ export type ProjectDoc = {
   url?: string;
   /** รหัสไฟล์จริงที่เก็บไว้ในเครื่อง (file-store.ts) — เปิดไฟล์กลับมาดูได้ */
   fileId?: string;
+  /** ที่อยู่ไฟล์ในถังของระบบ (รอบที่ 111) — มีค่า = ทีมบนเครื่องอื่นเปิดดูได้ด้วย */
+  path?: string;
 };
 
 export type ProjectTransfer = {

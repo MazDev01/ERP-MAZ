@@ -20,7 +20,7 @@ import { latestRound, roundStatus, useClientReviews } from "@/lib/client-review-
 import { ClientFeedbackSheet, ClientRoundChip, ClientSendSheet } from "./client-review-pm";
 import { ProjectChat } from "./project-chat";
 import { AddDocButton, AddDocsDialog, docSub, RemoveDocDialog } from "./pm-project-tools";
-import { openStoredFile } from "@/lib/file-store";
+import { openProjectDoc } from "@/lib/project-docs";
 import { useHydrated } from "@/lib/pwa";
 import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
@@ -533,12 +533,12 @@ function SalesDocs({ project }: { project: Project }) {
               <a href={d.url} target="_blank" rel="noreferrer" className="btn glass-thin h-7 px-2.5 text-[11.5px] max-sm:h-9 max-sm:px-3">
                 เปิด
               </a>
-            ) : d.fileId ? (
-              /* ไฟล์ที่แนบเก็บไบต์ไว้ในเครื่องตั้งแต่ตอนแนบ (file-store) จึงเปิดดูได้จริง */
+            ) : d.path || d.fileId ? (
+              /* เปิดจากถังของระบบก่อน ไม่มีที่อยู่ในถังค่อยเปิดไฟล์ที่เก็บไว้ในเครื่อง */
               <button
                 type="button"
                 className="btn glass-thin h-7 px-2.5 text-[11.5px] max-sm:h-9 max-sm:px-3"
-                onClick={() => void openStoredFile(d.fileId!)}
+                onClick={() => void openProjectDoc(d)}
               >
                 เปิด
               </button>

@@ -14,7 +14,8 @@ import { addProjectDocs, removeProjectDoc, renameProject } from "@/lib/pm-store"
 import { useProfile } from "@/lib/profile-data";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FileDrop, fileSize, type PickedFile } from "./file-drop";
-import { openStoredFile, removeStoredFile } from "@/lib/file-store";
+import { removeStoredFile } from "@/lib/file-store";
+import { openProjectDoc, uploadProjectFile } from "@/lib/project-docs";
 import { CloseIcon, FileIcon, LinkIcon, PencilIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
@@ -113,19 +114,25 @@ export function AddDocButton({ onClick, className = "" }: { onClick: () => void;
 }
 
 /*
- * ยังไม่มีที่เก็บไฟล์จริง — เก็บแค่ชื่อกับขนาดเหมือนไฟล์แนบอื่นในระบบ (ดู file-drop.tsx)
- * ลิงก์ http(s) เก็บ url ไว้เปิดได้จริง
+ * ไฟล์ขึ้นถังของระบบตั้งแต่รอบที่ 111 — ทีมบนเครื่องอื่นเปิดดูได้ด้วย
+ * ลิงก์ http(s) เก็บ url ไว้เปิดได้จริง ไม่ต้องอัปโหลด
+ * อัปโหลดไม่ผ่าน (ไฟล์ใหญ่เกิน หรือชนิดไม่รับ) ยังแนบชื่อไว้ให้ทีมเห็น เหมือนของเดิม
  */
 export function AddDocsDialog({ pj, onClose }: { pj: string; onClose: () => void }) {
   const me = useProfile();
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [busy, setBusy] = useState(false);
-  function save() {
+  const [saving, setSaving] = useState(false);
+  async function save() {
+    setSaving(true);
     const at = bkkStamp();
-    const docs: ProjectDoc[] = files.map((f) => {
+    const docs: ProjectDoc[] = [];
+    for (const f of files) {
       const url = f.url && /^https?:\/\//i.test(f.url) ? f.url : undefined;
-      return { n: f.name, sz: url ? "ลิงก์" : fileSize(f.size), by: me.name, at, url, fileId: f.fileId };
-    });
+      /* ไฟล์จริงที่เก็บไว้ในเครื่องตอนแนบ — ส่งขึ้นถังให้ทีมเปิดได้จากทุกเครื่อง */
+      const path = !url && f.fileId ? await uploadProjectFile(pj, f.fileId) : undefined;
+      docs.push({ n: f.name, sz: url ? "ลิงก์" : fileSize(f.size), by: me.name, at, url, fileId: f.fileId, path });
+    }
     addProjectDocs(pj, docs);
     onClose();
   }
@@ -141,10 +148,10 @@ export function AddDocsDialog({ pj, onClose }: { pj: string; onClose: () => void
           <button
             type="button"
             className="btn solid btn-solid disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={files.length === 0 || busy}
-            onClick={save}
+            disabled={files.length === 0 || busy || saving}
+            onClick={() => void save()}
           >
-            แนบเอกสาร
+            {saving ? "กำลังอัปโหลด…" : "แนบเอกสาร"}
           </button>
         </>
       }
@@ -232,12 +239,12 @@ export function DocChips({
               <a href={d.url} target="_blank" rel="noreferrer" title={docSub(d)} className="btn glass-thin pl-docbtn">
                 {inner}
               </a>
-            ) : d.fileId ? (
-              /* ไฟล์ที่แนบไว้เปิดดูได้จริง — เก็บไบต์ไว้ในเครื่องตั้งแต่ตอนแนบ (file-store) */
+            ) : d.path || d.fileId ? (
+              /* เปิดจากถังของระบบก่อน ไม่มีที่อยู่ในถังค่อยเปิดไฟล์ที่เก็บไว้ในเครื่อง */
               <button
                 type="button"
                 title={`เปิด ${d.n} · ${docSub(d)}`}
-                onClick={() => void openStoredFile(d.fileId!)}
+                onClick={() => void openProjectDoc(d)}
                 className="btn glass-thin pl-docbtn"
               >
                 {inner}
