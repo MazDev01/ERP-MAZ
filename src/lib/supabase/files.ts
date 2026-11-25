@@ -17,8 +17,11 @@ import { loadPeople, myId } from "./people";
  * ผู้อนุมัติจึงเห็นชื่อไฟล์แต่เปิดดูไม่ได้
  */
 
-/* project = ไฟล์และรูปของโปรเจคฝ่ายโครงการ (เพิ่มรอบที่ 111) */
-export type OwnerKind = "leave" | "ot" | "expense" | "employee" | "payroll" | "project";
+/*
+ * project = ไฟล์และรูปของโปรเจคฝ่ายโครงการ (เพิ่มรอบที่ 111)
+ * lead    = ไฟล์ Proposal และเอกสารของผู้สนใจ (เพิ่มรอบที่ 115)
+ */
+export type OwnerKind = "leave" | "ot" | "expense" | "employee" | "payroll" | "project" | "lead";
 
 export type Attachment = {
   id: string;
