@@ -21,7 +21,7 @@ import { usePm } from "@/lib/pm-store";
 import { baht, initials, thaiDate, todayIso } from "@/lib/format";
 import { USERS } from "@/lib/mock-data";
 import { useRole } from "@/lib/role";
-import { BanIcon, CalendarIcon, PaperclipIcon } from "./icons";
+import { BanIcon, CalendarIcon, FileIcon, PaperclipIcon } from "./icons";
 import { CancelDealDialog } from "./cancel-deal-dialog";
 import { Sheet } from "./lead-dialogs";
 import { Pager, SearchBox, TabStrip, Who, usePaged } from "./sales-ui";
@@ -71,6 +71,8 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
 
   /* ยกเลิกได้ที่หน้านี้เฉพาะดีลที่ยังไม่รับเงิน — รับเงินแล้วต้องให้ฝ่ายบัญชียกเลิกที่หน้าวางบิล */
   const canCancel = (d: Deal) => d.status === "ปิดการขาย" && !dealPaid(acc, d.no);
+  /* ใบสัญญาที่ระบบออก — เปิดได้เฉพาะดีลที่ยังเดินอยู่และลูกค้าชำระงวดแรกแล้ว (ด่านเดียวกับหน้าใบสัญญา) */
+  const canContract = (d: Deal) => !ceo && d.status === "ปิดการขาย" && dealPaid(acc, d.no);
   /* กางได้เฉพาะแถวที่มีอะไรให้ดู — ยกเลิก/ไม่ตกลง (เหตุผล) หรือมีสัญญา */
   const canOpen = (d: Deal) => d.status !== "ปิดการขาย" || (d.contracts?.length ?? 0) > 0;
   const quoHref = (no: string) =>
@@ -198,6 +200,16 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
                         <td onClick={(e) => e.stopPropagation()}>
                           <span className="flex justify-end gap-1.5">
                             {/* ตามต้นแบบ deals.html — แนบสัญญาได้ทุกแถว รวมดีลที่ยกเลิกแล้ว (เก็บเป็นหลักฐาน) */}
+                            {canContract(d) && (
+                              <Link
+                                href={`/deals/${encodeURIComponent(d.no)}/contract`}
+                                className="iconbtn glass-thin"
+                                aria-label={`ใบสัญญา ${d.no}`}
+                                title="ใบสัญญา"
+                              >
+                                <FileIcon className="size-3.5" strokeWidth={2} />
+                              </Link>
+                            )}
                             <button
                               type="button"
                               className="iconbtn glass-thin"
