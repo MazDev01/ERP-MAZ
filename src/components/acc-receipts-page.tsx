@@ -408,8 +408,11 @@ function IssueDialog({
             className="btn solid btn-solid disabled:opacity-45"
             disabled={!ok}
             onClick={() => {
-              /* งวดแรกที่ชำระครบ → งานเข้าคิว PM ต่อโดยอัตโนมัติ ทำงานเบื้องหลัง (AC-BR-06) */
-              if (issueReceiptFlow(invoice.no, date, gotNum, whtNum)) onDone();
+              /* งวดแรกที่ชำระครบ → งานเข้าคิว PM ต่อโดยอัตโนมัติ ทำงานเบื้องหลัง (AC-BR-06)
+                 ต่อฐานข้อมูลแล้วต้องรอเลขที่ใบเสร็จก่อน ออกไม่สำเร็จจะได้ไม่ปิดกล่องทิ้ง */
+              void issueReceiptFlow(invoice.no, date, gotNum, whtNum).then((no) => {
+                if (no) onDone();
+              });
             }}
           >
             ออกใบเสร็จ

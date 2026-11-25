@@ -34,6 +34,20 @@ import {
 } from "./acc-data";
 import { bkkNow, bkkStamp, nextDocNo, pad2, round2, toIsoDate } from "./format";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+import {
+  EMPTY_BILLING,
+  fetchAccBilling,
+  sbCancelInvoices,
+  sbIssueInvoice,
+  sbIssueReceipt,
+  sbLogCollection,
+  sbMarkDealsSeen,
+  sbRemoveWht,
+  sbSavePlan,
+  sbSaveWht,
+  type AccBilling,
+} from "./supabase/acc";
 
 export type AccState = {
   deals: AccDeal[];
@@ -117,17 +131,92 @@ function migrateAcc(v: AccState): AccState {
 
 const store = createPersistedStore<AccState>("maz-erp.acc.v9", INITIAL, isAccState, migrateAcc);
 
+/* ─── สายวางบิลจากฐานข้อมูล (รอบที่ 99–100) ─────────────────────────
+ *
+ * ต่อฐานข้อมูลแล้ว ห้ากองนี้อ่านจากฐานข้อมูลแทนเครื่อง
+ * ดีลที่รอวางบิล · ใบแจ้งหนี้ · รับชำระ · ใบเสร็จ · ภาษีหัก ณ ที่จ่าย
+ * ส่วนใบลดหนี้ ใบเพิ่มหนี้ และการคืนเงิน พักไว้ทั้งก้อนตั้งแต่ 24 ก.ย. 2569 จึงยังไม่ต่อ
+ *
+ * ระหว่างยังโหลดไม่เสร็จให้เป็นกองว่างไว้ก่อน ไม่ใช่ข้อมูลตัวอย่างในเครื่อง
+ */
+const live = hasBackend;
+let billing: AccBilling | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function loadBilling() {
+  if (!live || loading || billing !== null) return;
+  loading = true;
+  void fetchAccBilling()
+    .then((got) => {
+      billing = got;
+    })
+    .catch(() => {
+      billing = EMPTY_BILLING;
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+/** ขอข้อมูลใหม่หลังเขียน — ยอดบนจอจะได้ตรงกับฐานข้อมูลเสมอ */
+function refreshBilling() {
+  if (!live) return;
+  billing = null;
+  loading = false;
+  loadBilling();
+  tell();
+}
+
+/* useSyncExternalStore ต้องได้ snapshot ตัวเดิมเมื่อข้อมูลไม่เปลี่ยน ไม่งั้นวาดวนไม่หยุด */
+let lastLocal: AccState | null = null;
+let lastBilling: AccBilling | null = null;
+let lastMerged: AccState | null = null;
+
+function snapshot(): AccState {
+  const local = store.get();
+  if (!live) return local;
+  loadBilling();
+  if (lastMerged && lastLocal === local && lastBilling === billing) return lastMerged;
+  lastLocal = local;
+  lastBilling = billing;
+  lastMerged = {
+    ...local,
+    deals: billing?.deals ?? [],
+    invoices: billing?.invoices ?? [],
+    payments: billing?.payments ?? [],
+    receipts: billing?.receipts ?? [],
+    wht: billing?.wht ?? [],
+  };
+  return lastMerged;
+}
+
+function subscribeAll(onChange: () => void) {
+  const off = store.subscribe(onChange);
+  watchers.add(onChange);
+  return () => {
+    off();
+    watchers.delete(onChange);
+  };
+}
+
 export function useAcc() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return useSyncExternalStore(subscribeAll, snapshot, store.getServer);
 }
 
 export function resetAcc() {
   store.reset();
+  refreshBilling();
 }
 
 /** อ่านค่าปัจจุบันนอกคอมโพเนนต์ — ใช้ตอนส่งงานข้ามฝ่าย (ดู flow.ts) */
 export function accSnapshot() {
-  return store.get();
+  return snapshot();
 }
 
 /**
@@ -135,6 +224,11 @@ export function accSnapshot() {
  * ยังไม่มีงวดชำระ เพราะการแบ่งงวดเป็นหน้าที่ของบัญชี ไม่ใช่ของฝ่ายขาย
  */
 export function openDealForBilling(deal: AccDeal) {
+  /* ต่อฐานข้อมูลแล้วดีลที่รอวางบิลอ่านจากดีลของฝ่ายขายโดยตรง ไม่ต้องทำสำเนาไว้ฝั่งบัญชีอีก */
+  if (live) {
+    refreshBilling();
+    return;
+  }
   store.update((s) =>
     s.deals.some((d) => d.no === deal.no)
       ? s
@@ -148,7 +242,12 @@ export function unseenDeals(s: AccState) {
 }
 
 /** ฝ่ายบัญชีเปิดแท็บรอวางบิลแล้ว — ถือว่าเห็นดีลใหม่ทุกใบ จุดแดงหายไป */
-export function markDealsSeen() {
+export async function markDealsSeen() {
+  if (live) {
+    await sbMarkDealsSeen();
+    refreshBilling();
+    return;
+  }
   store.update((s) =>
     s.deals.some((d) => d.accSeen === false)
       ? { ...s, deals: s.deals.map((d) => (d.accSeen === false ? { ...d, accSeen: true } : d)) }
@@ -171,10 +270,16 @@ export function dealPaid(s: AccState, deal: string) {
  * ใบเสร็จที่ออกไปแล้วและเงินที่รับมาแล้วไม่แตะ และระบบไม่คืนเงินให้เอง (ผู้ใช้กำหนด 21 ก.ย. 2569)
  * เรียกผ่าน cancelDealFlow เท่านั้น
  */
-export function cancelDealBilling(
+export async function cancelDealBilling(
   deal: string,
   c: { at: string; by: string; why: string; note?: string },
 ) {
+  if (live) {
+    /* ดีลถูกยกเลิกฝั่งขายแล้ว (cancel_deal) ที่นี่ปิดเฉพาะใบแจ้งหนี้ที่ยังค้าง */
+    await sbCancelInvoices(deal, c);
+    refreshBilling();
+    return;
+  }
   store.update((s) => ({
     ...s,
     deals: s.deals.map((d) => (d.no === deal ? { ...d, cancelled: c } : d)),
@@ -869,7 +974,12 @@ export function receiptsOf(s: AccState, invoiceNo: string) {
  * ตั้งหรือแก้งวดชำระของดีล — ยอดรวมทุกงวดต้องเท่ากับยอดดีลพอดี (AC-BR-03)
  * งวดที่ออกใบแจ้งหนี้แล้วคงค่าเดิมเสมอ ไม่ว่าหน้าจอส่งอะไรมา เพราะเอกสารออกเลขไปแล้ว
  */
-export function savePlan(dealNo: string, plan: Installment[]) {
+export async function savePlan(dealNo: string, plan: Installment[]) {
+  if (live) {
+    await sbSavePlan(dealNo, plan);
+    refreshBilling();
+    return;
+  }
   store.update((s) => {
     const deal = s.deals.find((d) => d.no === dealNo);
     if (!deal) return s;
@@ -892,7 +1002,28 @@ export function savePlan(dealNo: string, plan: Installment[]) {
  * เลขที่รูปแบบ INV + ปี ค.ศ. สองหลัก + ขีด + เดือนสองหลัก + ลำดับสี่หลัก
  * ยอดที่ต้องชำระ = ยอดงวดพอดี ไม่คิด VAT หรือหัก ณ ที่จ่ายซ้ำ (AC-BR-02)
  */
-export function issueInvoice(dealNo: string, seq: number, due: string) {
+export async function issueInvoice(dealNo: string, seq: number, due: string) {
+  if (live) {
+    const s = snapshot();
+    const deal = s.deals.find((d) => d.no === dealNo);
+    const item = deal?.plan.find((p) => p.seq === seq);
+    if (!deal || !item || !canBill(s, deal, deal.plan.indexOf(item))) return;
+    const money = invoiceAmounts(deal, item.amount);
+    await sbIssueInvoice({
+      dealNo,
+      seq,
+      issue: toIsoDate(bkkNow()),
+      due,
+      base: money.base,
+      vat: money.vat,
+      wht: money.wht,
+      total: money.total,
+      /* ยอดค้างคิดก่อนหักภาษี ณ ที่จ่าย — ภาษีที่ลูกค้าหักไว้ถือว่าชำระแล้ว */
+      outstanding: round2(money.base + money.vat),
+    });
+    refreshBilling();
+    return;
+  }
   store.update((s) => {
     const deal = s.deals.find((d) => d.no === dealNo);
     const item = deal?.plan.find((p) => p.seq === seq);
@@ -930,7 +1061,12 @@ export function issueInvoice(dealNo: string, seq: number, due: string) {
   });
 }
 
-export function logCollection(invoiceNo: string, entry: Collection) {
+export async function logCollection(invoiceNo: string, entry: Collection) {
+  if (live) {
+    await sbLogCollection(invoiceNo, entry);
+    refreshBilling();
+    return;
+  }
   store.update((s) => ({
     ...s,
     invoices: s.invoices.map((v) =>
@@ -947,7 +1083,34 @@ export function logCollection(invoiceNo: string, entry: Collection) {
  * งานเข้าคิว PM เมื่องวดแรกชำระครบ — หน้าจอต้องเรียกผ่าน issueReceiptFlow ใน flow.ts
  * คืนเลขที่ใบเสร็จ หรือค่าว่างถ้าออกไม่ได้
  */
-export function issueReceipt(invoiceNo: string, date: string, received: number, wht: number) {
+export async function issueReceipt(invoiceNo: string, date: string, received: number, wht: number) {
+  if (live) {
+    const s = snapshot();
+    const v = s.invoices.find((x) => x.no === invoiceNo);
+    if (!v || !date || v.status === "cancelled" || v.outstanding <= 0) return "";
+    const got = round2(received);
+    const tax = round2(wht);
+    /* ใบเสร็จที่ไม่มีเงินเข้าเลย หรือรับเกินมูลค่างวด ไม่ใช่ใบเสร็จที่ถูกต้อง */
+    if (got <= 0 || tax < 0 || round2(got + tax) > v.outstanding) return "";
+    /* แยกฐานภาษีกับ VAT ของยอดที่รับครั้งนี้ตามสัดส่วนของใบแจ้งหนี้ — สูตรเดียวกับของเดิม */
+    const paid = round2(got + tax);
+    const gross = round2(v.base + v.vat);
+    const base = gross ? round2((v.base * paid) / gross) : paid;
+    const res = await sbIssueReceipt({
+      invoiceNo,
+      date,
+      received: got,
+      wht: tax,
+      base,
+      vatAmount: round2(paid - base),
+      /* หักภาษีไว้ = ยังไม่ได้หนังสือรับรอง จนกว่าลูกค้าจะส่งมา */
+      certReceived: tax <= 0,
+      vatDoc: ISSUER_VAT,
+      outstanding: round2(v.outstanding - paid),
+    });
+    refreshBilling();
+    return res.ok && res.no ? res.no : "";
+  }
   let issued = "";
   store.update((s) => {
     const v = s.invoices.find((x) => x.no === invoiceNo);
@@ -1000,7 +1163,12 @@ export function issueReceipt(invoiceNo: string, date: string, received: number, 
   return issued;
 }
 
-export function saveWht(row: WhtRow) {
+export async function saveWht(row: WhtRow) {
+  if (live) {
+    await sbSaveWht(row);
+    refreshBilling();
+    return;
+  }
   store.update((s) => ({
     ...s,
     wht: s.wht.some((w) => w.id === row.id)
@@ -1010,7 +1178,12 @@ export function saveWht(row: WhtRow) {
 }
 
 /** ลบรายการภาษีหัก ณ ที่จ่าย (ระบบไม่เก็บเลขหนังสือรับรองแล้ว — เจ้าของระบบสั่ง 8 ต.ค. 2569) */
-export function removeWht(id: string) {
+export async function removeWht(id: string) {
+  if (live) {
+    await sbRemoveWht(id);
+    refreshBilling();
+    return;
+  }
   store.update((s) => ({
     ...s,
     wht: s.wht.filter((w) => w.id !== id),

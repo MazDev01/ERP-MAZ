@@ -147,10 +147,11 @@ export async function acceptQuotationFlow(quotationId: string) {
  * ใช้งวดแรกเป็นเงื่อนไข เพราะกติกาบริษัทคือเริ่มลงมือทำงานได้เมื่อลูกค้าจ่ายมัดจำแล้ว
  * คืนเลขที่ใบเสร็จ หรือค่าว่างถ้าออกไม่ได้
  */
-export function issueReceiptFlow(invoiceNo: string, date: string, received: number, wht: number) {
+export async function issueReceiptFlow(invoiceNo: string, date: string, received: number, wht: number) {
   const before = accSnapshot();
   const invoice = before.invoices.find((v) => v.no === invoiceNo);
-  const no = issueReceipt(invoiceNo, date, received, wht);
+  /* ต่อฐานข้อมูลแล้วเลขที่ใบเสร็จมาจากฐานข้อมูล ต้องรอคำตอบก่อนจึงรู้ว่าออกสำเร็จไหม */
+  const no = await issueReceipt(invoiceNo, date, received, wht);
   if (!no || !invoice || invoice.seq !== 1) return no;
   /* ชำระบางส่วนยังไม่ใช่มัดจำครบ งานยังไม่เข้าคิว PM */
   const after = accSnapshot();
