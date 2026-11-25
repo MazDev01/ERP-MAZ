@@ -8,11 +8,23 @@
  * ไฟล์ที่อัปโหลดเองเก็บตัวไฟล์ไว้ในเครื่อง (file-store.ts) จึงเปิดกลับมาดูได้
  * ส่วนเทมเพลตชุดตั้งต้นมีแค่ชื่อไฟล์ เพราะยังไม่มีที่เก็บไฟล์ของระบบ
  * เลือกเทมเพลตไปแนบในหน้าส่งงาน (presales-work) แล้วนับจำนวนครั้งที่ใช้ให้
+ *
+ * ต่อฐานข้อมูลแล้ว (รอบที่ 109) — คลังเป็นของทีม ไม่ใช่ของเครื่องใครเครื่องมัน
+ * จำนวนครั้งที่ใช้ให้ฐานข้อมูลบวกเอง สองคนส่งงานพร้อมกันจะได้ไม่ทับกัน
+ * ยังไม่ได้ต่อฐานข้อมูล (dev ที่ไม่มีคีย์) ถอยไปใช้ชุดตั้งต้นในเบราว์เซอร์เหมือนเดิม
  */
 
 import { useSyncExternalStore } from "react";
 import { todayIso } from "./format";
 import { createPersistedStore } from "./persisted-store";
+import { hasBackend } from "./supabase/env";
+import {
+  fetchTemplates,
+  sbAddTemplate,
+  sbCountTemplateUse,
+  sbRetireTemplate,
+  sbUpdateTemplate,
+} from "./supabase/presales";
 
 export type TemplateKind = "ppt" | "pdf" | "canva" | "link";
 
@@ -123,11 +135,71 @@ function isTemplates(v: unknown): v is PresalesTemplate[] {
 
 const store = createPersistedStore<PresalesTemplate[]>("maz-erp.presales-templates.v1", SEED, isTemplates);
 
+/* ─── ชั้นต่อฐานข้อมูล ───────────────────────────────────────────── */
+const live = hasBackend;
+let fromDb: PresalesTemplate[] | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function load() {
+  if (!live || loading || fromDb !== null) return;
+  loading = true;
+  void fetchTemplates()
+    .then((got) => {
+      fromDb = got;
+    })
+    .catch(() => {
+      fromDb = [];
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+function refresh() {
+  if (!live) return;
+  fromDb = null;
+  loading = false;
+  load();
+  tell();
+}
+
+/** รอให้ฐานข้อมูลตอบแล้วอ่านคลังใหม่ — หน้าจอไม่รอผลลัพธ์ */
+function after(job: Promise<unknown>) {
+  void job.then(refresh, refresh);
+}
+
+const EMPTY: PresalesTemplate[] = [];
+
+function snapshot(): PresalesTemplate[] {
+  if (!live) return store.get();
+  load();
+  return fromDb ?? EMPTY;
+}
+
+function subscribeAll(onChange: () => void) {
+  const off = store.subscribe(onChange);
+  watchers.add(onChange);
+  return () => {
+    off();
+    watchers.delete(onChange);
+  };
+}
+
 export function useTemplates() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return useSyncExternalStore(subscribeAll, snapshot, store.getServer);
 }
 
 export function resetTemplates() {
+  if (live) {
+    refresh();
+    return;
+  }
   store.reset();
 }
 
@@ -144,6 +216,10 @@ export function linkKind(url: string): TemplateKind {
 export type TemplateInput = Pick<PresalesTemplate, "name" | "service" | "kind" | "file" | "url" | "size" | "note">;
 
 export function addTemplate(input: TemplateInput, by: string) {
+  if (live) {
+    after(sbAddTemplate(input, by));
+    return;
+  }
   const t: PresalesTemplate = {
     ...input,
     id: `tpl-${Date.now().toString(36)}`,
@@ -155,20 +231,35 @@ export function addTemplate(input: TemplateInput, by: string) {
 }
 
 export function updateTemplate(id: string, input: TemplateInput) {
+  if (live) {
+    after(sbUpdateTemplate(id, input));
+    return;
+  }
   store.update((list) => list.map((t) => (t.id === id ? { ...t, ...input, updatedAt: todayIso() } : t)));
 }
 
+/** ลบเทมเพลตได้เฉพาะตอนยังไม่ต่อฐานข้อมูล — ของจริงใช้เลิกใช้แทน ข้อเสนอเก่าจะได้ตามย้อนได้ */
 export function removeTemplate(id: string) {
+  if (live) return;
   store.update((list) => list.filter((t) => t.id !== id));
 }
 
 /** เลิกใช้หรือกลับมาใช้อีกครั้ง — ไม่ลบทิ้ง ข้อเสนอเก่าจึงยังอ้างฉบับที่ใช้จริงได้ */
 export function toggleTemplateOff(id: string) {
+  if (live) {
+    const now = snapshot().find((t) => t.id === id);
+    after(sbRetireTemplate(id, !now?.off));
+    return;
+  }
   store.update((list) => list.map((t) => (t.id === id ? { ...t, off: !t.off, updatedAt: todayIso() } : t)));
 }
 
 /** นับว่าเทมเพลตถูกแนบไปกับข้อเสนอ — เรียกตอนส่งงานจริง */
 export function countTemplateUse(ids: string[]) {
   if (!ids.length) return;
+  if (live) {
+    after(sbCountTemplateUse(ids));
+    return;
+  }
   store.update((list) => list.map((t) => (ids.includes(t.id) ? { ...t, uses: t.uses + ids.filter((x) => x === t.id).length } : t)));
 }

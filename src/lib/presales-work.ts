@@ -12,6 +12,8 @@ import { bkkStamp, daysBetween } from "./format";
 import { USERS } from "./mock-data";
 import { createPersistedStore } from "./persisted-store";
 import { psEmployeeId, psMeOf, usePsEmployeeId } from "./ps-identity";
+import { hasBackend } from "./supabase/env";
+import { fetchPsNotes, sbAddPsNote } from "./supabase/presales";
 
 /**
  * คนในทีมก่อนการขายที่ใช้ระบบอยู่ — SA หรือ BD สลับได้ที่เมนูบัญชีของฉัน (ดู ps-identity.ts)
@@ -133,8 +135,62 @@ const threads = createPersistedStore<Record<string, PsNote[]>>(
   (v) => ({ ...PS_THREAD_SEED, ...v }),
 );
 
+/* ─── ชั้นต่อฐานข้อมูล (รอบที่ 109) ───────────────────────────────
+   สายสนทนาเป็นของทีม ไม่ใช่ของเครื่องใครเครื่องมัน — เดิมอีกฝั่งไม่เห็นว่าคุยอะไรไว้
+   ยังไม่ได้ต่อฐานข้อมูล (dev ที่ไม่มีคีย์) ถอยไปเก็บในเบราว์เซอร์เหมือนเดิม */
+const live = hasBackend;
+type Threads = Record<string, PsNote[]>;
+let fromDb: Threads | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function load() {
+  if (!live || loading || fromDb !== null) return;
+  loading = true;
+  void fetchPsNotes()
+    .then((got) => {
+      fromDb = got;
+    })
+    .catch(() => {
+      fromDb = {};
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+function refresh() {
+  if (!live) return;
+  fromDb = null;
+  loading = false;
+  load();
+  tell();
+}
+
+const EMPTY_THREADS: Threads = {};
+
+function snapshot(): Threads {
+  if (!live) return threads.get();
+  load();
+  return fromDb ?? EMPTY_THREADS;
+}
+
+function subscribeAll(onChange: () => void) {
+  const off = threads.subscribe(onChange);
+  watchers.add(onChange);
+  return () => {
+    off();
+    watchers.delete(onChange);
+  };
+}
+
 export function usePsThreads() {
-  return useSyncExternalStore(threads.subscribe, threads.get, threads.getServer);
+  return useSyncExternalStore(subscribeAll, snapshot, threads.getServer);
 }
 
 /**
@@ -188,5 +244,10 @@ export function psFromOthers(notes: PsNote[], side: PsNote["side"]) {
 }
 
 function addPsNote(no: string, note: PsNote) {
+  if (live) {
+    /* หน้าจอไม่รอผลลัพธ์ — ส่งแล้วค่อยอ่านสายใหม่เมื่อฐานข้อมูลตอบ */
+    void sbAddPsNote(no, note).then(refresh, refresh);
+    return;
+  }
   threads.update((all) => ({ ...all, [no]: [...(all[no] ?? []), note] }));
 }
