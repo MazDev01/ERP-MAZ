@@ -61,7 +61,11 @@ export function LeadForm({
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  /** เบอร์ซ้ำมักแปลว่าเป็นลูกค้าเดิม — เตือนไว้ก่อนจะได้ไม่มีข้อมูลซ้ำสองรายการ */
+  /**
+   * เบอร์ซ้ำ = เป็นรายเดิม ห้ามบันทึกเพิ่ม (M1-F1)
+   * เดิมเป็นแค่คำเตือน กดบันทึกต่อได้ ฐานข้อมูลก็ไม่กัน จึงมีรายซ้ำได้จริง
+   * ตั้งแต่รอบที่ 112 ฐานข้อมูลกันเบอร์ซ้ำแล้ว หน้าจอจึงต้องกันตั้งแต่ปุ่มบันทึก
+   */
   const duplicate = useMemo(() => {
     const digits = phone.replace(/\D/g, "");
     if (digits.length < 9) return null;
@@ -74,7 +78,7 @@ export function LeadForm({
   const badPhone = phoneDigits.length > 0 && phoneDigits.length < 9;
   const problems = {
     name: !name.trim(),
-    phone: badPhone,
+    phone: badPhone || Boolean(duplicate),
     channel: !channel,
     summary: !summary.trim(),
   };
@@ -156,7 +160,13 @@ export function LeadForm({
 
           <Field
             label="เบอร์โทรศัพท์"
-            error={touched && problems.phone ? "เบอร์โทรศัพท์ต้องมี 9–10 หลัก" : undefined}
+            error={
+              touched && badPhone
+                ? "เบอร์โทรศัพท์ต้องมี 9–10 หลัก"
+                : touched && duplicate
+                  ? "เบอร์นี้มีผู้สนใจรายเดิมอยู่แล้ว"
+                  : undefined
+            }
             hint={duplicate ? undefined : "ใช้ตรวจสอบข้อมูลซ้ำ"}
           >
             <input
@@ -168,12 +178,12 @@ export function LeadForm({
               className="field-control"
             />
             {duplicate && (
-              <p className="mt-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-[12.5px] leading-relaxed text-[var(--warning)]">
+              <p className="mt-2 rounded-lg bg-[var(--destructive-soft)] px-3 py-2 text-[12.5px] leading-relaxed text-destructive">
                 เบอร์นี้มีอยู่แล้วในระบบ:{" "}
                 <Link href={`/leads/${duplicate.code}`} className="font-semibold underline">
                   {duplicate.name} ({duplicate.code})
                 </Link>{" "}
-                — ตรวจสอบก่อนบันทึกซ้ำ
+                — เพิ่มรายใหม่ด้วยเบอร์เดิมไม่ได้ ถ้าเป็นรายเดียวกันให้บันทึกการติดต่อที่รายเดิม
               </p>
             )}
           </Field>

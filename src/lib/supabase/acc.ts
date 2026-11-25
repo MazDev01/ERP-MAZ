@@ -332,6 +332,8 @@ export const ACC_REASON: Record<string, string> = {
 
 function why(message: string): string {
   if (/row-level security/i.test(message)) return "denied";
+  /* ข้อความจากด่านลำดับงวด (รอบที่ 112) — ส่งข้อความของฐานข้อมูลต่อให้หน้าจอตรง ๆ */
+  if (/ออกบิลงวดที่/.test(message)) return message.slice(0, 120);
   const hit = /invoice_locked|receipt_locked|payment_locked|need_cancel_reason/.exec(message);
   if (hit) return hit[0];
   return message.split("\n")[0].slice(0, 80);
@@ -355,31 +357,23 @@ async function invoiceIdOf(no: string): Promise<string | null> {
  * บันทึกแผนวางบิล — งวดที่ออกใบแจ้งหนี้ไปแล้วแตะไม่ได้ (ฐานข้อมูลกันการลบไว้ด้วย)
  * วิธีง่ายและตรงที่สุดคือลบงวดที่ยังไม่ออกใบทิ้ง แล้วใส่ชุดใหม่ลงไป
  */
+/**
+ * บันทึกแผนงวดเงินทั้งชุด — ผ่านฟังก์ชันของฐานข้อมูล (รอบที่ 112)
+ *
+ * เดิมลบงวดเก่าแล้วค่อยใส่ชุดใหม่เป็นสองคำขอแยกกัน ระหว่างนั้นแผนไม่ครบ
+ * และไม่มีใครตรวจว่าผลรวมเท่ายอดดีล — หน้าจอกันไว้ชั้นเดียว
+ * ฟังก์ชันของฐานข้อมูลทำทั้งชุดในคำสั่งเดียว ตรวจผลรวม เลขงวด และงวดที่ออกบิลไปแล้ว
+ */
 export async function sbSavePlan(dealNo: string, plan: Installment[]): Promise<AccWrite> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
-  const id = await dealIdOf(dealNo);
-  if (!id) return { ok: false, reason: "not_found" };
-
-  const issued = await sb.from("invoices").select("seq").eq("deal_id", id);
-  const locked = new Set(((issued.data ?? []) as { seq: number }[]).map((x) => x.seq));
-
-  const drop = await sb.from("deal_installments").delete().eq("deal_id", id).not("seq", "in", `(${[...locked, -1].join(",")})`);
-  if (drop.error) return { ok: false, reason: why(drop.error.message) };
-
-  const rows = plan
-    .filter((p) => !locked.has(p.seq))
-    .map((p) => ({
-      deal_id: id,
-      seq: p.seq,
-      pct: p.pct,
-      amount: p.amount,
-      due: p.due || null,
-      created_by: myId(),
-    }));
-  if (!rows.length) return { ok: true };
-  const add = await sb.from("deal_installments").insert(rows);
-  if (add.error) return { ok: false, reason: why(add.error.message) };
+  const got = await sb.rpc("save_installments", {
+    p_deal: dealNo,
+    p_rows: plan.map((p) => ({ seq: p.seq, pct: p.pct, amount: p.amount, due: p.due || "" })),
+  });
+  if (got.error) return { ok: false, reason: why(got.error.message) };
+  const out = got.data as { ok?: boolean; reason?: string } | null;
+  if (!out?.ok) return { ok: false, reason: out?.reason ?? "unknown" };
   return { ok: true };
 }
 

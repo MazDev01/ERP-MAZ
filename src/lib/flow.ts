@@ -153,10 +153,15 @@ export async function issueReceiptFlow(invoiceNo: string, date: string, received
   /* ต่อฐานข้อมูลแล้วเลขที่ใบเสร็จมาจากฐานข้อมูล ต้องรอคำตอบก่อนจึงรู้ว่าออกสำเร็จไหม */
   const no = await issueReceipt(invoiceNo, date, received, wht);
   if (!no || !invoice || invoice.seq !== 1) return no;
-  /* ชำระบางส่วนยังไม่ใช่มัดจำครบ งานยังไม่เข้าคิว PM */
-  const after = accSnapshot();
-  const settled = after.invoices.find((v) => v.no === invoiceNo);
-  if (!settled || invoiceStatus(after, settled) !== "paid") return no;
+  /*
+   * ชำระบางส่วนยังไม่ใช่มัดจำครบ งานยังไม่เข้าคิว PM
+   *
+   * ตัดสินจากยอดค้างก่อนรับเงินกับยอดที่รับครั้งนี้ ไม่อ่านสโตร์ใหม่
+   * เพราะตอนต่อฐานข้อมูลแล้ว การอ่านใหม่เป็นงานที่ยังวิ่งอยู่ สโตร์จึงยังเป็นค่าก่อนหน้า
+   * เงื่อนไขสุดท้ายอยู่ที่ฐานข้อมูลอีกชั้น (pm_inbox_add ตรวจว่างวดแรกและชำระครบจริง)
+   */
+  const settledNow = round2(received + wht) >= round2(invoice.outstanding);
+  if (!settledNow) return no;
 
   /* โปรเจคเกิดตรงนี้ — ผูกกับใบแจ้งหนี้งวดแรกใบนี้ ได้เลขที่โปรเจคของตัวเอง (ผู้ใช้สั่ง 5 ต.ค. 2569) */
   const deal = before.deals.find((d) => d.no === invoice.deal);

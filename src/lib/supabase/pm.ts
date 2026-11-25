@@ -697,45 +697,50 @@ export async function sbRemoveDoc(pj: string, name: string): Promise<PmWrite> {
 }
 
 /** งานใหม่เข้ากล่องของผู้จัดการโครงการ — เกิดตอนบัญชีรับเงินงวดแรก */
+/**
+ * งานเข้ากล่องของฝ่ายโครงการ — เรียกผ่านฟังก์ชันของฐานข้อมูล (รอบที่ 112)
+ *
+ * เดิมเขียนลงตารางตรง ๆ แต่คนที่กดออกใบเสร็จงวดแรกคือฝ่ายบัญชี ซึ่งนโยบายของ
+ * ตารางกล่องงานไม่ให้เขียน งานจึงไม่เคยเข้ากล่องเลยและไม่มีข้อความบอกใคร
+ * ฟังก์ชันของฐานข้อมูลตรวจซ้ำเองว่าใบแจ้งหนี้นั้นเป็นงวดแรกและชำระครบแล้วจริง
+ * และกันงานซ้ำให้ด้วย (บัญชีแก้แล้วบันทึกเงินซ้ำได้)
+ */
 export async function sbAddInbox(job: Omit<InboxJob, "pj">): Promise<PmWrite> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
-  const inv = job.bill ? await sb.from("invoices").select("id").eq("no", job.bill).maybeSingle() : { data: null };
-  const deal = job.deal ? await sb.from("deals").select("id, customer_id").eq("no", job.deal).maybeSingle() : { data: null };
-  const got = await sb
-    .from("project_inbox")
-    .insert({
-      invoice_id: (inv.data as { id?: string } | null)?.id ?? null,
-      deal_id: (deal.data as { id?: string } | null)?.id ?? null,
-      customer_id: (deal.data as { customer_id?: string } | null)?.customer_id ?? null,
+  const got = await sb.rpc("pm_inbox_add", {
+    p: {
+      bill: job.bill ?? "",
+      deal: job.deal ?? "",
       service: job.service,
       cus: job.cus,
       quo: job.quo,
-      quo_date: job.quoDate || null,
+      quoDate: job.quoDate ?? "",
       net: job.net,
       seqs: job.seqs,
-      paid_at: job.paidAt || null,
-      sent_at: job.sentAt || null,
+      paidAt: job.paidAt ?? "",
+      sentAt: job.sentAt ?? "",
       scope: job.scope,
       items: job.items ?? [],
-      due: job.due || null,
+      due: job.due ?? "",
       stage: job.stage,
-      plan_start: job.planStart || null,
-      plan_end: job.planEnd || null,
-      duration_days: job.durationDays,
+      planStart: job.planStart ?? "",
+      planEnd: job.planEnd ?? "",
+      durationDays: job.durationDays,
       phases: job.phases ?? [],
       proposal: job.proposal ?? null,
       contact: job.contact ?? "",
       phone: job.phone ?? "",
-      tax_id: job.taxId ?? "",
+      taxId: job.taxId ?? "",
       address: job.address ?? "",
       terms: job.terms ?? "",
-      valid_days: job.validDays ?? 0,
-    })
-    .select("pj")
-    .single();
+      validDays: job.validDays ?? 0,
+    },
+  });
   if (got.error) return { ok: false, reason: why(got.error.message) };
-  return { ok: true, pj: (got.data as { pj: string }).pj };
+  const out = got.data as { ok?: boolean; pj?: string; reason?: string } | null;
+  if (!out?.ok) return { ok: false, reason: out?.reason ?? "unknown" };
+  return { ok: true, pj: out.pj ?? "" };
 }
 
 /**
