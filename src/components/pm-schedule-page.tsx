@@ -25,9 +25,12 @@
  */
 
 import { useRef, useState } from "react";
-import { projName } from "@/lib/pm-data";
+import { projName, projectHref } from "@/lib/pm-data";
 import { bkkNow, thaiDate, toIsoDate } from "@/lib/format";
 import { usePm, useTeam } from "@/lib/pm-store";
+import { nameOf } from "@/lib/emp-name";
+import { useHydrated } from "@/lib/pwa";
+import { memberColor, memberTint } from "@/lib/member-color";
 import { USERS } from "@/lib/mock-data";
 import { useCrm } from "@/lib/crm-store";
 import { CustomerCombo } from "./customer-combo";
@@ -95,6 +98,8 @@ function pmBoardEvent(e: PmEvent): BoardEvent<PmEvent> {
 
 export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
   const sc = useSchedule();
+  const pm = usePm();
+  const hydrated = useHydrated();
   const nav = useBoardNav();
   /* GM เปิดหน้าของ PM ได้แบบดูอย่างเดียว — สร้างหรือแก้นัดของ PM ไม่ได้ */
   const ro = usePmReadOnly() && !sales;
@@ -118,6 +123,40 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
   const events = sc.events
     .filter((e) => (sales ? isSalesEvent(e) : !isPsEvent(e) && !isSalesEvent(e)))
     .map(pmBoardEvent);
+
+  /*
+   * คิวงานของทีมในปฏิทินเดียวกัน แยกสีรายคน (รอบที่ 129 · Requirement รอบ 11)
+   * ใบงานที่มีกำหนดส่งและยังไม่เสร็จ ขึ้นเป็นแถบสีประจำตัวของคนที่ถืองาน
+   * ฝ่ายขายไม่เห็นคิวงานของฝ่ายโครงการ หน้านี้ของเขาเป็นนัดกับผู้สนใจล้วน
+   */
+  /* รอให้ hydrate ก่อน — ฝั่งเซิร์ฟเวอร์ยังไม่มีข้อมูลโปรเจค จำนวนบนชิปจะไม่ตรงกัน
+     แล้ว React จะฟ้องว่าวาดไม่เหมือนกัน (กติกาเดิมของหน้าอื่นในระบบ) */
+  const queue = sales || !hydrated
+    ? []
+    : pm.projects.flatMap((p) =>
+        p.status === "cancelled"
+          ? []
+          : p.tasks.flatMap((t, i) =>
+              !t.due || t.status === "done" || !t.whos.length
+                ? []
+                : t.whos.map<BoardEvent<PmEvent>>((who) => ({
+                    id: `task-${p.pj}-${i}-${who}`,
+                    kind: "queue",
+                    start: t.start && t.start < t.due ? t.start : t.due,
+                    end: t.due,
+                    title: `${t.name} · ${nameOf(who)}`,
+                    bar: `${nameOf(who)} · ${t.name}`,
+                    sub: `${p.name || p.cus} · กำหนดส่ง ${thaiDate(t.due)}`,
+                    dot: memberColor(who),
+                    paint: { style: { background: memberTint(who), color: memberColor(who) } },
+                    tip: `${t.name} · ${nameOf(who)} · กำหนดส่ง ${thaiDate(t.due)}`,
+                    href: projectHref(p.pj),
+                    inert: true,
+                    data: null as unknown as PmEvent,
+                  })),
+            ),
+      );
+  const allEvents = [...events, ...queue];
 
   return (
     <div className="space-y-4">
@@ -169,8 +208,8 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
       <div className="max-md:hidden">
       <ScheduleBoard
         nav={nav}
-        events={events}
-        kinds={pmBoardKinds()}
+        events={allEvents}
+        kinds={[...pmBoardKinds(), ...(sales ? [] : [{ key: "queue", label: "คิวงานของทีม", color: "#2563EB" }])]}
         /* คำแนะนำตามโครงหน้า · คนที่แก้ไม่ได้ให้บอกวิธีใช้ตัวกรองแทน */
         hint={
           canEdit
