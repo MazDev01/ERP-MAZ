@@ -96,6 +96,11 @@ export type RateSettings = {
    */
   whtMinBase: number;
   whtMinBaseGov: number;
+  /*
+   * ความแม่นยำของพิกัดที่ยอมรับตอนลงเวลา (เมตร) — แย่กว่านี้ถือว่ายังไม่รู้ที่อยู่จริง
+   * 0 = ไม่ตรวจ · เดิมไม่ตรวจเลย พิกัดคลาด 5 กม. ก็ลงเวลาได้ถ้าจุดอยู่ในรัศมี
+   */
+  gpsAccMaxM: number;
   commission: number;
   otAfterWork: number;
   otHoliday: number;
@@ -343,6 +348,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     wht: 3,
     whtMinBase: 1000,
     whtMinBaseGov: 500,
+    gpsAccMaxM: 100,
     commission: 5,
     otAfterWork: 1.5,
     otHoliday: 2,

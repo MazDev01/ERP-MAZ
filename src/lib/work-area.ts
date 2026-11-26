@@ -44,8 +44,16 @@ export type AreaSettings = {
   areas: WorkArea[];
 };
 
-/** GPS คลาดเคลื่อนเกินนี้ (เมตร) และอยู่นอกรัศมี → บอกว่าสัญญาณไม่แม่น ให้ลองใหม่ แทนที่จะบอกว่าอยู่นอกพื้นที่ */
+/*
+ * GPS คลาดเคลื่อนเกินนี้ (เมตร) = ยังไม่รู้ว่าอยู่ที่ไหนจริง ให้ลองใหม่
+ * ตั้งได้ที่หน้าอัตราและภาษี (rates.gpsAccMaxM) · 0 = ไม่ตรวจ
+ * ฐานข้อมูลใช้เกณฑ์เดียวกันตอนบันทึก (รอบที่ 124) ต้องตรงกัน ไม่งั้นกดแล้วถูกปฏิเสธเงียบ ๆ
+ */
 export const MAX_ACCURACY = 100;
+export const accMax = () => {
+  const v = settings().rates.gpsAccMaxM;
+  return Number.isFinite(v) && v >= 0 ? v : MAX_ACCURACY;
+};
 
 export const RADIUS_MIN = 30;
 export const RADIUS_MAX = 5000;
@@ -225,6 +233,14 @@ export const GEO_LABEL: Record<GeoStatus, string> = {
 export function judge(fix: Fix, s: AreaSettings): PunchGeo {
   const base = { lat: fix.lat, lng: fix.lng, acc: Math.round(fix.acc) };
   const areas = [workplaceOf(s)];
+  /* คลาดเกินเกณฑ์ = ตัดสินไม่ได้ แม้พิกัดจะตกอยู่ในรัศมีก็ตาม (ตรวจระบบ 26 พ.ย. 2569) */
+  const limit = accMax();
+  if (limit > 0 && fix.acc > limit) {
+    const n = areas
+      .map((a) => ({ a, d: distanceM(fix.lat, fix.lng, a.lat, a.lng) }))
+      .sort((x, y) => x.d - y.d)[0];
+    return { ...base, status: "weak", area: n?.a.name, dist: n ? Math.round(n.d) : undefined };
+  }
 
   const ranked = areas
     .map((a) => ({ a, d: distanceM(fix.lat, fix.lng, a.lat, a.lng) }))
@@ -234,10 +250,6 @@ export function judge(fix: Fix, s: AreaSettings): PunchGeo {
   if (hit) return { ...base, status: "inside", area: hit.a.name, dist: Math.round(hit.d) };
 
   const near = ranked[0];
-  /* อยู่นอกจริงหรือ GPS แค่คลาด — ถ้าคลาดเกินเกณฑ์ บอกว่าสัญญาณไม่แม่นแทนที่จะกล่าวหาว่าอยู่นอก */
-  if (fix.acc > MAX_ACCURACY) {
-    return { ...base, status: "weak", area: near.a.name, dist: Math.round(near.d) };
-  }
   return { ...base, status: "outside", area: near.a.name, dist: Math.round(near.d) };
 }
 
