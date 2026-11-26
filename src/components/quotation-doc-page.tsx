@@ -199,6 +199,8 @@ export function QuotationDocPage({
             issued: q.issued,
             validDays: q.validDays,
             issuer: q.issuer,
+            seller: q.seller ?? customer?.owner,
+            filledBy: q.filledBy,
             body: q.body,
             terms: q.terms,
             totals: quotationTotals(q),

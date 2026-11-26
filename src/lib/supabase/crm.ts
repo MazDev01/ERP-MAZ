@@ -550,6 +550,8 @@ type QuotationRow = {
   customer_id: string;
   issuer: string;
   buyer_type: string;
+  seller: string | null;
+  filled_by: string | null;
   service: string;
   issued: string;
   valid_days: number;
@@ -615,7 +617,7 @@ type JobRow = {
 const QUOTATION_COLS =
   "id, no, customer_id, issuer, buyer_type, service, issued, valid_days, valid_until," +
   " amount, discount, wht, wht_pct, body, terms, status, revision, sent_at, presales_id," +
-  " replaces, replaced_by, rejected_at, reject_reason, created_at";
+  " replaces, replaced_by, rejected_at, reject_reason, created_at, seller, filled_by";
 
 const DEAL_COLS =
   "id, no, customer_id, quotation_id, total, status, po_ref, start_on, delivery, scope," +
@@ -690,6 +692,8 @@ export async function fetchSalesDocs(
     replacedBy: r.replaced_by ?? undefined,
     rejectedAt: r.rejected_at ?? undefined,
     rejectReason: r.reject_reason || undefined,
+    seller: r.seller || undefined,
+    filledBy: r.filled_by || undefined,
   }));
 
   const deals = dRows.map<Deal>((r) => ({
@@ -742,6 +746,9 @@ export async function sbAddQuotation(input: {
   terms: string;
   psNo?: string;
   replaces?: string;
+  /** ขายในนามใคร — ว่าง = ใช้ผู้ดูแลลูกค้า (ฐานข้อมูลเติมให้) */
+  seller?: string;
+  sellerId?: string;
 }): Promise<CrmWrite> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
@@ -774,6 +781,8 @@ export async function sbAddQuotation(input: {
       presales_id: ps,
       sent_at: input.issued,
       replaces: input.replaces ?? null,
+      seller: input.seller ?? "",
+      seller_id: input.sellerId ?? null,
       created_by: myId(),
     })
     .select("no")

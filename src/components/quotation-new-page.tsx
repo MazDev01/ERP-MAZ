@@ -22,6 +22,9 @@ import {
 } from "@/lib/crm-data";
 import { NO_WHT_NOTE } from "@/lib/acc-data";
 import { addQuotation, useCrm, useCrmReady, type CrmState } from "@/lib/crm-store";
+import { holdsPos } from "@/lib/hr-data";
+import { useHr } from "@/lib/hr-store";
+import { settings } from "@/lib/system-settings";
 import { services, type ServiceKey } from "@/lib/pm-data";
 import { addDays, baht, commaInput, round2, thaiDate, todayIso } from "@/lib/format";
 import { cleanHtml, htmlToText } from "@/lib/rich-text";
@@ -239,6 +242,20 @@ function QuotationForm({
   /* ออกแทนใบเดิม — "new" = ใบใหม่แยก · เลขที่ = ออกแทนใบนั้น · null = ยังไม่เลือก
      ออกใบใหม่จากใบเดิม (?from=) เลือกใบต้นทางไว้ให้ก่อน เปลี่ยนได้ */
   const [rep, setRep] = useState<string | null>(mode.kind === "from" ? mode.src.no : null);
+  /*
+   * ขายในนามใคร (รอบที่ 125) — เฮียเป็นคนขายเอง บัญชีกรอกใบแทน
+   * ว่าง = ใช้ผู้ดูแลลูกค้า (ฐานข้อมูลเติมให้) · ชื่อคนกรอกฐานข้อมูลเขียนให้เอง
+   */
+  const [seller, setSeller] = useState("");
+  /* คนที่ขายได้ — ฝ่ายขายในทะเบียน กับผู้บริหาร (ผู้บริหารไม่มีแถวในทะเบียน ใช้ชื่อจากค่าตั้งค่า) */
+  const hr = useHr();
+  const sellerOptions = useMemo(() => {
+    const names = hr.emp
+      .filter((e) => e.status !== "left" && holdsPos(e, "sales"))
+      .map((e) => e.name);
+    const exec = settings().approvers.exec?.name;
+    return [...new Set([...names, ...(exec ? [exec] : [])])].filter(Boolean);
+  }, [hr.emp]);
   const [touched, setTouched] = useState(false);
   const [preview, setPreview] = useState(false);
   const summaryRef = useRef<HTMLParagraphElement>(null);
@@ -317,6 +334,7 @@ function QuotationForm({
       terms: terms.trim(),
       ps: ps || (mode.kind === "from" ? mode.src.ps : undefined),
       replaces: repValue && repValue !== "new" ? repValue : undefined,
+      seller: seller.trim() || undefined,
     };
   }
 
@@ -471,6 +489,25 @@ function QuotationForm({
                       ＋ เพิ่มผู้ออกเอกสารใหม่…
                     </option>
                   )}
+                </select>
+              </Field>
+
+              {/* ขายในนามใคร — บัญชีกรอกใบแทนเจ้าของได้ (คำตอบพี่มิ้นท์ 25 พ.ย. 2569)
+                  ว่างไว้ = ผู้ดูแลลูกค้าเป็นคนขาย */}
+              <Field label="ขายในนาม" hint={seller ? undefined : customer ? `ตั้งต้น ${customer.owner}` : undefined}>
+                <select
+                  value={seller}
+                  onChange={(e) => setSeller(e.target.value)}
+                  className="field-control cursor-pointer"
+                >
+                  <option value="">{customer ? customer.owner : "ผู้ดูแลลูกค้า"}</option>
+                  {sellerOptions
+                    .filter((n) => n !== customer?.owner)
+                    .map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
                 </select>
               </Field>
 
@@ -714,6 +751,7 @@ function QuotationForm({
                     issued: "",
                     validDays: days,
                     issuer: issuer || "MAZ",
+                    seller: seller || customer?.owner,
                     body,
                     terms: terms.trim(),
                     totals: {

@@ -48,6 +48,9 @@ export type PaperDoc = {
   revision?: number;
   validDays: number;
   issuer: IssuerCode;
+  /** ขายในนามใคร กับคนกรอกใบ (รอบที่ 125) — ว่าง = ใบเก่าที่ไม่ได้เก็บไว้ */
+  seller?: string;
+  filledBy?: string;
   customer: PaperParty | null;
   /** รายละเอียดงานเป็น HTML · <hr> คือจุดขึ้นหน้าใหม่ */
   body: string;
@@ -152,6 +155,13 @@ function PaperHead({ doc }: { doc: PaperDoc }) {
               กำหนดยืนเวลา {doc.validDays} วัน
             </em>
           </p>
+          {/* ขายในนามใคร และใครกรอกใบนี้ — คนละคนได้ (บัญชีกรอกแทนเจ้าของ) */}
+          {doc.seller && (
+            <p className="mt-1 text-[11.5px] text-[#5a6069]">
+              ขายในนาม {doc.seller}
+              {doc.filledBy && doc.filledBy !== doc.seller && <span> · กรอกโดย {doc.filledBy}</span>}
+            </p>
+          )}
         </div>
       </header>
 

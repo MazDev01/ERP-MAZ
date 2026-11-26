@@ -728,6 +728,12 @@ export type QuotationInput = {
   ps?: string;
   /** ออกแทนใบเดิม — ใบเดิมจะถูกบันทึกว่าออกใบใหม่แทนแล้ว */
   replaces?: string;
+  /*
+   * ขายในนามใคร (รอบที่ 125) — บัญชีกรอกใบแทนเจ้าของได้
+   * ไม่ส่งมา = ใช้ผู้ดูแลลูกค้า · ส่วนคนกรอกฐานข้อมูลเขียนให้เอง
+   */
+  seller?: string;
+  sellerId?: string;
 };
 
 /**
@@ -757,6 +763,8 @@ export async function addQuotation(input: QuotationInput) {
       terms: input.terms,
       psNo: input.ps,
       replaces: input.replaces,
+      seller: input.seller,
+      sellerId: input.sellerId,
     });
     refreshParties();
     return made.ok && made.code ? made.code : "";
@@ -767,7 +775,8 @@ export async function addQuotation(input: QuotationInput) {
        ตัวอักษรหน้าแยกตามผู้ออกเอกสารตามค่าตั้งค่า (/admin/company) */
     no = quotationDocNo(issuerOf(input.issuer).prefix, s.quotations.map((q) => q.no));
     const issued = today();
-    const { replaces, ps, ...rest } = input;
+    const { replaces, ps, sellerId, ...rest } = input;
+    void sellerId;
     const old = replaces ? s.quotations.find((q) => q.no === replaces && !q.replacedBy) : undefined;
     const quotation: Quotation = {
       id: newId("Q"),
@@ -782,6 +791,8 @@ export async function addQuotation(input: QuotationInput) {
       sentAt: issued,
       ...(ps ? { ps } : {}),
       ...(old ? { replaces: old.no } : {}),
+      /* โหมดไม่มีฐานข้อมูล — คนกรอกคือคนที่ใช้เครื่องอยู่ */
+      filledBy: CURRENT_USER.name,
     };
     const next: CrmState = {
       ...s,
