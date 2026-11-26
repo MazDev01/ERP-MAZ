@@ -16,6 +16,7 @@ import {
 import { type LeaveRecord } from "@/lib/leave-data";
 import { OT_KIND, otKindOf, type OtRecord } from "@/lib/ot-data";
 import { useOtRecords } from "@/lib/ot-store";
+import { useWfh } from "@/lib/wfh-store";
 import { leavesOnDate, useLeaveRecords } from "@/lib/leave-store";
 import {
   formatMinutesOfDay,
@@ -42,7 +43,7 @@ const TH_DAYS = [
   "อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์",
 ];
 
-type Status = "ok" | "late" | "early" | "leave" | "leaveWait" | "miss" | "working" | "holiday";
+type Status = "ok" | "late" | "early" | "leave" | "leaveWait" | "miss" | "working" | "holiday" | "wfh";
 
 const STATUS: Record<Status, { label: string; cls: string }> = {
   ok: { label: "ปกติ", cls: "t-ok" },
@@ -54,6 +55,8 @@ const STATUS: Record<Status, { label: string; cls: string }> = {
   miss: { label: "ขาดบันทึก", cls: "t-miss" },
   working: { label: "กำลังทำงาน", cls: "t-work" },
   holiday: { label: "วันหยุด", cls: "t-info" },
+  /* แจ้งทำงานที่บ้านช่วงฉุกเฉิน (รอบที่ 127) — ไม่ต้องอนุมัติ และไม่ใช่ขาดบันทึก */
+  wfh: { label: "ทำงานที่บ้าน", cls: "t-info" },
 };
 
 const TABS = [
@@ -79,6 +82,8 @@ type DayRow = {
   leaveWaiting: boolean;
   /** โอทีของวันนั้นจากหน้าคำขอทำล่วงเวลา — ชั่วโมงกับสถานะล่าสุด */
   ot: { hours: number; status: string; rate: number } | null;
+  /** แจ้งทำงานที่บ้านไว้ของวันนั้น — ข้อความคือเหตุผล */
+  wfh: string;
   note: string;
 };
 
@@ -95,6 +100,8 @@ export function AttendanceTable() {
   );
   const leaveRecords = useLeaveRecords();
   const otRecords = useOtRecords();
+  /* วันที่แจ้งทำงานที่บ้านไว้ — ไม่ให้ขึ้นเป็นขาดบันทึก (รอบที่ 127) */
+  const wfhList = useWfh();
   const now = useMemo(() => (tick ? new Date(tick) : null), [tick]);
 
   /* หน้าการลากับโอทีลิงก์มาหาเดือนของรายการที่กดด้วย ?month=YYYY-MM
@@ -113,8 +120,8 @@ export function AttendanceTable() {
   const todayKey = now ? dayKey(now) : null;
   const rows = useMemo(
     () =>
-      todayKey ? buildRows(viewMonth, todayKey, records, leaveRecords, otRecords) : [],
-    [viewMonth, todayKey, records, leaveRecords, otRecords],
+      todayKey ? buildRows(viewMonth, todayKey, records, leaveRecords, otRecords, wfhList) : [],
+    [viewMonth, todayKey, records, leaveRecords, otRecords, wfhList],
   );
 
   const workdays = useMemo(() => rows.filter((r) => !r.off), [rows]);
@@ -450,6 +457,8 @@ function hhmm(m: number | null) {
 
 function statusOf(r: DayRow): Status {
   const s = shiftOf(r.leave);
+  /* แจ้งทำงานที่บ้านไว้และไม่ได้ตอกบัตร — เป็นวันทำงาน ไม่ใช่ขาดบันทึก (รอบที่ 127) */
+  if (r.wfh && r.inMin == null) return "wfh";
   const required = Math.max(0, s.out - s.in);
   // ลาทั้งวัน = ไม่ต้องทำงาน ต่อให้แวะมาตอกบัตรก็ยังนับเป็นวันลา
   if (r.leave && required === 0) return "leave";
@@ -477,6 +486,7 @@ function buildRows(
   records: PunchRecord[],
   leaves: LeaveRecord[],
   otRecords: OtRecord[],
+  wfh: { date: string; reason: string }[] = [],
 ): DayRow[] {
   const year = month.getFullYear();
   const m = month.getMonth();
@@ -521,6 +531,7 @@ function buildRows(
       leave: leaveWindowOf(leave),
       leaveName: leave?.type ?? waiting?.type ?? "",
       leaveWaiting: Boolean(waiting),
+      wfh: wfh.find((w) => w.date === key)?.reason ?? "",
       ot: otOfDay.length
         ? {
             hours: Math.round(otHoursOfDay * 100) / 100,
@@ -535,7 +546,10 @@ function buildRows(
           ? `${leave.type}${leave.comment ? ` · ${leave.comment}` : ""}`
           : waiting
             ? `ยื่นลาไว้ ${waiting.type} เลขที่ ${waiting.id} · รออนุมัติ`
-            : ""),
+            : /* เหตุผลที่แจ้งทำงานที่บ้าน — ฝ่ายบุคคลอ่านได้ตอนปิดรอบเวลา (รอบที่ 127) */
+              (wfh.find((w) => w.date === key)?.reason
+                ? `ทำงานที่บ้าน · ${wfh.find((w) => w.date === key)?.reason}`
+                : "")),
     });
   }
   return out;

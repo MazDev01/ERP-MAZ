@@ -34,6 +34,8 @@ import { popupOn, useNotifySettings } from "@/lib/notify-settings";
 import { useOnline } from "@/lib/pwa";
 import { areaSettings, freshFix, judge, locate, meters, useLiveGeo, type LiveGeo, type PunchGeo } from "@/lib/work-area";
 import { ChevronLeftIcon, ChevronRightIcon, ClockIcon, LeaveIcon, LoginIcon, PinIcon, PlusIcon, PowerIcon } from "./icons";
+import { cancelWfh, noticeWfh, useWfh, wfhReasons } from "@/lib/wfh-store";
+import { todayIso } from "@/lib/format";
 
 const DOW_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
@@ -534,6 +536,10 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
         </div>
 
 
+        {/* แจ้งทำงานที่บ้านช่วงฉุกเฉิน — ไฟดับ เน็ตล่ม น้ำท่วม (รอบที่ 127)
+           ไม่ต้องรออนุมัติตามที่ฝ่ายบุคคลยืนยัน 25 พ.ย. 2569 */}
+        <WfhCard />
+
         {/* ปุ่มเข้าหน้าบันทึกเวลาทั้งเดือน — เห็นทุกขนาดจอ (ผู้ใช้สั่ง 7 ต.ค. 2569)
            เดิมซ่อนบนจอกว้างเพราะมีชิป "บันทึกเวลาของฉัน" อยู่แล้ว แต่หาไม่เจอ */}
         {canRecords && <Link
@@ -790,6 +796,120 @@ export function CheckinScreen({ embedded = false }: { embedded?: boolean } = {})
 }
 
 /** ป้ายบอกสถานะพื้นที่ใต้หัวการ์ด */
+/*
+ * แจ้งทำงานที่บ้านช่วงฉุกเฉิน (รอบที่ 127 · ฝ่ายบุคคลยืนยัน 25 พ.ย. 2569)
+ *
+ * ไม่มีขั้นอนุมัติ — เลือกเหตุผลแล้วกดแจ้ง มีผลทันที และวันนั้นจะไม่ขึ้นเป็น
+ * "ขาดบันทึก" ให้ฝ่ายบุคคลตามอีก · แจ้งซ้ำวันเดิมคือแก้เหตุผล ถอนเองได้
+ */
+function WfhCard() {
+  const list = useWfh();
+  const day = todayIso();
+  const mine = list.find((x) => x.date === day);
+  const reasons = wfhReasons();
+  const [open, setOpen] = useState(false);
+  const [why, setWhy] = useState(reasons[0] ?? "");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function send() {
+    setBusy(true);
+    const res = await noticeWfh(why, note);
+    setBusy(false);
+    if (!res.ok) {
+      setErr(res.message);
+      return;
+    }
+    setErr("");
+    setNote("");
+    setOpen(false);
+  }
+
+  async function undo() {
+    setBusy(true);
+    const res = await cancelWfh(day);
+    setBusy(false);
+    setErr(res.ok ? "" : res.message);
+  }
+
+  if (mine) {
+    return (
+      <div className="rounded-[14px] border border-border bg-muted/50 px-3.5 py-3 text-left">
+        <p className="text-[13px] font-semibold">
+          วันนี้ทำงานที่บ้าน · {mine.reason}
+        </p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
+          แจ้งไว้แล้ว ไม่ต้องรออนุมัติ{mine.note ? ` · ${mine.note}` : ""}
+        </p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void undo()}
+          className="btn glass-thin btn-mini mt-2.5"
+        >
+          ถอนที่แจ้งไว้
+        </button>
+        {err && <p className="mt-2 text-[12px] font-semibold text-destructive">{err}</p>}
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="btn glass-thin btn-mini w-full justify-center"
+      >
+        แจ้งทำงานที่บ้าน (เหตุฉุกเฉิน)
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-[14px] border border-border bg-white px-3.5 py-3 text-left">
+      <p className="text-[13px] font-semibold">แจ้งทำงานที่บ้านวันนี้</p>
+      <p className="mt-0.5 text-[12px] text-muted-foreground">
+        ไฟดับ เน็ตล่ม น้ำท่วม — แจ้งแล้วมีผลทันที ไม่ต้องรออนุมัติ
+      </p>
+      <select
+        value={why}
+        onChange={(e) => setWhy(e.target.value)}
+        aria-label="เหตุผลที่ทำงานที่บ้าน"
+        className="field-control mt-2.5 h-[38px] w-full cursor-pointer text-[13.5px]"
+      >
+        {reasons.map((r) => (
+          <option key={r} value={r}>
+            {r}
+          </option>
+        ))}
+      </select>
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)"
+        aria-label="รายละเอียดเพิ่มเติม"
+        className="field-control mt-2 h-[38px] w-full text-[13.5px]"
+      />
+      {err && <p className="mt-2 text-[12px] font-semibold text-destructive">{err}</p>}
+      <div className="mt-2.5 flex gap-2">
+        <button type="button" className="btn glass-thin btn-mini flex-1" onClick={() => setOpen(false)}>
+          ยกเลิก
+        </button>
+        <button
+          type="button"
+          disabled={busy || !why}
+          onClick={() => void send()}
+          className="btn solid btn-solid btn-mini flex-1"
+        >
+          แจ้ง
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AreaBadge({
   checkedOut,
   isWorking,
