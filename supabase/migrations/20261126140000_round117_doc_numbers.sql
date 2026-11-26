@@ -3,8 +3,8 @@
    ของเดิมทุกอย่างเป็น <คำนำหน้า>-<พ.ศ.>-<ลำดับ 4 หลัก> รีเซ็ตรายปี
    ของจริงที่บัญชีใช้อยู่เป็นแบบนี้
 
-   1. ใบเสนอราคา  MAZ{YY}-{MM}{NNNN}   เช่น MAZ26-060041
-      YY = ปี ค.ศ. สองหลักท้าย (ตามเอกสารจริงที่ส่งมา — ปี 2026 เขียน 26)
+   1. ใบเสนอราคา  MAZ{YY}-{MM}{NNNN}   เช่น MAZ69-110001
+      YY = ปี พ.ศ. สองหลักท้าย (ผู้ใช้ยืนยัน 26 พ.ย. 2569 — 2569 เขียน 69)
       ลำดับรีเซ็ตทุกเดือน · ใช้ชุดเดียวกันทุกผู้ออกเอกสาร (เมธา / ไอเมซเมกเกอร์ / ในนามบุคคล)
    2. ใบแจ้งหนี้   เลขเดียวกับใบเสนอราคา เปลี่ยนตัวอักษรหน้าเป็น INV
       เช่น MAZ26-060041 → INV26-060041 · ทุกงวดของดีลใช้เลขเดียวกัน
@@ -48,7 +48,7 @@ as $$
 declare
   v_today date := (now() at time zone 'Asia/Bangkok')::date;
   v_be    int  := extract(year from v_today)::int + 543;
-  v_yy    text := lpad((extract(year from v_today)::int % 100)::text, 2, '0');
+  v_yy    text := lpad((v_be % 100)::text, 2, '0');
   v_mm    text := lpad(extract(month from v_today)::text, 2, '0');
   v_pre   text := coalesce(nullif(public.pay_settings() #>> array['docs', 'quotationMaz'], ''), 'MAZ');
   v_no    int;
@@ -92,7 +92,7 @@ as $$
 declare
   v_quo   text;
   v_today date := (now() at time zone 'Asia/Bangkok')::date;
-  v_yy    text := lpad((extract(year from v_today)::int % 100)::text, 2, '0');
+  v_yy    text := lpad(((extract(year from v_today)::int + 543) % 100)::text, 2, '0');
   v_mm    text := lpad(extract(month from v_today)::text, 2, '0');
 begin
   select q.no into v_quo

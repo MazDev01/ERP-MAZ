@@ -80,10 +80,10 @@ export function nextDocNo(prefix: string, existing: string[]) {
  * ทางนี้ใช้เฉพาะตอนยังไม่ต่อฐานข้อมูล — ของจริงฐานข้อมูลออกเลขให้ (next_quotation_no ฯลฯ)
  */
 
-/** ใบเสนอราคา MAZ{YY}-{MM}{NNNN} · YY = ปี ค.ศ. สองหลักท้าย เช่น MAZ26-110001 */
+/** ใบเสนอราคา MAZ{YY}-{MM}{NNNN} · YY = ปี พ.ศ. สองหลักท้าย เช่น MAZ69-110001 */
 export function quotationDocNo(prefix: string, existing: string[]) {
   const now = bkkNow();
-  const yy = String(now.getFullYear() % 100).padStart(2, "0");
+  const yy = String((now.getFullYear() + 543) % 100).padStart(2, "0");
   const mm = pad2(now.getMonth() + 1);
   const head = `${prefix}${yy}-${mm}`;
   /* นับจากทุกคำนำหน้าในเดือนเดียวกัน เพราะใช้ชุดเลขเดียวกันทุกผู้ออกเอกสาร */
