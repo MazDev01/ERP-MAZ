@@ -34,6 +34,9 @@ type Field = { key: NumKey; label: string; unit: string; hint: string; min: numb
 const TAX: Field[] = [
   { key: "vat", label: "ภาษีมูลค่าเพิ่ม", unit: "%", hint: "ใช้กับผู้ออกเอกสารที่จด VAT", min: 0, max: 30, step: 0.5 },
   { key: "wht", label: "ภาษีหัก ณ ที่จ่าย", unit: "%", hint: "งานรับจ้างทำของปกติ 3%", min: 0, max: 15, step: 0.5 },
+  /* เกณฑ์ขั้นต่ำของกรมสรรพากร (รอบที่ 120) — ต่ำกว่านี้ไม่หัก */
+  { key: "whtMinBase", label: "ยอดขั้นต่ำที่ต้องหักภาษี", unit: "บาท/ครั้ง", hint: "ต่ำกว่านี้ไม่หัก ณ ที่จ่าย · 0 = หักทุกยอด", min: 0, max: 100000, step: 100 },
+  { key: "whtMinBaseGov", label: "ยอดขั้นต่ำเมื่อผู้จ่ายเป็นราชการ", unit: "บาท/ครั้ง", hint: "ส่วนราชการหัก 1% ตั้งแต่ยอดนี้ขึ้นไป", min: 0, max: 100000, step: 100 },
 ];
 const PAY: Field[] = [
   { key: "commission", label: "ค่าคอมมิชชั่นฝ่ายขาย", unit: "% ของมูลค่าดีล", hint: "ใช้ในใบเบิกของพนักงานขาย", min: 0, max: 50, step: 0.5 },

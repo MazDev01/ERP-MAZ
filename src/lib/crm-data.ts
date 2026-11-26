@@ -436,6 +436,16 @@ export const WHT_PCTS = [1, 2, 3, 5];
  * บุคคลธรรมดาที่ซื้อของไม่มีหน้าที่หักภาษี ณ ที่จ่าย ต่อให้ติ๊กช่องไว้ก็ไม่หัก
  * ไม่ได้ระบุอัตราไว้ (ใบเก่า) ใช้อัตรามาตรฐาน · ที่เหลือห้ามเดาเอง
  */
+/**
+ * ยอดต่อครั้งที่ต่ำกว่านี้ ไม่ต้องหักภาษี ณ ที่จ่าย (รอบที่ 120)
+ * ทั่วไป 1,000 บาท · ผู้จ่ายเป็นส่วนราชการหักตั้งแต่ 500 บาท — ตั้งได้ที่ /admin/rates
+ */
+export const whtMinBase = (payerIsGov = false) =>
+  payerIsGov ? settings().rates.whtMinBaseGov : settings().rates.whtMinBase;
+
+/** ยอดนี้ถึงเกณฑ์ต้องหักไหม */
+export const whtDue = (base: number, payerIsGov = false) => round2(base) >= whtMinBase(payerIsGov);
+
 export function whtPctOf(q: Pick<Quotation, "wht" | "whtPct" | "buyer">) {
   if (!q.wht || q.buyer === "individual") return 0;
   const pct = q.whtPct ?? whtRate();
@@ -454,7 +464,8 @@ export function quotationTotals(
   const base = round2(gross - discount);
   const rate = issuerOf(q.issuer).vat ? vatRate() : 0;
   const vat = round2((base * rate) / 100);
-  const whtPct = whtPctOf(q);
+  /* ยอดเล็กกว่าเกณฑ์ของกรมสรรพากร ไม่หัก — ราชการใช้เกณฑ์ของราชการ (รอบที่ 120) */
+  const whtPct = whtDue(base, q.buyer === "government") ? whtPctOf(q) : 0;
   const whtAmount = round2((base * whtPct) / 100);
   return {
     gross, discount, base, vatRate: rate, vat, whtPct, whtAmount,

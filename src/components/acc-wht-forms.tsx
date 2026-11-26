@@ -30,6 +30,7 @@ import {
   type WhtPayee,
   type WhtRow,
 } from "@/lib/acc-data";
+import { whtDue, whtMinBase } from "@/lib/crm-data";
 import { issueWht, newWhtId, useAcc } from "@/lib/acc-store";
 import { baht, bahtText, commaInput, todayIso } from "@/lib/format";
 import { useHydrated } from "@/lib/pwa";
@@ -806,6 +807,12 @@ function CertEditor({
         <div className="ml-auto text-right text-[12.5px]">
           <span className="block text-muted-foreground">ภาษีที่หักและนำส่ง</span>
           <b className="num text-[16px] font-bold">{baht(whtAmount({ base, rate }))} บาท</b>
+          {/* ยอดเล็กไม่เข้าเกณฑ์ของกรมสรรพากร — บอกเหตุผลไว้ ไม่งั้นเห็นศูนย์แล้วนึกว่าระบบพัง (รอบที่ 120) */}
+          {base > 0 && !whtDue(base) && (
+            <span className="block text-muted-foreground">
+              ยอดต่ำกว่า {whtMinBase().toLocaleString("en-US")} บาท ไม่เข้าเกณฑ์หักภาษี
+            </span>
+          )}
         </div>
         {tried && invalid && (
           <p className="w-full text-[12.5px] font-semibold text-destructive">

@@ -89,6 +89,13 @@ export type LateMode = "off" | "wage" | "fixed";
 export type RateSettings = {
   vat: number;
   wht: number;
+  /*
+   * ยอดจ่ายต่อครั้งที่ต่ำกว่านี้ ไม่ต้องหักภาษี ณ ที่จ่าย (รอบที่ 120)
+   * ทั่วไป 1,000 บาท · ถ้าผู้จ่ายเป็นส่วนราชการ หักตั้งแต่ 500 บาท
+   * เก็บเป็นค่าตั้งค่าเพราะกรมสรรพากรปรับเกณฑ์ได้ ห้ามเขียนเป็นค่าคงที่ในโค้ด
+   */
+  whtMinBase: number;
+  whtMinBaseGov: number;
   commission: number;
   otAfterWork: number;
   otHoliday: number;
@@ -334,6 +341,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   rates: {
     vat: 7,
     wht: 3,
+    whtMinBase: 1000,
+    whtMinBaseGov: 500,
     commission: 5,
     otAfterWork: 1.5,
     otHoliday: 2,

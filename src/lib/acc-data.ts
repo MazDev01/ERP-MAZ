@@ -13,7 +13,7 @@
  */
 
 /* อัตราภาษีใช้ชุดเดียวกับฝ่ายขาย ไม่ประกาศซ้ำ ไม่งั้นสองฝ่ายคิดยอดไม่ตรงกัน */
-import { vatRate, whtRate } from "./crm-data";
+import { vatRate, whtDue, whtRate } from "./crm-data";
 import { round2, todayIso } from "./format";
 import { merged } from "./catalog";
 import { settings, whtRateOn } from "./system-settings";
@@ -481,6 +481,8 @@ export const kindOfPayee = (p: WhtPayee): WhtKind => (p === "individual" ? "3" :
 export type WhtType = string;
 
 export const BUILTIN_WHT_TYPES: { key: WhtType; label: string; rate: number }[] = [
+  /* ค่าสินค้าไม่อยู่ในข่ายหัก ณ ที่จ่าย — ต้องมีให้เลือก ไม่งั้นบัญชีเลี่ยงไปใช้ "อื่นๆ" ที่หัก 3% */
+  { key: "goods", label: "ค่าสินค้า (ไม่หัก)", rate: 0 },
   { key: "service", label: "ค่าบริการ / รับจ้างทำของ", rate: 3 },
   { key: "rent", label: "ค่าเช่าทรัพย์สิน", rate: 5 },
   { key: "ads", label: "ค่าโฆษณา", rate: 2 },
@@ -580,6 +582,8 @@ export const ACC_WHT: WhtRow[] = [
 
 /** ภาษีที่ต้องหักและนำส่งของหนึ่งรายการ */
 export function whtAmount(row: Pick<WhtRow, "base" | "rate">) {
+  /* ต่ำกว่าเกณฑ์ไม่หัก แม้จะเผลอตั้งอัตราไว้ */
+  if (!whtDue(row.base)) return 0;
   return Math.round(((row.base * row.rate) / 100) * 100) / 100;
 }
 

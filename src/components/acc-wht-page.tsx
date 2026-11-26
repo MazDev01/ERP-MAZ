@@ -12,6 +12,7 @@ import {
   type WhtRow,
   type WhtType,
 } from "@/lib/acc-data";
+import { whtDue, whtMinBase } from "@/lib/crm-data";
 import { newWhtId, removeWht, saveWht, useAcc } from "@/lib/acc-store";
 import { TH_MONTHS_FULL, baht, bkkNow, parseIsoDate, thaiDate, todayIso, commaInput } from "@/lib/format";
 import { MonthNav } from "./acc-ui";
@@ -275,7 +276,8 @@ function WhtDialog({
   const baseNum = Number(base.replace(/,/g, "")) || 0;
   const rateNum = Number(rate.replace(/,/g, "")) || 0;
   const tax13 = tax.replace(/\D/g, "");
-  const wht = Math.round(((baseNum * rateNum) / 100) * 100) / 100;
+  /* ยอดต่ำกว่าเกณฑ์ของกรมสรรพากรไม่ต้องหัก — คิดจากที่เดียวกับฐานข้อมูล (รอบที่ 120) */
+  const wht = whtAmount({ base: baseNum, rate: rateNum });
 
   const bad = {
     name: !name.trim(),
@@ -432,7 +434,15 @@ function WhtDialog({
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3 rounded-[11px] border border-border bg-muted/60 px-3.5 py-3 text-[13px]">
-        <span>ภาษีที่ต้องหักและนำส่ง</span>
+        <span>
+          ภาษีที่ต้องหักและนำส่ง
+          {/* บอกเหตุผลไว้ ไม่งั้นเห็นศูนย์แล้วนึกว่าระบบพัง (รอบที่ 120) */}
+          {baseNum > 0 && !whtDue(baseNum) && (
+            <span className="block text-[12px] text-muted-foreground">
+              ยอดต่ำกว่า {whtMinBase().toLocaleString("en-US")} บาท ไม่เข้าเกณฑ์หักภาษี
+            </span>
+          )}
+        </span>
         <b className="num text-[15px] font-bold">{baht(wht)} บาท</b>
       </div>
       <p className="mt-2 text-[12.5px] text-muted-foreground">
