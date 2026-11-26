@@ -297,7 +297,7 @@ export async function loadRoundByToken(token: string) {
 }
 
 /** ลูกค้ากรอกรหัสของลิงก์ (รอบที่ 128) — เก็บไว้ในหน่วยความจำของแท็บเท่านั้น */
-export async function useRoundPass(pass: string) {
+export async function applyRoundPass(pass: string) {
   const { setReviewPass } = await import("./supabase/review");
   setReviewPass(pass);
 }

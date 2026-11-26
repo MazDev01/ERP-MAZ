@@ -26,7 +26,7 @@ import {
   findRound,
   liveUrl,
   loadRoundByToken,
-  useRoundPass,
+  applyRoundPass,
   onClientWrite,
   rememberName,
   rememberedName,
@@ -132,7 +132,7 @@ function AskPass({ wrong, onDone }: { wrong: boolean; onDone: () => void }) {
   async function go() {
     if (!v.trim() || busy) return;
     setBusy(true);
-    await useRoundPass(v.trim());
+    await applyRoundPass(v.trim());
     setBusy(false);
     onDone();
   }
