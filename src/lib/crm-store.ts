@@ -34,6 +34,7 @@ import {
   type Quotation,
   type QuotationRevision,
   type Urgency,
+  isJuristicBuyer,
 } from "./crm-data";
 import { addDays, bkkNow, nextDocNo, quotationDocNo, todayIso } from "./format";
 import { firstLine } from "./rich-text";
@@ -445,8 +446,8 @@ export async function addLead(input: {
       source: input.source,
       taxId: input.taxId,
       type: input.type,
-      legalName: input.type === "juristic" ? input.legalName : "",
-      branch: input.type === "juristic" ? input.branch : "",
+      legalName: isJuristicBuyer(input.type) ? input.legalName : "",
+      branch: isJuristicBuyer(input.type) ? input.branch : "",
       owner: CURRENT_USER.name,
     });
     if (made.ok && made.code) await sbLogActivity({ code: made.code, ...input.activity });
@@ -467,8 +468,8 @@ export async function addLead(input: {
       taxId: input.taxId,
       /* นิติบุคคลต้องมีชื่อตามหนังสือรับรองกับสำนักงานใหญ่/สาขา ไม่งั้นบัญชีออกใบกำกับภาษีไม่ได้ */
       type: input.type,
-      legalName: input.type === "juristic" ? input.legalName : "",
-      branch: input.type === "juristic" ? input.branch : "",
+      legalName: isJuristicBuyer(input.type) ? input.legalName : "",
+      branch: isJuristicBuyer(input.type) ? input.branch : "",
       status: "รอนัดหมาย",
       closedReason: "",
       owner: CURRENT_USER.name,
@@ -716,6 +717,11 @@ export type QuotationInput = {
   amount: number;
   discount: number;
   wht: boolean;
+  /**
+   * อัตราหัก ณ ที่จ่ายของใบนี้ — ตั้งต้นจากประเภทลูกค้า (เอกชน 3% ราชการ 1% มูลนิธิ 3% บุคคลไม่หัก)
+   * ไม่ส่งมา = ใช้อัตรามาตรฐานของระบบ
+   */
+  whtPct?: number;
   body: string;
   terms: string;
   /** อ้างอิงคำขอก่อนการขาย — เอกสารของคำขอจะตามไปถึง PM */
@@ -746,6 +752,7 @@ export async function addQuotation(input: QuotationInput) {
       amount: input.amount,
       discount: input.discount,
       wht: input.wht,
+      whtPct: input.whtPct,
       body: input.body,
       terms: input.terms,
       psNo: input.ps,

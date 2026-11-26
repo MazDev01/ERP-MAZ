@@ -73,6 +73,8 @@ const CUSTOMER_COLS =
   "id, code, lead_code, name, legal_name, contact, phone, email, address, legal_address," +
   " branch, tax_id, source, buyer_type, status, closed_reason, owner, created_at";
 
+const BUYER_TYPES: BuyerType[] = ["juristic", "government", "foundation", "individual"];
+
 /** yyyy-mm-dd ตามเวลาไทยของเวลาที่ฐานข้อมูลคืนมา */
 function thaiDay(at: string) {
   const d = new Date(at);
@@ -93,7 +95,8 @@ function toCustomer(r: CustomerRow): Customer {
     legalName: r.legal_name || undefined,
     legalAddress: r.legal_address || undefined,
     branch: r.branch || undefined,
-    type: (r.buyer_type === "individual" ? "individual" : "juristic") as BuyerType,
+    /* ประเภทลูกค้ามีสี่แบบตั้งแต่รอบที่ 118 — ค่าที่ไม่รู้จักถือเป็นเอกชนเหมือนเดิม */
+    type: (BUYER_TYPES.includes(r.buyer_type as BuyerType) ? r.buyer_type : "juristic") as BuyerType,
     status: r.status as CustomerStatus,
     leadCode: r.lead_code ?? undefined,
     closedReason: r.closed_reason,
@@ -667,7 +670,7 @@ export async function fetchSalesDocs(
     no: r.no,
     customerCode: codeById[r.customer_id] ?? "",
     issuer: r.issuer,
-    buyer: (r.buyer_type === "individual" ? "individual" : "juristic") as BuyerType,
+    buyer: (BUYER_TYPES.includes(r.buyer_type as BuyerType) ? r.buyer_type : "juristic") as BuyerType,
     service: (r.service || undefined) as Quotation["service"],
     issued: r.issued,
     validDays: r.valid_days,

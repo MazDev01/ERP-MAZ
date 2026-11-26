@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { branchLabel, HEAD_OFFICE, type Customer } from "@/lib/crm-data";
+import { branchLabel, HEAD_OFFICE, isJuristicBuyer, type Customer } from "@/lib/crm-data";
 import { PencilIcon } from "./icons";
 import { useAddOption } from "./add-option";
 
@@ -87,7 +87,7 @@ export function ProfileFacts({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Editable>(() => pick(customer));
-  const fields = FIELDS.filter((f) => !f.juristic || customer.type === "juristic");
+  const fields = FIELDS.filter((f) => !f.juristic || isJuristicBuyer(customer.type));
   const addSource = useAddOption({ list: "leadSource" }, (v) => setDraft((d) => ({ ...d, source: v })));
   /* รายการที่เพิ่งเพิ่มจากตรงนี้ ยังไม่อยู่ใน props ที่หน้าแม่ส่งมา — ต่อท้ายให้เห็นทันที */
   const sourceList = draft.source && !sources.includes(draft.source) ? [...sources, draft.source] : sources;

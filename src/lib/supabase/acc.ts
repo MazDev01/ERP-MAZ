@@ -417,6 +417,43 @@ export async function sbIssueInvoice(input: {
   return { ok: true, no: (got.data as { no: string }).no };
 }
 
+/**
+ * บันทึกรับชำระโดยไม่ออกใบเสร็จ (รอบที่ 118)
+ *
+ * งานบุคคลกับบุคคลไม่ออกใบเสร็จ แต่ต้องรู้ว่ารับเงินแล้ว
+ * เขียนรายการรับชำระกับยอดค้างของใบแจ้งหนี้ ไม่แตะตารางใบเสร็จ
+ */
+export async function sbRecordPayment(input: {
+  invoiceNo: string;
+  date: string;
+  received: number;
+  wht: number;
+  outstanding: number;
+}): Promise<AccWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const id = await invoiceIdOf(input.invoiceNo);
+  if (!id) return { ok: false, reason: "not_found" };
+
+  const pay = await sb.from("payments").insert({
+    invoice_id: id,
+    on_date: input.date,
+    received: input.received,
+    wht: input.wht,
+    cert_received: input.wht <= 0,
+    created_by: myId(),
+  });
+  if (pay.error) return { ok: false, reason: why(pay.error.message) };
+
+  const left = Math.max(0, input.outstanding);
+  const up = await sb
+    .from("invoices")
+    .update({ outstanding: left, status: left > 0 ? "partial" : "paid" })
+    .eq("id", id);
+  if (up.error) return { ok: false, reason: why(up.error.message) };
+  return { ok: true };
+}
+
 export async function sbLogCollection(invoiceNo: string, c: Collection): Promise<AccWrite> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;

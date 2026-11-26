@@ -35,7 +35,7 @@ import {
   useAcc,
   type AccState,
 } from "@/lib/acc-store";
-import { issueReceiptFlow } from "@/lib/flow";
+import { issueReceiptFlow, recordPaymentFlow } from "@/lib/flow";
 import { lockScroll } from "@/lib/scroll-lock";
 import {
   TH_MONTHS_FULL,
@@ -207,6 +207,28 @@ export function AccBillingPage() {
       `\n\nยืนยันออกใบเสร็จ?`;
     if (!window.confirm(msg)) return;
     issueReceiptFlow(v.no, today, got, wht);
+  }
+
+  /*
+   * งานบุคคลกับบุคคลไม่ออกใบเสร็จ (ผู้ใช้ยืนยัน 25 พ.ย. 2569)
+   * บัญชีบันทึกรายได้ในตารางภายในเอง ระบบแค่ต้องรู้ว่ารับเงินแล้ว
+   * งวดแรกที่รับครบยังส่งงานเข้าคิวของฝ่ายโครงการเหมือนเดิม
+   */
+  function quickCash(v: Invoice) {
+    const due = invoiceDue(v);
+    const wht = receiptsOf(acc, v.no).length === 0 ? v.wht : 0;
+    const got = round2(due - wht);
+    const msg =
+      `บันทึกรับชำระของใบแจ้งหนี้ ${v.no}
+รับเงิน ${baht(got)} บาท` +
+      (wht > 0 ? `
+ภาษีหัก ณ ที่จ่าย ${baht(wht)} บาท` : "") +
+      `
+
+ไม่ออกใบเสร็จ — ใช้กับงานที่ตกลงกันเป็นบุคคลกับบุคคล
+ยืนยันบันทึกรับชำระ?`;
+    if (!window.confirm(msg)) return;
+    void recordPaymentFlow(v.no, today, got, wht);
   }
 
   return (
@@ -543,6 +565,7 @@ export function AccBillingPage() {
                 onBill={(item) => setBilling({ deal: d, item })}
                 onCancel={canCancel(d.no) ? () => openCancel(d.no) : undefined}
                 onReceipt={(v) => quickReceipt(v, d)}
+                onCash={(v) => quickCash(v)}
               />
             ))
           )}
@@ -864,6 +887,7 @@ function PhoneDeal({
   onBill,
   onCancel,
   onReceipt,
+  onCash,
 }: {
   acc: AccState;
   deal: AccDeal;
@@ -875,6 +899,8 @@ function PhoneDeal({
   onBill: (item: Installment) => void;
   onCancel?: () => void;
   onReceipt: (v: Invoice) => void;
+  /** บันทึกรับชำระโดยไม่ออกใบเสร็จ — งานบุคคลกับบุคคล */
+  onCash: (v: Invoice) => void;
 }) {
   const has = d.plan.length > 0;
   const isOpen = open && has;
@@ -1000,6 +1026,7 @@ function PhoneDeal({
                 onEdit={() => onPlan(p.seq)}
                 onBill={() => onBill(p)}
                 onReceipt={onReceipt}
+                onCash={onCash}
               />
             ))}
             {cancelBtn && <div className="grid grid-cols-2 justify-items-center">{cancelBtn}</div>}
@@ -1020,6 +1047,7 @@ function PhoneSeq({
   onEdit,
   onBill,
   onReceipt,
+  onCash,
 }: {
   acc: AccState;
   deal: AccDeal;
@@ -1029,6 +1057,7 @@ function PhoneSeq({
   onEdit: () => void;
   onBill: () => void;
   onReceipt: (v: Invoice) => void;
+  onCash: (v: Invoice) => void;
 }) {
   const router = useRouter();
   const pending = seqStatus(acc, deal.no, p.seq) === "pending";
@@ -1083,14 +1112,25 @@ function PhoneSeq({
                 ใบแจ้งหนี้
               </button>
               {owed ? (
-                <button
-                  type="button"
-                  data-ceo-hide
-                  className={`${docBtn} bg-[#C8102E] text-white`}
-                  onClick={() => onReceipt(inv)}
-                >
-                  ออกใบเสร็จ
-                </button>
+                <>
+                  <button
+                    type="button"
+                    data-ceo-hide
+                    className={`${docBtn} bg-[#C8102E] text-white`}
+                    onClick={() => onReceipt(inv)}
+                  >
+                    ออกใบเสร็จ
+                  </button>
+                  {/* งานบุคคลกับบุคคลไม่ออกใบเสร็จ — บันทึกว่ารับเงินแล้วอย่างเดียว (รอบที่ 118) */}
+                  <button
+                    type="button"
+                    data-ceo-hide
+                    className={`${docBtn} border border-[#E6DADD] bg-white text-[#2A1F22]`}
+                    onClick={() => onCash(inv)}
+                  >
+                    รับชำระ (ไม่ออกใบเสร็จ)
+                  </button>
+                </>
               ) : rc ? (
                 <button
                   type="button"

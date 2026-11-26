@@ -28,14 +28,34 @@ export const CUSTOMER_STATUS: Record<CustomerStatus, string> = {
 };
 
 /*
- * ประเภทผู้ซื้อ — ตัดสินว่าเวลาหักภาษี ณ ที่จ่ายต้องยื่นแบบไหน
- * นิติบุคคลยื่น ภ.ง.ด.53 บุคคลธรรมดายื่น ภ.ง.ด.3 (ดู acc-data.ts)
+ * ประเภทผู้ซื้อ (ผู้ใช้ยืนยัน 25 พ.ย. 2569 · issue #1)
+ *
+ * ใช้สองเรื่อง
+ *   1. ตัดสินว่าหักภาษี ณ ที่จ่ายต้องยื่นแบบไหน — บุคคลธรรมดายื่น ภ.ง.ด.3 ที่เหลือยื่น ภ.ง.ด.53
+ *   2. ตั้งอัตราหัก ณ ที่จ่ายให้เองตอนออกใบเสนอราคา (แก้รายใบได้)
+ * เดิมมีสองแบบ นิติบุคคล/บุคคลธรรมดา — "นิติบุคคล" เดิมคือเอกชน ข้อมูลเก่าจึงใช้ได้เลย
  */
-export type BuyerType = "juristic" | "individual";
+export type BuyerType = "juristic" | "government" | "foundation" | "individual";
 
 export const BUYER_TYPE: Record<BuyerType, string> = {
-  juristic: "นิติบุคคล",
+  juristic: "เอกชน (นิติบุคคล)",
+  government: "ราชการ",
+  foundation: "มูลนิธิ",
   individual: "บุคคลธรรมดา",
+};
+
+/** ต้องใช้ข้อมูลนิติบุคคล (ชื่อตามหนังสือรับรอง เลขผู้เสียภาษี สาขา) ไหม */
+export const isJuristicBuyer = (t: BuyerType) => t !== "individual";
+
+/**
+ * อัตราหัก ณ ที่จ่ายตั้งต้นของลูกค้าแต่ละประเภท — 0 = ไม่หัก
+ * ตรงกับ wht_pct_of_buyer ของฐานข้อมูล (รอบที่ 118)
+ */
+export const WHT_PCT_BY_BUYER: Record<BuyerType, number> = {
+  juristic: 3,
+  government: 1,
+  foundation: 3,
+  individual: 0,
 };
 
 export type Customer = {
@@ -153,7 +173,7 @@ export function taxInvoiceBuyer(c: Customer | undefined): TaxInvoiceBuyer {
   if (!c) {
     return { name: "", taxId: "", address: "", branch: "", missing: ["ข้อมูลลูกค้าทั้งหมด"] };
   }
-  const juristic = c.type === "juristic";
+  const juristic = isJuristicBuyer(c.type);
   const legalName = (c.legalName ?? "").trim();
   const address = (c.legalAddress ?? "").trim() || c.address.trim();
   const taxId = c.taxId.trim();

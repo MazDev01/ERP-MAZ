@@ -8,6 +8,7 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   BUYER_TYPE,
+  WHT_PCT_BY_BUYER,
   canBillQuotation,
   issuerOf,
   issuers,
@@ -67,9 +68,13 @@ function initialOf(crm: CrmState, mode: Mode, presetCustomer?: string, ps?: stri
     /* ต้นแบบคัดลอกยอดก่อนภาษีมาเป็นจำนวนเงิน ส่วนลดเริ่มว่าง · ร่างแก้ของเดิมต่อ จึงเก็บส่วนลดไว้ */
     discount: "",
     terms: src?.terms ?? "",
-    wht: src?.wht ?? false,
-    /* อัตราของใบเดิม ถ้าเป็นใบใหม่ใช้อัตรามาตรฐานเป็นค่าตั้งต้น */
-    whtPct: src?.whtPct ?? whtRate(),
+    /*
+     * หักภาษี ณ ที่จ่ายหรือไม่ และกี่เปอร์เซ็นต์ — ใบใหม่ตั้งให้เองจากประเภทลูกค้า
+     * เอกชน 3% · ราชการ 1% · มูลนิธิ 3% · บุคคลธรรมดาไม่หัก (ผู้ใช้ยืนยัน 25 พ.ย. 2569)
+     * แก้รายใบได้ถ้าตกลงกับลูกค้าเป็นอย่างอื่น
+     */
+    wht: src?.wht ?? (customer ? WHT_PCT_BY_BUYER[customer.type] > 0 : false),
+    whtPct: src?.whtPct ?? (customer ? WHT_PCT_BY_BUYER[customer.type] || whtRate() : whtRate()),
   };
 }
 
@@ -224,6 +229,13 @@ function QuotationForm({
   const [wht, setWht] = useState(init.wht);
   /* อัตราหัก ณ ที่จ่ายของใบนี้ — งานคนละประเภทคนละอัตรา ต้องเลือกไว้ในใบ ไม่ใช่ให้จอปลายทางเดา */
   const [whtPct, setWhtPct] = useState(init.whtPct);
+  /** ตั้งการหักภาษี ณ ที่จ่ายตามประเภทผู้ซื้อ — เอกชน 3% ราชการ 1% มูลนิธิ 3% บุคคลไม่หัก */
+  function applyBuyer(t: BuyerType) {
+    const pct = WHT_PCT_BY_BUYER[t];
+    setWht(pct > 0);
+    if (pct > 0) setWhtPct(pct);
+  }
+
   /* ออกแทนใบเดิม — "new" = ใบใหม่แยก · เลขที่ = ออกแทนใบนั้น · null = ยังไม่เลือก
      ออกใบใหม่จากใบเดิม (?from=) เลือกใบต้นทางไว้ให้ก่อน เปลี่ยนได้ */
   const [rep, setRep] = useState<string | null>(mode.kind === "from" ? mode.src.no : null);
@@ -363,7 +375,11 @@ function QuotationForm({
                 onChange={(c) => {
                   setCustomer(c);
                   setRep(null);
-                  if (c) setBuyer(c.type);
+                  if (c) {
+                    setBuyer(c.type);
+                    /* อัตราหัก ณ ที่จ่ายตั้งตามประเภทลูกค้าให้เอง แก้ต่อได้ (รอบที่ 118) */
+                    applyBuyer(c.type);
+                  }
                 }}
                 invalid={touched && problems.customer}
               />
@@ -461,7 +477,11 @@ function QuotationForm({
               <Field label="ประเภทผู้ซื้อ">
                 <select
                   value={buyer}
-                  onChange={(e) => setBuyer(e.target.value as BuyerType)}
+                  onChange={(e) => {
+                    const t = e.target.value as BuyerType;
+                    setBuyer(t);
+                    applyBuyer(t);
+                  }}
                   className="field-control cursor-pointer"
                 >
                   {(Object.keys(BUYER_TYPE) as BuyerType[]).map((k) => (

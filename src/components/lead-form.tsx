@@ -7,7 +7,7 @@ import { addLead, nextLeadCode, useCrm } from "@/lib/crm-store";
 import { todayIso } from "@/lib/format";
 import { Field, Sheet } from "./lead-dialogs";
 import { BranchInput } from "./lead-facts";
-import type { BuyerType } from "@/lib/crm-data";
+import { BUYER_TYPE, isJuristicBuyer, WHT_PCT_BY_BUYER, type BuyerType } from "@/lib/crm-data";
 
 import { DateField } from "./thai-date-picker";
 import { useAddOption } from "./add-option";
@@ -45,7 +45,7 @@ export function LeadForm({
   const [buyerType, setBuyerType] = useState<BuyerType>("juristic");
   const [legalName, setLegalName] = useState("");
   const [branch, setBranch] = useState("");
-  const juristic = buyerType === "juristic";
+  const juristic = isJuristicBuyer(buyerType);
 
   const [date, setDate] = useState(today);
   const [channel, setChannel] = useState("");
@@ -225,14 +225,22 @@ export function LeadForm({
             </Field>
           </div>
 
-          <Field label="ประเภทผู้ซื้อ" hint="ใช้ตัดสินว่าต้องมีข้อมูลอะไรบ้างตอนออกใบกำกับภาษี">
+          <Field
+            label="ประเภทผู้ซื้อ"
+            hint={`ใช้ตัดสินข้อมูลที่ต้องมีตอนออกใบกำกับภาษี และตั้งอัตราหัก ณ ที่จ่ายให้เอง (${
+              WHT_PCT_BY_BUYER[buyerType] ? `${WHT_PCT_BY_BUYER[buyerType]}%` : "ไม่หัก"
+            })`}
+          >
             <select
               value={buyerType}
               onChange={(e) => setBuyerType(e.target.value as BuyerType)}
               className="field-control cursor-pointer"
             >
-              <option value="juristic">นิติบุคคล</option>
-              <option value="individual">บุคคลธรรมดา</option>
+              {(Object.keys(BUYER_TYPE) as BuyerType[]).map((t) => (
+                <option key={t} value={t}>
+                  {BUYER_TYPE[t]}
+                </option>
+              ))}
             </select>
           </Field>
 

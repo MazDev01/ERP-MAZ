@@ -26,6 +26,7 @@ import {
   invoiceStatus,
   openDealForBilling,
   issueReceipt,
+  recordPayment,
   accSnapshot,
   type AccState,
 } from "./acc-store";
@@ -173,6 +174,27 @@ export async function issueReceiptFlow(invoiceNo: string, date: string, received
      แต่ใบเสร็จออกไปแล้ว ถ้าตรงนี้พลาดจึงไม่ถอนใบเสร็จ ให้ขึ้นกล่องช้าหน่อยแทน */
   if (deal) await addInboxJob(buildInboxJob(deal, date, invoice.no));
   return no;
+}
+
+/**
+ * บันทึกรับชำระโดยไม่ออกใบเสร็จ แล้วส่งงานเข้าคิว PM ถ้าเป็นงวดแรกและรับครบ (รอบที่ 118)
+ *
+ * งานบุคคลกับบุคคลไม่มีใบเสร็จ แต่กติกาการส่งงานต่อเหมือนกันทุกประการ
+ * คืน true เมื่อบันทึกสำเร็จ
+ */
+export async function recordPaymentFlow(invoiceNo: string, date: string, received: number, wht: number) {
+  const before = accSnapshot();
+  const invoice = before.invoices.find((v) => v.no === invoiceNo);
+  const ok = await recordPayment(invoiceNo, date, received, wht);
+  if (!ok || !invoice || invoice.seq !== 1) return ok;
+
+  const settledNow = round2(received + wht) >= round2(invoice.outstanding);
+  if (!settledNow) return ok;
+
+  promoteCustomerOnPaid(invoice.deal);
+  const deal = before.deals.find((d) => d.no === invoice.deal);
+  if (deal) await addInboxJob(buildInboxJob(deal, date, invoice.no));
+  return ok;
 }
 
 /** จำนวนวันมาตรฐานของโครงการเมื่อฝ่ายขายไม่ได้ระบุกำหนดส่ง */

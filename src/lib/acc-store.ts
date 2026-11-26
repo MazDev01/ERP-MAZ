@@ -51,6 +51,7 @@ import {
   sbCancelInvoices,
   sbIssueInvoice,
   sbIssueReceipt,
+  sbRecordPayment,
   sbLogCollection,
   sbMarkDealsSeen,
   sbRemoveWht,
@@ -1096,6 +1097,39 @@ export async function logCollection(invoiceNo: string, entry: Collection) {
  * งานเข้าคิว PM เมื่องวดแรกชำระครบ — หน้าจอต้องเรียกผ่าน issueReceiptFlow ใน flow.ts
  * คืนเลขที่ใบเสร็จ หรือค่าว่างถ้าออกไม่ได้
  */
+/**
+ * บันทึกรับชำระโดยไม่ออกใบเสร็จ (รอบที่ 118 · งานบุคคลกับบุคคล)
+ *
+ * บัญชีบันทึกรายได้ในตารางภายในเอง ระบบจึงต้องรับเงินได้โดยไม่ออกเอกสารภาษี
+ * คืน true เมื่อบันทึกสำเร็จ — เรียกผ่าน recordPaymentFlow (flow.ts) เพื่อให้งานเข้าคิว PM ต่อ
+ */
+export async function recordPayment(invoiceNo: string, date: string, received: number, wht: number) {
+  const s = snapshot();
+  const v = s.invoices.find((x) => x.no === invoiceNo);
+  if (!v || !date || v.status === "cancelled" || v.outstanding <= 0) return false;
+  const got = round2(received);
+  const tax = round2(wht);
+  if (got <= 0 || tax < 0 || round2(got + tax) > v.outstanding) return false;
+  const left = round2(v.outstanding - round2(got + tax));
+
+  if (live) {
+    const res = await sbRecordPayment({ invoiceNo, date, received: got, wht: tax, outstanding: left });
+    refreshBilling();
+    return res.ok;
+  }
+  store.update((st) => ({
+    ...st,
+    invoices: st.invoices.map((x) =>
+      x.no === invoiceNo ? { ...x, outstanding: left, status: left > 0 ? "partial" : "paid" } : x,
+    ),
+    payments: [
+      ...st.payments,
+      { inv: invoiceNo, date, received: got, wht: tax, certReceived: tax <= 0 },
+    ],
+  }));
+  return true;
+}
+
 export async function issueReceipt(invoiceNo: string, date: string, received: number, wht: number) {
   if (live) {
     const s = snapshot();
