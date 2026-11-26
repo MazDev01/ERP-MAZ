@@ -470,6 +470,14 @@ export type ProjectTask = {
   /** ดัชนีเฟสที่งานนี้อยู่ */
   phase: number;
   whos: string[];
+  /*
+   * คนที่ต้องตรวจใบงานนี้ (รอบที่ 130 · คำตอบเจ้าของ 25 พ.ย. 2569)
+   * ขั้นตรวจก่อนส่งลูกค้าของงาน DM ต้องให้ฝ่ายโครงการ BD และฝ่ายขายดูร่วมกัน
+   * ว่าง = ฝ่ายโครงการตรวจคนเดียวเหมือนเดิม · ครบทุกคนกดผ่านงานจึงเสร็จ
+   */
+  reviewers?: string[];
+  /** ผลตรวจที่แต่ละคนกดไว้ของรอบที่ส่งมาล่าสุด */
+  reviews?: { who: string; ok: boolean; note: string; at: string }[];
   start: string;
   due: string;
   status: TaskStatus;

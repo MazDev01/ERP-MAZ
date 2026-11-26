@@ -13,7 +13,8 @@ import { useMemo, useState } from "react";
 import { bkkStamp, daysBetween, thaiDate, todayIso } from "@/lib/format";
 import { isRef, lastSub, projName, projectHref, type Project, type ProjectTask } from "@/lib/pm-data";
 import { approveWorkFlow } from "@/lib/flow";
-import { memberName, memberOf, sendBackWork, usePm } from "@/lib/pm-store";
+import { memberName, memberOf, reviewTask, sendBackWork, setTaskReviewers, usePm } from "@/lib/pm-store";
+import { displayName, nameOf } from "@/lib/emp-name";
 import { roleLabel } from "@/lib/pm-data";
 import { hrPos } from "@/lib/hr-data";
 import { useHr } from "@/lib/hr-store";
@@ -297,6 +298,21 @@ function ReviewDialog({
   const who = lastSub(t)?.by ?? t.whos[0] ?? "";
   /* GM เปิดดูสิ่งที่ส่งมาได้ แต่ PM เป็นคนตัดสินผลตรวจ */
   const ro = usePmReadOnly();
+  /*
+   * ผู้ตรวจหลายคน (รอบที่ 130) — งาน DM ต้องให้ BD กับฝ่ายขายดูร่วมกับฝ่ายโครงการ
+   * ไม่ตั้งใคร = ฝ่ายโครงการตรวจคนเดียวเหมือนเดิม
+   */
+  const hr = useHr();
+  const people = hr.emp.filter((e) => e.status === "active");
+  const reviewers = t.reviewers ?? [];
+  const okBy = (t.reviews ?? []).filter((r) => r.ok).map((r) => r.who);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [draft, setDraft] = useState<string[]>(reviewers);
+
+  async function saveReviewers() {
+    await setTaskReviewers(p.pj, t.name, draft);
+    setPickOpen(false);
+  }
 
   return (
     <Sheet
@@ -325,15 +341,76 @@ function ReviewDialog({
             type="button"
             className="btn solid flex-1 justify-center !bg-[var(--success)] !text-white max-sm:!h-12 max-sm:!rounded-[14px] max-sm:basis-0 max-sm:grow-[1.4] sm:flex-none"
             onClick={() => {
-              approveWorkFlow(p.pj, t.name, bkkStamp());
-              onDone();
+              /* มีผู้ตรวจหลายคน = นับผลรายคน ครบทุกคนฐานข้อมูลจึงปิดงาน (รอบที่ 130)
+                 ไม่มีใครถูกตั้งไว้ = ฝ่ายโครงการตรวจผ่านได้คนเดียวเหมือนเดิม */
+              if (reviewers.length) void reviewTask(p.pj, t.name, true).then(onDone);
+              else {
+                approveWorkFlow(p.pj, t.name, bkkStamp());
+                onDone();
+              }
             }}
           >
-            ผ่าน
+            {reviewers.length ? `ผ่าน (${okBy.length + 1}/${reviewers.length})` : "ผ่าน"}
           </button>
         </>
       }
     >
+      {/* ผู้ตรวจของใบงานนี้ — ฝ่ายโครงการตั้งได้ (รอบที่ 130) */}
+      <Section title="ผู้ตรวจ">
+        {reviewers.length === 0 ? (
+          <p className="text-[12.5px] text-muted-foreground">ยังไม่ได้ตั้งผู้ตรวจ — ฝ่ายโครงการตรวจคนเดียว</p>
+        ) : (
+          <ul className="flex flex-wrap gap-1.5">
+            {reviewers.map((id) => (
+              <li
+                key={id}
+                className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${
+                  okBy.includes(id) ? "bg-[var(--success)]/15 text-[var(--success)]" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {nameOf(id)}
+                {okBy.includes(id) ? " ✓" : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+        {!ro && (
+          <button
+            type="button"
+            className="btn glass-thin btn-mini mt-2"
+            onClick={() => {
+              setDraft(reviewers);
+              setPickOpen((v) => !v);
+            }}
+          >
+            {pickOpen ? "ปิดรายชื่อ" : "ตั้งผู้ตรวจ"}
+          </button>
+        )}
+        {pickOpen && !ro && (
+          <div className="mt-2 rounded-[12px] border border-border p-2.5">
+            <ul className="grid max-h-[190px] gap-1 overflow-auto sm:grid-cols-2">
+              {people.map((e) => (
+                <li key={e.id}>
+                  <label className="flex items-center gap-2 text-[12.5px]">
+                    <input
+                      type="checkbox"
+                      checked={draft.includes(e.id)}
+                      onChange={() =>
+                        setDraft((d) => (d.includes(e.id) ? d.filter((x) => x !== e.id) : [...d, e.id]))
+                      }
+                    />
+                    {displayName(e)} · {hrPos(e.pos)?.label ?? e.pos}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="btn solid btn-solid btn-mini mt-2" onClick={() => void saveReviewers()}>
+              บันทึกผู้ตรวจ {draft.length} คน
+            </button>
+          </div>
+        )}
+      </Section>
+
       <Section title="งาน">
         <Row2 k="ชื่องาน" v={t.name} />
         <Row2 k="โปรเจค" v={projName(p)} />

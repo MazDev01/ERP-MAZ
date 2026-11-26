@@ -67,6 +67,7 @@ type TaskRow = {
   name: string;
   phase: number;
   whos: string[];
+  reviewers: string[] | null;
   start_on: string | null;
   due: string | null;
   status: string;
@@ -178,11 +179,11 @@ export async function fetchPm(): Promise<PmData> {
     pjById[r.id] = r.pj;
   }
 
-  const [tk, ch, ac, dc, tr, tl, df] = await Promise.all([
+  const [tk, ch, ac, dc, trf, tl, df, tr] = await Promise.all([
     sb
       .from("project_tasks")
       .select(
-        "id, project_id, idx, name, phase, whos, start_on, due, status, pct, brief," +
+        "id, project_id, idx, name, phase, whos, reviewers, start_on, due, status, pct, brief," +
           " files, subs, back, assigned_at, done_at, last_change",
       )
       .order("idx"),
@@ -192,7 +193,12 @@ export async function fetchPm(): Promise<PmData> {
     sb.from("project_transfers").select("project_id, at, from_name, to_name, by_name, why").order("at"),
     sb.from("task_talks").select("pj, task_name, who, at, tx, nudge").order("at"),
     sb.from("project_drafts").select("pj, phases, plan, at, by_name"),
+    /* ผลตรวจของผู้ตรวจแต่ละคน (รอบที่ 130) — หน้าจอต้องบอกว่าใครกดผ่านแล้ว */
+    sb.from("task_reviews").select("task_id, who, ok, note, at").order("at"),
   ]);
+  const reviewsByTask: Record<string, { who: string; ok: boolean; note: string; at: string }[]> = {};
+  for (const r of (tr.data ?? []) as { task_id: string; who: string; ok: boolean; note: string; at: string }[])
+    (reviewsByTask[r.task_id] ??= []).push({ who: r.who, ok: r.ok, note: r.note, at: stampOf(r.at) });
 
   const taskIdByKey: Record<string, string> = {};
   const tasksByProj: Record<string, ProjectTask[]> = {};
@@ -204,6 +210,8 @@ export async function fetchPm(): Promise<PmData> {
       name: r.name,
       phase: r.phase,
       whos: r.whos ?? [],
+      reviewers: r.reviewers?.length ? r.reviewers : undefined,
+      reviews: reviewsByTask[r.id],
       start: dayOf(r.start_on),
       due: dayOf(r.due),
       status: r.status as TaskStatus,
@@ -256,7 +264,7 @@ export async function fetchPm(): Promise<PmData> {
   }
 
   const trByProj: Record<string, ProjectTransfer[]> = {};
-  for (const r of (tr.data ?? []) as {
+  for (const r of (trf.data ?? []) as {
     project_id: string; at: string; from_name: string; to_name: string; by_name: string; why: string;
   }[]) {
     (trByProj[r.project_id] ??= []).push({
@@ -441,6 +449,66 @@ export async function sbPatchTask(
   const got = await sb.from("project_tasks").update(patch).eq("id", id);
   if (got.error) return { ok: false, reason: why(got.error.message) };
   return { ok: true };
+}
+
+/* ── ผู้ตรวจหลายคนของใบงาน (รอบที่ 130) ─────────────────────────── */
+
+export type MyReviewRow = {
+  task: string;
+  pj: string;
+  project: string;
+  cus: string;
+  name: string;
+  due: string | null;
+  sent: string | null;
+  sentBy: string | null;
+  note: string | null;
+  doers: string[];
+  reviewers: { who: string; name: string; ok: boolean }[];
+};
+
+/**
+ * งานที่รอฉันตรวจ — ชื่อคนมาจากฐานข้อมูลพร้อมรายการ
+ * (ผู้ตรวจอยู่คนละฝ่าย ฝ่ายขายเห็นทะเบียนพนักงานแค่ของตัวเอง ถ้าประกอบชื่อที่หน้าจอ
+ *  จะขึ้นเป็นรหัสพนักงานของคนอื่น)
+ */
+export async function fetchMyReviews(): Promise<MyReviewRow[]> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return [];
+  const got = await sb.rpc("my_review_tasks");
+  if (got.error) return [];
+  return (got.data as MyReviewRow[] | null) ?? [];
+}
+
+/** ฝ่ายโครงการตั้งว่าใบงานนี้ใครต้องตรวจ */
+export async function sbSetReviewers(pj: string, idx: number, who: string[]): Promise<PmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const id = await taskIdOf(pj, idx);
+  if (!id) return { ok: false, reason: "not_found" };
+  const got = await sb.rpc("task_set_reviewers", { p_task: id, p_who: who });
+  if (got.error) return { ok: false, reason: why(got.error.message) };
+  const out = got.data as { ok?: boolean; reason?: string } | null;
+  return out?.ok ? { ok: true } : { ok: false, reason: out?.reason ?? "unknown" };
+}
+
+/** ผู้ตรวจกดผลของตัวเอง — ครบทุกคนแล้วฐานข้อมูลปิดงานให้เอง */
+export async function sbTaskReview(
+  pj: string,
+  idx: number,
+  ok: boolean,
+  note = "",
+): Promise<PmWrite & { status?: string; left?: number }> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const id = await taskIdOf(pj, idx);
+  if (!id) return { ok: false, reason: "not_found" };
+  const got = await sb.rpc("task_review", { p_task: id, p_ok: ok, p_note: note });
+  if (got.error) return { ok: false, reason: why(got.error.message) };
+  const out = got.data as { ok?: boolean; reason?: string; status?: string; left?: number } | null;
+  return out?.ok
+    ? { ok: true, status: out.status, left: out.left }
+    : { ok: false, reason: out?.reason ?? "unknown" };
 }
 
 export async function sbPatchProject(pj: string, patch: Record<string, unknown>): Promise<PmWrite> {

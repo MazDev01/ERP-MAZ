@@ -214,7 +214,32 @@ export async function recordPaymentFlow(
 const DEFAULT_SPAN_DAYS = 90;
 
 /** โครงเฟสตั้งต้น — PM แก้ชื่อ วันที่ และผู้รับผิดชอบได้ในหน้าวางแผนงาน */
-const PHASE_TEMPLATE: { name: string; role: TeamRole; weight: number; tasks: string[] }[] = [
+type PhaseTemplate = { name: string; role: TeamRole; weight: number; tasks: string[] };
+
+/*
+ * สายงาน Digital Marketing ตามที่เจ้าของอธิบายไว้ (คำตอบ 25 พ.ย. 2569)
+ *
+ *   ฝ่ายขายปิดดีล → GM (ซึ่งเป็น PM คนเดียวกัน) เลือก BD ตามความถนัดและงานที่ถืออยู่
+ *   → วาง Timeline → BD คิดแคมเปญ (GM ตรวจ) → ทำคอนเทนต์ (GM + BD ตรวจ)
+ *   → ฝ่ายขายตรวจก่อนเสนอ → ลูกค้าอนุมัติคอนเทนต์ → กราฟิก
+ *   → ลูกค้าตรวจงานกราฟิกจนอนุมัติ → Media ยิงแอด → รายงานผล
+ *
+ * ลูกค้าตรวจสองรอบ (คอนเทนต์ แล้วกราฟิก) จึงมีใบงาน "ส่งลูกค้าตรวจ" สองใบ
+ * PM แก้ชื่อ วัน และผู้รับผิดชอบได้ทั้งหมดในหน้าจัดคิวงาน นี่เป็นแค่จุดเริ่ม
+ */
+const DM_PHASES: PhaseTemplate[] = [
+  { name: "วางแผนแคมเปญ", role: "plan", weight: 20, tasks: ["เลือกผู้ดูแลงานและวาง Timeline", "คิดแคมเปญเสนอ GM ตรวจ"] },
+  { name: "คอนเทนต์", role: "content", weight: 25, tasks: ["ร่างคอนเทนต์ตามแคมเปญ", "ส่งคอนเทนต์ให้ลูกค้าตรวจ"] },
+  { name: "งานกราฟิก", role: "artwork", weight: 30, tasks: ["ผลิตงานกราฟิกตามคอนเทนต์ที่อนุมัติ", "ส่งงานกราฟิกให้ลูกค้าตรวจ"] },
+  { name: "ยิงแอดและรายงาน", role: "media", weight: 25, tasks: ["ตั้งค่าและยิงแอดตามแผน", "สรุปผลโฆษณาส่งลูกค้า"] },
+];
+
+/** แม่แบบเฟสของบริการนั้น — ไม่มีของตัวเองใช้ชุดกลาง */
+export function phaseTemplateOf(service: string): PhaseTemplate[] {
+  return service === "dm" ? DM_PHASES : PHASE_TEMPLATE;
+}
+
+const PHASE_TEMPLATE: PhaseTemplate[] = [
   { name: "วิเคราะห์และสรุปขอบเขต", role: "ba", weight: 15, tasks: ["เก็บความต้องการจากลูกค้า", "สรุปขอบเขตงานให้ลูกค้ายืนยัน"] },
   { name: "ออกแบบหน้าจอ", role: "design", weight: 20, tasks: ["ออกแบบโครงหน้าจอ", "ออกแบบงานกราฟิก"] },
   { name: "พัฒนาระบบ", role: "backend", weight: 45, tasks: ["พัฒนาส่วนหลังบ้าน", "พัฒนาหน้าจอผู้ใช้"] },
@@ -297,7 +322,10 @@ function buildInboxJob(deal: AccDeal, paidAt: string, bill: string): Omit<InboxJ
 
   const start = salesDeal?.start || addDays(paidAt, 1);
   const end = salesDeal?.delivery || addDays(start, DEFAULT_SPAN_DAYS);
-  const span = Math.max(PHASE_TEMPLATE.length, daysBetween(start, end) + 1);
+  /* แม่แบบตามประเภทบริการ — งาน DM มีสายงานของตัวเอง (คำตอบเจ้าของ 25 พ.ย. 2569)
+     ประเภทบริการอยู่ที่ใบเสนอราคาของดีล ที่เดียวกับที่กล่องงานเข้าใหม่ใช้ */
+  const template = phaseTemplateOf(crm.quotations.find((q) => q.no === deal.quo)?.service ?? "");
+  const span = Math.max(template.length, daysBetween(start, end) + 1);
 
   /*
    * แผนที่ BD/SA วางไว้เป็นช่วงสัปดาห์มาก่อนแม่แบบเสมอ — แปลงสัปดาห์เป็นวันที่จริงจากวันเริ่มโครงการ
@@ -318,10 +346,10 @@ function buildInboxJob(deal: AccDeal, paidAt: string, bill: string): Omit<InboxJ
       })
     : (() => {
         let cursor = start;
-        return PHASE_TEMPLATE.map((t, i) => {
+        return template.map((t, i) => {
           const days = Math.max(1, Math.round((span * t.weight) / 100));
           const phaseStart = cursor;
-          const phaseEnd = i === PHASE_TEMPLATE.length - 1 ? end : addDays(phaseStart, days - 1);
+          const phaseEnd = i === template.length - 1 ? end : addDays(phaseStart, days - 1);
           cursor = addDays(phaseEnd, 1);
           return { name: t.name, role: t.role, start: phaseStart, end: phaseEnd, tasks: [...t.tasks] };
         });

@@ -48,6 +48,8 @@ import {
   sbMarkInboxSeen,
   sbPatchProject,
   sbPatchTask,
+  sbSetReviewers,
+  sbTaskReview,
   sbPostChat,
   sbPostTaskTalk,
   sbRemoveDoc,
@@ -1332,6 +1334,70 @@ export async function submitWork(
 }
 
 /** PM ตรวจผ่าน — งานจบที่ 100% ไม่ต้องให้ทีมมากดปิดซ้ำอีกที */
+/* ── ผู้ตรวจหลายคน (รอบที่ 130 · คำตอบเจ้าของ 25 พ.ย. 2569) ───────── */
+
+/** ฝ่ายโครงการตั้งผู้ตรวจของใบงาน — ว่าง = ฝ่ายโครงการตรวจคนเดียวเหมือนเดิม */
+export async function setTaskReviewers(pj: string, taskName: string, who: string[]) {
+  if (live) {
+    const hit = await pmTask(pj, taskName);
+    if (!hit) return false;
+    const res = await sbSetReviewers(hit.pj, hit.i, who);
+    refreshPm();
+    return res.ok;
+  }
+  const at0 = bkkStamp();
+  store.update((s) =>
+    patchTask(
+      s,
+      pj,
+      taskName,
+      (t) => ({ ...t, reviewers: who.length ? who : undefined, reviews: undefined }),
+      { kind: "status", who: "PM", at: at0, tx: `ตั้งผู้ตรวจของ ${taskName} ${who.length} คน` },
+    ),
+  );
+  return true;
+}
+
+/**
+ * ผู้ตรวจกดผลของตัวเอง — ครบทุกคนแล้วฐานข้อมูลปิดงานให้เอง
+ * คืนสถานะที่ได้ (done / sent / revise) เพื่อให้หน้าจอบอกผลได้ตรง
+ */
+export async function reviewTask(pj: string, taskName: string, ok: boolean, note = "") {
+  if (live) {
+    const hit = await pmTask(pj, taskName);
+    if (!hit) return { ok: false as const };
+    const res = await sbTaskReview(hit.pj, hit.i, ok, note);
+    refreshPm();
+    return res.ok ? { ok: true as const, status: res.status, left: res.left } : { ok: false as const };
+  }
+  /* โหมดไม่มีฐานข้อมูล — นับผลในเครื่องด้วยกติกาเดียวกัน */
+  const at = bkkStamp();
+  const me = USERS[currentRole()]?.employeeId ?? "me";
+  let status = "sent";
+  store.update((s) =>
+    patchTask(
+      s,
+      pj,
+      taskName,
+      (t) => {
+        if (!ok) {
+          status = "revise";
+          return { ...t, status: "revise", back: { why: note || "ขอแก้งาน", at, by: me }, reviews: undefined };
+        }
+        const list = [...(t.reviews ?? []).filter((r) => r.who !== me), { who: me, ok: true, note, at }];
+        const need = Math.max(t.reviewers?.length ?? 0, 1);
+        if (list.filter((r) => r.ok).length >= need) {
+          status = "done";
+          return { ...t, status: "done", pct: 100, doneAt: at, back: undefined, reviews: list };
+        }
+        return { ...t, reviews: list };
+      },
+      { kind: "status", who: me, at, tx: ok ? `ตรวจผ่าน ${taskName}` : `ขอแก้ ${taskName}` },
+    ),
+  );
+  return { ok: true as const, status };
+}
+
 export async function approveWork(pj: string, taskName: string, stamp: string) {
   if (live) {
     const hit = await pmTask(pj, taskName);
