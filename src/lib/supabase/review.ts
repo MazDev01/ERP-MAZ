@@ -15,8 +15,11 @@ import type {
  * ลูกค้าตรวจงานผ่านลิงก์ (รอบที่ 116)
  *
  * ฝั่งคนในบริษัทอ่านตารางตามปกติ (นโยบายของฝ่ายโครงการ)
- * ฝั่งลูกค้าไม่มีบัญชี จึงเรียกผ่านฟังก์ชันที่รับโทเคน — ตัวลิงก์คือกุญแจ
- * ไฟล์ของรอบอยู่ในถัง "review" ที่เป็นถังสาธารณะ ที่อยู่ขึ้นต้นด้วยโทเคน
+ * ฝั่งลูกค้าไม่มีบัญชี จึงเรียกผ่านเส้นทาง /api/review/[token] — ตัวลิงก์คือกุญแจ
+ *
+ * ถังไฟล์ "review" เป็นถังปิด (รอบที่ 119) ใครถือที่อยู่ไฟล์ไว้ก็เปิดไม่ได้
+ * คนในบริษัทขอลิงก์ชั่วคราวเองด้วยสิทธิ์ของตัวเอง ส่วนลูกค้าได้ลิงก์ชั่วคราว
+ * จากเส้นทางฝั่งเซิร์ฟเวอร์ และได้เฉพาะรอบที่ยังไม่หมดอายุ
  */
 
 const BUCKET = "review";
@@ -58,6 +61,7 @@ type FileRow = {
   kind: string;
   size_text: string;
   url: string | null;
+  path: string | null;
   poster: string | null;
   duration: number | null;
   approved: boolean;
@@ -95,7 +99,7 @@ export async function fetchReviews(): Promise<ClientReviewState> {
       .order("created_at"),
     sb
       .from("review_files")
-      .select("id, round_id, name, kind, size_text, url, poster, duration, approved, name_only")
+      .select("id, round_id, name, kind, size_text, url, path, poster, duration, approved, name_only")
       .order("idx"),
     sb
       .from("review_comments")
@@ -104,14 +108,23 @@ export async function fetchReviews(): Promise<ClientReviewState> {
   ]);
   if (rd.error || fl.error || cm.error) return { rounds: [] };
 
+  /* ถังปิดแล้ว ที่อยู่ไฟล์เปิดตรง ๆ ไม่ได้ — ขอลิงก์ชั่วคราวให้คนในบริษัททีเดียวทั้งชุด */
+  const rows = (fl.data ?? []) as unknown as FileRow[];
+  const signed = new Map<string, string>();
+  const paths = [...new Set(rows.map((f) => f.path).filter((x): x is string => Boolean(x)))];
+  if (paths.length) {
+    const got = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
+    for (const s of got.data ?? []) if (s.path && s.signedUrl) signed.set(s.path, s.signedUrl);
+  }
+
   const filesBy = new Map<string, ReviewFile[]>();
-  for (const f of (fl.data ?? []) as unknown as FileRow[]) {
+  for (const f of rows) {
     const item: ReviewFile = {
       id: f.id,
       name: f.name,
       kind: kindOf(f.kind),
       size: f.size_text,
-      url: f.url ?? undefined,
+      url: (f.path ? signed.get(f.path) : undefined) ?? f.url ?? undefined,
       poster: f.poster ?? undefined,
       duration: f.duration ?? undefined,
       approved: f.approved || undefined,
@@ -203,9 +216,10 @@ export async function sbCreateRound(input: {
   const rows: Record<string, unknown>[] = [];
   for (const [i, f] of input.files.entries()) {
     let url = f.url ?? null;
+    let saved: string | null = null;
     let nameOnly = !url;
     if (f.file) {
-      /* ที่อยู่ขึ้นต้นด้วยโทเคน — เดาไม่ได้เท่าตัวลิงก์เอง (ถังนี้เป็นถังสาธารณะ) */
+      /* ที่อยู่ขึ้นต้นด้วยโทเคน เก็บไว้ออกลิงก์ชั่วคราวทีหลัง (ถังนี้เป็นถังปิด) */
       const safe = f.file.name.replace(/[^\w.\-]+/g, "_").slice(-80) || `file-${i}`;
       const path = `${input.token}/${Date.now()}-${i}-${safe}`;
       const up = await sb.storage.from(BUCKET).upload(path, f.file, {
@@ -213,7 +227,8 @@ export async function sbCreateRound(input: {
         upsert: false,
       });
       if (!up.error) {
-        url = sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+        saved = path;
+        url = null;
         nameOnly = false;
       }
     }
@@ -223,6 +238,7 @@ export async function sbCreateRound(input: {
       kind: f.kind,
       size_text: f.size,
       url,
+      path: saved,
       poster: f.poster ?? null,
       duration: f.duration ?? null,
       name_only: nameOnly,
@@ -254,11 +270,16 @@ export type OpenedRound = {
 };
 
 export async function sbOpenRound(token: string): Promise<OpenedRound | null> {
-  const sb = supabase();
-  if (!sb) return null;
-  const got = await sb.rpc("review_open", { p_token: token });
-  if (got.error || !got.data) return null;
-  const out = got.data as {
+  /* ลูกค้าไม่มีบัญชี — ขอผ่านเส้นทางฝั่งเซิร์ฟเวอร์ที่ออกลิงก์ชั่วคราวให้ */
+  let data: unknown = null;
+  try {
+    const res = await fetch(`/api/review/${encodeURIComponent(token)}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    data = await res.json();
+  } catch {
+    return null;
+  }
+  const out = data as {
     ok?: boolean;
     round?: Record<string, unknown>;
     files?: Record<string, unknown>[];

@@ -11,9 +11,15 @@ import { issuerInfo } from "./quotation-paper";
 import { useCrm } from "@/lib/crm-store";
 import { baht, thaiDate } from "@/lib/format";
 import { roleLabel, type InboxJob } from "@/lib/pm-data";
+import { useRole } from "@/lib/role";
+
+/* ผู้จัดการทั่วไปไม่เห็นเงินของบริษัท — ฐานข้อมูลไม่ส่งมูลค่างานมาให้ (รอบที่ 119)
+   จึงต้องขึ้นขีดไว้ ไม่ใช่ปล่อยให้อ่านเป็นศูนย์บาท */
+const MONEY_HIDDEN = "—";
 
 
 export function QuotationPreview({ job }: { job: InboxJob }) {
+  const hideMoney = useRole() === "gm";
   /* หัวกระดาษและยอดทุกบรรทัดมาจากใบเสนอราคาตัวจริงของงานนี้ */
   const crm = useCrm();
   const quotation = crm.quotations.find((q) => q.no === job.quo);
@@ -91,7 +97,7 @@ export function QuotationPreview({ job }: { job: InboxJob }) {
               </ul>
             </td>
             {/* ช่องรวมของรายการคือราคาก่อนภาษี ภาษีอยู่บรรทัดของมันเองด้านล่าง */}
-            <td className="num px-1.5 py-3 text-right align-top text-[13px]">{baht(t ? t.base : job.net)}</td>
+            <td className="num px-1.5 py-3 text-right align-top text-[13px]">{hideMoney ? MONEY_HIDDEN : baht(t ? t.base : job.net)}</td>
           </tr>
         </tbody>
       </table>
@@ -115,7 +121,7 @@ export function QuotationPreview({ job }: { job: InboxJob }) {
           )}
           <div className="mt-1.5 flex justify-between gap-3.5 border-t-2 border-primary pt-2.5 text-sm font-bold">
             <span>รวมทั้งสิ้น</span>
-            <b className="num text-base text-primary">{baht(t ? t.grand : job.net)}</b>
+            <b className="num text-base text-primary">{hideMoney ? MONEY_HIDDEN : baht(t ? t.grand : job.net)}</b>
           </div>
         </div>
       </div>
@@ -139,6 +145,7 @@ export function QuotationPreview({ job }: { job: InboxJob }) {
  *   plan   ตามต้นแบบ pm-plan.html — มีช่องจัดทำโดย/เสนอต่อ ท้ายเป็นมูลค่างาน ชั่วโมงที่ใช้จัดทำ เอกสารแนบ
  */
 export function ProposalPreview({ job, variant = "plan" }: { job: InboxJob; variant?: "inbox" | "plan" }) {
+  const hideMoney = useRole() === "gm";
   /* งานเดี่ยวไม่มีข้อเสนอ จึงไม่มีเอกสารให้เปิด (ดู isSolo ใน pm-data) */
   const pr = job.proposal;
   if (!pr) return null;
@@ -236,7 +243,7 @@ export function ProposalPreview({ job, variant = "plan" }: { job: InboxJob; vari
       ) : (
         <>
           <div className="mt-4 grid gap-4 border-t border-border pt-3.5 sm:grid-cols-3">
-            <Fact label="มูลค่างาน" value={`${baht(job.net)} บาท`} />
+            <Fact label="มูลค่างาน" value={hideMoney ? MONEY_HIDDEN : `${baht(job.net)} บาท`} />
             <Fact label="ชั่วโมงที่ใช้จัดทำ" value={`${pr.hours} ชม.`} />
             <Fact
               label="เอกสารแนบ"

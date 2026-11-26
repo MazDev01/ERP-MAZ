@@ -24,7 +24,6 @@ import type {
  * ฐานข้อมูลจึงเก็บ idx ไว้ด้วย และเรียงตาม idx เสมอตอนอ่าน ไม่งั้นงานสลับใบกัน
  */
 
-const n = (v: number | string | null | undefined) => Number(v ?? 0);
 
 /** "YYYY-MM-DD HH:mm" ตามเวลาไทย — รูปเดียวกับที่ทุกหน้าใช้ */
 function stampOf(at: string | null): string {
@@ -45,7 +44,6 @@ type ProjectRow = {
   name: string;
   cus: string;
   quo: string;
-  net: number | string;
   scope: string;
   pm: string;
   start_on: string | null;
@@ -89,7 +87,6 @@ type InboxRow = {
   cus: string;
   quo: string;
   quo_date: string | null;
-  net: number | string;
   seqs: number;
   paid_at: string | null;
   sent_at: string | null;
@@ -141,13 +138,15 @@ export const EMPTY_PM: PmData = {
   taskIdByKey: {},
 };
 
+/* ช่อง net อ่านตรง ๆ ไม่ได้แล้ว — ขอยอดผ่าน project_money()/inbox_money() ที่ไม่คืนอะไร
+   ให้ผู้จัดการทั่วไป เพราะข้อกำหนดบอกว่าไม่เห็นเงินของบริษัท (รอบที่ 119) */
 const PROJECT_COLS =
-  "id, pj, deal_id, service, name, cus, quo, net, scope, pm, start_on, due, status," +
+  "id, pj, deal_id, service, name, cus, quo, scope, pm, start_on, due, status," +
   " cancel_at, cancel_by, cancel_why, tone, phases, source, updated," +
   " deals(no), invoices(no)";
 
 const INBOX_COLS =
-  "id, pj, service, cus, quo, quo_date, net, seqs, paid_at, sent_at, scope, items, due," +
+  "id, pj, service, cus, quo, quo_date, seqs, paid_at, sent_at, scope, items, due," +
   " stage, plan_start, plan_end, duration_days, phases, proposal, assign_whos, assign_due," +
   " seen, project_start, contact, phone, tax_id, address, terms, valid_days," +
   " taken_by, taken_at, name, docs, deals(no), invoices(no)";
@@ -156,10 +155,20 @@ export async function fetchPm(): Promise<PmData> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return EMPTY_PM;
 
-  const [pr, ib] = await Promise.all([
+  const [pr, ib, pMoney, iMoney] = await Promise.all([
     sb.from("projects").select(PROJECT_COLS).order("pj", { ascending: false }),
     sb.from("project_inbox").select(INBOX_COLS).order("pj", { ascending: false }),
+    sb.rpc("project_money"),
+    sb.rpc("inbox_money"),
   ]);
+  /* ยอดเงินมาคนละชุด — บทบาทที่ไม่มีสิทธิ์เห็นเงินจะได้ชุดว่าง แล้วหน้าจอขึ้นขีดแทน */
+  const moneyOf = (rows: unknown) => {
+    const map = new Map<string, number>();
+    for (const r of (rows ?? []) as { id: string; net: number | string }[]) map.set(r.id, Number(r.net ?? 0));
+    return map;
+  };
+  const projMoney = moneyOf(pMoney.data);
+  const inboxMoney = moneyOf(iMoney.data);
   if (pr.error) return EMPTY_PM;
   const projRows = (pr.data ?? []) as unknown as ProjectRow[];
   const projIdByPj: Record<string, string> = {};
@@ -287,7 +296,7 @@ export async function fetchPm(): Promise<PmData> {
     name: r.name || undefined,
     cus: r.cus,
     quo: r.quo,
-    net: n(r.net),
+    net: projMoney.get(r.id) ?? 0,
     scope: r.scope,
     pm: r.pm,
     start: dayOf(r.start_on),
@@ -313,7 +322,7 @@ export async function fetchPm(): Promise<PmData> {
     cus: r.cus,
     quo: r.quo,
     quoDate: dayOf(r.quo_date),
-    net: n(r.net),
+    net: inboxMoney.get(r.id) ?? 0,
     seqs: r.seqs,
     paidAt: dayOf(r.paid_at),
     sentAt: dayOf(r.sent_at),
