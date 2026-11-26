@@ -124,6 +124,8 @@ export function ClientSendSheet({
   const [locals, setLocals] = useState<Local[]>([]);
   const [message, setMessage] = useState("");
   const [days, setDays] = useState(DEFAULT_EXPIRY_DAYS);
+  /* รหัสผ่านของลิงก์ (รอบที่ 128 · Requirement รอบ 9) — ไม่ใส่ก็ได้ */
+  const [pass, setPass] = useState("");
   /* ผู้ติดต่อของดีล — งานที่รับผ่านกล่องงานเข้ามีในใบงาน ไม่มีก็ย้อนไปหาลูกค้าในฝ่ายขาย */
   const [contact, setContact] = useState(
     () => project.source?.contact || customerOfDeal(crm, project.deal ?? "", project.quo, project.cus)?.contact || "",
@@ -186,6 +188,7 @@ export function ClientSendSheet({
       contact,
       days,
       files,
+      pass,
     });
     setToken(tk);
   }
@@ -365,6 +368,20 @@ export function ClientSendSheet({
           </option>
         ))}
       </select>
+
+      <label htmlFor="cr-pass" className="mt-4 mb-1.5 block text-[12.5px] font-semibold">
+        รหัสผ่านของลิงก์ <span className="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+      </label>
+      <input
+        id="cr-pass"
+        value={pass}
+        onChange={(e) => setPass(e.target.value)}
+        placeholder="ใส่ไว้กันลิงก์หลุด แล้วบอกรหัสกับลูกค้าแยกช่องทาง"
+        className="field-control"
+      />
+      <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+        ตั้งไว้แล้วลูกค้าต้องใส่รหัสก่อนเปิดดูงาน · เว้นว่างคือใช้ตัวลิงก์เป็นกุญแจเหมือนเดิม
+      </p>
     </Sheet>
   );
 }

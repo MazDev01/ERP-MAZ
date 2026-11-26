@@ -26,6 +26,7 @@ import {
   findRound,
   liveUrl,
   loadRoundByToken,
+  useRoundPass,
   onClientWrite,
   rememberName,
   rememberedName,
@@ -82,11 +83,20 @@ export function ClientReviewPage({ token }: { token: string }) {
   /* ยังไม่ต่อฐานข้อมูล = ไม่ต้องรออะไร ใช้ของในเบราว์เซอร์ได้เลย */
   const [fromDb, setFromDb] = useState<ReviewRound | null | undefined>(hasBackend ? undefined : null);
   const [reload, setReload] = useState(0);
+  /* ลิงก์ที่ตั้งรหัสไว้ (รอบที่ 128) — ยังไม่ใส่รหัสจะไม่ได้ข้อมูลงานเลย */
+  const [needPass, setNeedPass] = useState<{ wrong: boolean } | null>(null);
   useEffect(() => {
     if (!hasBackend) return;
     let live = true;
     void loadRoundByToken(token).then((got) => {
-      if (live) setFromDb(got?.round ?? null);
+      if (!live) return;
+      if (got && "needPass" in got) {
+        setNeedPass({ wrong: got.wrong });
+        setFromDb(null);
+        return;
+      }
+      setNeedPass(null);
+      setFromDb(got?.round ?? null);
     });
     return () => {
       live = false;
@@ -104,10 +114,63 @@ export function ClientReviewPage({ token }: { token: string }) {
       </div>
     );
   }
+  if (needPass) return <AskPass wrong={needPass.wrong} onDone={() => setReload((n) => n + 1)} />;
   const r = hasBackend ? fromDb : findRound(s, token);
   const st = r ? roundStatus(r) : "expired";
   if (!r || st === "expired") return <Gone />;
   return <Review r={r} st={st} />;
+}
+
+/*
+ * ลิงก์ที่ฝ่ายโครงการตั้งรหัสไว้ (รอบที่ 128 · Requirement รอบ 9)
+ * ยังไม่ใส่รหัสจะไม่เห็นอะไรของงานเลย แม้แต่ชื่องานหรือจำนวนไฟล์
+ */
+function AskPass({ wrong, onDone }: { wrong: boolean; onDone: () => void }) {
+  const [v, setV] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function go() {
+    if (!v.trim() || busy) return;
+    setBusy(true);
+    await useRoundPass(v.trim());
+    setBusy(false);
+    onDone();
+  }
+
+  return (
+    <div className="rv">
+      <div className="grid flex-1 place-items-center px-4">
+        <div className="w-full max-w-[420px] rounded-[20px] bg-white px-6 py-10 text-center shadow-[0_1px_2px_rgba(40,20,25,.04)]">
+          <Wordmark className="mx-auto h-[30px] w-auto" />
+          <h1 className="mt-6 text-[17px] font-bold">ลิงก์นี้ต้องใส่รหัสผ่าน</h1>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
+            รหัสอยู่ในข้อความที่ผู้ดูแลโปรเจคส่งมาพร้อมลิงก์
+          </p>
+          <input
+            type="password"
+            value={v}
+            autoFocus
+            onChange={(e) => setV(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void go()}
+            aria-label="รหัสผ่านของลิงก์ตรวจงาน"
+            placeholder="รหัสผ่าน"
+            className="field-control mt-5 h-[42px] w-full text-center text-[15px]"
+          />
+          {wrong && (
+            <p className="mt-2 text-[12.5px] font-semibold text-destructive">รหัสไม่ถูกต้อง ลองอีกครั้ง</p>
+          )}
+          <button
+            type="button"
+            disabled={!v.trim() || busy}
+            onClick={() => void go()}
+            className="btn solid btn-solid mt-4 w-full justify-center"
+          >
+            เปิดดูงาน
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Gone() {

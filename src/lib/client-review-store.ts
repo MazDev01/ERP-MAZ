@@ -296,6 +296,12 @@ export async function loadRoundByToken(token: string) {
   return sbOpenRound(token);
 }
 
+/** ลูกค้ากรอกรหัสของลิงก์ (รอบที่ 128) — เก็บไว้ในหน่วยความจำของแท็บเท่านั้น */
+export async function useRoundPass(pass: string) {
+  const { setReviewPass } = await import("./supabase/review");
+  setReviewPass(pass);
+}
+
 // ─── ตัวช่วย ──────────────────────────────────────────────────────
 
 /** token สุ่ม 20 ตัวอักษร — เฟส 2 ต้องเป็น token ลงลายเซ็นที่ออกจากเซิร์ฟเวอร์ */
@@ -424,6 +430,8 @@ export function createRound(input: {
   contact: string;
   days: number;
   files: NewReviewFile[];
+  /** รหัสผ่านของลิงก์ (รอบที่ 128) — ว่าง = ใช้ตัวลิงก์เป็นกุญแจเหมือนเดิม */
+  pass?: string;
 }) {
   const token = newToken();
   const at = bkkStamp();
@@ -443,8 +451,14 @@ export function createRound(input: {
         contact: input.contact.trim(),
         expiresAt: addDays(at.slice(0, 10), Math.max(1, input.days)),
         files: input.files,
-      }).then((ok) => {
-        if (ok) sendToClientWork(input.pj, input.taskName, round, at);
+      }).then(async (ok) => {
+        if (!ok) return;
+        /* ตั้งรหัสหลังสร้างรอบ — ฟังก์ชันของฐานข้อมูลเก็บเป็นลายนิ้วมือ ไม่เก็บตัวรหัส */
+        if (input.pass?.trim()) {
+          const { sbSetRoundPass } = await import("./supabase/review");
+          await sbSetRoundPass(token, input.pass.trim());
+        }
+        sendToClientWork(input.pj, input.taskName, round, at);
       }),
     );
     return token;

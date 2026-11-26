@@ -23,6 +23,20 @@ import type {
  */
 
 const BUCKET = "review";
+
+/*
+ * รหัสผ่านของลิงก์ตรวจงาน (รอบที่ 128) — ลูกค้ากรอกครั้งเดียวต่อการเปิดหน้า
+ * เก็บไว้ในตัวโมดูล ไม่ลงที่เก็บของเบราว์เซอร์ ปิดแท็บแล้วต้องกรอกใหม่
+ */
+let roundPass = "";
+
+export function setReviewPass(v: string) {
+  roundPass = v.trim();
+}
+
+export function reviewPass() {
+  return roundPass;
+}
 const KINDS: ReviewFileKind[] = ["image", "video", "pdf", "link"];
 
 /** "yyyy-mm-dd HH:mm" ตามเวลาไทย */
@@ -255,6 +269,15 @@ export async function sbToggleCommentDone(id: string, done: boolean) {
   await sb.from("review_comments").update({ done }).eq("id", id);
 }
 
+/** ฝ่ายโครงการตั้งหรือล้างรหัสของลิงก์ (รอบที่ 128) */
+export async function sbSetRoundPass(token: string, pass: string): Promise<boolean> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return false;
+  const got = await sb.rpc("review_set_pass", { p_token: token, p_pass: pass });
+  if (got.error) return false;
+  return Boolean((got.data as { ok?: boolean } | null)?.ok);
+}
+
 export async function sbStampRound(token: string, field: "forwarded_at" | "closed_at") {
   const sb = supabase();
   if (!sb || !(await signedIn())) return;
@@ -269,22 +292,30 @@ export type OpenedRound = {
   expired: boolean;
 };
 
-export async function sbOpenRound(token: string): Promise<OpenedRound | null> {
+/** ลิงก์นี้ตั้งรหัสไว้ — ยังไม่ใส่ หรือใส่ผิด */
+export type NeedPass = { needPass: true; wrong: boolean };
+
+export async function sbOpenRound(token: string): Promise<OpenedRound | NeedPass | null> {
   /* ลูกค้าไม่มีบัญชี — ขอผ่านเส้นทางฝั่งเซิร์ฟเวอร์ที่ออกลิงก์ชั่วคราวให้ */
   let data: unknown = null;
   try {
-    const res = await fetch(`/api/review/${encodeURIComponent(token)}`, { cache: "no-store" });
-    if (!res.ok) return null;
+    const q = roundPass ? `?pass=${encodeURIComponent(roundPass)}` : "";
+    const res = await fetch(`/api/review/${encodeURIComponent(token)}${q}`, { cache: "no-store" });
+    /* 401 = ต้องใส่รหัส ยังต้องอ่านเหตุผลจาก body */
+    if (!res.ok && res.status !== 401) return null;
     data = await res.json();
   } catch {
     return null;
   }
   const out = data as {
     ok?: boolean;
+    reason?: string;
+    wrong?: boolean;
     round?: Record<string, unknown>;
     files?: Record<string, unknown>[];
     comments?: Record<string, unknown>[];
   };
+  if (out.reason === "need_pass") return { needPass: true, wrong: Boolean(out.wrong) };
   if (!out.ok || !out.round) return null;
   const r = out.round as {
     token: string;
@@ -375,6 +406,7 @@ export async function sbAddComment(
     p_pin: c.pin ?? null,
     p_page: c.page ?? null,
     p_attach: c.attach ?? null,
+    p_pass: roundPass,
   });
   const out = got.data as { ok?: boolean; id?: string } | null;
   return out?.ok ? (out.id ?? null) : null;
@@ -383,24 +415,24 @@ export async function sbAddComment(
 export async function sbEditComment(token: string, id: string, text: string) {
   const sb = supabase();
   if (!sb) return;
-  await sb.rpc("review_comment_edit", { p_token: token, p_id: id, p_text: text });
+  await sb.rpc("review_comment_edit", { p_token: token, p_id: id, p_text: text, p_pass: roundPass });
 }
 
 export async function sbDeleteComment(token: string, id: string) {
   const sb = supabase();
   if (!sb) return;
-  await sb.rpc("review_comment_del", { p_token: token, p_id: id });
+  await sb.rpc("review_comment_del", { p_token: token, p_id: id, p_pass: roundPass });
 }
 
 export async function sbApproveFile(token: string, fileId: string, approved: boolean) {
   const sb = supabase();
   if (!sb) return;
-  await sb.rpc("review_file_approve", { p_token: token, p_file: fileId, p_ok: approved });
+  await sb.rpc("review_file_approve", { p_token: token, p_file: fileId, p_ok: approved, p_pass: roundPass });
 }
 
 export async function sbSubmitRound(token: string, all: boolean) {
   const sb = supabase();
   if (!sb) return null;
-  const got = await sb.rpc("review_submit", { p_token: token, p_all: all });
+  const got = await sb.rpc("review_submit", { p_token: token, p_all: all, p_pass: roundPass });
   return (got.data as { ok?: boolean; status?: string } | null) ?? null;
 }
