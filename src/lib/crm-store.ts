@@ -35,7 +35,7 @@ import {
   type QuotationRevision,
   type Urgency,
 } from "./crm-data";
-import { addDays, bkkNow, nextDocNo, todayIso } from "./format";
+import { addDays, bkkNow, nextDocNo, quotationDocNo, todayIso } from "./format";
 import { firstLine } from "./rich-text";
 import { CURRENT_USER } from "./mock-data";
 import { createPersistedStore } from "./persisted-store";
@@ -756,8 +756,9 @@ export async function addQuotation(input: QuotationInput) {
   }
   let no = "";
   store.update((s) => {
-    /* ตัวนำหน้าเลขใบเสนอราคาแยกตามผู้ออกเอกสาร (/admin/company) */
-    no = nextNo(issuerOf(input.issuer).prefix, s.quotations.map((q) => q.no));
+    /* เลขใบเสนอราคารีเซ็ตทุกเดือนและใช้ชุดเดียวกันทุกผู้ออกเอกสาร (รอบที่ 117)
+       ตัวอักษรหน้าแยกตามผู้ออกเอกสารตามค่าตั้งค่า (/admin/company) */
+    no = quotationDocNo(issuerOf(input.issuer).prefix, s.quotations.map((q) => q.no));
     const issued = today();
     const { replaces, ps, ...rest } = input;
     const old = replaces ? s.quotations.find((q) => q.no === replaces && !q.replacedBy) : undefined;

@@ -746,13 +746,15 @@ export async function sbAddQuotation(input: {
   if (!customer) return { ok: false, reason: "not_found" };
   const ps = input.psNo ? await presalesIdOf(input.psNo) : null;
 
-  const no = await sb.rpc("next_sales_no", { p_key: input.prefixKey, p_fallback: input.prefix });
-  if (no.error || !no.data) return { ok: false, reason: sayWhy(no.error?.message ?? "no_number") };
-
+  /*
+   * เลขที่ใบเสนอราคาออกจากฐานข้อมูล (รอบที่ 117) — รูปแบบ MAZ{YY}-{MM}{NNNN}
+   * ชุดเดียวกันทุกผู้ออกเอกสาร และรีเซ็ตทุกเดือน จึงไม่ส่งคำนำหน้าไปอีก
+   * ส่งเลขว่างไป ทริกเกอร์ของตารางออกเลขให้ตอนบันทึก สองคนกดพร้อมกันไม่ได้เลขซ้ำ
+   */
   const got = await sb
     .from("quotations")
     .insert({
-      no: no.data as string,
+      no: "",
       customer_id: customer,
       issuer: input.issuer,
       buyer_type: input.buyer,
@@ -774,15 +776,16 @@ export async function sbAddQuotation(input: {
     .select("no")
     .single();
   if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
+  const made = (got.data as { no: string }).no;
 
   /* ใบเดิมกลายเป็น "แทนที่แล้ว" และจำว่าถูกแทนด้วยใบไหน */
   if (input.replaces) {
     await sb
       .from("quotations")
-      .update({ status: "แทนที่แล้ว", replaced_by: no.data as string })
+      .update({ status: "แทนที่แล้ว", replaced_by: made })
       .eq("no", input.replaces);
   }
-  return { ok: true, code: (got.data as { no: string }).no };
+  return { ok: true, code: made };
 }
 
 /** ลูกค้าปฏิเสธใบเสนอราคา — ไม่เกิดดีล */

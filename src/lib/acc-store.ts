@@ -32,7 +32,17 @@ import {
   type Refund,
   type WhtRow,
 } from "./acc-data";
-import { bkkNow, bkkStamp, nextDocNo, pad2, round2, toIsoDate, todayIso } from "./format";
+import {
+  bkkNow,
+  bkkStamp,
+  invoiceDocNoOf,
+  pad2,
+  quotationDocNo,
+  receiptDocNo,
+  round2,
+  toIsoDate,
+  todayIso,
+} from "./format";
 import { createPersistedStore } from "./persisted-store";
 import { hasBackend } from "./supabase/env";
 import {
@@ -1033,9 +1043,11 @@ export async function issueInvoice(dealNo: string, seq: number, due: string) {
     const money = invoiceAmounts(deal, item.amount);
     const today = bkkNow();
     const invoice: Invoice = {
-      /* รูปแบบเลขเดียวกับเอกสารอื่นทั้งระบบ: คำนำหน้า-ปีไทย-ลำดับ 4 หลัก (ผู้ใช้สั่ง 25 ก.ย. 2569)
-         เดิมใบแจ้งหนี้กับใบเสร็จใช้ปี ค.ศ. สองหลักต่อเดือน (INV-2569-0014) ซึ่งอ่านคนละแบบกับใบอื่น */
-      no: nextDocNo(settings().docs.invoice, s.invoices.map((v) => v.no)),
+      /* เลขใบแจ้งหนี้ = เลขใบเสนอราคาของดีล เปลี่ยนตัวอักษรหน้าเป็น INV (รอบที่ 117)
+         ทุกงวดของดีลใช้เลขเดียวกัน · ดีลที่ไม่มีใบเสนอราคาออกเลขของเดือนนั้นให้ใหม่ */
+      no: deal.quo
+        ? invoiceDocNoOf(deal.quo)
+        : invoiceDocNoOf(quotationDocNo(settings().docs.quotationMaz, s.invoices.map((v) => v.no))),
       deal: deal.no,
       cus: deal.cus,
       seq,
@@ -1127,7 +1139,8 @@ export async function issueReceipt(invoiceNo: string, date: string, received: nu
     const base = gross ? round2((v.base * paid) / gross) : paid;
     const left = round2(v.outstanding - paid);
     const receipt: Receipt = {
-      no: nextDocNo(settings().docs.receipt, s.receipts.map((r) => r.no)),
+      /* ใบเสร็จ {พ.ศ.}{เดือน}-{NNN} รีเซ็ตทุกเดือน (รอบที่ 117) */
+      no: receiptDocNo(s.receipts.map((r) => r.no)),
       inv: v.no,
       deal: v.deal,
       seq: v.seq,

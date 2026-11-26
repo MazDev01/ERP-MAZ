@@ -75,6 +75,40 @@ export function nextDocNo(prefix: string, existing: string[]) {
   return head + String(max + 1).padStart(4, "0");
 }
 
+/*
+ * เลขเอกสารของงานขาย/บัญชี ที่รีเซ็ตทุกเดือน (รอบที่ 117 · ตามที่บัญชียืนยัน)
+ * ทางนี้ใช้เฉพาะตอนยังไม่ต่อฐานข้อมูล — ของจริงฐานข้อมูลออกเลขให้ (next_quotation_no ฯลฯ)
+ */
+
+/** ใบเสนอราคา MAZ{YY}-{MM}{NNNN} · YY = ปี ค.ศ. สองหลักท้าย เช่น MAZ26-110001 */
+export function quotationDocNo(prefix: string, existing: string[]) {
+  const now = bkkNow();
+  const yy = String(now.getFullYear() % 100).padStart(2, "0");
+  const mm = pad2(now.getMonth() + 1);
+  const head = `${prefix}${yy}-${mm}`;
+  /* นับจากทุกคำนำหน้าในเดือนเดียวกัน เพราะใช้ชุดเลขเดียวกันทุกผู้ออกเอกสาร */
+  const max = existing
+    .map((n) => /^[A-Za-z]+(\d{2})-(\d{2})(\d{4})$/.exec(n))
+    .filter((m): m is RegExpExecArray => Boolean(m) && m![1] === yy && m![2] === mm)
+    .reduce((m, hit) => Math.max(m, Number(hit[3]) || 0), 0);
+  return head + String(max + 1).padStart(4, "0");
+}
+
+/** ใบแจ้งหนี้ = เลขใบเสนอราคา เปลี่ยนตัวอักษรหน้าเป็น INV */
+export function invoiceDocNoOf(quotationNo: string) {
+  return `INV${quotationNo.replace(/^[A-Za-z]+/, "")}`;
+}
+
+/** ใบเสร็จ {พ.ศ.}{เดือน}-{NNN} เช่น 256911-001 */
+export function receiptDocNo(existing: string[]) {
+  const now = bkkNow();
+  const head = `${now.getFullYear() + 543}${pad2(now.getMonth() + 1)}-`;
+  const max = existing
+    .filter((n) => n.startsWith(head))
+    .reduce((m, n) => Math.max(m, Number(n.slice(head.length)) || 0), 0);
+  return head + String(max + 1).padStart(3, "0");
+}
+
 /** yyyy-mm-dd ของวันที่ที่ให้มา (อ่านจากค่าใน Date ตรง ๆ ไม่แปลงเขตเวลาซ้ำ) */
 export function toIsoDate(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
