@@ -103,7 +103,9 @@ function candidates(t: ProjectTask): Pick[] {
   return out;
 }
 
-type Local = { id: string; name: string; kind: ReviewFileKind; bytes: number; blobUrl: string };
+/* file = ตัวไฟล์จริง เก็บไว้เพื่อส่งขึ้นถังตอนกดสร้างลิงก์ (รอบที่ 116)
+   ก่อนหน้านี้เก็บแต่ blobUrl ไฟล์จึงไม่เคยออกจากแท็บนี้ ลูกค้าเปิดไม่ได้ */
+type Local = { id: string; name: string; kind: ReviewFileKind; bytes: number; blobUrl: string; file: File };
 
 const KIND_LABEL: Record<ReviewFileKind, string> = { image: "รูปภาพ", video: "วิดีโอ", pdf: "เอกสาร", link: "ลิงก์" };
 
@@ -154,6 +156,7 @@ export function ClientSendSheet({
           : reviewKindOf(f.name),
       bytes: f.size,
       blobUrl: URL.createObjectURL(f),
+      file: f,
     }));
     setErr(false);
     setLocals((l) => [...l, ...add.filter((a) => !l.some((x) => x.id === a.id))]);
@@ -164,7 +167,14 @@ export function ClientSendSheet({
       ...list
         .filter((x) => picked.has(x.key))
         .map((x) => ({ name: x.name, kind: x.kind, size: x.size })),
-      ...locals.map((l) => ({ name: l.name, kind: l.kind, size: sizeText(l.bytes), local: true, blobUrl: l.blobUrl })),
+      ...locals.map((l) => ({
+        name: l.name,
+        kind: l.kind,
+        size: sizeText(l.bytes),
+        local: true,
+        blobUrl: l.blobUrl,
+        file: l.file,
+      })),
     ];
     if (!files.length) return setErr(true);
     const tk = createRound({
@@ -313,7 +323,7 @@ export function ClientSendSheet({
         />
       </label>
       <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-        รูป วิดีโอ หรือ PDF · ยังไม่ได้อัปโหลดจริง เปิดดูได้ระหว่างที่แท็บนี้ยังเปิดอยู่ (อัปโหลดจริงมากับระบบหลังบ้าน)
+        รูป วิดีโอ หรือ PDF · อัปโหลดขึ้นที่เก็บไฟล์ของระบบตอนกดสร้างลิงก์ ลูกค้าจึงเปิดดูได้จากทุกเครื่อง
       </p>
       {err && <p className="mt-2 text-[12.5px] font-semibold text-destructive">เลือกอย่างน้อยหนึ่งไฟล์</p>}
 

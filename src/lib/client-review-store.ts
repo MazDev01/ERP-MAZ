@@ -7,9 +7,12 @@
  *   ลูกค้าเปิดลิงก์ ไม่ต้องล็อกอิน → ดูไฟล์ คอมเมนต์ตามเวลาในวิดีโอ/ปักหมุดบนรูป → ส่งความเห็น หรืออนุมัติทั้งหมด
  *   PM เห็นความเห็น → ส่งให้ทีมแก้ (ใช้ทางตีกลับเดิม sendBackWork) หรือปิดงาน (approveWorkFlow)
  *
- * เฟส 1 ยังไม่มี backend ทุกอย่างอยู่ใน localStorage ของเบราว์เซอร์นี้ — ลิงก์จึงเปิดได้แค่ในเครื่องเดียวกัน
- * TODO เฟส 2: ตารางรอบตรวจที่เซิร์ฟเวอร์ + token แบบลงลายเซ็น (หมดอายุฝั่งเซิร์ฟเวอร์) + ที่เก็บไฟล์จริง
- *   ไฟล์ที่ PM เลือกจากเครื่องตอนนี้เปิดได้ผ่าน object URL ในรอบเปิดหน้านั้นเท่านั้น รีโหลดแล้วหาย
+ * เฟส 2 ต่อฐานข้อมูลแล้ว (รอบที่ 116) — ลูกค้าเปิดลิงก์จากเครื่องไหนก็ได้
+ *   ลูกค้าไม่มีบัญชี ตัวลิงก์ (โทเคน 20 ตัวอักษร) จึงเป็นกุญแจ
+ *   ฝั่งลูกค้าเรียกผ่านฟังก์ชันของฐานข้อมูลที่รับโทเคน ไม่ได้อ่านตารางตรง ๆ
+ *   ไฟล์ที่ PM เลือกจากเครื่องถูกอัปโหลดขึ้นถัง review (ถังสาธารณะ ที่อยู่ขึ้นต้นด้วยโทเคน)
+ *   ไฟล์ส่งมอบที่รู้แค่ชื่อยังเปิดไม่ได้เหมือนเดิม — ไม่มีไบต์ของไฟล์ให้อัปโหลด
+ * ยังไม่ได้ต่อฐานข้อมูล (dev ที่ไม่มีคีย์) ถอยไปเก็บในเบราว์เซอร์เหมือนเฟส 1
  */
 
 import { useSyncExternalStore } from "react";
@@ -18,6 +21,18 @@ import { approveWorkFlow } from "./flow";
 import { createPersistedStore } from "./persisted-store";
 import { addProjectAct, pmSnapshot, sendBackWork, sendToClientWork } from "./pm-store";
 import { isRef, legacyPj } from "./pm-data";
+import { hasBackend } from "./supabase/env";
+import {
+  fetchReviews,
+  sbAddComment,
+  sbApproveFile,
+  sbCreateRound,
+  sbDeleteComment,
+  sbEditComment,
+  sbStampRound,
+  sbSubmitRound,
+  sbToggleCommentDone,
+} from "./supabase/review";
 
 export type ReviewFileKind = "image" | "video" | "pdf" | "link";
 
@@ -196,12 +211,89 @@ if (typeof window !== "undefined") {
   });
 }
 
+/* ─── ชั้นต่อฐานข้อมูล ───────────────────────────────────────────── */
+const live = hasBackend;
+const EMPTY: ClientReviewState = { rounds: [] };
+let fromDb: ClientReviewState | null = null;
+let loading = false;
+const watchers = new Set<() => void>();
+
+function tell() {
+  for (const fn of watchers) fn();
+}
+
+function load() {
+  if (!live || loading || fromDb !== null) return;
+  loading = true;
+  void fetchReviews()
+    .then((got) => {
+      fromDb = got;
+    })
+    .catch(() => {
+      fromDb = EMPTY;
+    })
+    .finally(() => {
+      loading = false;
+      tell();
+    });
+}
+
+function refresh() {
+  if (!live) return;
+  fromDb = null;
+  loading = false;
+  load();
+  tell();
+}
+
+/** หน้าจอไม่รอผลลัพธ์ — เขียนแล้วค่อยอ่านใหม่เมื่อฐานข้อมูลตอบ */
+function after(job: Promise<unknown>) {
+  void job.then(refresh, refresh);
+}
+
+function snapshot(): ClientReviewState {
+  if (!live) return store.get();
+  load();
+  return fromDb ?? EMPTY;
+}
+
+function subscribeAll(onChange: () => void) {
+  const off = store.subscribe(onChange);
+  watchers.add(onChange);
+  return () => {
+    off();
+    watchers.delete(onChange);
+  };
+}
+
 export function useClientReviews() {
-  return useSyncExternalStore(store.subscribe, store.get, store.getServer);
+  return useSyncExternalStore(subscribeAll, snapshot, store.getServer);
 }
 
 export function clientReviewSnapshot() {
-  return store.get();
+  return snapshot();
+}
+
+/* ─── ฝั่งลูกค้าเขียนอะไรแล้วบอกหน้าให้อ่านใหม่ ─────────────────────
+   หน้าของลูกค้าไม่ได้อ่านสโตร์ (ไม่มีสิทธิ์) จึงฟังสัญญาณนี้แล้วไปอ่านรอบใหม่เอง */
+const clientWatchers = new Set<() => void>();
+
+export function onClientWrite(fn: () => void) {
+  clientWatchers.add(fn);
+  return () => {
+    clientWatchers.delete(fn);
+  };
+}
+
+function toldClient() {
+  for (const fn of clientWatchers) fn();
+}
+
+/** อ่านรอบเดียวด้วยโทเคนจากฐานข้อมูล — หน้าของลูกค้าใช้ ไม่ต้องล็อกอิน */
+export async function loadRoundByToken(token: string) {
+  if (!live) return null;
+  const { sbOpenRound } = await import("./supabase/review");
+  return sbOpenRound(token);
 }
 
 // ─── ตัวช่วย ──────────────────────────────────────────────────────
@@ -315,7 +407,9 @@ function keepLive(id: string, url: string) {
 
 // ─── ฝั่ง PM ──────────────────────────────────────────────────────
 
-export type NewReviewFile = Omit<ReviewFile, "id"> & { blobUrl?: string };
+/* file = ตัวไฟล์จริงที่ PM เลือกจากเครื่อง — ส่งขึ้นถังตอนสร้างรอบ (รอบที่ 116)
+   blobUrl = ที่อยู่ชั่วคราวในแท็บนั้น ใช้แสดงตัวอย่างก่อนส่ง */
+export type NewReviewFile = Omit<ReviewFile, "id"> & { blobUrl?: string; file?: File };
 
 /**
  * สร้างรอบให้ลูกค้าตรวจ — คืน token ของลิงก์
@@ -333,8 +427,28 @@ export function createRound(input: {
 }) {
   const token = newToken();
   const at = bkkStamp();
-  const s = store.get();
+  const s = snapshot();
   const round = (latestRound(s, input.pj, input.taskName)?.round ?? 0) + 1;
+  if (live) {
+    /* ไฟล์ที่เลือกจากเครื่องถูกส่งขึ้นถังในชั้นข้อมูล — ตัวไฟล์มาทาง input.files[].file */
+    after(
+      sbCreateRound({
+        token,
+        pj: input.pj,
+        taskName: input.taskName,
+        round,
+        project: input.project,
+        createdBy: input.createdBy,
+        message: input.message.trim(),
+        contact: input.contact.trim(),
+        expiresAt: addDays(at.slice(0, 10), Math.max(1, input.days)),
+        files: input.files,
+      }).then((ok) => {
+        if (ok) sendToClientWork(input.pj, input.taskName, round, at);
+      }),
+    );
+    return token;
+  }
   const files: ReviewFile[] = input.files.map((f) => {
     const id = newId("f");
     const { blobUrl, ...rest } = f;
@@ -367,6 +481,11 @@ function patchRound(token: string, fn: (r: ReviewRound) => ReviewRound) {
 
 /** PM ติ๊ก "แก้แล้ว" ทีละคอมเมนต์ */
 export function toggleCommentDone(token: string, id: string) {
+  if (live) {
+    const now = findRound(snapshot(), token)?.comments.find((c) => c.id === id);
+    after(sbToggleCommentDone(id, !now?.done));
+    return;
+  }
   patchRound(token, (r) => ({
     ...r,
     comments: r.comments.map((c) => (c.id === id ? { ...c, done: !c.done } : c)),
@@ -386,19 +505,27 @@ export function composeReason(r: ReviewRound) {
 
 /** ส่งความเห็นของลูกค้าให้ทีมแก้ — ใช้ทางตีกลับเดิม งานกลายเป็น "ต้องแก้ไข" */
 export function forwardToTeam(token: string) {
-  const r = findRound(store.get(), token);
+  const r = findRound(snapshot(), token);
   if (!r || !r.comments.some((c) => !c.done)) return;
   const at = bkkStamp();
   sendBackWork(r.pj, r.taskName, composeReason(r), at);
+  if (live) {
+    after(sbStampRound(token, "forwarded_at"));
+    return;
+  }
   patchRound(token, (x) => ({ ...x, forwardedAt: at }));
 }
 
 /** ลูกค้าอนุมัติแล้ว PM ปิดงาน — ใช้ทางตรวจผ่านเดิม (ปิดใบงานฝั่งขายให้ถ้าครบทุกใบ) */
 export function closeFromClient(token: string) {
-  const r = findRound(store.get(), token);
+  const r = findRound(snapshot(), token);
   if (!r) return;
   const at = bkkStamp();
   approveWorkFlow(r.pj, r.taskName, at);
+  if (live) {
+    after(sbStampRound(token, "closed_at"));
+    return;
+  }
   patchRound(token, (x) => ({ ...x, closedAt: at }));
 }
 
@@ -410,6 +537,11 @@ function patchOpen(token: string, fn: (r: ReviewRound) => ReviewRound) {
 }
 
 export function addComment(token: string, c: Omit<ReviewComment, "id" | "at">) {
+  if (live) {
+    /* หน้าของลูกค้าอ่านรอบใหม่เองหลังเขียน (ดู loadRoundByToken) */
+    void sbAddComment(token, c).then(toldClient, toldClient);
+    return "";
+  }
   const full: ReviewComment = { ...c, id: newId("c"), at: bkkStamp() };
   patchOpen(token, (r) => ({ ...r, comments: [...r.comments, full] }));
   return full.id;
@@ -418,14 +550,26 @@ export function addComment(token: string, c: Omit<ReviewComment, "id" | "at">) {
 export function editComment(token: string, id: string, text: string) {
   const v = text.trim();
   if (!v) return;
+  if (live) {
+    void sbEditComment(token, id, v).then(toldClient, toldClient);
+    return;
+  }
   patchOpen(token, (r) => ({ ...r, comments: r.comments.map((c) => (c.id === id ? { ...c, text: v } : c)) }));
 }
 
 export function deleteComment(token: string, id: string) {
+  if (live) {
+    void sbDeleteComment(token, id).then(toldClient, toldClient);
+    return;
+  }
   patchOpen(token, (r) => ({ ...r, comments: r.comments.filter((c) => c.id !== id) }));
 }
 
 export function setFileApproved(token: string, fileId: string, approved: boolean) {
+  if (live) {
+    void sbApproveFile(token, fileId, approved).then(toldClient, toldClient);
+    return;
+  }
   patchOpen(token, (r) => ({ ...r, files: r.files.map((f) => (f.id === fileId ? { ...f, approved } : f)) }));
 }
 
@@ -434,7 +578,11 @@ export function setFileApproved(token: string, fileId: string, approved: boolean
  * ไม่มีคอมเมนต์และทุกไฟล์อนุมัติแล้ว = อนุมัติ · นอกนั้น = ส่งความเห็น
  */
 export function submitRound(token: string, all: boolean) {
-  const r = findRound(store.get(), token);
+  if (live) {
+    void sbSubmitRound(token, all).then(toldClient, toldClient);
+    return;
+  }
+  const r = findRound(snapshot(), token);
   if (!r || roundStatus(r) !== "open") return;
   const at = bkkStamp();
   const files = all ? r.files.map((f) => ({ ...f, approved: true })) : r.files;

@@ -50,8 +50,10 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
-              /* แผนที่จุดลงเวลาใช้ภาพ tile ของ OpenStreetMap — ไม่อนุญาตไว้ แผนที่จะขึ้นเป็นรูปแตก */
-              "img-src 'self' data: blob: https://tile.openstreetmap.org",
+              /* แผนที่จุดลงเวลาใช้ภาพ tile ของ OpenStreetMap — ไม่อนุญาตไว้ แผนที่จะขึ้นเป็นรูปแตก
+                 ต้นทางฐานข้อมูลด้วย เพราะรูปงานที่ส่งให้ลูกค้าตรวจเสิร์ฟจากที่เก็บไฟล์ของ Supabase
+                 (เจอตอนทดสอบ 26 พ.ย. 2569 — ลูกค้าเปิดลิงก์แล้วเห็นรูปแตกทั้งหน้า) */
+              ["img-src 'self' data: blob: https://tile.openstreetmap.org", ...SB.filter((x) => x.startsWith("http"))].join(" "),
               "font-src 'self' data:",
               ["connect-src 'self'", ...SB].join(" "),
               "worker-src 'self' blob:",

@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { thaiDate, thaiStamp } from "@/lib/format";
 import { useHydrated } from "@/lib/pwa";
 import { lockScroll } from "@/lib/scroll-lock";
+import { hasBackend } from "@/lib/supabase/env";
 import {
   addComment,
   clock,
@@ -24,6 +25,8 @@ import {
   editComment,
   findRound,
   liveUrl,
+  loadRoundByToken,
+  onClientWrite,
   rememberName,
   rememberedName,
   roundStatus,
@@ -68,17 +71,40 @@ function PauseGlyph({ className = "size-5" }: { className?: string }) {
 }
 
 export function ClientReviewPage({ token }: { token: string }) {
-  /* ข้อมูลอยู่ในเบราว์เซอร์ — ก่อน hydrate ยังไม่รู้ว่ามีรอบนี้ไหม อย่าเพิ่งบอกว่าลิงก์หมดอายุ */
+  /* ก่อน hydrate ยังไม่รู้ว่ามีรอบนี้ไหม อย่าเพิ่งบอกว่าลิงก์หมดอายุ */
   const hydrated = useHydrated();
   const s = useClientReviews();
-  if (!hydrated) {
+  /*
+   * ลูกค้าไม่ได้ล็อกอิน — อ่านรอบด้วยโทเคนผ่านฟังก์ชันของฐานข้อมูล (รอบที่ 116)
+   * ของในเบราว์เซอร์ใช้เฉพาะตอนที่ยังไม่ต่อฐานข้อมูล
+   * reload ขยับทุกครั้งที่ลูกค้าเขียนอะไร เพื่อให้อ่านรอบใหม่หลังเขียน
+   */
+  /* ยังไม่ต่อฐานข้อมูล = ไม่ต้องรออะไร ใช้ของในเบราว์เซอร์ได้เลย */
+  const [fromDb, setFromDb] = useState<ReviewRound | null | undefined>(hasBackend ? undefined : null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (!hasBackend) return;
+    let live = true;
+    void loadRoundByToken(token).then((got) => {
+      if (live) setFromDb(got?.round ?? null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [token, reload]);
+
+  /* ลูกค้าเขียนอะไรแล้วอ่านรอบใหม่ — ฝั่งนี้ไม่มีสโตร์ให้ฟัง */
+  useEffect(() => onClientWrite(() => setReload((n) => n + 1)), []);
+
+  const waiting = !hydrated || (hasBackend && fromDb === undefined);
+  if (waiting) {
     return (
       <div className="rv">
         <div className="grid flex-1 place-items-center text-[13px] text-muted-foreground">กำลังเปิดงาน…</div>
       </div>
     );
   }
-  const r = findRound(s, token);
+  const r = hasBackend ? fromDb : findRound(s, token);
   const st = r ? roundStatus(r) : "expired";
   if (!r || st === "expired") return <Gone />;
   return <Review r={r} st={st} />;
