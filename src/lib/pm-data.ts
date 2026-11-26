@@ -587,6 +587,8 @@ export type ProjectDoc = {
   fileId?: string;
   /** ที่อยู่ไฟล์ในถังของระบบ (รอบที่ 111) — มีค่า = ทีมบนเครื่องอื่นเปิดดูได้ด้วย */
   path?: string;
+  /** รหัสไฟล์บน Google Drive (รอบที่ 131) — ไฟล์ผลงานก้อนใหญ่ไปอยู่ที่นั่น */
+  driveId?: string;
 };
 
 export type ProjectTransfer = {

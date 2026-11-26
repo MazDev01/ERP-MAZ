@@ -189,7 +189,7 @@ export async function fetchPm(): Promise<PmData> {
       .order("idx"),
     sb.from("project_chat").select("project_id, who, at, tx, files").order("at"),
     sb.from("project_acts").select("project_id, kind, who, at, tx").order("at", { ascending: false }),
-    sb.from("project_docs").select("project_id, name, size_text, by_name, at, url, file_id, path").order("at"),
+    sb.from("project_docs").select("project_id, name, size_text, by_name, at, url, file_id, path, drive_id").order("at"),
     sb.from("project_transfers").select("project_id, at, from_name, to_name, by_name, why").order("at"),
     sb.from("task_talks").select("pj, task_name, who, at, tx, nudge").order("at"),
     sb.from("project_drafts").select("pj, phases, plan, at, by_name"),
@@ -250,7 +250,7 @@ export async function fetchPm(): Promise<PmData> {
   const docsByProj: Record<string, ProjectDoc[]> = {};
   for (const r of (dc.data ?? []) as {
     project_id: string; name: string; size_text: string; by_name: string; at: string; url: string;
-    file_id: string; path: string | null;
+    file_id: string; path: string | null; drive_id: string | null;
   }[]) {
     (docsByProj[r.project_id] ??= []).push({
       n: r.name,
@@ -260,6 +260,7 @@ export async function fetchPm(): Promise<PmData> {
       url: r.url || undefined,
       fileId: r.file_id || undefined,
       path: r.path || undefined,
+      driveId: r.drive_id || undefined,
     });
   }
 
@@ -605,6 +606,7 @@ export async function sbAddDocs(pj: string, docs: ProjectDoc[]): Promise<PmWrite
       url: d.url ?? "",
       file_id: d.fileId ?? "",
       path: d.path ?? null,
+      drive_id: d.driveId ?? null,
     })),
   );
   if (got.error) return { ok: false, reason: why(got.error.message) };

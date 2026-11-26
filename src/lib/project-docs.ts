@@ -30,6 +30,22 @@ export async function uploadProjectFile(pj: string, fileId: string): Promise<str
   return uploadProjectFileBlob(pj, file);
 }
 
+/**
+ * ส่งไฟล์ก้อนใหญ่จากที่เก็บในเครื่องขึ้น Google Drive (รอบที่ 131)
+ * ยังไม่ได้ตั้งกุญแจ Google จะคืน ok: false พร้อมข้อความให้หน้าจอบอกผู้ใช้
+ */
+export async function driveFromStore(
+  fileId: string,
+  onProgress?: (p: number) => void,
+): Promise<{ ok: true; id: string; url: string } | { ok: false; message: string } | null> {
+  const saved = await getFile(fileId);
+  if (!saved?.blob) return null;
+  const file = new File([saved.blob], saved.name, { type: saved.type || saved.blob.type });
+  const { uploadToDrive } = await import("./drive");
+  const res = await uploadToDrive(file, onProgress);
+  return res.ok ? { ok: true, id: res.id, url: res.url } : { ok: false, message: res.message };
+}
+
 /** ส่งไฟล์ที่มีอยู่ในมือแล้วขึ้นถัง — ใช้กับไฟล์ของร่างโปรเจคใหม่ที่เก็บ Blob ไว้เอง */
 export async function uploadProjectFileBlob(pj: string, file: File): Promise<string | undefined> {
   if (!hasBackend) return undefined;

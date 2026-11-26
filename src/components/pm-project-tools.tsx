@@ -15,7 +15,8 @@ import { useProfile } from "@/lib/profile-data";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FileDrop, fileSize, type PickedFile } from "./file-drop";
 import { removeStoredFile } from "@/lib/file-store";
-import { openProjectDoc, uploadProjectFile } from "@/lib/project-docs";
+import { driveFromStore, openProjectDoc, uploadProjectFile } from "@/lib/project-docs";
+import { MAX_FILE_BYTES } from "@/lib/supabase/files";
 import { CloseIcon, FileIcon, LinkIcon, PencilIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 
@@ -117,18 +118,34 @@ export function AddDocButton({ onClick, className = "" }: { onClick: () => void;
  * ไฟล์ขึ้นถังของระบบตั้งแต่รอบที่ 111 — ทีมบนเครื่องอื่นเปิดดูได้ด้วย
  * ลิงก์ http(s) เก็บ url ไว้เปิดได้จริง ไม่ต้องอัปโหลด
  * อัปโหลดไม่ผ่าน (ไฟล์ใหญ่เกิน หรือชนิดไม่รับ) ยังแนบชื่อไว้ให้ทีมเห็น เหมือนของเดิม
+ *
+ * ไฟล์ผลงานก้อนใหญ่ (เกินเพดานของถังระบบ) ส่งขึ้น Google Drive แทน (รอบที่ 131)
+ * ยังไม่ได้ตั้งกุญแจ Google จะบอกไว้ตรง ๆ แล้วเก็บเป็นชื่อไฟล์เหมือนของเดิม
  */
 export function AddDocsDialog({ pj, onClose }: { pj: string; onClose: () => void }) {
   const me = useProfile();
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState("");
   async function save() {
     setSaving(true);
     const at = bkkStamp();
     const docs: ProjectDoc[] = [];
     for (const f of files) {
       const url = f.url && /^https?:\/\//i.test(f.url) ? f.url : undefined;
+      /* ก้อนใหญ่เกินเพดานของถังระบบ — ส่งขึ้น Google Drive (รอบที่ 131) */
+      if (!url && f.size > MAX_FILE_BYTES && f.fileId) {
+        const big = await driveFromStore(f.fileId, (p) => setNote(`กำลังส่งขึ้น Google Drive ${Math.round(p * 100)}%`));
+        if (big?.ok) {
+          docs.push({ n: f.name, sz: fileSize(f.size), by: me.name, at, url: big.url, driveId: big.id, fileId: f.fileId });
+          setNote("");
+          continue;
+        }
+        setNote(big?.message ?? "ไฟล์ใหญ่เกินเพดานของที่เก็บไฟล์ระบบ");
+        docs.push({ n: f.name, sz: fileSize(f.size), by: me.name, at, fileId: f.fileId });
+        continue;
+      }
       /* ไฟล์จริงที่เก็บไว้ในเครื่องตอนแนบ — ส่งขึ้นถังให้ทีมเปิดได้จากทุกเครื่อง */
       const path = !url && f.fileId ? await uploadProjectFile(pj, f.fileId) : undefined;
       docs.push({ n: f.name, sz: url ? "ลิงก์" : fileSize(f.size), by: me.name, at, url, fileId: f.fileId, path });
@@ -164,7 +181,11 @@ export function AddDocsDialog({ pj, onClose }: { pj: string; onClose: () => void
         hint="เอกสารที่ทีมควรเห็น เช่น บรีฟ คู่มือแบรนด์ ไฟล์จากลูกค้า"
         linkPlaceholder="หรือวางลิงก์ เช่น Google Drive, Canva, Figma"
       />
-      <p className="mt-2.5 text-[12px] text-muted-foreground">ทีมที่ได้รับงานในโปรเจคนี้จะเห็นเอกสารเหล่านี้</p>
+      <p className="mt-2.5 text-[12px] text-muted-foreground">
+        ทีมที่ได้รับงานในโปรเจคนี้จะเห็นเอกสารเหล่านี้ · ไฟล์ผลงานก้อนใหญ่ส่งขึ้น Google Drive
+      </p>
+      {/* ความคืบหน้าหรือเหตุที่ส่งขึ้น Drive ไม่ได้ (รอบที่ 131) */}
+      {note && <p className="mt-1.5 text-[12px] font-semibold text-primary">{note}</p>}
     </Sheet>
   );
 }
