@@ -18,6 +18,8 @@ import { daysBetween, thaiDate, todayIso } from "@/lib/format";
 import { ClockIcon, PhoneIcon, PlusIcon } from "./icons";
 import { LeadNewDialog } from "./lead-form";
 import { LeadsFollowup } from "./leads-followup";
+import { LeadsPipeline } from "./leads-pipeline";
+import { createdKey, setSort as setPipeSort, usePipePrefs } from "@/lib/pipeline-cols";
 import { ChangeFromTo, Pager, SearchBox, TabStrip, Who, usePaged } from "./sales-ui";
 
 const PER_PAGE = 7;
@@ -45,8 +47,9 @@ export function LeadsPage() {
    * เป็นโหมดแสดงผลของหน้าเดียวกัน ไม่ใช่เมนูนำทาง · บทบาทอื่นไม่เห็นปุ่มนี้
    */
   const isSales = useRole() === "sales";
-  const [viewPick, setView] = useState<"list" | "followup">("list");
-  const view = viewPick === "followup" && !isSales ? "list" : viewPick;
+  /* มุมมอง Pipeline ยกมาจาก ERP_Test (รอบที่ 133) — ขั้นอนุมานจากข้อมูลที่มีอยู่ ไม่มีช่องสถานะใหม่ */
+  const [viewPick, setView] = useState<"list" | "pipeline" | "followup">("list");
+  const view = viewPick !== "list" && !isSales ? "list" : viewPick;
   const profile = useProfile();
   const router = useRouter();
   const today = todayIso();
@@ -93,6 +96,24 @@ export function LeadsPage() {
   const rows = tab === "all" || tab === "log" ? scoped : scoped.filter((c) => c.status === tab);
   /* การ์ดบนกระดาน — รายที่ปิดงานกลายเป็นดีลแล้ว ไม่ต้องติดตามต่อ */
   const open = useMemo(() => scoped.filter((c) => c.status !== "ปิดงาน"), [scoped]);
+  /*
+   * Pipeline (ยกมาจาก ERP_Test · รอบที่ 133) — เรียงตามตัวเลือกของพนักงานคนนั้น
+   * ผู้สนใจไม่มีวันที่สร้างในข้อมูลเก่า จึงใช้วันติดต่อครั้งแรกหรือเดือนจากรหัสแทน
+   */
+  const pipeSort = usePipePrefs(profile.employeeId).sort;
+  const firstContact = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of crm.activities) {
+      if (!map[a.customerCode] || a.date < map[a.customerCode]) map[a.customerCode] = a.date;
+    }
+    return map;
+  }, [crm.activities]);
+  const pipeRows = useMemo(() => {
+    const key = (c: Customer) => createdKey(c.code, c.leadCode, firstContact[c.code] ?? "", c.createdAt);
+    const list = [...open];
+    list.sort((a, b) => (pipeSort === "new" ? key(b).localeCompare(key(a)) : key(a).localeCompare(key(b))));
+    return list;
+  }, [open, firstContact, pipeSort]);
   const paged = usePaged<Customer | LogRow>(tab === "log" ? logs : rows, PER_PAGE);
 
   const counts: Record<string, number> = {
@@ -135,6 +156,14 @@ export function LeadsPage() {
               </button>
               <button
                 type="button"
+                className={view === "pipeline" ? "on" : ""}
+                aria-pressed={view === "pipeline"}
+                onClick={() => setView("pipeline")}
+              >
+                Pipeline
+              </button>
+              <button
+                type="button"
                 className={view === "followup" ? "on" : ""}
                 aria-pressed={view === "followup"}
                 onClick={() => setView("followup")}
@@ -162,7 +191,32 @@ export function LeadsPage() {
         </div>
       </div>
 
-      {view === "followup" ? (
+      {view === "pipeline" ? (
+        <>
+          {/* Pipeline ใช้ตัวค้นหาชุดเดียวกับรายการ · เรียงใหม่/เก่าได้ (ยกมาจาก ERP_Test) */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="seg glass-thin shrink-0" role="group" aria-label="เรียงลำดับ">
+              <button
+                type="button"
+                className={pipeSort === "new" ? "on" : ""}
+                aria-pressed={pipeSort === "new"}
+                onClick={() => setPipeSort(profile.employeeId, "new")}
+              >
+                ล่าสุดก่อน
+              </button>
+              <button
+                type="button"
+                className={pipeSort === "old" ? "on" : ""}
+                aria-pressed={pipeSort === "old"}
+                onClick={() => setPipeSort(profile.employeeId, "old")}
+              >
+                เก่าสุดก่อน
+              </button>
+            </div>
+          </div>
+          <LeadsPipeline crm={crm} rows={pipeRows} today={today} isStale={isStale} />
+        </>
+      ) : view === "followup" ? (
         <>
           {/* กระดานใช้ตัวค้นหาและตัวกรองชุดเดียวกับรายการ แต่ไม่มีแท็บสถานะ เพราะคอลัมน์แทนแท็บแล้ว */}
           <div className="flex flex-wrap justify-end gap-2">

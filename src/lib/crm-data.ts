@@ -86,10 +86,50 @@ export type Customer = {
   leadCode?: string;
   /** เหตุผลที่ปิดเสนอ — ว่างถ้ายังไม่ปิด */
   closedReason: string;
+  /** วันที่เปลี่ยนเป็นปฏิเสธ (yyyy-mm-dd) — ครบ 1 เดือนแล้วออกจาก Pipeline (ยกมาจาก ERP_Test) */
+  rejectedAt?: string;
   owner: string;
   /** วันที่เข้าระบบ "yyyy-mm-dd" — ข้อมูลตั้งต้นในเครื่องไม่มี ใช้วันติดต่อครั้งแรกแทน */
   createdAt?: string;
 };
+
+/* ─── เหตุผลที่ลูกค้าปฏิเสธ (ยกมาจาก ERP_Test · ผู้ใช้สั่ง 14 ต.ค. 2569) ───
+   เก็บเป็นข้อความเดียวใน closedReason เหมือนเดิม แต่แสดงผลเป็น "หมวด · หมายเหตุ"
+   ข้อความเก่าที่พิมพ์เองถือเป็นหมวด "อื่นๆ" */
+export const REJECT_KINDS = ["ติดราคา", "เงียบหาย", "ลูกค้าไม่เอา", "เราปฏิเสธงานเอง", "อื่นๆ"] as const;
+export type RejectKind = (typeof REJECT_KINDS)[number];
+
+/** ข้อความแสดงผล "<หมวด> · <หมายเหตุ>" — ไม่มีหมายเหตุแสดงแค่หมวด */
+export function rejectText(kind: RejectKind, note: string) {
+  const n = note.trim();
+  return n ? `${kind} · ${n}` : kind;
+}
+
+/** แยกข้อความเหตุผลกลับเป็นหมวด + หมายเหตุ */
+export function parseRejectText(text: string): { kind: RejectKind; note: string } {
+  const t = (text ?? "").trim();
+  for (const k of REJECT_KINDS) {
+    if (t === k) return { kind: k, note: "" };
+    if (t.startsWith(k + " · ")) return { kind: k, note: t.slice(k.length + 3).trim() };
+  }
+  return { kind: "อื่นๆ", note: t };
+}
+
+/** หมวด/หมายเหตุของรายที่ปฏิเสธ */
+export function rejectInfo(c: Pick<Customer, "closedReason">) {
+  const { kind, note } = parseRejectText(c.closedReason);
+  return { kind, note, text: rejectText(kind, note) };
+}
+
+/** ปฏิเสธครบ 1 เดือนแล้ว — ไม่แสดงใน Pipeline (ยังดูได้ในแท็บปฏิเสธของหน้าผู้สนใจ) */
+export function rejectArchived(c: Pick<Customer, "status" | "rejectedAt">, today: string) {
+  if (c.status !== "ปฏิเสธ" || !c.rejectedAt) return false;
+  const [y, m, d] = c.rejectedAt.split("-").map(Number);
+  const due = new Date(Date.UTC(y, m, d));
+  /* เดือนถัดไปไม่มีวันนั้น (31 ม.ค. → 3 มี.ค.) ใช้วันสุดท้ายของเดือนถัดไปแทน */
+  if (due.getUTCDate() !== d) due.setUTCDate(0);
+  return today >= due.toISOString().slice(0, 10);
+}
 
 export type Activity = {
   id: string;

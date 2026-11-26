@@ -44,6 +44,7 @@ type CustomerRow = {
   buyer_type: string;
   status: string;
   closed_reason: string;
+  rejected_at: string | null;
   owner: string;
   created_at: string;
 };
@@ -71,7 +72,7 @@ type ChangeRow = {
 
 const CUSTOMER_COLS =
   "id, code, lead_code, name, legal_name, contact, phone, email, address, legal_address," +
-  " branch, tax_id, source, buyer_type, status, closed_reason, owner, created_at";
+  " branch, tax_id, source, buyer_type, status, closed_reason, rejected_at, owner, created_at";
 
 const BUYER_TYPES: BuyerType[] = ["juristic", "government", "foundation", "individual"];
 
@@ -100,6 +101,7 @@ function toCustomer(r: CustomerRow): Customer {
     status: r.status as CustomerStatus,
     leadCode: r.lead_code ?? undefined,
     closedReason: r.closed_reason,
+    rejectedAt: r.rejected_at ?? undefined,
     owner: r.owner,
     createdAt: r.created_at ? thaiDay(r.created_at) : undefined,
   };
