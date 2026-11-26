@@ -15,8 +15,8 @@ import {
 import { currentRole, type Role } from "./role";
 import { settings } from "./system-settings";
 import { createRoleStore } from "./role-store";
-import { bkkStamp, nextDocNo } from "./format";
-import { HR_INTERN_LEAVE, ROLE_EMPLOYEE } from "./hr-data";
+import { bkkStamp, daysBetween, nextDocNo } from "./format";
+import { HR_INTERN_LEAVE, ROLE_EMPLOYEE, probEnd } from "./hr-data";
 import { hrSnapshot } from "./hr-store";
 import { myEmpNo, staffEmployeeId } from "./staff-identity";
 import { USERS } from "./mock-data";
@@ -274,10 +274,38 @@ export function daysByStatus(
 function baseDays(type: LeaveType, period: string, empId = myEmployeeId()) {
   const own = empId ? hrSnapshot().emp.find((e) => e.id === empId)?.leaveDays?.[type] : undefined;
   if (typeof own === "number") return own;
-  return entitlements().filter((e) => e.type === type && e.period === period).reduce(
+  const set = settings().leave.find((q) => q.type === type);
+  const flat = entitlements().filter((e) => e.type === type && e.period === period).reduce(
     (sum, e) => sum + e.days,
     0,
   );
+  if (!set || (!set.perYear && !set.fromProbat)) return flat;
+
+  /*
+   * สิทธิ์ตามอายุงาน (รอบที่ 126) — พักร้อนเริ่มหลังผ่านทดลองงาน แล้วเพิ่มปีละ 1 วัน สูงสุด 10
+   * สูตรเดียวกับฝั่งฐานข้อมูล (leave_quota) ตัวเลขบนจอกับที่หักเงินเดือนจึงตรงกัน
+   */
+  const emp = empId ? hrSnapshot().emp.find((e) => e.id === empId) : undefined;
+  if (!emp?.startedAt) return flat;
+  const end = periodRange(period)[1];
+  /* วันพ้นทดลองงาน — ตัวช่วยเดียวกับหน้าฝ่ายบุคคล (probEnd ถอยหนึ่งวัน จึงบวกกลับหนึ่งวัน) */
+  const probLast = probEnd(emp.startedAt);
+  probLast.setDate(probLast.getDate() + 1);
+  const okAt = probLast.toISOString().slice(0, 10);
+  if (set.fromProbat && okAt > end) return 0;
+  if (!set.perYear) return flat;
+  const years = Math.max(0, Math.floor(daysBetween(okAt, end) / 365.25));
+  const days = flat + years * set.perYear;
+  return set.maxDays ? Math.min(days, set.maxDays) : days;
+}
+
+/** ประเภทที่ใช้สิทธิ์ก้อนเดียวกับประเภทนี้ (รวมตัวมันเอง) — ลากิจ + พักร้อน เป็นก้อนเดียว */
+export function leavePoolTypes(type: LeaveType): LeaveType[] {
+  const all = settings().leave;
+  const pool = all.find((q) => q.type === type)?.pool;
+  if (!pool) return [type];
+  const list = all.filter((q) => q.pool === pool).map((q) => q.type);
+  return list.includes(type) ? list : [type, ...list];
 }
 
 /**
@@ -349,9 +377,11 @@ export function leaveUsage(
   /** ดูสิทธิ์ของคนอื่น (ฝ่ายบุคคล) — ไม่ส่งมาคือของคนที่ล็อกอินอยู่ */
   empId?: string,
 ): LeaveUsage {
-  const entitled = entitlementDays(type, period, records, empId);
-  const approved = daysByStatus(records, type, period, "อนุมัติแล้ว");
-  const pending = daysByStatus(records, type, period, "รอการอนุมัติ");
+  /* ประเภทที่อยู่ก้อนเดียวกันรวมสิทธิ์และรวมวันที่ใช้ไปเป็นก้อนเดียว (รอบที่ 126) */
+  const pool = leavePoolTypes(type);
+  const entitled = pool.reduce((sum, t) => sum + entitlementDays(t, period, records, empId), 0);
+  const approved = pool.reduce((sum, t) => sum + daysByStatus(records, t, period, "อนุมัติแล้ว"), 0);
+  const pending = pool.reduce((sum, t) => sum + daysByStatus(records, t, period, "รอการอนุมัติ"), 0);
   return {
     entitled,
     approved,

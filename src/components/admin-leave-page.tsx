@@ -166,6 +166,10 @@ export function AdminLeavePage() {
                   </b>
                   <small className="block text-[11.5px] text-muted-foreground">
                     {q.note ?? leaveNote(q.type)}
+                    {q.perYear ? ` · +${q.perYear} วัน/ปีตามอายุงาน` : ""}
+                    {q.maxDays ? ` สูงสุด ${q.maxDays} วัน` : ""}
+                    {q.fromProbat ? " · เริ่มหลังผ่านทดลองงาน" : ""}
+                    {q.pool ? " · ใช้สิทธิ์ก้อนเดียวกับลากิจ/พักร้อน" : ""}
                     {was && q.days !== was.days && ` · เดิม ${was.days} วัน`}
                   </small>
                 </span>
@@ -365,6 +369,11 @@ function TypeDialog({
   const [name, setName] = useState(initial?.type ?? "");
   const [days, setDays] = useState(initial ? String(initial.days) : "");
   const [note, setNote] = useState(initial?.note ?? (initial ? leaveNote(initial.type) : ""));
+  /* กติกาวันลาที่ฝ่ายบุคคลยืนยัน 25 พ.ย. 2569 — พักร้อนเพิ่มตามอายุงาน และใช้สิทธิ์ร่วมกับลากิจ */
+  const [perYear, setPerYear] = useState(initial?.perYear ? String(initial.perYear) : "");
+  const [maxDays, setMaxDays] = useState(initial?.maxDays ? String(initial.maxDays) : "");
+  const [fromProbat, setFromProbat] = useState(Boolean(initial?.fromProbat));
+  const [shared, setShared] = useState(Boolean(initial?.pool));
   const clean = name.trim();
   const dup = Boolean(clean) && taken.includes(clean);
   const n = Number(days) || 0;
@@ -373,7 +382,15 @@ function TypeDialog({
 
   function save() {
     if (!clean || dup || badDays) return;
-    onSave({ type: clean, days: n, ...(note.trim() ? { note: note.trim() } : {}) });
+    onSave({
+      type: clean,
+      days: n,
+      ...(note.trim() ? { note: note.trim() } : {}),
+      ...(Number(perYear) > 0 ? { perYear: Number(perYear) } : {}),
+      ...(Number(maxDays) > 0 ? { maxDays: Number(maxDays) } : {}),
+      ...(fromProbat ? { fromProbat: true } : {}),
+      ...(shared ? { pool: "personal" } : {}),
+    });
   }
 
   return (
@@ -430,6 +447,41 @@ function TypeDialog({
           />
         </Input2>
       </div>
+      {/* สิทธิ์ตามอายุงาน และก้อนสิทธิ์ร่วม (รอบที่ 126) */}
+      <div className="mt-3.5 grid gap-3.5 sm:grid-cols-2">
+        <Input2 label="เพิ่มตามอายุงาน (วัน/ปี)">
+          <input
+            type="number"
+            min={0}
+            max={10}
+            step={0.5}
+            value={perYear}
+            onChange={(e) => setPerYear(e.target.value)}
+            placeholder="0 = ไม่เพิ่ม"
+            className={`${inputCls} num text-right`}
+          />
+        </Input2>
+        <Input2 label="เพดานรวม (วัน)">
+          <input
+            type="number"
+            min={0}
+            max={365}
+            step={0.5}
+            value={maxDays}
+            onChange={(e) => setMaxDays(e.target.value)}
+            placeholder="ว่าง = ไม่จำกัด"
+            className={`${inputCls} num text-right`}
+          />
+        </Input2>
+      </div>
+      <label className="mt-3 flex items-center gap-2.5 text-[13px] font-medium">
+        <input type="checkbox" checked={fromProbat} onChange={(e) => setFromProbat(e.target.checked)} />
+        เริ่มมีสิทธิ์หลังผ่านทดลองงาน
+      </label>
+      <label className="mt-2 flex items-center gap-2.5 text-[13px] font-medium">
+        <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+        ใช้สิทธิ์ก้อนเดียวกับประเภทอื่นที่ติ๊กข้อนี้ (ลากิจ + ลาพักร้อน)
+      </label>
       <p className="mt-3.5 rounded-[11px] bg-muted/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
         {renamed
           ? "เปลี่ยนชื่อแล้ว ใบลาที่ยื่นไปแล้วยังใช้ชื่อเดิม และไม่ถูกนับเข้าสิทธิ์ของชื่อใหม่"

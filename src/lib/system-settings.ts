@@ -42,7 +42,23 @@ export type ScheduleSettings = {
 
 /** note = คำอธิบายสั้นใต้ชื่อ (ใช้กับประเภทที่ผู้ดูแลระบบเพิ่มเอง) */
 /** off = ปิดใช้งาน ไม่ขึ้นให้เลือกตอนยื่นลาใหม่ แต่ใบลาเก่ายังอ่านชื่อได้ (ต้นแบบ HR-12) */
-export type LeaveQuota = { type: string; days: number; note?: string; off?: boolean };
+/*
+ * โควตาวันลาของแต่ละประเภท (รอบที่ 126 · ฝ่ายบุคคลยืนยัน 25 พ.ย. 2569)
+ *   perYear   เพิ่มให้ปีละกี่วันตามอายุงาน (พักร้อน +1/ปี) · 0 = ไม่เพิ่ม
+ *   maxDays   เพดานรวมเมื่อนับอายุงานแล้ว (พักร้อนสูงสุด 10)
+ *   fromProbat เริ่มมีสิทธิ์หลังผ่านทดลองงาน
+ *   pool      ชื่อก้อนสิทธิ์ที่ใช้ร่วมกัน (ลากิจ + พักร้อน = ก้อนเดียว)
+ */
+export type LeaveQuota = {
+  type: string;
+  days: number;
+  note?: string;
+  off?: boolean;
+  perYear?: number;
+  maxDays?: number;
+  fromProbat?: boolean;
+  pool?: string;
+};
 
 export type CompanySettings = {
   name: string;
@@ -324,9 +340,10 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   /* สิทธิ์วันลาของรอบปีปัจจุบัน — ประเภทตั้งต้นตาม LEAVE_TYPES ใน leave-data.ts · ผู้ดูแลเพิ่มประเภทต่อท้ายได้
      สามประเภทหลักตาม ERD (leave_quota, HR-BR-13): ลากิจ 3 · ลาพักร้อน 6 · ลาป่วย 30 วันต่อปี ไม่สะสมข้ามปี */
   leave: [
-    { type: "ลาพักร้อน", days: 6 },
+    /* พักร้อน 6 วันหลังผ่านทดลองงาน แล้วเพิ่มปีละ 1 วัน สูงสุด 10 · ใช้ก้อนเดียวกับลากิจ */
+    { type: "ลาพักร้อน", days: 6, perYear: 1, maxDays: 10, fromProbat: true, pool: "personal" },
     { type: "ลาป่วย", days: 30 },
-    { type: "ลากิจ", days: 3 },
+    { type: "ลากิจ", days: 3, pool: "personal" },
     /* ลาคลอด 45 วัน = ช่วงที่บริษัทจ่ายค่าจ้าง ที่เหลือประกันสังคมจ่าย (เจ้าของตัดสิน 6 ต.ค. 2569)
        วันที่เกินจากนี้ระบบถือเป็นลาไม่รับค่าจ้างของบริษัทและหักจากเงินเดือน */
     { type: "ลาคลอด", days: 45 },
@@ -725,7 +742,15 @@ async function mirror<K extends keyof SystemSettings>(key: K, value: SystemSetti
   if (!dbOn) return { ok: true };
   if (key === "leave") {
     const r = await syncLeaveTypes(
-      (value as LeaveQuota[]).map((q) => ({ code: q.type, days: q.days, off: q.off })),
+      (value as LeaveQuota[]).map((q) => ({
+        code: q.type,
+        days: q.days,
+        off: q.off,
+        perYear: q.perYear,
+        maxDays: q.maxDays,
+        fromProbat: q.fromProbat,
+        pool: q.pool,
+      })),
     );
     return r.ok ? { ok: true } : { ok: false, message: `บันทึกประเภทการลาลงฐานข้อมูลไม่สำเร็จ: ${r.reason}` };
   }

@@ -28,7 +28,16 @@ async function db() {
 
 /* ── ประเภทการลา ────────────────────────────────────────────────── */
 
-export type LeaveTypeIn = { code: string; days: number; off?: boolean };
+export type LeaveTypeIn = {
+  code: string;
+  days: number;
+  off?: boolean;
+  /* กติกาวันลาตามอายุงานและก้อนสิทธิ์ร่วม (รอบที่ 126) */
+  perYear?: number;
+  maxDays?: number;
+  fromProbat?: boolean;
+  pool?: string;
+};
 
 /**
  * ประเภทการลาที่ใช้ได้ + จำนวนวันตั้งต้นของแต่ละประเภท
@@ -45,7 +54,20 @@ export async function syncLeaveTypes(list: LeaveTypeIn[]): Promise<SyncResult> {
     const t = keep[i];
     const { error } = await sb
       .from("leave_types")
-      .upsert({ code: t.code, label: t.code, default_days: Math.round(t.days), active: true, sort: i + 1 }, { onConflict: "code" });
+      .upsert(
+        {
+          code: t.code,
+          label: t.code,
+          default_days: Math.round(t.days),
+          active: true,
+          sort: i + 1,
+          per_year: t.perYear ?? 0,
+          max_days: t.maxDays ?? null,
+          from_probat: t.fromProbat ?? false,
+          pool: t.pool ?? null,
+        },
+        { onConflict: "code" },
+      );
     if (error) return { ok: false, reason: error.message };
   }
 
