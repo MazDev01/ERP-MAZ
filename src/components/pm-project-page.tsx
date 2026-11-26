@@ -41,6 +41,7 @@ import {
   type TaskStatus,
 } from "@/lib/pm-data";
 import {
+  closeProject,
   memberOf,
   nudgeTask,
   renameProject,
@@ -101,6 +102,9 @@ export function PmProjectPage({ pj }: { pj: string }) {
 /** ไอคอนปุ่มแชทลอยบนมือถือ */
 
 function Detail({ project }: { project: Project }) {
+  /* ปิดงาน (รอบที่ 132) — ข้อความบอกเหตุเมื่อปิดไม่ได้ */
+  const [closeMsg, setCloseMsg] = useState("");
+  const [closing, setClosing] = useState(false);
   const today = todayIso();
   /* ร่างแผนของโปรเจคนี้ที่ PM ยังไม่ได้ยืนยัน — คนอื่นที่เปิดโปรเจคต้องเห็นว่ามีร่างค้างอยู่ */
   const draft = usePm().drafts[project.pj];
@@ -210,6 +214,30 @@ function Detail({ project }: { project: Project }) {
             {project.service ? ` · บริการ ${serviceLabel(project.service)}` : ""}
           </p>
           <p className="mt-[3px] text-[13px] text-muted-foreground">{project.scope}</p>
+          {/* ปิดงานเป็นเรื่องที่ PM กดเอง (รอบที่ 132 · เจ้าของสั่ง 25 พ.ย. 2569)
+              งาน DM ต้องยิงแอดครบก่อน ฐานข้อมูลกันไว้อีกชั้นและส่งเหตุผลกลับมาบอก */}
+          {project.status === "running" && !ro && (
+            <div className="mt-2.5">
+              <button
+                type="button"
+                className="btn glass-thin btn-mini"
+                disabled={closing}
+                onClick={() => {
+                  setCloseMsg("");
+                  setClosing(true);
+                  void closeProject(project.pj).then((r) => {
+                    setClosing(false);
+                    if (!r.ok) setCloseMsg(r.message);
+                  });
+                }}
+              >
+                ปิดงาน
+              </button>
+              {closeMsg && (
+                <p className="mt-1.5 text-[12px] font-semibold text-destructive">{closeMsg}</p>
+              )}
+            </div>
+          )}
           {project.status === "cancelled" && (
             /* ดีลถูกยกเลิก — บอกว่าใครยกเลิก เมื่อไร และเพราะอะไร ทีมจะได้ไม่ทำงานต่อ */
             <p className="mt-2 text-[12.5px] text-muted-foreground">

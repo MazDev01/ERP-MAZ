@@ -1125,9 +1125,8 @@ export async function setTaskStatus(pj: string, taskIndex: number, status: TaskS
     if (!p0 || !t0) return;
     const pct = status === "done" ? 100 : status === "todo" ? 0 : t0.pct;
     await sbPatchTask(p0.pj, taskIndex, { status, pct });
-    /* งานครบทุกใบแล้วถือว่าโปรเจคส่งมอบเสร็จ ไม่ต้องมากดปิดซ้ำอีกที */
-    const allDone = p0.tasks.every((t, i) => (i === taskIndex ? status === "done" : t.status === "done"));
-    await sbPatchProject(p0.pj, { status: allDone ? "done" : "running", updated: today() });
+    /* ปิดงานเป็นเรื่องที่ PM กดเอง (รอบที่ 132) — ที่นี่แค่ขยับวันที่แก้ล่าสุด */
+    await sbPatchProject(p0.pj, { updated: today() });
     refreshPm();
     return;
   }
@@ -1140,14 +1139,8 @@ export async function setTaskStatus(pj: string, taskIndex: number, status: TaskS
           ? { ...t, status, pct: status === "done" ? 100 : status === "todo" ? 0 : t.pct }
           : t,
       );
-      /* งานครบทุกใบแล้วถือว่าโปรเจคส่งมอบเสร็จ ไม่ต้องมากดปิดซ้ำอีกที */
-      const allDone = tasks.every((t) => t.status === "done");
-      return {
-        ...p,
-        tasks,
-        status: allDone ? ("done" as const) : ("running" as const),
-        updated: today(),
-      };
+      /* ปิดงานเป็นเรื่องที่ PM กดเอง (รอบที่ 132) */
+      return { ...p, tasks, updated: today() };
     }),
   }));
 }
@@ -1165,8 +1158,7 @@ export async function setTaskProgress(pj: string, taskIndex: number, pct: number
     if (!p0 || !p0.tasks[taskIndex]) return;
     const status = clamped >= 100 ? "done" : clamped <= 0 ? "todo" : "doing";
     await sbPatchTask(p0.pj, taskIndex, { pct: clamped, status });
-    const allDone = p0.tasks.every((t, i) => (i === taskIndex ? status === "done" : t.status === "done"));
-    await sbPatchProject(p0.pj, { status: allDone ? "done" : "running", updated: today() });
+    await sbPatchProject(p0.pj, { updated: today() });
     refreshPm();
     return;
   }
@@ -1184,13 +1176,8 @@ export async function setTaskProgress(pj: string, taskIndex: number, pct: number
             }
           : t,
       );
-      const allDone = tasks.every((t) => t.status === "done");
-      return {
-        ...p,
-        tasks,
-        status: allDone ? ("done" as const) : ("running" as const),
-        updated: today(),
-      };
+      /* ปิดงานเป็นเรื่องที่ PM กดเอง (รอบที่ 132) */
+      return { ...p, tasks, updated: today() };
     }),
   }));
 }
@@ -1268,14 +1255,8 @@ function patchTask(
     projects: s.projects.map((p) => {
       if (!isRef(p, pj)) return p;
       const tasks = p.tasks.map((t) => (t.name === taskName ? fn(t) : t));
-      const allDone = tasks.every((t) => t.status === "done");
-      return {
-        ...p,
-        tasks,
-        status: allDone ? ("done" as const) : ("running" as const),
-        acts: [act, ...p.acts],
-        updated: today(),
-      };
+      /* ปิดงานเป็นเรื่องที่ PM กดเอง (รอบที่ 132) */
+      return { ...p, tasks, acts: [act, ...p.acts], updated: today() };
     }),
   };
 }
@@ -1398,6 +1379,53 @@ export async function reviewTask(pj: string, taskName: string, ok: boolean, note
   return { ok: true as const, status };
 }
 
+/**
+ * PM กดปิดงาน (รอบที่ 132 · เจ้าของสั่ง 25 พ.ย. 2569)
+ *
+ * งานย่อยต้องเสร็จครบก่อน · งาน DM ต้องยิงแอดครบทุกตัวด้วย (ฐานข้อมูลกันไว้อีกชั้น)
+ * คืนเหตุผลเป็นข้อความเมื่อปิดไม่ได้ เพื่อให้หน้าจอบอกตรง ๆ
+ */
+export async function closeProject(pj: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const now = mergedState().projects.find((x) => isRef(x, pj));
+  if (!now) return { ok: false, message: "ไม่พบโปรเจคนี้" };
+  if (now.status === "cancelled") return { ok: false, message: "โปรเจคนี้ถูกยกเลิกไปแล้ว" };
+  const left = now.tasks.filter((t) => t.status !== "done").length;
+  if (left > 0) return { ok: false, message: `ยังมีงานที่ไม่เสร็จอีก ${left} ใบ` };
+
+  const at = bkkStamp();
+  if (live) {
+    const res = await sbPatchProject(now.pj, { status: "done", updated: today() });
+    if (!res.ok) {
+      /* ปิดไม่สำเร็จ = ไม่มีอะไรเปลี่ยน ไม่ต้องอ่านใหม่
+         (อ่านใหม่แล้วหน้าจอวาดรอบใหม่ ข้อความบอกเหตุหายไปทันที) */
+      return {
+        ok: false,
+        /* ฐานข้อมูลส่งข้อความไทยกลับมาตรง ๆ (ตัวกันปิดงานของรอบที่ 132) */
+        message: /ยิง|โฆษณา|ปิดงาน/.test(res.reason ?? "")
+          ? (res.reason as string)
+          : "ปิดงานไม่สำเร็จ ลองใหม่อีกครั้ง",
+      };
+    }
+    await sbAddAct(now.pj, { kind: "status", who: "PM", at, tx: "ปิดงาน" });
+    refreshPm();
+    return { ok: true };
+  }
+  store.update((s) => ({
+    ...s,
+    projects: s.projects.map((p) =>
+      isRef(p, pj)
+        ? {
+            ...p,
+            status: "done" as const,
+            updated: today(),
+            acts: [{ kind: "status" as const, who: "PM", at, tx: "ปิดงาน" }, ...p.acts],
+          }
+        : p,
+    ),
+  }));
+  return { ok: true };
+}
+
 export async function approveWork(pj: string, taskName: string, stamp: string) {
   if (live) {
     const hit = await pmTask(pj, taskName);
@@ -1406,9 +1434,11 @@ export async function approveWork(pj: string, taskName: string, stamp: string) {
     await sbAddAct(hit.pj, { kind: "status", who: "PM", at: stamp, tx: `ตรวจผ่าน ${taskName}` });
     /* งานครบทุกใบแล้วถือว่าโปรเจคส่งมอบเสร็จ ไม่ต้องมากดปิดซ้ำอีกที
        (ทางเดิมคิดให้ใน patchTask — ทางฐานข้อมูลต้องคิดตรงนี้เอง) */
-    const p0 = mergedState().projects.find((x) => isRef(x, pj));
-    const allDone = p0?.tasks.every((t, i) => (i === hit.i ? true : t.status === "done")) ?? false;
-    await sbPatchProject(hit.pj, { status: allDone ? "done" : "running", updated: today() });
+    /*
+     * ไม่ปิดโปรเจคให้เองแล้ว (รอบที่ 132 · เจ้าของสั่ง 25 พ.ย. 2569 ว่า "PM เป็นคนกดปิด")
+     * งาน DM ยังต้องยิงแอดให้ครบก่อน งานครบทุกใบจึงไม่เท่ากับปิดงานได้
+     */
+    await sbPatchProject(hit.pj, { updated: today() });
     refreshPm();
     return;
   }
