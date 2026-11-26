@@ -410,7 +410,7 @@ function IssueDialog({
             onClick={() => {
               /* งวดแรกที่ชำระครบ → งานเข้าคิว PM ต่อโดยอัตโนมัติ ทำงานเบื้องหลัง (AC-BR-06)
                  ต่อฐานข้อมูลแล้วต้องรอเลขที่ใบเสร็จก่อน ออกไม่สำเร็จจะได้ไม่ปิดกล่องทิ้ง */
-              void issueReceiptFlow(invoice.no, date, gotNum, whtNum).then((no) => {
+              void issueReceiptFlow(invoice.no, invoice.seq, date, gotNum, whtNum).then((no) => {
                 if (no) onDone();
               });
             }}

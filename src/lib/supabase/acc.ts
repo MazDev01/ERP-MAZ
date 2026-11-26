@@ -239,6 +239,8 @@ export async function fetchAccBilling(): Promise<AccBilling> {
     };
   });
 
+  /* เลขที่ใบแจ้งหนี้ซ้ำกันทุกงวด (รอบที่ 117) — จับคู่กลับด้วยรหัสแถวเท่านั้น */
+  const invById: Record<string, Invoice> = {};
   const invoices = invRows.map<Invoice>((r) => ({
     no: r.no,
     deal: dealNoById[r.deal_id] ?? "",
@@ -257,15 +259,19 @@ export async function fetchAccBilling(): Promise<AccBilling> {
       : undefined,
     col: colByInv[r.id] ?? [],
   }));
+  for (const [i, r] of invRows.entries()) invById[r.id] = invoices[i];
 
-  /* หน้าจอเดิมมองการรับชำระของใบหนึ่งเป็นก้อนเดียว — รวมรายครั้งให้ตรงรูปเดิม */
+  /* หน้าจอเดิมมองการรับชำระของใบหนึ่งเป็นก้อนเดียว — รวมรายครั้งให้ตรงรูปเดิม
+     รวมแยกตามงวด ไม่ใช่ตามเลขที่ ไม่งั้นทุกงวดของดีลเดียวจะกองเป็นก้อนเดียว */
   const sum: Record<string, Payment> = {};
   for (const r of (pm.data ?? []) as unknown as PaymentRow[]) {
-    const no = invNoById[r.invoice_id];
-    if (!no) continue;
-    const cur = sum[no];
-    sum[no] = {
-      inv: no,
+    const inv = invById[r.invoice_id];
+    if (!inv) continue;
+    const key = r.invoice_id;
+    const cur = sum[key];
+    sum[key] = {
+      inv: inv.no,
+      seq: inv.seq,
       date: cur ? (r.on_date > cur.date ? r.on_date : cur.date) : r.on_date,
       received: (cur?.received ?? 0) + n(r.received),
       wht: (cur?.wht ?? 0) + n(r.wht),
@@ -274,7 +280,7 @@ export async function fetchAccBilling(): Promise<AccBilling> {
   }
 
   const receipts = ((rc.data ?? []) as unknown as ReceiptRow[]).map<Receipt>((r) => {
-    const inv = invoices.find((x) => x.no === invNoById[r.invoice_id]);
+    const inv = invById[r.invoice_id];
     return {
       no: r.no,
       inv: inv?.no ?? "",
@@ -346,10 +352,15 @@ async function dealIdOf(no: string): Promise<string | null> {
   return (got.data as { id?: string } | null)?.id ?? null;
 }
 
-async function invoiceIdOf(no: string): Promise<string | null> {
+/*
+ * ใบแจ้งหนี้ทุกงวดของดีลหนึ่งใช้เลขเดียวกัน (รอบที่ 117) เลขที่จึงชี้ใบไม่ได้
+ * ต้องระบุงวดด้วย ไม่งั้นเจอหลายแถวแล้วได้ค่าว่าง — บันทึกรับเงินงวดที่ 2
+ * ขึ้นไปไม่ได้เลย (เจอตอนทดสอบ 26 พ.ย. 2569)
+ */
+async function invoiceIdOf(no: string, seq: number): Promise<string | null> {
   const sb = supabase();
   if (!sb) return null;
-  const got = await sb.from("invoices").select("id").eq("no", no).maybeSingle();
+  const got = await sb.from("invoices").select("id").eq("no", no).eq("seq", seq).maybeSingle();
   return (got.data as { id?: string } | null)?.id ?? null;
 }
 
@@ -425,6 +436,7 @@ export async function sbIssueInvoice(input: {
  */
 export async function sbRecordPayment(input: {
   invoiceNo: string;
+  seq: number;
   date: string;
   received: number;
   wht: number;
@@ -432,7 +444,7 @@ export async function sbRecordPayment(input: {
 }): Promise<AccWrite> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
-  const id = await invoiceIdOf(input.invoiceNo);
+  const id = await invoiceIdOf(input.invoiceNo, input.seq);
   if (!id) return { ok: false, reason: "not_found" };
 
   const pay = await sb.from("payments").insert({
@@ -454,10 +466,10 @@ export async function sbRecordPayment(input: {
   return { ok: true };
 }
 
-export async function sbLogCollection(invoiceNo: string, c: Collection): Promise<AccWrite> {
+export async function sbLogCollection(invoiceNo: string, seq: number, c: Collection): Promise<AccWrite> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
-  const id = await invoiceIdOf(invoiceNo);
+  const id = await invoiceIdOf(invoiceNo, seq);
   if (!id) return { ok: false, reason: "not_found" };
   const got = await sb.from("invoice_collections").insert({
     invoice_id: id,
@@ -474,6 +486,7 @@ export async function sbLogCollection(invoiceNo: string, c: Collection): Promise
 /** ออกใบเสร็จ = บันทึกรับชำระหนึ่งครั้ง แล้วอัปเดตยอดค้างของใบแจ้งหนี้ */
 export async function sbIssueReceipt(input: {
   invoiceNo: string;
+  seq: number;
   date: string;
   received: number;
   wht: number;
@@ -485,7 +498,7 @@ export async function sbIssueReceipt(input: {
 }): Promise<AccWrite> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
-  const id = await invoiceIdOf(input.invoiceNo);
+  const id = await invoiceIdOf(input.invoiceNo, input.seq);
   if (!id) return { ok: false, reason: "not_found" };
 
   const pay = await sb

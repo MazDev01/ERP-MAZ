@@ -148,11 +148,18 @@ export async function acceptQuotationFlow(quotationId: string) {
  * ใช้งวดแรกเป็นเงื่อนไข เพราะกติกาบริษัทคือเริ่มลงมือทำงานได้เมื่อลูกค้าจ่ายมัดจำแล้ว
  * คืนเลขที่ใบเสร็จ หรือค่าว่างถ้าออกไม่ได้
  */
-export async function issueReceiptFlow(invoiceNo: string, date: string, received: number, wht: number) {
+export async function issueReceiptFlow(
+  invoiceNo: string,
+  seq: number,
+  date: string,
+  received: number,
+  wht: number,
+) {
   const before = accSnapshot();
-  const invoice = before.invoices.find((v) => v.no === invoiceNo);
+  /* เลขที่ซ้ำกันทุกงวด (รอบที่ 117) — ใบที่หมายถึงต้องระบุงวดด้วย */
+  const invoice = before.invoices.find((v) => v.no === invoiceNo && v.seq === seq);
   /* ต่อฐานข้อมูลแล้วเลขที่ใบเสร็จมาจากฐานข้อมูล ต้องรอคำตอบก่อนจึงรู้ว่าออกสำเร็จไหม */
-  const no = await issueReceipt(invoiceNo, date, received, wht);
+  const no = await issueReceipt(invoiceNo, seq, date, received, wht);
   if (!no || !invoice || invoice.seq !== 1) return no;
   /*
    * ชำระบางส่วนยังไม่ใช่มัดจำครบ งานยังไม่เข้าคิว PM
@@ -182,10 +189,16 @@ export async function issueReceiptFlow(invoiceNo: string, date: string, received
  * งานบุคคลกับบุคคลไม่มีใบเสร็จ แต่กติกาการส่งงานต่อเหมือนกันทุกประการ
  * คืน true เมื่อบันทึกสำเร็จ
  */
-export async function recordPaymentFlow(invoiceNo: string, date: string, received: number, wht: number) {
+export async function recordPaymentFlow(
+  invoiceNo: string,
+  seq: number,
+  date: string,
+  received: number,
+  wht: number,
+) {
   const before = accSnapshot();
-  const invoice = before.invoices.find((v) => v.no === invoiceNo);
-  const ok = await recordPayment(invoiceNo, date, received, wht);
+  const invoice = before.invoices.find((v) => v.no === invoiceNo && v.seq === seq);
+  const ok = await recordPayment(invoiceNo, seq, date, received, wht);
   if (!ok || !invoice || invoice.seq !== 1) return ok;
 
   const settledNow = round2(received + wht) >= round2(invoice.outstanding);

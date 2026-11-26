@@ -1075,16 +1075,16 @@ export async function issueInvoice(dealNo: string, seq: number, due: string) {
   });
 }
 
-export async function logCollection(invoiceNo: string, entry: Collection) {
+export async function logCollection(invoiceNo: string, seq: number, entry: Collection) {
   if (live) {
-    await sbLogCollection(invoiceNo, entry);
+    await sbLogCollection(invoiceNo, seq, entry);
     refreshBilling();
     return;
   }
   store.update((s) => ({
     ...s,
     invoices: s.invoices.map((v) =>
-      v.no === invoiceNo ? { ...v, col: [...v.col, entry] } : v,
+      v.no === invoiceNo && v.seq === seq ? { ...v, col: [...v.col, entry] } : v,
     ),
   }));
 }
@@ -1103,9 +1103,10 @@ export async function logCollection(invoiceNo: string, entry: Collection) {
  * บัญชีบันทึกรายได้ในตารางภายในเอง ระบบจึงต้องรับเงินได้โดยไม่ออกเอกสารภาษี
  * คืน true เมื่อบันทึกสำเร็จ — เรียกผ่าน recordPaymentFlow (flow.ts) เพื่อให้งานเข้าคิว PM ต่อ
  */
-export async function recordPayment(invoiceNo: string, date: string, received: number, wht: number) {
+export async function recordPayment(invoiceNo: string, seq: number, date: string, received: number, wht: number) {
   const s = snapshot();
-  const v = s.invoices.find((x) => x.no === invoiceNo);
+  /* เลขที่ซ้ำกันทุกงวด (รอบที่ 117) — ต้องจับคู่ด้วยงวดด้วย ไม่งั้นได้งวดแรกที่จ่ายแล้ว */
+  const v = s.invoices.find((x) => x.no === invoiceNo && x.seq === seq);
   if (!v || !date || v.status === "cancelled" || v.outstanding <= 0) return false;
   const got = round2(received);
   const tax = round2(wht);
@@ -1113,27 +1114,29 @@ export async function recordPayment(invoiceNo: string, date: string, received: n
   const left = round2(v.outstanding - round2(got + tax));
 
   if (live) {
-    const res = await sbRecordPayment({ invoiceNo, date, received: got, wht: tax, outstanding: left });
+    const res = await sbRecordPayment({ invoiceNo, seq, date, received: got, wht: tax, outstanding: left });
     refreshBilling();
     return res.ok;
   }
   store.update((st) => ({
     ...st,
     invoices: st.invoices.map((x) =>
-      x.no === invoiceNo ? { ...x, outstanding: left, status: left > 0 ? "partial" : "paid" } : x,
+      x.no === invoiceNo && x.seq === seq
+        ? { ...x, outstanding: left, status: left > 0 ? "partial" : "paid" }
+        : x,
     ),
     payments: [
       ...st.payments,
-      { inv: invoiceNo, date, received: got, wht: tax, certReceived: tax <= 0 },
+      { inv: invoiceNo, seq, date, received: got, wht: tax, certReceived: tax <= 0 },
     ],
   }));
   return true;
 }
 
-export async function issueReceipt(invoiceNo: string, date: string, received: number, wht: number) {
+export async function issueReceipt(invoiceNo: string, seq: number, date: string, received: number, wht: number) {
   if (live) {
     const s = snapshot();
-    const v = s.invoices.find((x) => x.no === invoiceNo);
+    const v = s.invoices.find((x) => x.no === invoiceNo && x.seq === seq);
     if (!v || !date || v.status === "cancelled" || v.outstanding <= 0) return "";
     const got = round2(received);
     const tax = round2(wht);
@@ -1145,6 +1148,7 @@ export async function issueReceipt(invoiceNo: string, date: string, received: nu
     const base = gross ? round2((v.base * paid) / gross) : paid;
     const res = await sbIssueReceipt({
       invoiceNo,
+      seq,
       date,
       received: got,
       wht: tax,
@@ -1160,7 +1164,7 @@ export async function issueReceipt(invoiceNo: string, date: string, received: nu
   }
   let issued = "";
   store.update((s) => {
-    const v = s.invoices.find((x) => x.no === invoiceNo);
+    const v = s.invoices.find((x) => x.no === invoiceNo && x.seq === seq);
     if (!v || !date || v.status === "cancelled" || v.outstanding <= 0) return s;
     const got = round2(received);
     const tax = round2(wht);
@@ -1191,6 +1195,7 @@ export async function issueReceipt(invoiceNo: string, date: string, received: nu
     /* เงินเข้าจริงคือยอดบนใบเสร็จ ภาษีที่ถูกหักเก็บแยกไว้ให้แดชบอร์ดรวมเป็นรายได้ได้ครบ */
     const payment: Payment = {
       inv: v.no,
+      seq: v.seq,
       date,
       received: got,
       wht: tax,

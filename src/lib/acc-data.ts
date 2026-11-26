@@ -336,6 +336,8 @@ export const ACC_INVOICES: Invoice[] = [
 /* เกิดพร้อมใบเสร็จเสมอ (ออกใบเสร็จ = รับชำระ) — เก็บไว้ให้แดชบอร์ดรวมยอดรับเงินตามวันที่ */
 export type Payment = {
   inv: string;
+  /** งวดที่ — เลขที่ใบแจ้งหนี้ซ้ำกันทุกงวด (รอบที่ 117) ต้องมีงวดกำกับ */
+  seq: number;
   date: string;
   /** เงินโอนเข้าบัญชี ไม่รวมภาษีที่ลูกค้าหักไว้ */
   received: number;
@@ -346,15 +348,15 @@ export type Payment = {
 
 export const ACC_PAYMENTS: Payment[] = [
   /* ต้นแบบสร้างจากใบเสร็จ (รับชำระ = ออกใบเสร็จ) */
-  { inv: "INV-2569-0014", date: "2026-09-05", received: 171200, wht: 0, certReceived: true },
-  { inv: "INV-2569-0018", date: "2026-08-18", received: 10400, wht: 0, certReceived: true },
-  { inv: "INV-2569-0022", date: "2026-07-31", received: 40560, wht: 1170, certReceived: true },
-  { inv: "INV-2569-0032", date: "2026-05-28", received: 145000, wht: 0, certReceived: true },
-  { inv: "INV-2569-0033", date: "2026-09-01", received: 48000, wht: 0, certReceived: true },
-  { inv: "INV-2569-0034", date: "2026-09-05", received: 8500, wht: 0, certReceived: true },
-  { inv: "INV-2569-0035", date: "2026-09-06", received: 51200, wht: 0, certReceived: true },
-  { inv: "INV-2569-0036", date: "2026-09-06", received: 91800, wht: 0, certReceived: true },
-  { inv: "INV-2569-0037", date: "2026-09-07", received: 15000, wht: 0, certReceived: true },
+  { inv: "INV-2569-0014", seq: 1, date: "2026-09-05", received: 171200, wht: 0, certReceived: true },
+  { inv: "INV-2569-0018", seq: 1, date: "2026-08-18", received: 10400, wht: 0, certReceived: true },
+  { inv: "INV-2569-0022", seq: 1, date: "2026-07-31", received: 40560, wht: 1170, certReceived: true },
+  { inv: "INV-2569-0032", seq: 1, date: "2026-05-28", received: 145000, wht: 0, certReceived: true },
+  { inv: "INV-2569-0033", seq: 1, date: "2026-09-01", received: 48000, wht: 0, certReceived: true },
+  { inv: "INV-2569-0034", seq: 1, date: "2026-09-05", received: 8500, wht: 0, certReceived: true },
+  { inv: "INV-2569-0035", seq: 1, date: "2026-09-06", received: 51200, wht: 0, certReceived: true },
+  { inv: "INV-2569-0036", seq: 1, date: "2026-09-06", received: 91800, wht: 0, certReceived: true },
+  { inv: "INV-2569-0037", seq: 1, date: "2026-09-07", received: 15000, wht: 0, certReceived: true },
 ];
 
 // ═══ ใบเสร็จรับเงิน ════════════════════════════════════════════

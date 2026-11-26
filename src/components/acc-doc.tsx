@@ -69,10 +69,12 @@ function parties(crm: CrmState, deal: AccDeal | undefined, cusName: string) {
   return { info: issuerInfo(quotation?.issuer), buyer: taxInvoiceBuyer(customer) };
 }
 
-export function AccInvoiceView({ no }: { no: string }) {
+export function AccInvoiceView({ no, seq }: { no: string; seq?: number }) {
   const acc = useAcc();
   const crm = useCrm();
-  const v = acc.invoices.find((x) => x.no === no);
+  /* เลขที่ซ้ำกันทุกงวด (รอบที่ 117) — ไม่ได้บอกงวดมาก็เอางวดแรกสุดของเลขนั้น */
+  const same = acc.invoices.filter((x) => x.no === no).sort((a, b) => a.seq - b.seq);
+  const v = seq ? same.find((x) => x.seq === seq) : same[0];
 
   if (!v) return <NotFound back="/acc/billing" backLabel="กลับไปหน้าวางบิล" no={no} what="ไม่พบใบแจ้งหนี้นี้" />;
 

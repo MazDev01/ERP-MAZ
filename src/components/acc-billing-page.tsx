@@ -70,9 +70,12 @@ import { DateField } from "./thai-date-picker";
 import { CancelDealDialog } from "./cancel-deal-dialog";
 type TabKey = "todo" | "inv" | "due";
 
-/** ที่อยู่หน้าเอกสารใบแจ้งหนี้ — อยู่ใต้เมนูวางบิล สิทธิ์เข้าหน้าจึงตามเมนูนี้ */
-export function invoiceHref(no: string) {
-  return `/acc/billing/invoice/${encodeURIComponent(no)}`;
+/*
+ * ที่อยู่หน้าเอกสารใบแจ้งหนี้ — อยู่ใต้เมนูวางบิล สิทธิ์เข้าหน้าจึงตามเมนูนี้
+ * ทุกงวดใช้เลขเดียวกัน (รอบที่ 117) ต้องบอกงวดมาด้วย ไม่งั้นเปิดได้แต่งวดแรก
+ */
+export function invoiceHref(no: string, seq: number) {
+  return `/acc/billing/invoice/${encodeURIComponent(no)}?seq=${seq}`;
 }
 
 export function AccBillingPage() {
@@ -206,7 +209,7 @@ export function AccBillingPage() {
       (wht > 0 ? `\nภาษีหัก ณ ที่จ่าย ${baht(wht)} บาท` : "") +
       `\n\nยืนยันออกใบเสร็จ?`;
     if (!window.confirm(msg)) return;
-    issueReceiptFlow(v.no, today, got, wht);
+    issueReceiptFlow(v.no, v.seq, today, got, wht);
   }
 
   /*
@@ -228,7 +231,7 @@ export function AccBillingPage() {
 ไม่ออกใบเสร็จ — ใช้กับงานที่ตกลงกันเป็นบุคคลกับบุคคล
 ยืนยันบันทึกรับชำระ?`;
     if (!window.confirm(msg)) return;
-    void recordPaymentFlow(v.no, today, got, wht);
+    void recordPaymentFlow(v.no, v.seq, today, got, wht);
   }
 
   return (
@@ -384,12 +387,12 @@ export function AccBillingPage() {
                       tabIndex={0}
                       style={{ cursor: "pointer" }}
                       title="เปิดใบแจ้งหนี้"
-                      onClick={() => router.push(invoiceHref(v.no))}
+                      onClick={() => router.push(invoiceHref(v.no, v.seq))}
                       onKeyDown={(e) => {
                         if ((e.target as HTMLElement).closest("button")) return;
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          router.push(invoiceHref(v.no));
+                          router.push(invoiceHref(v.no, v.seq));
                         }
                       }}
                     >
@@ -844,7 +847,7 @@ function SeqBilled({ acc, deal, seq, no }: { acc: AccState; deal: string; seq: n
         {paid ? "ชำระแล้ว" : "วางบิลแล้ว"}
       </span>
       {no && (
-        <Link className="lnk num" href={invoiceHref(no)} title="เปิดใบแจ้งหนี้">
+        <Link className="lnk num" href={invoiceHref(no, seq)} title="เปิดใบแจ้งหนี้">
           {no}
         </Link>
       )}
@@ -1106,7 +1109,7 @@ function PhoneSeq({
               <button
                 type="button"
                 className={`${docBtn} border border-[#E6DADD] bg-white text-[#2A1F22]`}
-                onClick={() => router.push(invoiceHref(inv.no))}
+                onClick={() => router.push(invoiceHref(inv.no, inv.seq))}
               >
                 <DownloadIcon className="size-[15px]" strokeWidth={2.2} />
                 ใบแจ้งหนี้
@@ -1805,7 +1808,7 @@ function CollectDialog({
             onClick={() => {
               /* ต้องมีผลการติดตาม — ว่างอยู่ให้กลับไปที่ช่องนั้น */
               if (!result.trim()) return resultBox.current?.querySelector("textarea")?.focus();
-              logCollection(invoice.no, { date: today, channel, result: result.trim(), next });
+              logCollection(invoice.no, invoice.seq, { date: today, channel, result: result.trim(), next });
               onClose();
             }}
           >
