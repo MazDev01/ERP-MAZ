@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { openStoredFile } from "@/lib/file-store";
+import { uploadProjectFile } from "@/lib/project-docs";
 import { blockers, manualWaitDays, waitText } from "@/lib/task-deps";
 import { sbTaskWaitClear, sbTaskWaitSet } from "@/lib/supabase/pm";
 import { bkkStamp, daysBetween, thaiDate, thaiStamp, todayIso } from "@/lib/format";
@@ -723,12 +724,25 @@ function SubmitDialog({
                 setBrief(false);
                 return;
               }
-              submitWork(p.pj, t.name, {
-                by: me,
-                files: files.map((f) => f.name),
-                note: note.trim(),
-                at: bkkStamp(),
-              });
+              /*
+                * ส่งไฟล์ขึ้นถังของระบบก่อน (รอบที่ 154) — คนตรวจจะได้กดเปิดไฟล์ได้จริง
+                * ไฟล์ไหนขึ้นไม่สำเร็จก็ยังส่งงานได้ แต่จะเห็นแค่ชื่อเหมือนเดิม
+                */
+              void (async () => {
+                const refs: { name: string; path: string }[] = [];
+                for (const f of files) {
+                  if (!f.fileId) continue;
+                  const path = await uploadProjectFile(p.pj, f.fileId);
+                  if (path) refs.push({ name: f.name, path });
+                }
+                await submitWork(p.pj, t.name, {
+                  by: me,
+                  files: files.map((f) => f.name),
+                  note: note.trim(),
+                  at: bkkStamp(),
+                  refs,
+                });
+              })();
               onSent();
             }}
           >

@@ -64,3 +64,20 @@ export async function openProjectDoc(d: ProjectDoc): Promise<string | null> {
   if (d.fileId) return openStoredFile(d.fileId);
   return "ไฟล์นี้ยังไม่ได้อัปโหลดจริง";
 }
+
+/**
+ * เปิดไฟล์ที่แนบมากับรอบส่งงาน (รอบที่ 154)
+ * รอบที่ส่งหลังรอบนี้มีที่อยู่ไฟล์ในถัง — เปิดได้จากทุกเครื่องที่มีสิทธิ์เห็นโปรเจค
+ * รอบเก่ามีแต่ชื่อไฟล์ คืนข้อความบอกเหตุไปให้หน้าจอแสดง
+ */
+export async function openSubFile(
+  sub: { refs?: { name: string; path: string }[] },
+  name: string,
+): Promise<string | null> {
+  const ref = sub.refs?.find((r) => r.name === name);
+  if (!ref) return "ไฟล์รอบนี้ส่งก่อนระบบเก็บไฟล์ให้ จึงเปิดจากที่นี่ไม่ได้ — ขอไฟล์จากคนส่งโดยตรง";
+  const url = await fileUrl(ref.path);
+  if (!url) return "เปิดไฟล์ไม่ได้ ลองใหม่อีกครั้ง";
+  window.open(url, "_blank", "noopener,noreferrer");
+  return null;
+}

@@ -1295,13 +1295,15 @@ function patchTask(
 export async function submitWork(
   pj: string,
   taskName: string,
-  input: { by: string; files: string[]; note: string; at: string },
+  input: { by: string; files: string[]; note: string; at: string; refs?: { name: string; path: string }[] },
 ) {
   const sub: Submission = {
     at: input.at,
     by: input.by,
     files: input.files,
     note: input.note,
+    /* ไฟล์ที่ขึ้นถังสำเร็จ — ไฟล์ที่ขึ้นไม่สำเร็จยังส่งงานได้ แค่คนตรวจเปิดไม่ได้ (รอบที่ 154) */
+    ...(input.refs?.length ? { refs: input.refs } : {}),
   };
   if (live) {
     const p0 = mergedState().projects.find((p) => isRef(p, pj));

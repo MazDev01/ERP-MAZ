@@ -12,6 +12,7 @@
 import { useMemo, useState } from "react";
 import { bkkStamp, daysBetween, thaiDate, todayIso } from "@/lib/format";
 import { isRef, lastSub, projName, projectHref, type Project, type ProjectTask } from "@/lib/pm-data";
+import { openSubFile } from "@/lib/project-docs";
 import { approveWorkFlow } from "@/lib/flow";
 import { memberName, memberOf, reviewTask, sendBackWork, setTaskReviewers, usePm } from "@/lib/pm-store";
 import { displayName, nameOf } from "@/lib/emp-name";
@@ -292,6 +293,8 @@ function ReviewDialog({
   const { p, t } = row;
   const [why, setWhy] = useState("");
   const [touched, setTouched] = useState(false);
+  /* ข้อความตอนเปิดไฟล์ที่ส่งมาไม่ได้ (รอบที่ 154) */
+  const [fileMsg, setFileMsg] = useState("");
   /* รอบใหม่อยู่บนสุด คนตรวจจะได้เห็นของล่าสุดก่อนแล้วค่อยไล่ลงไปดูรอบก่อน */
   const subs = [...(t.subs ?? [])].reverse();
   const position = usePosition();
@@ -427,14 +430,29 @@ function ReviewDialog({
         <h3 className="mb-2 text-[13px] font-semibold">
           สิ่งที่ส่งมา{subs.length > 1 ? ` ${subs.length} ครั้ง` : ""}
         </h3>
+        {fileMsg && <p className="mb-2 text-[12px] font-semibold text-destructive">{fileMsg}</p>}
         <ul className="flex flex-col gap-2">
           {subs.map((sb, i) => (
             <li
               key={`${sb.at}-${i}`}
               className="rounded-xl border border-border bg-card px-3.5 py-3"
             >
+              {/* ไฟล์ที่ส่งมาเปิดได้จริง (รอบที่ 154) — รอบเก่าที่ยังไม่มีไฟล์ในระบบบอกเหตุผลแทน */}
               <b className="block text-[13px] font-semibold">
-                {sb.files.length ? sb.files.join(" · ") : "ไม่ได้แนบไฟล์"}
+                {sb.files.length
+                  ? sb.files.map((n, k) => (
+                      <span key={`${n}-${k}`}>
+                        {k > 0 && " · "}
+                        <button
+                          type="button"
+                          className="font-semibold text-primary hover:underline"
+                          onClick={() => void openSubFile(sb, n).then((msg) => msg && setFileMsg(msg))}
+                        >
+                          {n}
+                        </button>
+                      </span>
+                    ))
+                  : "ไม่ได้แนบไฟล์"}
               </b>
               <em className="mt-1 block text-[12.5px] leading-relaxed text-muted-foreground not-italic">
                 {sb.note || "ไม่ได้เขียนรายละเอียด"}

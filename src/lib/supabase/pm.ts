@@ -886,3 +886,19 @@ export async function sbTaskWaitClear(pj: string, idx: number): Promise<PmWrite>
   const out = got.data as { ok?: boolean; reason?: string } | null;
   return out?.ok ? { ok: true } : { ok: false, reason: out?.reason ?? "denied" };
 }
+
+/* ── ไฟล์ที่แนบมากับการส่งงาน (รอบที่ 154) ───────────────────────
+   ของเดิมไฟล์อยู่ในเครื่องคนส่ง (IndexedDB) คนตรวจจึงเห็นแต่ชื่อไฟล์ กดเปิดไม่ได้
+   ย้ายขึ้นถัง docs ใต้โฟลเดอร์ของโปรเจคนั้น สิทธิ์เปิดจึงเท่ากับสิทธิ์เห็นโปรเจค */
+
+export type TaskFileRef = { name: string; path: string };
+
+/** อัปไฟล์ของใบงานขึ้นระบบ แล้วคืนชื่อกับที่อยู่ไฟล์ไว้ผูกกับรอบที่ส่ง */
+export async function sbUploadTaskFile(
+  pj: string,
+  file: File,
+): Promise<{ ok: true; ref: TaskFileRef } | { ok: false; reason: string }> {
+  const path = await sbUploadProjectFile(pj, file);
+  if (!path) return { ok: false, reason: "upload_failed" };
+  return { ok: true, ref: { name: file.name, path } };
+}
