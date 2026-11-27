@@ -15,6 +15,7 @@ import { useHr } from "@/lib/hr-store";
 import { isRef } from "@/lib/pm-data";
 import { usePm } from "@/lib/pm-store";
 import { endOf, eventKind, lastEdit, type PmEvent } from "@/lib/pm-schedule-data";
+import { downloadIcs, gcalUrl, type CalEvent } from "@/lib/calendar-link";
 import { Sheet } from "./lead-dialogs";
 
 const DW_FULL = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
@@ -29,6 +30,19 @@ const spanText = (v: string) => v.split("~").map(thaiDate).join(" – ");
 
 /** ช่วงเวลาในประวัติการแก้เก็บเป็น "HH:mm-HH:mm" */
 const timeText = (v: string) => `${v.replace("-", " – ")} น.`;
+
+/** นัดหมายหนึ่งใบในรูปที่ปฏิทินข้างนอกเข้าใจ (รอบที่ 141) */
+function calOf(event: PmEvent, who: string, note?: string): CalEvent {
+  return {
+    title: event.title,
+    date: event.date,
+    dateEnd: endOf(event),
+    from: event.from || undefined,
+    to: event.to || undefined,
+    place: event.place || undefined,
+    detail: [who && `ผู้เข้าร่วม ${who}`, note?.trim()].filter(Boolean).join("\n") || undefined,
+  };
+}
 
 export function AppointmentSheet({
   event,
@@ -48,6 +62,7 @@ export function AppointmentSheet({
   const nameOf = (id: string) => emp.find((e) => e.id === id)?.name ?? id;
   /* บอกการแก้ครั้งล่าสุดครั้งเดียว — คนอ่านอยากรู้ว่า "ตกลงตอนนี้เป็นยังไง" ไม่ได้อยากอ่านประวัติทั้งเส้น */
   const edit = event.cancel ? undefined : lastEdit(event);
+  const cal = calOf(event, event.who.map(nameOf).join(" · "), note);
   const editLines = edit
     ? [
         edit.date && `เลื่อนวันจาก ${spanText(edit.date.before)} เป็น ${spanText(edit.date.after)}`,
@@ -59,7 +74,30 @@ export function AppointmentSheet({
     : [];
 
   return (
-    <Sheet title={event.title} onClose={onClose} footer={null}>
+    <Sheet
+      title={event.title}
+      onClose={onClose}
+      /*
+       * เชื่อมปฏิทินภายนอก (Requirement รอบ 10, 12 · รอบที่ 141)
+       * นัดที่ยกเลิกแล้วไม่ต้องมีปุ่ม — ไม่มีใครอยากได้นัดที่ยกเลิกไปลงปฏิทินตัวเอง
+       */
+      footer={
+        event.cancel ? null : (
+          <>
+            <button
+              type="button"
+              className="btn glass-thin"
+              onClick={() => downloadIcs(`นัดหมาย-${event.date}`, [cal], event.title)}
+            >
+              ไฟล์ .ics
+            </button>
+            <a className="btn solid btn-solid" href={gcalUrl(cal)} target="_blank" rel="noreferrer">
+              เพิ่มลง Google Calendar
+            </a>
+          </>
+        )
+      }
+    >
       <span
         className="inline-flex items-center gap-1.5 rounded-[20px] px-[11px] py-1 text-[12px] font-bold"
         style={{ color: kind.dot, background: `color-mix(in srgb, ${kind.dot} 12%, transparent)` }}

@@ -58,6 +58,7 @@ import {
 } from "@/lib/pm-schedule-store";
 import { AppointmentSheet } from "./appointment-sheet";
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, PlusIcon } from "./icons";
+import { downloadIcs, type CalEvent } from "@/lib/calendar-link";
 import { Sheet } from "./lead-dialogs";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 import { ScheduleBoard, boardOn, useBoardNav, type BoardEvent, type BoardKind, type BoardNav } from "./schedule-board";
@@ -158,6 +159,25 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
       );
   const allEvents = [...events, ...queue];
 
+  /*
+   * นำนัดทั้งเดือนเข้าปฏิทินภายนอกทีเดียว (Requirement รอบ 10, 12 · รอบที่ 141)
+   * เอาเฉพาะนัดจริง ไม่รวมคิวงานของทีม เพราะคิวงานเปลี่ยนทุกวันตามแผน
+   * นัดที่ยกเลิกแล้วไม่รวมด้วย
+   */
+  const month = nav.sel.slice(0, 7);
+  const monthEvents = sc.events
+    .filter((e) => (sales ? isSalesEvent(e) : !isPsEvent(e) && !isSalesEvent(e)))
+    .filter((e) => !e.cancel && (e.date.slice(0, 7) === month || endOf(e).slice(0, 7) === month))
+    .map<CalEvent>((e) => ({
+      title: e.title,
+      date: e.date,
+      dateEnd: endOf(e),
+      from: e.from || undefined,
+      to: e.to || undefined,
+      place: e.place || undefined,
+      detail: sc.notes[e.id] ?? e.todo.join(" · ") ?? undefined,
+    }));
+
   return (
     <div className="space-y-4">
       {/* มือถือ (< md) ใช้ปฏิทินแบบแอปแทนหัวเรื่องกับกระดานของจอกว้าง (ยกจากระบบต้นฉบับ)
@@ -172,6 +192,18 @@ export function PmSchedulePage({ sales = false }: { sales?: boolean }) {
                 : "นัดหมายและกิจกรรมของผู้จัดการโครงการ กดวันในปฏิทินเพื่อเพิ่มนัดของวันนั้น"
               : "นัดหมายของผู้จัดการโครงการ กดวันเพื่อดูนัดของวันนั้น"}
           </p>
+        </div>
+        <div className="tools">
+          {/* เชื่อมปฏิทินภายนอก — ไฟล์เดียวนำเข้า Google Calendar, Outlook หรือปฏิทินในมือถือได้ */}
+          <button
+            type="button"
+            className="btn glass-thin"
+            disabled={monthEvents.length === 0}
+            title={`นำนัด ${monthEvents.length} ใบของเดือนนี้เข้าปฏิทินภายนอก`}
+            onClick={() => downloadIcs(`ตารางนัด-${month}`, monthEvents, "ตารางงาน MAZ")}
+          >
+            ปฏิทินเดือนนี้ (.ics)
+          </button>
         </div>
         {canEdit && (
           <div className="tools">

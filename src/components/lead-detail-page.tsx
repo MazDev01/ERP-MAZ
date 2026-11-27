@@ -32,6 +32,7 @@ import {
   TrashIcon,
 } from "./icons";
 import { ConfirmDialog } from "./confirm-dialog";
+import { downloadIcs, gcalUrl, type CalEvent } from "@/lib/calendar-link";
 import { ActivityDialog, CloseLeadDialog, TakeOverDialog } from "./lead-dialogs";
 import { ProfileFacts } from "./lead-facts";
 import { ChangeFromTo } from "./sales-ui";
@@ -144,6 +145,24 @@ export function LeadDetailPage({ code }: { code: string }) {
   /** วันที่สร้างรายการ — ยังไม่มีช่องวันที่สร้าง ใช้การติดต่อครั้งแรกแทน */
   const createdAt = acts.at(-1)?.date ?? "";
   const hasDeal = (no: string) => crm.deals.some((d) => d.quotationNo === no);
+  /*
+   * นัดติดตามครั้งถัดไปเอาเข้าปฏิทินของพนักงานขายเองได้ (Requirement รอบ 10, 12 · รอบที่ 141)
+   * เป็นกิจกรรมทั้งวัน เพราะบันทึกการติดต่อเก็บแค่วัน ไม่มีเวลานัด
+   * รายละเอียดใส่สิ่งที่ต้องทำต่อจากบันทึกล่าสุด คนเปิดปฏิทินจะได้รู้ว่าต้องโทรไปเรื่องอะไร
+   */
+  const followCal: CalEvent | null = nextFollow
+    ? {
+        title: `ติดตาม ${customer.name}`,
+        date: nextFollow,
+        detail: [
+          acts.find((a) => a.followUp === nextFollow)?.nextAction,
+          acts[0]?.summary,
+          customer.phone && `โทร ${customer.phone}`,
+        ]
+          .filter(Boolean)
+          .join("\n") || undefined,
+      }
+    : null;
 
   /* ปุ่มรอง (ปฏิเสธ · ลบ · รับช่วง · บันทึกการติดต่อ) — จอคอมอยู่บนแถบหัวเรื่อง มือถืออยู่ท้ายหน้าตามต้นแบบ */
   const secondaryActions = (
@@ -349,11 +368,12 @@ export function LeadDetailPage({ code }: { code: string }) {
               </div>
               <div className="relative pl-[26px] max-md:hidden">
                 <span className="absolute top-1.5 bottom-1.5 left-1.5 w-0.5 bg-border" />
-                {nextFollow && (
+                {nextFollow && followCal && (
                   <Event
                     tone="next"
                     when={`${thaiDate(nextFollow)} · นัดติดตามครั้งถัดไป`}
                     body={nextFollow >= today ? "ยังไม่ถึงกำหนด" : "เลยกำหนดแล้ว"}
+                    cal={followCal}
                   />
                 )}
                 {acts.length === 0 ? (
@@ -560,12 +580,15 @@ function Event({
   channel,
   body,
   next,
+  cal,
 }: {
   tone: "next" | "first" | "normal";
   when: string;
   channel?: string;
   body: string;
   next?: string;
+  /** มีนัด = ขึ้นลิงก์เพิ่มลงปฏิทินภายนอก (รอบที่ 141) */
+  cal?: CalEvent;
 }) {
   const dot =
     tone === "next"
@@ -585,6 +608,20 @@ function Event({
         )}
       </p>
       <p className="mt-1.5 text-sm leading-relaxed break-words">{body}</p>
+      {cal && (
+        <p className="mt-1.5 flex flex-wrap items-center gap-3 text-[12px]">
+          <a className="font-semibold text-primary hover:underline" href={gcalUrl(cal)} target="_blank" rel="noreferrer">
+            เพิ่มลง Google Calendar
+          </a>
+          <button
+            type="button"
+            className="font-semibold text-muted-foreground hover:underline"
+            onClick={() => downloadIcs(`ติดตาม-${cal.date}`, [cal], cal.title)}
+          >
+            ไฟล์ .ics
+          </button>
+        </p>
+      )}
       {next && (
         <p className="mt-1.5 inline-block rounded-lg bg-[var(--warning-soft)] px-2.5 py-1 text-[12.5px] text-[var(--warning)]">
           สิ่งที่ต้องทำต่อ · {next}
