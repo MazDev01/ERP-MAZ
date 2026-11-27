@@ -8,6 +8,7 @@ import { useAcc } from "@/lib/acc-store";
 import { TH_MONTHS_FULL, baht, bkkNow, parseIsoDate, thaiDate } from "@/lib/format";
 import { useRole } from "@/lib/role";
 import { stackNo } from "@/lib/stack-no";
+import { BillScanCard } from "./bill-scan-card";
 import { MonthNav } from "./acc-ui";
 import { FileIcon, PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
@@ -84,6 +85,9 @@ export function AccWhtPage() {
           )}
         </div>
       </div>
+
+      {/* อ่านบิลผู้ขาย แล้วตรวจก่อนนำเข้า (รอบที่ 142) — เฉพาะฝ่ายบัญชี */}
+      {!readOnly && <BillScanCard />}
 
       <section className="glass rounded-[15px] px-5 py-[18px] max-sm:px-4 max-sm:py-4">
         <h2 className="text-[15px] font-bold">สรุปยื่นแบบประจำเดือน</h2>
