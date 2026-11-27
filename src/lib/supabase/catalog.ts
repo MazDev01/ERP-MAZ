@@ -99,6 +99,36 @@ export async function syncRoutes(rows: RouteRow[]): Promise<SyncResult> {
   return error ? { ok: false, reason: error.message } : { ok: true };
 }
 
+/** ชั้นทับรายตำแหน่ง (รอบที่ 151) — ตำแหน่งไหนไม่มีแถว ใช้สายรายบทบาทแทน */
+export type PosRouteRow = { kind: "leave" | "ot" | "expense"; posKey: string; approver: string };
+
+/**
+ * สายอนุมัติรายตำแหน่ง — ส่งทั้งชุด แถวที่หายไปคือที่ผู้ดูแลลบออก จึงลบในตารางด้วย
+ * ฐานข้อมูลอ่านชั้นนี้ก่อนชั้นบทบาทเสมอ (route_of)
+ */
+export async function syncPosRoutes(rows: PosRouteRow[]): Promise<SyncResult> {
+  const sb = await db();
+  if (!sb) return NO_DB;
+
+  if (rows.length) {
+    const { error } = await sb.from("approval_routes_pos").upsert(
+      rows.map((r) => ({ kind: r.kind, pos_key: r.posKey, approver_role: r.approver })),
+      { onConflict: "kind,pos_key" },
+    );
+    if (error) return { ok: false, reason: error.message };
+  }
+
+  /* ลบชั้นทับที่ไม่มีแล้ว — ทำทีละประเภทเพื่อไม่ไปแตะประเภทที่ไม่ได้ส่งมา */
+  for (const kind of ["leave", "ot", "expense"] as const) {
+    const keep = rows.filter((r) => r.kind === kind).map((r) => r.posKey);
+    let q = sb.from("approval_routes_pos").delete().eq("kind", kind);
+    if (keep.length) q = q.not("pos_key", "in", `(${keep.map((k) => `"${k}"`).join(",")})`);
+    const { error } = await q;
+    if (error) return { ok: false, reason: error.message };
+  }
+  return { ok: true };
+}
+
 /* ── วันหยุดบริษัท ──────────────────────────────────────────────── */
 
 /**

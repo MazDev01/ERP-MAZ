@@ -14,7 +14,7 @@
 import { useSyncExternalStore } from "react";
 import { createPersistedStore } from "./persisted-store";
 import { settings } from "./system-settings";
-import { syncRoutes, type RouteRow } from "./supabase/catalog";
+import { syncPosRoutes, syncRoutes, type PosRouteRow, type RouteRow } from "./supabase/catalog";
 import { HR_EMP, ROLE_EMPLOYEE } from "./hr-data";
 import { setShiftRole } from "./work-schedule";
 
@@ -309,23 +309,39 @@ export function setApprover(kind: RequestKind, from: Role, key: ApproverKey) {
  * สายอนุมัติที่ใช้จริง แปลงเป็นรูปที่ฐานข้อมูลเก็บ (บทบาทผู้ยื่น → บทบาทผู้อนุมัติ)
  *
  * ฝั่งหน้าจอมีสองชั้น: สายรายบทบาท (routeStore) กับสายรายตำแหน่งที่ทับได้ (posRoute)
- * ส่วนฐานข้อมูลเก็บชั้นเดียวคือผลลัพธ์ จึงคิดผลรวมให้เรียบร้อยก่อนค่อยส่งไป
+ * ฐานข้อมูลเก็บสองชั้นเหมือนกันแล้ว (รอบที่ 151) จึงส่งแยกชั้น ไม่ยุบรวมก่อนส่ง
+ * ถ้ายุบรวม สองตำแหน่งที่ถือบทบาทเดียวกันจะถูกบังคับให้ไปสายเดียวกัน
  */
 export function routeRowsNow(): RouteRow[] {
   const route = routeStore.get();
   const rows: RouteRow[] = [];
   for (const kind of KINDS) {
     for (const r of ROLES) {
-      const approver = APPROVER_ROLE[routeKeyOf(r.key, kind, route)];
+      const approver = APPROVER_ROLE[route[kind][r.key]];
       if (approver) rows.push({ kind, from: r.key, approver });
     }
   }
   return rows;
 }
 
-/** ส่งสายอนุมัติขึ้นฐานข้อมูล — เรียกหลังผู้ดูแลแก้สายอนุมัติทุกครั้ง */
+/** ชั้นทับรายตำแหน่งที่ผู้ดูแลตั้งไว้ (/admin/positions) */
+export function posRouteRowsNow(): PosRouteRow[] {
+  const rows: PosRouteRow[] = [];
+  for (const [posKey, byKind] of Object.entries(settings().posRoute)) {
+    for (const kind of KINDS) {
+      const key = byKind?.[kind];
+      const approver = key && key in APPROVER_ROLE ? APPROVER_ROLE[key as ApproverKey] : "";
+      if (approver) rows.push({ kind, posKey, approver });
+    }
+  }
+  return rows;
+}
+
+/** ส่งสายอนุมัติขึ้นฐานข้อมูลทั้งสองชั้น — เรียกหลังผู้ดูแลแก้สายอนุมัติทุกครั้ง */
 export async function pushRoutes() {
-  return syncRoutes(routeRowsNow());
+  const base = await syncRoutes(routeRowsNow());
+  if (!base.ok) return base;
+  return syncPosRoutes(posRouteRowsNow());
 }
 
 export function resetApprovalRoute() {
