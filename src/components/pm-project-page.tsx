@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
 import { latestRound, roundStatus, useClientReviews } from "@/lib/client-review-store";
 import { ClientFeedbackSheet, ClientRoundChip, ClientSendSheet } from "./client-review-pm";
+import { PmBillingAsk } from "./billing-ask";
 import { ProjectChat } from "./project-chat";
 import { AddDocButton, AddDocsDialog, docSub, RemoveDocDialog } from "./pm-project-tools";
 import { openProjectDoc } from "@/lib/project-docs";
@@ -290,6 +291,8 @@ function Detail({ project }: { project: Project }) {
           <Tasks project={project} today={today} count={pr.all} />
         </div>
         <aside className="min-w-0 space-y-5">
+          {/* ต่อบริการเดิม — ลูกค้าติดต่อ PM เอง แจ้งบัญชีออกเอกสารได้เลย (รอบที่ 139) */}
+          <PmBillingAsk pj={project.pj} service={project.service} readOnly={ro} />
           <SalesDocs project={project} />
           <RecentFiles project={project} />
           <RecentActs project={project} />

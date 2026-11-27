@@ -8,6 +8,7 @@
  * ค้างชำระ: ใบที่เลยวันครบกำหนด พร้อมบันทึกการติดตามหนี้
  */
 
+import { AccBillingAsks } from "./billing-ask";
 import { ADD_VALUE, useAddOption } from "./add-option";
 import { optionsOf } from "@/lib/options";
 import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -236,6 +237,8 @@ export function AccBillingPage() {
 
   return (
     <div className="space-y-4">
+      {/* คำขอจาก PM ให้ออกใบแจ้งหนี้ต่อบริการเดิม (รอบที่ 139) */}
+      <AccBillingAsks kind="invoice" />
       {/* จอคอม (md ขึ้นไป) — แท็บสามแท็บ ตาราง และยอดรวมท้ายตาราง · มือถือใช้รายการเดียวด้านล่างแทน */}
       <div className="bar max-md:hidden!">
         <div>

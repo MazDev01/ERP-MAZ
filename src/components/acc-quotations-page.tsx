@@ -17,6 +17,7 @@ import {
 import { useCrm } from "@/lib/crm-store";
 import { baht, daysBetween, thaiDate, todayIso } from "@/lib/format";
 import { ChevronDownIcon, ClockIcon, FileIcon, PlusIcon, RotateIcon } from "./icons";
+import { AccBillingAsks } from "./billing-ask";
 import { ChainTable } from "./quotations-page";
 import { Pager, SearchBox, Who, usePaged } from "./sales-ui";
 
@@ -111,6 +112,8 @@ export function AccQuotationsPage() {
 
   return (
     <div className="space-y-4">
+      {/* คำขอจาก PM ให้ออกใบเสนอราคาต่อบริการเดิม (รอบที่ 139) */}
+      <AccBillingAsks kind="quotation" />
       <div className="bar">
         <div>
           <p className="max-md:hidden!">พบ {rows.length} ฉบับ · เฉพาะลูกค้าที่ปิดการขายแล้ว</p>

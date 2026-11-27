@@ -24,6 +24,7 @@ import {
 } from "@/lib/crm-data";
 import { NO_WHT_NOTE } from "@/lib/acc-data";
 import { addQuotation, useCrm, useCrmReady, type CrmState } from "@/lib/crm-store";
+import { closeBilling } from "@/lib/billing-req-store";
 import { holdsPos } from "@/lib/hr-data";
 import { useHr } from "@/lib/hr-store";
 import { settings } from "@/lib/system-settings";
@@ -109,6 +110,8 @@ function NewPageBody({ acc }: { acc: boolean }) {
   /* ?replace= มาจากปุ่ม "ออกใบใหม่แทนใบนี้" ในหน้ารายการ (ชื่อเดียวกับต้นแบบ) · ?from= คือลิงก์เดิม */
   const fromNo = params.get("replace") ?? params.get("from") ?? "";
   const ps = params.get("ps") ?? "";
+  /* ?req= คำขอจาก PM ให้ออกใบเสนอราคาต่อบริการเดิม (รอบที่ 139) */
+  const req = params.get("req") ?? "";
   const presetCustomer = params.get("customer") ?? undefined;
 
   const mode: Mode = useMemo(() => {
@@ -158,6 +161,7 @@ function NewPageBody({ acc }: { acc: boolean }) {
         today={today}
         mode={effective}
         ps={fresh ? "" : ps}
+        req={fresh ? "" : req}
         presetCustomer={fresh ? undefined : presetCustomer}
         onSaved={(msg, keep) => {
           setDone(msg);
@@ -203,6 +207,7 @@ function QuotationForm({
   today,
   mode,
   ps,
+  req,
   presetCustomer,
   onSaved,
   onReset,
@@ -216,6 +221,8 @@ function QuotationForm({
   who: string;
   mode: Mode;
   ps: string;
+  /** เลขที่คำขอจาก PM ที่เปิดฟอร์มนี้มา — ออกใบแล้วปิดคำขอให้เลย (รอบที่ 139) */
+  req: string;
   presetCustomer?: string;
   onSaved: (msg: ReactNode, keep: boolean) => void;
   onReset: () => void;
@@ -370,6 +377,11 @@ function QuotationForm({
     if (!ok) return;
     /* เลขที่ใบออกจากฐานข้อมูล ต้องรอคำตอบก่อนจึงบอกผู้ใช้ได้ */
     const no = await addQuotation(inputOf(ok.customer, ok.issuer, ok.service));
+    /*
+     * ออกจากคำขอของ PM (?req=BR-…) — ผูกเลขที่ที่ออกกลับไปปิดคำขอให้เลย (รอบที่ 139)
+     * ปิดไม่สำเร็จก็ไม่ย้อนใบที่ออกแล้ว บัญชีผูกเลขเองได้จากการ์ดคำขอ
+     */
+    if (req && no) await closeBilling(req, no);
     onSaved(
       <>
         ออกเลขที่ <b className="num">{no}</b> แล้ว · รวมทั้งสิ้น {baht(totals.grand)} บาท · แก้ไขไม่ได้อีก
