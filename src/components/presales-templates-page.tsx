@@ -27,7 +27,8 @@ import {
 } from "@/lib/presales-templates";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FileDrop, type PickedFile } from "./file-drop";
-import { openStoredFile } from "@/lib/file-store";
+import { getFile, openStoredFile } from "@/lib/file-store";
+import { fileUrl } from "@/lib/supabase/files";
 import { PlusIcon } from "./icons";
 import { Sheet } from "./lead-dialogs";
 import { useAddOption } from "./add-option";
@@ -240,12 +241,24 @@ export function PresalesTemplatesPage() {
                           >
                             เปิด
                           </a>
-                        ) : t.fileId ? (
-                          /* ไฟล์ที่อัปโหลดเองเก็บไว้ในเครื่อง เปิดดูได้จริง (ตรวจระบบ 5 ต.ค. 2569) */
+                        ) : t.path || t.fileId ? (
+                          /*
+                           * ไฟล์ในถังของระบบเปิดได้ทุกเครื่อง (รอบที่ 158)
+                           * เทมเพลตที่อัปก่อนรอบนั้นมีแต่ไฟล์ในเครื่องคนอัป จึงถอยไปเปิดจากเครื่องนี้
+                           */
                           <button
                             type="button"
                             className="btn glass-thin btn-mini"
                             onClick={async () => {
+                              if (t.path) {
+                                const url = await fileUrl(t.path);
+                                if (url) {
+                                  window.open(url, "_blank", "noopener,noreferrer");
+                                  return;
+                                }
+                                setOpenError("เปิดไฟล์ไม่ได้ ลองใหม่อีกครั้ง");
+                                return;
+                              }
                               const why = await openStoredFile(t.fileId!);
                               if (why) setOpenError(why);
                             }}
@@ -324,6 +337,9 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
   const [note, setNote] = useState(t?.note ?? "");
   /* ขึ้นข้อความเตือนหลังกดบันทึกครั้งแรก ไม่ใช่ตั้งแต่เปิดหน้าต่าง */
   const [touched, setTouched] = useState(false);
+  /* ไฟล์ขึ้นถังของระบบตั้งแต่รอบที่ 158 — ระหว่างส่งต้องกันกดซ้ำ และบอกเมื่อไม่สำเร็จ */
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
 
   const problems = {
     name: !name.trim(),
@@ -335,6 +351,8 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
     setTouched(true);
     if (problems.name || problems.service || problems.file) return;
     const f = files[0];
+    setSaveErr("");
+    setSaving(true);
     const input = {
       name: name.trim(),
       service,
@@ -345,9 +363,26 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
       fileId: f.url ? undefined : (f.fileId ?? t?.fileId),
       note: note.trim(),
     };
-    if (t) updateTemplate(t.id, input);
-    else addTemplate(input, ME.name);
-    onClose();
+    /*
+     * ส่งตัวไฟล์ขึ้นถังของระบบด้วย (รอบที่ 158) — คลังเป็นของทีม ไฟล์จึงต้องเปิดได้ทุกเครื่อง
+     * ไฟล์ที่เพิ่งเลือกอยู่ในที่เก็บของเครื่อง (file-store) ประกอบกลับเป็นไฟล์ก่อนส่ง
+     * แนบเป็นลิงก์หรือไม่ได้เปลี่ยนไฟล์ → ไม่ต้องส่งอะไรขึ้นถัง
+     */
+    void (async () => {
+      let picked: File | undefined;
+      const fresh = !f.url && f.fileId && f.fileId !== t?.fileId;
+      if (fresh) {
+        const saved = await getFile(f.fileId!);
+        if (saved?.blob) picked = new File([saved.blob], saved.name, { type: saved.type || saved.blob.type });
+      }
+      const why = t ? await updateTemplate(t.id, input, picked) : await addTemplate(input, ME.name, picked);
+      setSaving(false);
+      if (why) {
+        setSaveErr(why);
+        return;
+      }
+      onClose();
+    })();
   }
 
   const err = "mt-1.5 text-[12.5px] text-destructive";
@@ -362,13 +397,23 @@ function TemplateDialog({ template: t, onClose }: { template?: PresalesTemplate;
           <button type="button" className="btn glass-thin flex-1 justify-center sm:flex-none" onClick={onClose}>
             ยกเลิก
           </button>
-          <button type="button" className="btn solid btn-solid flex-1 justify-center sm:flex-none" onClick={save}>
-            {t ? "บันทึก" : "เพิ่มเทมเพลต"}
+          <button
+            type="button"
+            className="btn solid btn-solid flex-1 justify-center sm:flex-none"
+            disabled={saving}
+            onClick={save}
+          >
+            {saving ? "กำลังส่งไฟล์…" : t ? "บันทึก" : "เพิ่มเทมเพลต"}
           </button>
         </>
       }
     >
       <div className="space-y-4">
+        {saveErr && (
+          <p className="rounded-[12px] bg-destructive/10 px-3.5 py-2.5 text-[12.5px] font-semibold text-destructive">
+            {saveErr}
+          </p>
+        )}
         <div>
           <label htmlFor="tpl-name" className={lb}>
             ชื่อเทมเพลต <span className="text-destructive">*</span>

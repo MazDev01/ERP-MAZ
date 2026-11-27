@@ -22,6 +22,7 @@ import {
   fetchTemplates,
   sbAddTemplate,
   sbCountTemplateUse,
+  sbPutTemplateFile,
   sbRetireTemplate,
   sbUpdateTemplate,
 } from "./supabase/presales";
@@ -41,6 +42,12 @@ export type PresalesTemplate = {
   size?: number;
   /** รหัสไฟล์จริงที่เก็บไว้ในเครื่อง (file-store.ts) — เทมเพลตชุดตั้งต้นยังไม่มีไฟล์จริง */
   fileId?: string;
+  /*
+   * ที่อยู่ไฟล์ในถังของระบบ (รอบที่ 158)
+   * คลังเป็นของทีม ไฟล์จึงต้องอยู่ที่ระบบ ไม่ใช่ในเครื่องคนที่อัป
+   * เทมเพลตที่เพิ่มก่อนรอบนี้ไม่มีช่องนี้ — เปิดได้แค่เครื่องที่อัปเหมือนเดิม
+   */
+  path?: string;
   note: string;
   uploadedBy: string;
   /** วันที่แก้ล่าสุด YYYY-MM-DD */
@@ -215,10 +222,22 @@ export function linkKind(url: string): TemplateKind {
 
 export type TemplateInput = Pick<PresalesTemplate, "name" | "service" | "kind" | "file" | "url" | "size" | "note">;
 
-export function addTemplate(input: TemplateInput, by: string) {
+/**
+ * เพิ่มเทมเพลต — ไฟล์ที่เลือกจากเครื่องถูกส่งขึ้นถังของระบบต่อให้ (รอบที่ 158)
+ * ส่งไฟล์ไม่สำเร็จไม่ล้มทั้งใบ แถวยังถูกบันทึก แต่เพื่อนร่วมทีมจะเปิดไฟล์ไม่ได้
+ * คืนข้อความบอกเหตุให้หน้าจอแสดง — null คือเรียบร้อย
+ */
+export async function addTemplate(input: TemplateInput, by: string, file?: File): Promise<string | null> {
   if (live) {
-    after(sbAddTemplate(input, by));
-    return;
+    const id = await sbAddTemplate(input, by);
+    refresh();
+    if (!id) return "บันทึกเทมเพลตไม่สำเร็จ ลองใหม่อีกครั้ง";
+    if (file) {
+      const put = await sbPutTemplateFile(id, file);
+      refresh();
+      if (!put) return "บันทึกชื่อเทมเพลตแล้ว แต่ส่งไฟล์ขึ้นระบบไม่สำเร็จ — เพื่อนร่วมทีมจะยังเปิดไฟล์นี้ไม่ได้";
+    }
+    return null;
   }
   const t: PresalesTemplate = {
     ...input,
@@ -228,14 +247,23 @@ export function addTemplate(input: TemplateInput, by: string) {
     uses: 0,
   };
   store.update((list) => [t, ...list]);
+  return null;
 }
 
-export function updateTemplate(id: string, input: TemplateInput) {
+export async function updateTemplate(id: string, input: TemplateInput, file?: File): Promise<string | null> {
   if (live) {
-    after(sbUpdateTemplate(id, input));
-    return;
+    await sbUpdateTemplate(id, input);
+    /* เปลี่ยนไฟล์แนบด้วย — ไฟล์ใหม่ขึ้นถังแล้วผูกที่อยู่ใหม่กับแถวเดิม (รอบที่ 158) */
+    if (file) {
+      const put = await sbPutTemplateFile(id, file);
+      refresh();
+      if (!put) return "แก้ข้อมูลแล้ว แต่ส่งไฟล์ใหม่ขึ้นระบบไม่สำเร็จ — ไฟล์ที่เพื่อนร่วมทีมเปิดจะยังเป็นไฟล์เดิม";
+    }
+    refresh();
+    return null;
   }
   store.update((list) => list.map((t) => (t.id === id ? { ...t, ...input, updatedAt: todayIso() } : t)));
+  return null;
 }
 
 /** ลบเทมเพลตได้เฉพาะตอนยังไม่ต่อฐานข้อมูล — ของจริงใช้เลิกใช้แทน ข้อเสนอเก่าจะได้ตามย้อนได้ */

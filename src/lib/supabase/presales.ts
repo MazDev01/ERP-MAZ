@@ -1,6 +1,7 @@
 "use client";
 
 import { signedIn, supabase } from "./client";
+import { uploadAttachment } from "./files";
 import { myId } from "./people";
 import type { PsNote } from "../presales-work";
 import type { PresalesTemplate, TemplateInput, TemplateKind } from "../presales-templates";
@@ -100,6 +101,8 @@ type TplRow = {
   url: string | null;
   size: number | null;
   file_id: string | null;
+  /** ที่อยู่ไฟล์ในถังของระบบ (รอบที่ 158) — เทมเพลตเก่ามีแต่ไฟล์ในเครื่องคนอัป */
+  path: string | null;
   note: string;
   by_name: string;
   uses: number;
@@ -109,7 +112,7 @@ type TplRow = {
 
 const KINDS: TemplateKind[] = ["ppt", "pdf", "canva", "link"];
 
-const TPL_COLS = "id, name, service, kind, file, url, size, file_id, note, by_name, uses, retired, updated_at";
+const TPL_COLS = "id, name, service, kind, file, url, size, file_id, path, note, by_name, uses, retired, updated_at";
 
 export async function fetchTemplates(): Promise<PresalesTemplate[]> {
   const sb = supabase();
@@ -125,6 +128,7 @@ export async function fetchTemplates(): Promise<PresalesTemplate[]> {
     url: r.url ?? undefined,
     size: r.size ?? undefined,
     fileId: r.file_id ?? undefined,
+    path: r.path ?? undefined,
     note: r.note,
     uploadedBy: r.by_name,
     updatedAt: dayOf(r.updated_at),
@@ -145,10 +149,27 @@ function toRow(input: TemplateInput) {
   };
 }
 
-export async function sbAddTemplate(input: TemplateInput, by: string) {
+/** เพิ่มเทมเพลต — คืนรหัสแถวใหม่ เพราะไฟล์ต้องเก็บใต้โฟลเดอร์ของแถวนั้น (รอบที่ 158) */
+export async function sbAddTemplate(input: TemplateInput, by: string): Promise<string | null> {
   const sb = supabase();
-  if (!sb || !(await signedIn())) return;
-  await sb.from("presales_templates").insert({ ...toRow(input), by_name: by, by_id: myId() });
+  if (!sb || !(await signedIn())) return null;
+  const got = await sb
+    .from("presales_templates")
+    .insert({ ...toRow(input), by_name: by, by_id: myId() })
+    .select("id")
+    .single();
+  if (got.error || !got.data) return null;
+  return (got.data as { id: string }).id;
+}
+
+/** ส่งไฟล์เทมเพลตขึ้นถังของระบบ แล้วผูกที่อยู่ไฟล์กับแถว — คืน false ถ้าไม่สำเร็จ */
+export async function sbPutTemplateFile(id: string, file: File): Promise<boolean> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return false;
+  const got = await uploadAttachment("template", id, file);
+  if (!got.ok) return false;
+  const upd = await sb.from("presales_templates").update({ path: got.attachment.path }).eq("id", id);
+  return !upd.error;
 }
 
 export async function sbUpdateTemplate(id: string, input: TemplateInput) {

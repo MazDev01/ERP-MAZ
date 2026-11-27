@@ -21,7 +21,8 @@ import { loadPeople, myId } from "./people";
  * project = ไฟล์และรูปของโปรเจคฝ่ายโครงการ (เพิ่มรอบที่ 111)
  * lead    = ไฟล์ Proposal และเอกสารของผู้สนใจ (เพิ่มรอบที่ 115)
  */
-export type OwnerKind = "leave" | "ot" | "expense" | "employee" | "payroll" | "project" | "lead";
+/* template = ไฟล์เทมเพลตของคลังก่อนการขาย (เพิ่มรอบที่ 158) */
+export type OwnerKind = "leave" | "ot" | "expense" | "employee" | "payroll" | "project" | "lead" | "template";
 
 export type Attachment = {
   id: string;
