@@ -12,8 +12,22 @@ import type {
   JobOrder,
   PresalesRequest,
   PresalesRound,
+  QuoteLine,
   Quotation,
 } from "../crm-data";
+
+/**
+ * รายการบริการของใบเสนอราคา (รอบที่ 138) — ฐานข้อมูลเก็บเป็น jsonb
+ * ทิ้งบรรทัดที่ไม่ครบสามช่อง ใบเก่าที่ยังเป็นรายการว่างคืนเป็น undefined (ใบบริการเดียว)
+ */
+function linesOf(raw: unknown): QuoteLine[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw
+    .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
+    .map((l) => ({ service: String(l.service ?? ""), name: String(l.name ?? ""), price: Number(l.price ?? 0) }))
+    .filter((l) => l.service && l.name);
+  return out.length ? out : undefined;
+}
 
 /*
  * สายผู้สนใจ/ลูกค้าจากฐานข้อมูล (รอบที่ 95 · SRS 1.5 M1)
@@ -555,6 +569,7 @@ type QuotationRow = {
   seller: string | null;
   filled_by: string | null;
   service: string;
+  lines: unknown;
   issued: string;
   valid_days: number;
   valid_until: string;
@@ -617,7 +632,7 @@ type JobRow = {
 };
 
 const QUOTATION_COLS =
-  "id, no, customer_id, issuer, buyer_type, service, issued, valid_days, valid_until," +
+  "id, no, customer_id, issuer, buyer_type, service, lines, issued, valid_days, valid_until," +
   " amount, discount, wht, wht_pct, body, terms, status, revision, sent_at, presales_id," +
   " replaces, replaced_by, rejected_at, reject_reason, created_at, seller, filled_by";
 
@@ -676,6 +691,7 @@ export async function fetchSalesDocs(
     issuer: r.issuer,
     buyer: (BUYER_TYPES.includes(r.buyer_type as BuyerType) ? r.buyer_type : "juristic") as BuyerType,
     service: (r.service || undefined) as Quotation["service"],
+    lines: linesOf(r.lines),
     issued: r.issued,
     validDays: r.valid_days,
     validUntil: r.valid_until,
@@ -737,6 +753,8 @@ export async function sbAddQuotation(input: {
   prefix: string;
   buyer: string;
   service: string;
+  /** รายการบริการของใบ — ว่างหรือไม่ส่ง = ใบบริการเดียว ใช้ amount ที่ส่งมา */
+  lines?: QuoteLine[];
   issued: string;
   validDays: number;
   validUntil: string;
@@ -771,6 +789,7 @@ export async function sbAddQuotation(input: {
       issuer: input.issuer,
       buyer_type: input.buyer,
       service: input.service,
+      lines: input.lines ?? [],
       issued: input.issued,
       valid_days: input.validDays,
       valid_until: input.validUntil,

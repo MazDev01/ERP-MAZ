@@ -13,12 +13,14 @@ import {
   issuerOf,
   issuers,
   quotationTotals,
+  quoteLinesTotal,
   whtRate,
   WHT_PCTS,
   type BuyerType,
   type Customer,
   type IssuerCode,
   type Quotation,
+  type QuoteLine,
 } from "@/lib/crm-data";
 import { NO_WHT_NOTE } from "@/lib/acc-data";
 import { addQuotation, useCrm, useCrmReady, type CrmState } from "@/lib/crm-store";
@@ -29,7 +31,7 @@ import { services, type ServiceKey } from "@/lib/pm-data";
 import { addDays, baht, commaInput, round2, thaiDate, todayIso } from "@/lib/format";
 import { cleanHtml, htmlToText } from "@/lib/rich-text";
 import { CustomerCombo } from "./customer-combo";
-import { CheckIcon, ChevronLeftIcon, CloseIcon, EyeIcon } from "./icons";
+import { CheckIcon, ChevronLeftIcon, CloseIcon, EyeIcon, PlusIcon, TrashIcon } from "./icons";
 import { Field } from "./lead-dialogs";
 import { QuotationPaper } from "./quotation-paper";
 import { RichEditor } from "./rich-editor";
@@ -63,6 +65,8 @@ function initialOf(crm: CrmState, mode: Mode, presetCustomer?: string, ps?: stri
   return {
     customer,
     service: (src?.service ?? "") as ServiceKey | "",
+    /* ใบหลายบริการ — คัดลอกรายการมาด้วยตอนออกใบใหม่แทนใบเดิม (รอบที่ 138) */
+    lines: (src?.lines ?? []).map((l) => ({ ...l })),
     issuer: (src?.issuer ?? "") as IssuerCode | "",
     buyer: (src?.buyer ?? customer?.type ?? "juristic") as BuyerType,
     validDays: String(src?.validDays ?? 30),
@@ -227,6 +231,16 @@ function QuotationForm({
   const [validDays, setValidDays] = useState(init.validDays);
   const [body, setBody] = useState(init.body);
   const [amount, setAmount] = useState(init.amount);
+  /*
+   * ใบที่ขายหลายบริการ — ราคาแยกทีละบริการ (Requirement รอบ 1 · รอบที่ 138)
+   * มีรายการ: จำนวนเงินของใบคิดจากผลรวม กรอกช่องจำนวนเงินเองไม่ได้
+   *           และบริการหลักของใบ = บริการของบรรทัดแรก (งานเข้าใหม่ของ PM ใช้ช่องนี้)
+   */
+  const [lines, setLines] = useState<QuoteLine[]>(init.lines);
+  const multi = lines.length > 0;
+  const linesTotal = quoteLinesTotal(lines);
+  const setLine = (i: number, patch: Partial<QuoteLine>) =>
+    setLines((all) => all.map((l, n) => (n === i ? { ...l, ...patch } : l)));
   const [discount, setDiscount] = useState(init.discount);
   const [terms, setTerms] = useState(init.terms);
   const [wht, setWht] = useState(init.wht);
@@ -267,7 +281,7 @@ function QuotationForm({
   const totals = useMemo(() => {
     /* คิดด้วยกติกาเดียวกับตอนบันทึกจริง (quotationTotals) ตัวเลขที่เห็นตอนกรอกจะได้ตรงกับเอกสาร */
     const t = quotationTotals({
-      amount: num(amount),
+      amount: multi ? linesTotal : num(amount),
       discount: num(discount),
       issuer: issuer || "MAZ",
       buyer,
@@ -275,7 +289,7 @@ function QuotationForm({
       whtPct,
     });
     return { ...t, disc: t.discount };
-  }, [amount, discount, issuer, buyer, wht, whtPct]);
+  }, [amount, multi, linesTotal, discount, issuer, buyer, wht, whtPct]);
 
   /*
    * ใบของลูกค้ารายนี้ที่ส่งแล้วและยังรอคำตอบ (ยังไม่มีดีล ไม่ถูกแทน ไม่ถูกปฏิเสธ ไม่หมดอายุ)
@@ -294,13 +308,16 @@ function QuotationForm({
   }, [crm.quotations, crm.deals, customer, mode, today]);
   const repValue = rep && (rep === "new" || waiting.some((q) => q.no === rep)) ? rep : null;
 
+  const mainService = multi ? lines[0].service : service;
+  const badLine = lines.some((l) => !l.service || !l.name.trim() || !(Number(l.price) > 0));
   const problems = {
     customer: !customer,
-    service: !service,
+    service: !mainService,
     rep: waiting.length > 0 && !repValue,
     issuer: !issuer,
     days: days <= 0,
-    items: !htmlToText(body) || totals.gross <= 0,
+    /* ใบหลายบริการ: ต้องกรอกครบทุกบรรทัด · ใบบริการเดียว: ต้องมีรายละเอียดและจำนวนเงินเหมือนเดิม */
+    items: multi ? badLine || totals.gross <= 0 : !htmlToText(body) || totals.gross <= 0,
     /*
      * ส่วนลดกินจำนวนเงินจนหมด — ยอดสุทธิเหลือ 0 (ไล่ทดสอบสายงาน 12 ต.ค. 2569)
      * เดิมตรวจแค่ยอดก่อนหักส่วนลด จึงออกใบเสนอราคา 0 บาทได้ และใบนั้นแก้ไม่ได้อีก
@@ -314,7 +331,7 @@ function QuotationForm({
     problems.rep && "ออกแทนใบเดิม",
     problems.issuer && "ออกในนาม",
     problems.days && "จำนวนวันยืนราคา",
-    problems.items && "รายละเอียดและจำนวนเงิน",
+    problems.items && (multi ? "บริการ ชื่อรายการ และราคาของทุกบรรทัด" : "รายละเอียดและจำนวนเงิน"),
     problems.discount && "ส่วนลด",
   ].filter((x): x is string => Boolean(x));
 
@@ -325,6 +342,7 @@ function QuotationForm({
       issuer: iss,
       buyer,
       service: svc,
+      lines: multi ? lines.map((l) => ({ ...l, name: l.name.trim(), price: Number(l.price) })) : undefined,
       validDays: days,
       amount: totals.gross,
       discount: totals.disc,
@@ -341,7 +359,7 @@ function QuotationForm({
   /** กรอกครบหรือยัง — ไม่ครบก็เลื่อนไปที่สรุปสิ่งที่ขาด ไม่ปล่อยให้กดแล้วเงียบ */
   function ready() {
     setTouched(true);
-    if (!miss.length && customer && issuer && service) return { customer, issuer, service };
+    if (!miss.length && customer && issuer && mainService) return { customer, issuer, service: mainService };
     window.setTimeout(() => summaryRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 0);
     return null;
   }
@@ -443,12 +461,17 @@ function QuotationForm({
                 label="บริการ"
                 required
                 error={touched && problems.service ? "เลือกบริการ" : undefined}
-                hint="1 ใบเสนอราคา = 1 บริการ ถ้าลูกค้าซื้อหลายบริการให้ออกคนละใบ"
+                hint={
+                  multi
+                    ? "ใบนี้ขายหลายบริการ — บริการหลักคือบรรทัดแรกของรายการบริการ"
+                    : "ขายหลายบริการในใบเดียวได้ แยกราคาได้ที่หัวข้อรายการ"
+                }
               >
                 <select
-                  value={service}
+                  value={multi ? lines[0].service : service}
+                  disabled={multi}
                   onChange={(e) => addService.pick(e.target.value) || setService(e.target.value as ServiceKey)}
-                  className="field-control cursor-pointer"
+                  className="field-control cursor-pointer disabled:opacity-60"
                 >
                   <option value="">— เลือกบริการ —</option>
                   {services().map((s) => (
@@ -557,18 +580,106 @@ function QuotationForm({
 
           <section className={card}>
             <h2 className={h2}>รายการ</h2>
+
+            {/* ── ราคาแยกตามบริการ (Requirement รอบ 1 · รอบที่ 138) ── */}
+            <div className="mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[12.5px] font-semibold text-muted-foreground">
+                  บริการและราคา
+                  {multi && <em className="ml-0.5 text-primary not-italic">*</em>}
+                </span>
+                {multi ? (
+                  <span className="num text-[12.5px] text-muted-foreground">รวม {baht(linesTotal)} บาท</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn glass-thin h-8 px-2.5 text-[12.5px]"
+                    onClick={() => setLines([{ service: (service || "") as ServiceKey, name: "", price: 0 }])}
+                  >
+                    <PlusIcon className="size-[14px]" strokeWidth={2.2} />
+                    แยกราคาตามบริการ
+                  </button>
+                )}
+              </div>
+
+              {!multi ? (
+                <p className="mt-1.5 text-[12px] text-muted-foreground">
+                  ใบนี้ขายบริการเดียว ใช้จำนวนเงินก้อนเดียว · ลูกค้าซื้อหลายบริการให้กดแยกราคา
+                  แล้วลูกค้าจะเห็นราคาทีละบริการบนเอกสาร
+                </p>
+              ) : (
+                <>
+                  <ul className="mt-2 space-y-2">
+                    {lines.map((l, i) => (
+                      <li
+                        key={i}
+                        className="grid grid-cols-[minmax(0,150px)_minmax(0,1fr)_120px_36px] items-start gap-2 max-sm:grid-cols-2"
+                      >
+                        <select
+                          value={l.service}
+                          aria-label={`บริการบรรทัดที่ ${i + 1}`}
+                          onChange={(e) => setLine(i, { service: e.target.value as ServiceKey })}
+                          className={`field-control cursor-pointer ${touched && !l.service ? "border-destructive" : ""}`}
+                        >
+                          <option value="">— เลือกบริการ —</option>
+                          {services().map((x) => (
+                            <option key={x.key} value={x.key}>
+                              {x.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={l.name}
+                          aria-label={`ชื่อรายการบรรทัดที่ ${i + 1}`}
+                          placeholder="ชื่อรายการที่ลูกค้าอ่าน เช่น เว็บไซต์องค์กร 8 หน้า"
+                          onChange={(e) => setLine(i, { name: e.target.value })}
+                          className={`field-control ${touched && !l.name.trim() ? "border-destructive" : ""}`}
+                        />
+                        <input
+                          value={l.price ? commaInput(String(l.price)) : ""}
+                          inputMode="decimal"
+                          aria-label={`ราคาบรรทัดที่ ${i + 1}`}
+                          placeholder="0"
+                          onChange={(e) => setLine(i, { price: num(commaInput(e.target.value)) })}
+                          className={`field-control num text-right ${touched && !(Number(l.price) > 0) ? "border-destructive" : ""}`}
+                        />
+                        <button
+                          type="button"
+                          className="iconbtn glass-thin"
+                          aria-label={`ลบบรรทัดที่ ${i + 1}`}
+                          onClick={() => setLines((all) => all.filter((_, n) => n !== i))}
+                        >
+                          <TrashIcon className="size-[15px]" strokeWidth={1.9} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    className="btn glass-thin mt-2 h-8 px-2.5 text-[12.5px]"
+                    onClick={() => setLines((all) => [...all, { service: "" as ServiceKey, name: "", price: 0 }])}
+                  >
+                    <PlusIcon className="size-[14px]" strokeWidth={2.2} />
+                    เพิ่มบริการ
+                  </button>
+                </>
+              )}
+            </div>
+
             <label id="bodyLabel" className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">
-              รายละเอียด<em className="ml-0.5 text-primary not-italic">*</em>
+              รายละเอียด{!multi && <em className="ml-0.5 text-primary not-italic">*</em>}
             </label>
             <RichEditor
               value={body}
               onChange={setBody}
               labelId="bodyLabel"
-              invalid={touched && !htmlToText(body)}
+              invalid={touched && !multi && !htmlToText(body)}
               placeholder="วางรายละเอียดจาก Word ได้เลย ตัวหนา ขีดเส้นใต้ จุดหัวข้อ และตัวแบ่งหน้าจะติดมาด้วย"
             />
             {touched && problems.items && (
-              <p className="mt-2.5 text-[12.5px] text-destructive">กรอกรายละเอียดและจำนวนเงิน</p>
+              <p className="mt-2.5 text-[12.5px] text-destructive">
+                {multi ? "กรอกบริการ ชื่อรายการ และราคาให้ครบทุกบรรทัด" : "กรอกรายละเอียดและจำนวนเงิน"}
+              </p>
             )}
           </section>
         </div>
@@ -577,13 +688,14 @@ function QuotationForm({
           <section className={card}>
             <h2 className={h2}>จำนวนเงินและการชำระเงิน</h2>
             <div className="grid grid-cols-2 gap-x-4">
-              <Field label="จำนวนเงิน" required>
+              <Field label="จำนวนเงิน" required hint={multi ? "คิดจากรายการบริการ" : undefined}>
                 <input
-                  value={amount}
+                  value={multi ? commaInput(String(linesTotal)) : amount}
                   inputMode="decimal"
+                  readOnly={multi}
                   onChange={(e) => setAmount(commaInput(e.target.value))}
                   placeholder="0"
-                  className="field-control num text-right"
+                  className="field-control num text-right read-only:opacity-70"
                 />
               </Field>
               <Field
@@ -753,6 +865,7 @@ function QuotationForm({
                     issuer: issuer || "MAZ",
                     seller: seller || customer?.owner,
                     body,
+                    lines: multi ? lines : undefined,
                     terms: terms.trim(),
                     totals: {
                       gross: totals.gross,

@@ -202,6 +202,8 @@ export function QuotationDocPage({
             seller: q.seller ?? customer?.owner,
             filledBy: q.filledBy,
             body: q.body,
+            /* ใบหลายบริการพิมพ์ราคาแยกทีละบริการ (รอบที่ 138) */
+            lines: q.lines,
             terms: q.terms,
             totals: quotationTotals(q),
             customer: customer

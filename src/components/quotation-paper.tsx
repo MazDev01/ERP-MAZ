@@ -4,6 +4,7 @@ import { issuerOf, issuers, type IssuerCode } from "@/lib/crm-data";
 import { NO_WHT_NOTE } from "@/lib/acc-data";
 import { baht, bahtText, thaiDateLong, todayIso } from "@/lib/format";
 import { splitPages } from "@/lib/rich-text";
+import { serviceLabel } from "@/lib/pm-data";
 
 /*
  * กระดาษ A4 ของใบเสนอราคา — ใช้ทั้งหน้าเอกสารจริงและตัวอย่างก่อนบันทึก
@@ -54,6 +55,11 @@ export type PaperDoc = {
   customer: PaperParty | null;
   /** รายละเอียดงานเป็น HTML · <hr> คือจุดขึ้นหน้าใหม่ */
   body: string;
+  /*
+   * ใบหลายบริการ — พิมพ์ราคาแยกทีละบริการ (Requirement รอบ 1 · รอบที่ 138)
+   * ไม่มี/ว่าง = ใบบริการเดียวแบบเดิม พิมพ์รายละเอียดเป็นรายการเดียวกับยอดรวม
+   */
+  lines?: { service: string; name: string; price: number }[];
   terms: string;
   totals: {
     gross: number;
@@ -71,6 +77,7 @@ export type PaperDoc = {
 export function QuotationPaper({ doc }: { doc: PaperDoc }) {
   const pages = splitPages(doc.body);
   const t = doc.totals;
+  const lines = doc.lines ?? [];
 
   return (
     <>
@@ -94,14 +101,26 @@ export function QuotationPaper({ doc }: { doc: PaperDoc }) {
               </thead>
             )}
             <tbody>
+              {/* ใบหลายบริการ: หน้าแรกขึ้นราคาแยกทีละบริการ แล้วต่อด้วยรายละเอียดของงาน */}
+              {i === 0 &&
+                lines.map((l, n) => (
+                  <tr key={`line-${n}`}>
+                    <td className="c num">{n + 1}</td>
+                    <td className="leading-[1.68]">
+                      <b className="font-semibold">{serviceLabel(l.service)}</b>
+                      {l.name ? ` — ${l.name}` : ""}
+                    </td>
+                    <td className="r num">{baht(l.price)}</td>
+                  </tr>
+                ))}
               <tr>
-                <td className="c num">{i === 0 ? "1" : ""}</td>
+                <td className="c num">{i === 0 && lines.length === 0 ? "1" : ""}</td>
                 <td
                   className="rich-out leading-[1.68]"
                   /* เนื้อหาผ่านการล้างแท็กแล้วตอนวางและตอนบันทึก */
                   dangerouslySetInnerHTML={{ __html: page }}
                 />
-                <td className="r num">{i === 0 ? baht(t.gross) : ""}</td>
+                <td className="r num">{i === 0 && lines.length === 0 ? baht(t.gross) : ""}</td>
               </tr>
             </tbody>
           </table>

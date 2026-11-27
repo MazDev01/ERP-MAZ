@@ -33,6 +33,7 @@ import {
   type ProposalPlanPhase,
   type Quotation,
   type QuotationRevision,
+  type QuoteLine,
   type Urgency,
   isJuristicBuyer,
 } from "./crm-data";
@@ -713,6 +714,8 @@ export type QuotationInput = {
   issuer: IssuerCode;
   buyer: BuyerType;
   service: ServiceKey;
+  /** ใบหลายบริการ — ราคาแยกทีละบริการ (รอบที่ 138) · ว่าง = ใบบริการเดียว ใช้ amount ที่ส่งมา */
+  lines?: QuoteLine[];
   validDays: number;
   amount: number;
   discount: number;
@@ -752,6 +755,7 @@ export async function addQuotation(input: QuotationInput) {
       prefix: issuer.prefix,
       buyer: input.buyer,
       service: input.service,
+      lines: input.lines,
       issued,
       validDays: input.validDays,
       validUntil: addDays(issued, input.validDays),

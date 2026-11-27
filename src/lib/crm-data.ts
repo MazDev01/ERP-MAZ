@@ -412,6 +412,14 @@ export const whtRate = () => settings().rates.wht;
 /** ใบเสนอราคาเหลือไม่เกินกี่วันถือว่าใกล้หมดอายุ */
 export const EXPIRING_DAYS = 7;
 
+/** บรรทัดบริการในใบเสนอราคา — บริการ ชื่อรายการที่ลูกค้าอ่าน และราคาของบริการนั้น (รอบที่ 138) */
+export type QuoteLine = { service: ServiceKey; name: string; price: number };
+
+/** ผลรวมราคาของรายการบริการ — ใช้ตอนกรอกและตอนแสดงยอด ตรงกับที่ฐานข้อมูลคิด */
+export function quoteLinesTotal(lines: readonly QuoteLine[]) {
+  return round2(lines.reduce((a, l) => a + (Number(l.price) || 0), 0));
+}
+
 export type Quotation = {
   id: string;
   /** เลขที่เอกสาร — ออกทันทีที่บันทึก ทุกใบจึงมีเลขที่เสมอ */
@@ -430,6 +438,12 @@ export type Quotation = {
   buyer: BuyerType;
   /** ประเภทบริการ — ส่งต่อไปถึงงานเข้าใหม่ของ PM (ใบเก่าที่ยังไม่มีช่องนี้ถือเป็น "ระบบ") */
   service?: ServiceKey;
+  /*
+   * ใบที่ขายหลายบริการในใบเดียว — ลูกค้าต้องเห็นราคาแยกทีละบริการ (Requirement รอบ 1 · รอบที่ 138)
+   * มีรายการ: amount = ผลรวมราคาทุกบรรทัด (ฐานข้อมูลคิดให้) และ service = บริการของบรรทัดแรก
+   * ไม่มี: ใบบริการเดียวแบบเดิม กรอกจำนวนเงินเอง
+   */
+  lines?: QuoteLine[];
   issued: string;
   validDays: number;
   validUntil: string;
