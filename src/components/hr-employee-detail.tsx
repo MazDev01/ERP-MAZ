@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { bankText, fetchBank, saveBank, type BankAccount } from "@/lib/supabase/bank";
 import { createPortal } from "react-dom";
 import { baht, thaiDate } from "@/lib/format";
 import { useHydrated } from "@/lib/pwa";
@@ -352,13 +353,19 @@ export function EmployeeDetail({
             )}
 
             {tab === "pay" && seePay && (
-              <Sect title="ประวัติตำแหน่งและเงินเดือน">
-                <p className="mb-2.5 text-[12.5px] text-muted-foreground">
-                  เงินเดือนปัจจุบัน <b className="num text-foreground">{baht(cur.salary)}</b> บาท ·
-                  เพิ่มเป็นแถวใหม่ทุกครั้งที่ปรับ ไม่ทับของเดิม
-                </p>
-                <History emp={emp} />
-              </Sect>
+              <div className="space-y-3">
+                <Sect title="ประวัติตำแหน่งและเงินเดือน">
+                  <p className="mb-2.5 text-[12.5px] text-muted-foreground">
+                    เงินเดือนปัจจุบัน <b className="num text-foreground">{baht(cur.salary)}</b> บาท ·
+                    เพิ่มเป็นแถวใหม่ทุกครั้งที่ปรับ ไม่ทับของเดิม
+                  </p>
+                  <History emp={emp} />
+                </Sect>
+                {/* บัญชีรับเงินเดือน — ฝ่ายบุคคลกรอก ผู้บริหารใช้โอนตามใบสรุปเงินเดือน (รอบที่ 144) */}
+                <Sect title="บัญชีรับเงินเดือน">
+                  <BankBox emp={emp} canEdit={role === "hr"} />
+                </Sect>
+              </div>
             )}
           </div>
         </div>
@@ -378,6 +385,109 @@ export function EmployeeDetail({
 }
 
 // ─── ชิ้นส่วนย่อย ─────────────────────────────────────────────────
+
+/**
+ * บัญชีรับเงินเดือนของพนักงานคนนี้ (รอบที่ 144)
+ * อ่านผ่านฟังก์ชันของฐานข้อมูล — ฝ่ายบุคคล ผู้บริหาร และเจ้าของบัญชีเท่านั้นที่ได้ค่า
+ * แก้ได้เฉพาะฝ่ายบุคคล · เลขบัญชีฐานข้อมูลตรวจซ้ำว่าเป็นตัวเลข
+ */
+function BankBox({ emp, canEdit }: { emp: Employee; canEdit: boolean }) {
+  const [bank, setBank] = useState<BankAccount>({ name: "", no: "" });
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<BankAccount>({ name: "", no: "" });
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void fetchBank(emp.id).then((b) => {
+      setBank(b);
+      setDraft(b);
+    });
+  }, [emp.id]);
+
+  async function save() {
+    setBusy(true);
+    const res = await saveBank(emp.id, draft);
+    setBusy(false);
+    if (!res.ok) {
+      setMsg(res.message);
+      return;
+    }
+    setBank(draft);
+    setEditing(false);
+    setMsg("บันทึกบัญชีแล้ว");
+  }
+
+  if (!editing) {
+    return (
+      <div>
+        <p className="num text-[13.5px]">{bankText(bank) || "ยังไม่ได้กรอกบัญชี"}</p>
+        {msg && <p className="mt-1 text-[12px] font-semibold text-primary">{msg}</p>}
+        {canEdit && (
+          <button
+            type="button"
+            className="btn glass-thin btn-mini mt-2"
+            onClick={() => {
+              setMsg("");
+              setEditing(true);
+            }}
+          >
+            {bankText(bank) ? "แก้บัญชี" : "กรอกบัญชี"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <label className="block">
+        <span className="mb-1 block text-[12px] font-semibold text-muted-foreground">ธนาคาร</span>
+        <input
+          value={draft.name}
+          aria-label="ธนาคาร"
+          className="field-control"
+          placeholder="เช่น ธนาคารกสิกรไทย"
+          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-[12px] font-semibold text-muted-foreground">เลขบัญชี</span>
+        <input
+          value={draft.no}
+          aria-label="เลขบัญชี"
+          inputMode="numeric"
+          className="field-control num"
+          placeholder="เช่น 123-4-56789-0"
+          onChange={(e) => setDraft((d) => ({ ...d, no: e.target.value }))}
+        />
+      </label>
+      <div className="flex items-center gap-2 sm:col-span-2">
+        <button
+          type="button"
+          className="btn solid btn-solid btn-mini"
+          aria-label="บันทึกบัญชีรับเงินเดือน"
+          disabled={busy}
+          onClick={() => void save()}
+        >
+          บันทึก
+        </button>
+        <button
+          type="button"
+          className="btn glass-thin btn-mini"
+          onClick={() => {
+            setDraft(bank);
+            setEditing(false);
+            setMsg("");
+          }}
+        >
+          ยกเลิก
+        </button>
+        {msg && <span className="text-[12px] font-semibold text-destructive">{msg}</span>}
+      </div>
+    </div>
+  );
+}
 
 function InfoBox({ k, v, num }: { k: string; v: string; num?: boolean }) {
   return (

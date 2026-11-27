@@ -1825,3 +1825,22 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   }
   .ps-paper table th { background: #f1f3f6 !important; }
 }
+
+/* ─── ใบสรุปเงินเดือน A4 แนวนอน (รอบที่ 144 · ยกแนวมาจาก ERP_Test) ───
+   กระดาษอยู่ในกล่องที่เลื่อนได้ เวลาพิมพ์จึงย้ายสำเนาไปไว้ใต้ body (printPayrollSummary)
+   แล้วซ่อนทุกอย่างที่ไม่ใช่สำเนานั้น จะได้ไม่ติดกรอบกล่องและไม่โดนตัดขอบขวา */
+.pr-sum-host { position: absolute; left: -10000px; top: 0; }
+
+@media print {
+  body.print-sum > *:not(.pr-sum-host) { display: none !important; }
+  body.print-sum .pr-sum-host { position: static; left: auto; }
+  body.print-sum .pr-sum {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  body.print-sum .pr-sum table { width: 100% !important; }
+  body.print-sum .pr-sum thead th { background: #f1f3f6 !important; }
+  body.print-sum .pr-sum tr { break-inside: avoid; }
+}

@@ -73,6 +73,7 @@ import { ThaiDatePicker } from "./thai-date-picker";
 import { Field, Input, Select } from "./ui";
 import { EditExtra } from "./hr-extra-edit";
 import { PhoneCard, PhoneList } from "./acchr-phone";
+import { PayrollSummarySheet } from "./payroll-summary-sheet";
 
 type Tab = "month" | "daily";
 /* บรรทัดเงินเดือนคิดที่ hr-data ที่เดียว หน้าอนุมัติของ CEO อ่านตัวเดียวกัน ห้ามคิดเองที่นี่ */
@@ -100,6 +101,8 @@ export function HrPayrollPage() {
   /* มาจากขั้นก่อนหน้าพร้อม ?m= ตั้งช่วงให้ตรงกับรอบนั้นเลย (ต้นแบบ urlMonth) */
   const urlMonth = useUrlMonth(months);
   const [range, setRange] = useState<Cycle>(() => hrCycle(urlMonth || months[months.length - 1]));
+  /* เปิดใบสรุปเงินเดือนของกลุ่มที่กำลังดูอยู่ (รอบที่ 144) */
+  const [sumSheet, setSumSheet] = useState(false);
   const urlGroup = useUrlGroup();
   /* กลุ่มมาจากเมนูย่อย "พนักงาน / ทดลองงาน" ทาง ?g= อย่างเดียว ไม่มีแท็บในหน้าแล้ว */
   const tab: Tab = urlGroup === "day" ? "daily" : "month";
@@ -349,8 +352,23 @@ export function HrPayrollPage() {
               ))}
             </Select>
           </Field>
+          {/* ใบสรุปเงินเดือนของรอบ — ผู้บริหารใช้ใบนี้โอนเงิน (รอบที่ 144) */}
+          <Field label=" " className="max-sm:w-full">
+            <button
+              type="button"
+              className="btn glass-thin max-sm:w-full"
+              disabled={groupLines.length === 0}
+              onClick={() => setSumSheet(true)}
+            >
+              ใบสรุปเงินเดือน
+            </button>
+          </Field>
         </div>
       </div>
+
+      {sumSheet && month && (
+        <PayrollSummarySheet lines={groupLines} month={month} cycle={range} onClose={() => setSumSheet(false)} />
+      )}
 
       <div className={mgroup === null ? "max-md:hidden" : ""}>
         <HrSteps month={month ?? undefined} group={tab === "daily" ? "day" : "month"} />
