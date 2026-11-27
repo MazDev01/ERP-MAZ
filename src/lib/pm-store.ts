@@ -265,6 +265,26 @@ const store = createPersistedStore<PmState>("maz-erp.pm.v4", INITIAL, isPmState,
  *
  * งานที่ยังไม่เคยกดรับ (stage "new") เอาออกจากกล่องงานเข้าใหม่ตามเดิม — ยังไม่มีใครลงแรงกับมัน
  */
+/**
+ * ดีลถูกยกเลิกหลังลูกค้าจ่ายเงินมาแล้ว — ไม่คืนเงิน ทำงานต่อเท่ายอดที่จ่าย (รอบที่ 140)
+ * งานจึงไม่หยุด เก็บแค่เพดานว่าส่งของเท่าไรถึงพอ แล้ว PM เป็นคนกดปิดงานเอง (รอบที่ 132)
+ * ต่อฐานข้อมูลแล้ว cancel_deal เขียนให้ที่ฐานข้อมูล ที่นี่ใช้กับโหมดไม่มีฐานข้อมูล
+ */
+export function capDealWork(deal: string, paid: number, cap: { at: string; why: string }) {
+  if (live) {
+    refreshPm();
+    return;
+  }
+  store.update((s) => ({
+    ...s,
+    projects: s.projects.map((p) =>
+      p.deal === deal && p.status === "running"
+        ? { ...p, workCap: paid, cap: { at: cap.at.slice(0, 10), why: cap.why }, updated: cap.at.slice(0, 10) }
+        : p,
+    ),
+  }));
+}
+
 export function cancelDealWork(deal: string, c: { at: string; by: string; why: string }) {
   store.update((s) => {
     const job = s.inbox.find((j) => j.deal === deal && j.stage === "plan");

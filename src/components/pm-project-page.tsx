@@ -25,7 +25,7 @@ import { openProjectDoc } from "@/lib/project-docs";
 import { useHydrated } from "@/lib/pwa";
 import type { PresalesRequest, PresalesRound } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
-import { addDays, bkkStamp, daysBetween, initials, thaiDate, thaiStamp, todayIso } from "@/lib/format";
+import { addDays, baht, bkkStamp, daysBetween, initials, thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import {
   isRef,
   planHref,
@@ -238,6 +238,14 @@ function Detail({ project }: { project: Project }) {
                 <p className="mt-1.5 text-[12px] font-semibold text-destructive">{closeMsg}</p>
               )}
             </div>
+          )}
+          {/* ดีลถูกยกเลิกหลังลูกค้าจ่ายเงิน — ไม่คืนเงิน ทำงานต่อเท่าที่จ่าย (รอบที่ 140) */}
+          {project.workCap != null && project.status !== "cancelled" && (
+            <p className="mt-2 rounded-[11px] border border-[rgba(180,99,11,.25)] bg-[var(--warning-soft)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[var(--warning)]">
+              ดีลถูกยกเลิกแล้ว แต่ลูกค้าจ่ายมา <b className="num font-bold">{baht(project.workCap)}</b> บาท —
+              ไม่คืนเงิน ทำงานต่อให้พอดีกับยอดที่จ่าย แล้วกดปิดงาน
+              {project.cap?.why ? ` · ${project.cap.why}` : ""}
+            </p>
           )}
           {project.status === "cancelled" && (
             /* ดีลถูกยกเลิก — บอกว่าใครยกเลิก เมื่อไร และเพราะอะไร ทีมจะได้ไม่ทำงานต่อ */

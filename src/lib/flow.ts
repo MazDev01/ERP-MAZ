@@ -23,6 +23,7 @@
 import {
   cancelDealBilling,
   dealPaid,
+  dealPaidAmount,
   invoiceStatus,
   openDealForBilling,
   issueReceipt,
@@ -37,6 +38,7 @@ import { addDays, bkkStamp, daysBetween, round2, todayIso } from "./format";
 import {
   addInboxJob,
   cancelDealWork,
+  capDealWork,
   approveWork,
   pmSnapshot,
   setTaskProgress,
@@ -94,17 +96,36 @@ export function dealCanceller(acc: AccState, dealNo: string): CancelBy {
   return dealPaid(acc, dealNo) ? "ฝ่ายบัญชี" : "ฝ่ายขาย";
 }
 
-export function cancelDealFlow(dealNo: string, why: string, by: CancelBy, note = "") {
+/**
+ * ผลของการยกเลิก — paid = ยอดที่ลูกค้าจ่ายมาแล้ว · capped = งานเดินต่อเท่ายอดนั้น
+ * (Requirement รอบ 7 · รอบที่ 140) จ่ายมาแล้วไม่คืนเงิน และงานฝั่ง PM ไม่หยุด
+ */
+export type CancelResult = { ok: false } | { ok: true; paid: number; capped: boolean };
+
+export async function cancelDealFlow(
+  dealNo: string,
+  why: string,
+  by: CancelBy,
+  note = "",
+): Promise<CancelResult> {
   const reason = why.trim();
   const deal = crmSnapshot().deals.find((d) => d.no === dealNo);
-  if (!reason || !deal || deal.status !== "ปิดการขาย") return false;
+  if (!reason || !deal || deal.status !== "ปิดการขาย") return { ok: false };
   /* กันอีกชั้น — กดจากหน้าของฝ่ายที่ไม่มีสิทธิ์ตามกติกาไม่ได้ */
-  if (dealCanceller(accSnapshot(), dealNo) !== by) return false;
+  if (dealCanceller(accSnapshot(), dealNo) !== by) return { ok: false };
   const c = { at: bkkStamp(), by, why: reason };
-  cancelDeal(dealNo, c);
+  /* ยอดที่จ่ายมาแล้วอ่านก่อน — ฝั่งบัญชียกเลิกใบที่ยังค้างทันทีหลังจากนี้ */
+  const localPaid = dealPaidAmount(accSnapshot(), dealNo);
+  const res = await cancelDeal(dealNo, c);
+  const paid = res.paid || localPaid;
   cancelDealBilling(dealNo, { ...c, note: note.trim() });
-  cancelDealWork(dealNo, c);
-  return true;
+  /*
+   * จ่ายมาแล้ว — งานไม่หยุด ฐานข้อมูลลงเพดานงานไว้ที่โปรเจคแล้ว (รอบที่ 140)
+   * โหมดไม่มีฐานข้อมูลลงเพดานให้เองที่สโตร์ของ PM
+   */
+  if (paid > 0) capDealWork(dealNo, paid, { at: c.at, why: reason });
+  else cancelDealWork(dealNo, c);
+  return { ok: true, paid, capped: paid > 0 };
 }
 
 // ═══ ขาย → บัญชี ═══════════════════════════════════════════════

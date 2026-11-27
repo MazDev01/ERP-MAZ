@@ -943,11 +943,12 @@ export async function attachContract(dealNo: string, c: DealContract) {
   }));
 }
 
-export async function cancelDeal(no: string, c: DealCancel) {
+/** คืนยอดที่ลูกค้าจ่ายมาแล้ว — มากกว่า 0 แปลว่างานฝั่ง PM ทำต่อเท่ายอดนั้น (รอบที่ 140) */
+export async function cancelDeal(no: string, c: DealCancel): Promise<{ paid: number; capped: boolean }> {
   if (live) {
-    await sbCancelDeal(no, c.why, c.by);
+    const res = await sbCancelDeal(no, c.why, c.by);
     refreshParties();
-    return;
+    return { paid: res.ok ? (res.paid ?? 0) : 0, capped: res.ok ? Boolean(res.capped) : false };
   }
   store.update((s) => {
     const deal = s.deals.find((d) => d.no === no && d.status === "ปิดการขาย");
@@ -971,6 +972,8 @@ export async function cancelDeal(no: string, c: DealCancel) {
       ? next
       : moveCustomer(next, deal.customerCode, "รอนัดหมาย", `ดีล ${no} ถูกยกเลิก · ${c.why}`);
   });
+  /* โหมดไม่มีฐานข้อมูลยังไม่รู้ยอดที่จ่ายจริง — สายงานคิดจากสโตร์บัญชีให้แทน */
+  return { paid: 0, capped: false };
 }
 
 /**

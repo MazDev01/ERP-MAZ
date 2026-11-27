@@ -859,13 +859,23 @@ export async function sbAcceptQuotation(input: {
   return got.data as { ok: boolean; deal?: string; reason?: string };
 }
 
-export async function sbCancelDeal(no: string, why: string, by: string): Promise<CrmWrite> {
+/*
+ * ยกเลิกดีล — คืนยอดที่ลูกค้าจ่ายมาแล้วด้วย (รอบที่ 140)
+ * จ่ายมาแล้วไม่คืนเงิน งานฝั่ง PM ไม่หยุด แต่ทำต่อได้เท่ายอดนั้น (capped = true)
+ */
+export async function sbCancelDeal(
+  no: string,
+  why: string,
+  by: string,
+): Promise<CrmWrite & { paid?: number; capped?: boolean }> {
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
   const got = await sb.rpc("cancel_deal", { p_no: no, p_why: why, p_by: by });
   if (got.error) return { ok: false, reason: sayWhy(got.error.message) };
-  const r = got.data as { ok: boolean; reason?: string };
-  return r.ok ? { ok: true } : { ok: false, reason: r.reason ?? "denied" };
+  const r = got.data as { ok: boolean; reason?: string; paid?: number; capped?: boolean };
+  return r.ok
+    ? { ok: true, paid: Number(r.paid ?? 0), capped: Boolean(r.capped) }
+    : { ok: false, reason: r.reason ?? "denied" };
 }
 
 export async function sbAttachContract(

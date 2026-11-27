@@ -269,9 +269,19 @@ export async function markDealsSeen() {
 
 // ─── ตัวช่วยที่หลายหน้าใช้ร่วมกัน ──────────────────────────────────
 /** ดีลนี้รับเงินจากลูกค้าไปแล้วหรือยัง — ตัดสินว่าใครเป็นคนยกเลิกดีลได้ (ก่อนรับเงิน = ฝ่ายขาย · หลังรับเงิน = ฝ่ายบัญชี) */
+/** ยอดที่ลูกค้าจ่ายมาแล้วของดีลนี้ (บาท) — ตรงกับ deal_paid() ของฐานข้อมูล (รอบที่ 140) */
+export function dealPaidAmount(s: AccState, deal: string) {
+  const nos = new Set(s.invoices.filter((v) => v.deal === deal).map((v) => v.no));
+  return s.payments.filter((p) => nos.has(p.inv)).reduce((a, p) => a + p.received, 0);
+}
+
 export function dealPaid(s: AccState, deal: string) {
-  /* ออกใบเสร็จ = รับชำระ — มีใบเสร็จอย่างน้อยหนึ่งใบคือรับเงินแล้ว */
-  return s.receipts.some((r) => r.deal === deal);
+  /*
+   * รับชำระแล้วคือรับเงินแล้ว — ไม่ใช่ "มีใบเสร็จ" (รอบที่ 140)
+   * รอบที่ 118 เปิดให้บันทึกรับชำระโดยไม่ออกใบเสร็จ (บุคคลกับบุคคล)
+   * ถ้าดูแต่ใบเสร็จ หน้าจอจะคิดว่ายังไม่รับเงินแล้วส่งฝ่ายขายไปกดยกเลิก ซึ่งฐานข้อมูลปฏิเสธ
+   */
+  return s.receipts.some((r) => r.deal === deal) || dealPaidAmount(s, deal) > 0;
 }
 
 /**

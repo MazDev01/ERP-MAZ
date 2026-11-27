@@ -52,6 +52,9 @@ type ProjectRow = {
   cancel_at: string | null;
   cancel_by: string;
   cancel_why: string;
+  work_cap: number | string | null;
+  cap_at: string | null;
+  cap_why: string;
   tone: string;
   phases: unknown;
   source: unknown;
@@ -143,7 +146,7 @@ export const EMPTY_PM: PmData = {
    ให้ผู้จัดการทั่วไป เพราะข้อกำหนดบอกว่าไม่เห็นเงินของบริษัท (รอบที่ 119) */
 const PROJECT_COLS =
   "id, pj, deal_id, service, name, cus, quo, scope, pm, start_on, due, status," +
-  " cancel_at, cancel_by, cancel_why, tone, phases, source, updated," +
+  " cancel_at, cancel_by, cancel_why, work_cap, cap_at, cap_why, tone, phases, source, updated," +
   " deals(no), invoices(no)";
 
 const INBOX_COLS =
@@ -313,6 +316,9 @@ export async function fetchPm(): Promise<PmData> {
     status: r.status as Project["status"],
     updated: dayOf(r.updated),
     cancelled: r.cancel_at ? { at: dayOf(r.cancel_at), by: r.cancel_by, why: r.cancel_why } : undefined,
+    /* เพดานงานจากดีลที่ถูกยกเลิกหลังรับเงิน (รอบที่ 140) */
+    workCap: r.work_cap === null ? undefined : Number(r.work_cap),
+    cap: r.cap_at ? { at: dayOf(r.cap_at), why: r.cap_why } : undefined,
     tone: r.tone as Project["tone"],
     phases: (r.phases as ProjectPhase[]) ?? [],
     tasks: tasksByProj[r.id] ?? [],
