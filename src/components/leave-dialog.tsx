@@ -1,5 +1,6 @@
 "use client";
 
+import { Time24Input } from "./time24-input";
 import { useHydrated } from "@/lib/pwa";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -340,8 +341,7 @@ export function LeaveDialog({
           {span === "hours" && (
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="เริ่มลา">
-                <input
-                  type="time"
+                <Time24Input
                   value={startAt}
                   step={900}
                   aria-label="เวลาที่เริ่มลาด่วน"
@@ -350,8 +350,7 @@ export function LeaveDialog({
                 />
               </Field>
               <Field label="จนถึง">
-                <input
-                  type="time"
+                <Time24Input
                   value={endAt}
                   step={900}
                   aria-label="เวลาที่สิ้นสุดการลาด่วน"

@@ -24,6 +24,7 @@
  * ทุกลิงก์ในหน้านี้อยู่ในหน้าของ PM เท่านั้น ไม่พาข้ามไปหน้าของบทบาทอื่น
  */
 
+import { Time24Input, UI_TIME_CLS } from "./time24-input";
 import { useRef, useState } from "react";
 import { projName, projectHref } from "@/lib/pm-data";
 import { bkkNow, thaiDate, toIsoDate } from "@/lib/format";
@@ -863,8 +864,7 @@ function EventForm({
                 setPick(null);
               }}
             />
-            <Input
-              type="time"
+            <Time24Input className={UI_TIME_CLS}
               step={900}
               value={form.from}
               aria-label="เวลาเริ่ม"
@@ -883,8 +883,7 @@ function EventForm({
                 setPick(null);
               }}
             />
-            <Input
-              type="time"
+            <Time24Input className={UI_TIME_CLS}
               step={900}
               value={form.to}
               aria-label="เวลาสิ้นสุด"

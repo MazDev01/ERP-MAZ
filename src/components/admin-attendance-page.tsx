@@ -8,6 +8,7 @@
  * รอบเงินเดือนที่ปิดไปแล้วแก้ไม่ได้ — วันที่เริ่มใช้ต้องอยู่หลังวันปิดรอบล่าสุด
  */
 
+import { Time24Input } from "./time24-input";
 import { useState } from "react";
 import { HR_OT_DIVISOR } from "@/lib/hr-data";
 import { AdminHead, Card, Input2, inputCls } from "./admin-ui";
@@ -176,16 +177,16 @@ export function AdminAttendancePage() {
         <Card title="เวลาทำงาน">
           <div className="grid gap-4 sm:grid-cols-2">
             <Input2 label="เวลาเข้างาน">
-              <input type="time" value={d.start} onChange={(e) => set("start", e.target.value)} className={`${inputCls} num`} />
+              <Time24Input value={d.start} onChange={(e) => set("start", e.target.value)} className={`${inputCls} num`} />
             </Input2>
             <Input2 label="เวลาเลิกงาน">
-              <input type="time" value={d.end} onChange={(e) => set("end", e.target.value)} className={`${inputCls} num`} />
+              <Time24Input value={d.end} onChange={(e) => set("end", e.target.value)} className={`${inputCls} num`} />
             </Input2>
             <Input2 label="เริ่มพักเที่ยง">
-              <input type="time" value={d.lunchStart} onChange={(e) => set("lunchStart", e.target.value)} className={`${inputCls} num`} />
+              <Time24Input value={d.lunchStart} onChange={(e) => set("lunchStart", e.target.value)} className={`${inputCls} num`} />
             </Input2>
             <Input2 label="สิ้นสุดพักเที่ยง">
-              <input type="time" value={d.lunchEnd} onChange={(e) => set("lunchEnd", e.target.value)} className={`${inputCls} num`} />
+              <Time24Input value={d.lunchEnd} onChange={(e) => set("lunchEnd", e.target.value)} className={`${inputCls} num`} />
             </Input2>
           </div>
           <p className="mt-3 rounded-[11px] border border-border bg-card px-3 py-2.5 text-[12.5px] text-muted-foreground">
@@ -484,7 +485,7 @@ function PayAndLate() {
             />
           </UiInput2>
           <UiInput2 label={SCHED_LABEL.otStart ?? ""} hint="ช่วงระหว่างเลิกงานถึงเวลานี้ถือเป็นพักเย็น ไม่นับโอที">
-            <input type="time" value={s.otStart} onChange={(e) => set("otStart", e.target.value)} className={`${inputCls} num`} />
+            <Time24Input value={s.otStart} onChange={(e) => set("otStart", e.target.value)} className={`${inputCls} num`} />
           </UiInput2>
           <UiInput2 label={SCHED_LABEL.forgotPunchOutAfterHours ?? ""}>
             <input
@@ -585,16 +586,14 @@ function RoleShifts() {
         <div key={role} className="grid items-end gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
           <b className="text-[13.5px] font-semibold">{roleName(role)}</b>
           <Input2 label="เวลาเข้างาน">
-            <input
-              type="time"
+            <Time24Input
               value={shifts[role].start}
               onChange={(e) => set(role, e.target.value, shifts[role].end)}
               className={`${inputCls} num`}
             />
           </Input2>
           <Input2 label="เวลาเลิกงาน">
-            <input
-              type="time"
+            <Time24Input
               value={shifts[role].end}
               onChange={(e) => set(role, shifts[role].start, e.target.value)}
               className={`${inputCls} num`}

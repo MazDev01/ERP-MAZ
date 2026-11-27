@@ -21,6 +21,7 @@
  * ลิงก์พาไปหน้างานก่อนการขายและใบลาของตัวเองเท่านั้น — งานในโปรเจคเป็นหน้าของพนักงาน จึงแสดงเฉย ๆ
  */
 
+import { Time24Input, UI_TIME_CLS } from "./time24-input";
 import { useMemo, useState } from "react";
 import { type PresalesRequest } from "@/lib/crm-data";
 import { useCrm } from "@/lib/crm-store";
@@ -400,10 +401,10 @@ function PsEventForm({
             />
           </Field>
           <Field label="เวลาเริ่ม">
-            <Input type="time" step={900} value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Time24Input className={UI_TIME_CLS} step={900} value={from} onChange={(e) => setFrom(e.target.value)} />
           </Field>
           <Field label="ถึง">
-            <Input type="time" step={900} value={to} onChange={(e) => setTo(e.target.value)} />
+            <Time24Input className={UI_TIME_CLS} step={900} value={to} onChange={(e) => setTo(e.target.value)} />
           </Field>
         </div>
 

@@ -12,9 +12,10 @@
  * ฐานข้อมูลเป็นคนคุมว่ายื่นแทนใครได้ (can_file_for) — หน้าจอแค่ไม่เสนอชื่อคนที่มีบัญชีให้เลือก
  */
 
+import { Time24Input, UI_TIME_CLS } from "./time24-input";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateField } from "./thai-date-picker";
-import { Field, Input, Select, Textarea } from "./ui";
+import { Field, Select, Textarea } from "./ui";
 import { thaiDate, todayIso } from "@/lib/format";
 import { isWorkday } from "@/lib/holidays";
 import { leaveTypes } from "@/lib/leave-data";
@@ -245,16 +246,14 @@ export function HrFileForPage() {
                 <DateField value={date} onChange={setDate} label="วันที่ทำโอที" max={todayIso()} />
               </Field>
               <Field label="เริ่ม" required>
-                <Input
-                  type="time"
+                <Time24Input className={UI_TIME_CLS}
                   value={start}
                   onChange={(e) => setStart(e.target.value)}
                   aria-label="เวลาเริ่มทำโอที"
                 />
               </Field>
               <Field label="ถึง" required>
-                <Input
-                  type="time"
+                <Time24Input className={UI_TIME_CLS}
                   value={end}
                   onChange={(e) => setEnd(e.target.value)}
                   aria-label="เวลาเลิกทำโอที"

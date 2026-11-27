@@ -24,6 +24,7 @@
  * ยกเลิกต้องมีเหตุผลทุกครั้ง และใบไม่หาย ยังขึ้นเป็นแบบขีดฆ่าในปฏิทินของผู้เข้าร่วม
  */
 
+import { Time24Input, UI_TIME_CLS } from "./time24-input";
 import { useMemo, useState } from "react";
 import { useHr } from "@/lib/hr-store";
 import { useTeamLeave } from "@/lib/gm-data";
@@ -355,10 +356,10 @@ function GmEventForm({
             />
           </Field>
           <Field label="เวลาเริ่ม">
-            <Input type="time" step={900} value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Time24Input className={UI_TIME_CLS} step={900} value={from} onChange={(e) => setFrom(e.target.value)} />
           </Field>
           <Field label="ถึง">
-            <Input type="time" step={900} value={to} onChange={(e) => setTo(e.target.value)} />
+            <Time24Input className={UI_TIME_CLS} step={900} value={to} onChange={(e) => setTo(e.target.value)} />
           </Field>
         </div>
 

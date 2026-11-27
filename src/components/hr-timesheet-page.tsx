@@ -15,6 +15,7 @@
  * ระบบไม่เดาให้ เพราะการเดาผิดหนึ่งวันคือเงินของคนคนหนึ่ง
  */
 
+import { Time24Input } from "./time24-input";
 import { useState } from "react";
 import { thaiDate, thaiMonth, todayIso } from "@/lib/format";
 import { targetWorkMs } from "@/lib/work-schedule";
@@ -836,8 +837,7 @@ function DayDetail({
                 <option value="in">เวลาเข้างาน</option>
                 <option value="out">เวลาออกงาน</option>
               </select>
-              <input
-                type="time"
+              <Time24Input
                 value={fill.time}
                 aria-label="เวลาที่เติม"
                 onChange={(e) => setFill({ ...fill, time: e.target.value })}
