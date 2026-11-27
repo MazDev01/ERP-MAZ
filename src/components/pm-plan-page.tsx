@@ -22,6 +22,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { addDays, daysBetween, initials, thaiDate, thaiStamp, todayIso } from "@/lib/format";
 import { useProfile } from "@/lib/profile-data";
+import { planTemplate } from "@/lib/service-plans";
 import {
   fileKind,
   fileKindLabel,
@@ -98,6 +99,8 @@ type Target = {
   planEnd: string;
   firstDay: string;
   project?: Project;
+  /** บริการของงานนี้ — ใช้เลือกชุดขั้นงานตั้งต้น (รอบที่ 143) */
+  service?: string;
   initial: () => Board;
 };
 
@@ -109,6 +112,7 @@ function targetOfJob(j: InboxJob): Target {
     scope: j.scope,
     extra: j.docs ?? [],
     docs: j,
+    service: j.service,
     planStart: j.planStart,
     planEnd: j.planEnd,
     firstDay: j.projectStart || j.planStart || todayIso(),
@@ -124,6 +128,7 @@ function targetOfProject(p: Project): Target {
     scope: p.scope,
     extra: p.docs ?? [],
     docs: p.source,
+    service: p.service,
     planStart: "",
     planEnd: "",
     firstDay: p.start,
@@ -202,6 +207,8 @@ export function PmPlanPage() {
   const [addingDoc, setAddingDoc] = useState(false);
   /** เฟสที่กำลังแก้ — -1 = เพิ่มเฟสใหม่ */
   const [phaseEdit, setPhaseEdit] = useState<number | null>(null);
+  /** ชุดขั้นงานตั้งต้นของบริการนี้ — ไม่มีก็ไม่ขึ้นปุ่ม (รอบที่ 143) */
+  const tpl = planTemplate(job?.service);
   const [adding, setAdding] = useState<number | null>(null);
   /* เฟสที่กำลังดูอยู่บนมือถือ — จอกว้างเห็นทุกเฟสพร้อมกันอยู่แล้ว ค่านี้จึงไม่มีผล */
   /* ลากการ์ดเพื่อสลับลำดับ — ลากได้เฉพาะในเฟสเดียวกัน เพราะงานย่อยผูกกับเฟสของมัน */
@@ -501,10 +508,37 @@ export function PmPlanPage() {
           <p className="mt-1.5 text-[13px] text-muted-foreground">
             งานนี้ไม่มีข้อเสนอมาเป็นโครงตั้งต้น เริ่มจากสร้างเฟสแรกได้เลย
           </p>
+          {/* บริการที่มีลำดับงานตายตัว (ตอนนี้คืองานโฆษณาออนไลน์) กดใช้ชุดตั้งต้นได้ แล้วค่อยแก้ (รอบที่ 143) */}
+          {!ro && tpl && (
+            <>
+              <p className="mx-auto mt-5 max-w-[560px] text-[12.5px] text-muted-foreground">
+                งาน {tpl.label} มีลำดับงานที่ทีมใช้จริงอยู่แล้ว — {tpl.note}
+              </p>
+              <button
+                type="button"
+                className="btn solid btn-solid mt-3 inline-flex"
+                onClick={() => {
+                  edit((b) => {
+                    b.phases = tpl.phases.map((ph) => ({ name: ph.name, role: ph.role, start: "", end: "" }));
+                    b.plan = tpl.phases.map((ph) =>
+                      ph.tasks.map((name) => ({ name, role: ph.role, whos: [], start: "", due: "" })),
+                    );
+                  });
+                }}
+              >
+                <PlusIcon className="size-[15px]" strokeWidth={2.2} />
+                ใช้ชุดขั้นงาน {tpl.label}
+              </button>
+            </>
+          )}
           {!ro && (
-            <button type="button" className="btn solid btn-solid mt-5 inline-flex" onClick={() => setPhaseEdit(-1)}>
+            <button
+              type="button"
+              className={`btn ${tpl ? "glass-thin" : "solid btn-solid"} mt-3 ml-2 inline-flex`}
+              onClick={() => setPhaseEdit(-1)}
+            >
               <PlusIcon className="size-[15px]" strokeWidth={2.2} />
-              เพิ่มเฟส
+              เพิ่มเฟสเอง
             </button>
           )}
         </section>
