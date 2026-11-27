@@ -20,7 +20,7 @@ import {
   useNotifySettings,
   type NotifySettings,
 } from "@/lib/notify-settings";
-import { setProfilePhoto, useProfilePhoto } from "@/lib/profile-store";
+import { dataUrlToBlob, saveProfilePhoto, useProfilePhoto } from "@/lib/profile-store";
 import {
   BOTNAV_SLOTS,
   botnavChoices,
@@ -191,6 +191,9 @@ function ProfileCard({
   const photo = useProfilePhoto();
   const fileRef = useRef<HTMLInputElement>(null);
   const [cropping, setCropping] = useState<string | null>(null);
+  /* ข้อความผิดพลาดตอนอัปรูป — รูปเก็บที่ระบบแล้ว (รอบที่ 153) จึงพลาดได้ */
+  const [photoErr, setPhotoErr] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function pick(file: File | undefined) {
     if (!file) return;
@@ -290,8 +293,9 @@ function ProfileCard({
         )}
         <button
           type="button"
+          disabled={saving}
           onClick={() => fileRef.current?.click()}
-          className="absolute -right-0.5 -bottom-0.5 grid size-7 place-items-center rounded-full border-[3px] border-white bg-primary text-white transition-colors hover:bg-primary-hover lg:right-0.5 lg:bottom-0.5 lg:size-[30px]"
+          className="absolute -right-0.5 -bottom-0.5 grid size-7 place-items-center rounded-full border-[3px] border-white bg-primary text-white transition-colors hover:bg-primary-hover disabled:opacity-60 lg:right-0.5 lg:bottom-0.5 lg:size-[30px]"
           aria-label="เปลี่ยนรูปโปรไฟล์"
         >
           <CameraIcon className="size-[15px]" strokeWidth={2.2} />
@@ -341,6 +345,9 @@ function ProfileCard({
           ออกจากระบบ
         </a>
       </div>
+      {/* รูปเก็บที่ระบบแล้ว (รอบที่ 153) — บอกให้รู้ว่ากำลังบันทึก หรือบันทึกไม่สำเร็จเพราะอะไร */}
+      {saving && <p className="mt-2 text-[12px] text-muted-foreground">กำลังบันทึกรูป…</p>}
+      {photoErr && <p className="mt-2 text-[12px] font-semibold text-destructive">{photoErr}</p>}
     </aside>
 
     {/* ช่องเลือกไฟล์กับกล่องครอปอยู่นอกการ์ด — การ์ดจอคอมถูกซ่อนบนมือถือ ปุ่มกล้องทั้งสองที่จึงใช้ช่องเดียวกัน
@@ -358,8 +365,16 @@ function ProfileCard({
         src={cropping}
         onCancel={() => setCropping(null)}
         onDone={(url) => {
-          setProfilePhoto(url);
           setCropping(null);
+          setSaving(true);
+          setPhotoErr("");
+          /* รูปที่ตัดแล้วเป็น data URL — ถอดเป็นไฟล์จริงก่อนส่งขึ้นถัง (fetch ไป data: ถูกบล็อก) */
+          void saveProfilePhoto(dataUrlToBlob(url))
+            .then((res) => {
+              if (!res.ok) setPhotoErr(res.message);
+            })
+            .catch(() => setPhotoErr("บันทึกรูปไม่สำเร็จ ลองใหม่อีกครั้ง"))
+            .finally(() => setSaving(false));
         }}
       />
     )}
