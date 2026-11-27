@@ -3,11 +3,12 @@
 /*
  * โปรเจคใหม่ของ PM — ต้นแบบ dose-erp-maz/project-new.html
  *
- * ยังไม่ต่อ backend ข้อมูลโปรเจค (ชื่อ ลูกค้า วันที่ แผนงาน บันทึก) เก็บใน localStorage
- * ส่วนไฟล์และรูปเก็บใน IndexedDB เพราะเป็นไฟล์จริง (ดู project-files.ts)
+ * ร่าง (ชื่อ ลูกค้า วันที่ แผนงาน บันทึก) เก็บที่ระบบตั้งแต่รอบที่ 155 — ตารางค่าตั้งส่วนตัว
+ * เปิดจากเครื่องไหนของคนเดียวกันก็เห็นร่างเดิม · ส่วนไฟล์และรูปยังอยู่ใน IndexedDB ของเครื่อง
+ * (ดู project-files.ts) แล้วส่งขึ้นถังของระบบตอนกดสร้างโปรเจค
  *
  * ไม่มีปุ่มบันทึก — แก้อะไรก็บันทึกร่างทันทีเหมือนหน้าวางแผนงาน (กติกาเดียวกับ pm-plan)
- * TODO: ของจริงบันทึกลง project / project_phase / project_task และอัปโหลดไฟล์ขึ้นที่เก็บไฟล์ของระบบ
+ * ตอนกดสร้าง ร่างจะกลายเป็นแถวจริงใน projects / project_tasks (createOwnProject)
  */
 
 import { useSyncExternalStore } from "react";
@@ -56,7 +57,12 @@ function isProject(value: unknown): value is NewProject {
   return typeof p.name === "string" && Array.isArray(p.phases);
 }
 
-const store = createPersistedStore<NewProject>("maz-erp.pm-project-new.v1", EMPTY_PROJECT, isProject);
+/*
+ * ร่างเก็บที่ระบบ (รอบที่ 155) — ของเดิมอยู่ในเบราว์เซอร์เครื่องเดียว
+ * ฝ่ายโครงการเริ่มร่างที่ออฟฟิศแล้วไปต่อที่บ้านไม่ได้ และล้างข้อมูลเว็บคือร่างหาย
+ * ไฟล์กับรูปยังอยู่ในเครื่องเหมือนเดิม จะย้ายขึ้นถังตอนกดสร้างโปรเจค
+ */
+const store = createPersistedStore<NewProject>("maz-erp.pm-project-new.v1", EMPTY_PROJECT, isProject, undefined, true);
 
 export function useNewProject() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);

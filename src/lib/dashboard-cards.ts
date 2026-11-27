@@ -24,7 +24,8 @@ function isCards(value: unknown): value is DashCards {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const store = createPersistedStore<DashCards>("maz-erp.dashboard-cards.v1", ALL_ON, isCards);
+/* เก็บที่ระบบ (รอบที่ 155) — การ์ดที่เลือกไว้ต้องตามตัวไปทุกเครื่อง ไม่ใช่ตามเบราว์เซอร์ */
+const store = createPersistedStore<DashCards>("maz-erp.dashboard-cards.v1", ALL_ON, isCards, undefined, true);
 
 export function useDashCards() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);

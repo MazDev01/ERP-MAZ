@@ -29,7 +29,7 @@ const store = createPersistedStore<AllPipes>("maz-erp.pipeline-cols.v1", {}, isA
   const out: AllPipes = {};
   for (const [k, u] of Object.entries(all)) out[k] = { sort: (u as Partial<UserPipe>).sort === "old" ? "old" : "new" };
   return out;
-});
+}, true);
 
 const SERVER: AllPipes = {};
 

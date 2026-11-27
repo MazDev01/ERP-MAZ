@@ -30,7 +30,8 @@ function isPrefs(value: unknown): value is Prefs {
   );
 }
 
-const store = createPersistedStore<Prefs>("maz-erp.botnav.v1", {}, isPrefs);
+/* เก็บที่ระบบ (รอบที่ 155) — แถบล่างที่จัดไว้บนมือถือ ต้องเหมือนกันทุกเครื่องของคนเดียวกัน */
+const store = createPersistedStore<Prefs>("maz-erp.botnav.v1", {}, isPrefs, undefined, true);
 
 export function useBotnavPrefs() {
   return useSyncExternalStore(store.subscribe, store.get, store.getServer);
