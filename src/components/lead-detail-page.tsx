@@ -38,6 +38,7 @@ import { ChangeFromTo } from "./sales-ui";
 import { findLink } from "@/lib/deep-link";
 import { LeadStatusMenu } from "./lead-status-menu";
 import { LeadFilesCard } from "./lead-files-card";
+import { LeadProposalCard } from "./lead-proposal-card";
 import "@/styles/mobile/lead-detail.css";
 
 const PANES = [
@@ -409,6 +410,9 @@ export function LeadDetailPage({ code }: { code: string }) {
 
           {/* ไฟล์ Proposal และเอกสารของรายนี้ (ยกมาจากสาย ERP_Test · ต่อฐานข้อมูลรอบที่ 115) */}
           <LeadFilesCard code={code} />
+
+          {/* แม่แบบ Proposal ของบริษัท (ยกมาจาก ERP_Test · รอบที่ 134) — ไม่ใช่ไฟล์ของรายนี้ */}
+          <LeadProposalCard />
         </div>
 
         <div className="space-y-4 max-md:space-y-3">

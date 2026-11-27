@@ -67,6 +67,8 @@ export const SETTINGS_SECTIONS = [
   { key: "payroll", label: "การคำนวณเงินเดือน", group: "เงินและเอกสาร" },
   { key: "wht", label: "หัก ณ ที่จ่าย", group: "เงินและเอกสาร" },
   { key: "issuer", label: "ข้อมูลผู้ออกเอกสาร", group: "เงินและเอกสาร" },
+  /* แม่แบบ Proposal ของผู้บริหาร (ยกมาจาก ERP_Test · รอบที่ 134) */
+  { key: "proposal", label: "แม่แบบ Proposal", group: "งานขาย" },
 ] as const;
 export type SettingsKey = (typeof SETTINGS_SECTIONS)[number]["key"];
 

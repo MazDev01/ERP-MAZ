@@ -10,6 +10,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SETTINGS_SECTIONS, settingsKeyOf, type SettingsKey } from "@/lib/nav";
+import { AdminProposalPage } from "./admin-proposal-page";
 import { AdminOptionsPage } from "./admin-options-page";
 import { AdminPositionsPage } from "./admin-positions-page";
 import { AdminLeavePage } from "./admin-leave-page";
@@ -40,6 +41,8 @@ function Section({ sec }: { sec: SecKey }) {
       return <AdminOptionsPage only="whtTypes" />;
     case "issuer":
       return <AdminCompanyPage />;
+    case "proposal":
+      return <AdminProposalPage />;
   }
 }
 
