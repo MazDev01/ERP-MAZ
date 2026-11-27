@@ -227,18 +227,14 @@ export function DealsPage({ ceo = false }: { ceo?: boolean }) {
                       >
                         <td data-label="เลขที่ดีล" className="num muted whitespace-nowrap">
                           {/* กดเลขที่ดีล = เปิดหน้ารายละเอียดดีล (แฟ้มเอกสารทั้งหมดของดีลอยู่ที่นั่น)
-                              ฝั่ง CEO ยังไม่มีหน้านี้ จึงเป็นข้อความเฉย ๆ — ห้ามลิงก์ข้ามไปหน้าของฝ่ายอื่น */}
-                          {ceo ? (
-                            d.no
-                          ) : (
-                            <Link
-                              href={dealHref(d.no, false)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="hover:text-primary hover:underline"
-                            >
-                              {d.no}
-                            </Link>
-                          )}
+                              ผู้บริหารมีหน้าของตัวเองใต้ /ceo/sales แล้ว (รอบที่ 147) ไม่ใช่การข้ามไปหน้าของฝ่ายขาย */}
+                          <Link
+                            href={dealHref(d.no, ceo)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-primary hover:underline"
+                          >
+                            {d.no}
+                          </Link>
                           {cons.length > 0 && (
                             <span className="mt-[3px] block text-[11.5px] text-muted-foreground">
                               มีสัญญา {cons.length} ฉบับ
