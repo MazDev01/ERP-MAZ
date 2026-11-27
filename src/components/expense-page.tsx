@@ -13,6 +13,7 @@ import {
   fuelTotal,
   otherRowProblem,
   otherTotal,
+  claimNeedsCeo,
   isLocked,
   type FuelMiss,
   type FuelRow,
@@ -84,6 +85,8 @@ export function ExpensePage() {
     ? [...check.reasons, "ใบนี้ยังไม่มีผู้อนุมัติ — ให้ผู้ดูแลระบบแก้สายอนุมัติก่อน"]
     : check.reasons;
   const shown = failed ? [...reasons, failed] : reasons;
+  /* ใบที่มีค่าใช้จ่ายอื่นปน ต้องขึ้นผู้บริหารทั้งใบ (รอบที่ 149) — บอกไว้ก่อนกดยื่น */
+  const toCeo = claimNeedsCeo(claim.other ?? []);
   const fuelSum = fuelTotal(claim.fuel);
   const otherSum = otherTotal(claim.other);
   /* ค่าเดินทางเป็นคนละก้อนกับค่าน้ำมัน — ท้ายใบต้องบอกทีละก้อน (เจ้าของระบบสั่ง 8 ต.ค. 2569) */
@@ -199,6 +202,13 @@ export function ExpensePage() {
         <p className="no-print rounded-xl border border-[var(--warning)]/20 bg-[var(--warning-soft)] px-4 py-3 text-sm text-[var(--warning)]">
           ยื่นแล้วเมื่อ {thaiStamp(claim.submittedAt)} · แก้ไม่ได้จนกว่าจะกด “ขอแก้ไข”
           เพื่อดึงกลับมาเป็นร่าง
+        </p>
+      )}
+
+      {/* ใบที่มีค่าใช้จ่ายอื่นปน ต้องขึ้นผู้บริหารทั้งใบ (รอบที่ 149 · BusinessRules ฉบับ 2) */}
+      {!locked && toCeo && (
+        <p className="no-print rounded-xl border border-[var(--info)]/20 bg-[var(--info-soft)] px-4 py-3 text-sm text-[var(--info)]">
+          ใบนี้มีค่าใช้จ่ายอื่นนอกเหนือค่าน้ำมัน ค่าเดินทาง และค่าคอมมิชชั่น — ทั้งใบจะส่งถึงผู้บริหารเป็นผู้อนุมัติ
         </p>
       )}
 
