@@ -287,6 +287,8 @@ const GM: NavItem[] = [
   { group: "ผู้จัดการทั่วไป", label: "โปรเจค", icon: "project", href: "/pm/projects" },
   { group: "ผู้จัดการทั่วไป", label: "งานรอตรวจ", icon: "tasks", href: "/pm/reviews" },
   { group: "ผู้จัดการทั่วไป", label: "ตารางงาน", icon: "leave", href: "/gm/calendar" },
+  /* ประสิทธิภาพพนักงาน — ตัวเลขรายคน ไม่มีคะแนนรวม (ยกหน้ามาจาก ERP_Test รอบที่ 136) */
+  { group: "ผู้จัดการทั่วไป", label: "ประสิทธิภาพพนักงาน", icon: "team", href: "/gm/performance" },
   { group: "ผู้จัดการทั่วไป", label: "โฆษณาและรายงาน", icon: "ads", href: "/pm/ads" },
 ];
 
