@@ -69,6 +69,7 @@ import {
   PencilIcon,
 } from "./icons";
 import { Sheet } from "./lead-dialogs";
+import { PayslipPaper } from "./payslip-paper";
 import { Field, Input } from "./ui";
 import { downloadCsv, toCsv } from "@/lib/report-export";
 import { PhoneCard, PhoneList } from "./acchr-phone";
@@ -749,6 +750,9 @@ function SlipView({
                 } ครั้ง`
               : "ยังไม่เผยแพร่ พนักงานยังเห็นไม่ได้"}
           </span>
+          <button type="button" className="btn glass-thin" onClick={() => window.print()}>
+            พิมพ์
+          </button>
           <button
             type="button"
             className="btn solid btn-solid disabled:opacity-45"
@@ -762,117 +766,23 @@ function SlipView({
         </>
       }
     >
-      {/* กระดาษสลิปทึบเสมอ ไม่ให้พื้นหลังทะลุขึ้นมา เพราะเป็นเอกสารที่ต้องอ่านชัด */}
-      <article className="rounded-[14px] border border-border bg-white px-6 py-6 shadow-sm max-sm:px-4 max-sm:py-5">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-primary pb-3.5">
-          <div>
-            <p className="text-[26px] leading-none font-extrabold tracking-[0.05em] text-primary">
-              MAZ
-            </p>
-            <p className="mt-1 text-[9.5px] font-semibold tracking-[0.12em] text-muted-foreground">
-              DIGITAL BUSINESS SOLUTION
-            </p>
-          </div>
-          <div className="text-right">
-            <h4 className="text-[17px] font-bold">สลิปเงินเดือน</h4>
-            <p className="num mt-1 text-xs text-muted-foreground">
-              รอบ {thaiMonth(month)} · {thaiDate(c.from)} – {thaiDate(c.to)}
-            </p>
-          </div>
-        </header>
-
-        <div className="mt-4 grid gap-2 text-[13px] sm:grid-cols-3">
-          <Fact k="ชื่อพนักงาน" v={emp.name} />
-          <Fact k="ตำแหน่ง" v={p.label} />
-          <Fact k="แผนก" v={hrDept(p.dept).label} />
-        </div>
-
-        <SlipTable
-          head="รายได้"
-          rows={income}
-          total={["รวมรายได้", earn]}
-        />
-        <SlipTable
-          head="รายการหัก"
-          rows={deductions}
-          total={["รวมรายการหัก", cutOf(pay)]}
-        />
-        {pay.reimb > 0 && (
-          /* ใบเบิกที่อนุมัติแล้ว จ่ายคืนพร้อมเงินเดือน — ไม่ใช่รายได้ จึงไม่อยู่ในตารางรายได้และไม่คิดประกันสังคม */
-          <SlipTable
-            head="ค่าใช้จ่ายคืน"
-            rows={[["ใบเบิกค่าใช้จ่ายที่อนุมัติแล้ว", pay.reimb]]}
-            total={["รวมค่าใช้จ่ายคืน", pay.reimb]}
-          />
-        )}
-
-        <div className="mt-4 flex items-center justify-between gap-4 rounded-[11px] bg-muted px-4 py-3.5 font-bold">
-          <span>ยอดสุทธิที่ได้รับ</span>
-          <b className="num text-[19px] text-primary">{baht(pay.net)} บาท</b>
-        </div>
-
-        <p className="mt-4 text-[11.5px] leading-[1.7] text-muted-foreground">
-          บริษัทสมทบประกันสังคมเท่ากับที่ลูกจ้างถูกหัก {baht(pay.ss)} บาท
-          <br />
-          เอกสารนี้ออกจากระบบ ERP MAZ ไม่ต้องลงลายมือชื่อ
-        </p>
-      </article>
+      {/* กระดาษสลิป A4 ชุดเดียวกับสลิปของพนักงาน (รอบที่ 135) — ตัวเลขมาจากผลคำนวณเดียวกัน */}
+      <PayslipPaper
+        emp={emp}
+        month={month}
+        cycle={c}
+        income={income}
+        deductions={deductions}
+        earn={earn}
+        cut={cutOf(pay)}
+        reimb={pay.reimb}
+        net={pay.net}
+        ss={pay.ss}
+      />
     </Sheet>
   );
 }
 
-function Fact({ k, v }: { k: string; v: string }) {
-  return (
-    <p>
-      <span className="text-muted-foreground">{k}</span>
-      <br />
-      <b className="font-semibold">{v}</b>
-    </p>
-  );
-}
-
-function SlipTable({
-  head,
-  rows,
-  total,
-}: {
-  head: string;
-  rows: [string, number][];
-  total: [string, number];
-}) {
-  return (
-    <table className="mt-4 w-full text-[13px]">
-      <thead>
-        <tr>
-          <th className="border-b border-border py-1.5 text-left text-[11.5px] font-bold text-primary">
-            {head}
-          </th>
-          <th className="border-b border-border py-1.5 text-right text-[11.5px] font-bold text-primary">
-            จำนวนเงิน
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(([label, v]) => (
-          <tr key={label}>
-            <td className="border-b border-border py-1.5">{label}</td>
-            <td className="num border-b border-border py-1.5 text-right whitespace-nowrap">
-              {baht(v)}
-            </td>
-          </tr>
-        ))}
-        <tr>
-          <td className="border-t border-border py-1.5 font-bold">
-            {total[0]}
-          </td>
-          <td className="num border-t border-border py-1.5 text-right font-bold whitespace-nowrap">
-            {baht(total[1])}
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  );
-}
 
 // ─── เผยแพร่และยกเลิกการเผยแพร่ ───────────────────────────────────
 

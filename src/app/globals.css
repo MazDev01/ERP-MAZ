@@ -1809,3 +1809,19 @@ table.sheet tr.bad td { background: var(--destructive-soft); }
   .sd-go { width: 36px; height: 36px; border-radius: 50%; background: #f7eff1; display: flex; align-items: center; justify-content: center; color: var(--sd-ink2); }
   .sd-mempty { text-align: center; font-size: 13px; color: var(--sd-ink3); background: #fff; border-radius: 20px; padding: 22px; box-shadow: var(--sd-shadow); }
 }
+
+/* ─── กระดาษสลิปเงินเดือน A4 (รอบที่ 135 · ยกแบบมาจาก ERP_Test) ───
+   เปิดดูบนจอใช้ความกว้างเต็มการ์ด พิมพ์ออกมาเป็น A4 ใบเดียวไม่มีกรอบการ์ด */
+.ps-paper { break-inside: avoid; }
+
+@media print {
+  /* พิมพ์เฉพาะกระดาษสลิป ส่วนอื่นของแอปไม่ต้องติดไปด้วย */
+  body:has(.ps-paper) > *:not(:has(.ps-paper)) { display: none !important; }
+  .ps-paper {
+    width: 100% !important;
+    max-width: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  .ps-paper table th { background: #f1f3f6 !important; }
+}

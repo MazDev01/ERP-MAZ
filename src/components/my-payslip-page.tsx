@@ -37,6 +37,7 @@ import { downloadCsv, toCsv } from "@/lib/report-export";
 import { useRole } from "@/lib/role";
 import { useStaffEmployeeId } from "@/lib/staff-identity";
 import { Sheet } from "./lead-dialogs";
+import { PayslipPaper } from "./payslip-paper";
 import { PhoneCard, PhoneList } from "./acchr-phone";
 
 /** หนึ่งแถวในรายการ = รอบที่เผยแพร่แล้วหนึ่งรอบ พร้อมบรรทัดของเราในรอบนั้น */
@@ -75,6 +76,14 @@ export function MyPayslipPage() {
       });
     }
     rows.sort((a, b) => b.month.localeCompare(a.month));
+    /* กันรอบซ้ำเดือนเดียวกัน — รายการสลิปมาจากทั้งฐานข้อมูลและชุดตั้งต้น
+       ซ้ำแล้ว React ฟ้องคีย์ซ้ำ และพนักงานเห็นรอบเดียวกันสองแถว */
+    const seen = new Set<string>();
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      const key = `${rows[i].month}|${rows[i].day}`;
+      if (seen.has(key)) rows.splice(i, 1);
+      else seen.add(key);
+    }
   }
 
   const picked = rows.find((r) => r.month === open);
@@ -411,6 +420,7 @@ function SlipDialog({
   return (
     <Sheet
       title={`สลิปเงินเดือน ${thaiMonth(row.month)}`}
+      wide
       onClose={onClose}
       footer={
         <>
@@ -445,72 +455,26 @@ function SlipDialog({
           {pdfError}
         </p>
       )}
+      {/* กระดาษสลิป A4 ชุดเดียวกับฝั่งฝ่ายบุคคล (รอบที่ 135) — ตัวเลขมาจากยอดที่ปิดรอบไว้ */}
       <div ref={slip} className="bg-card">
-      <Sect title="ข้อมูลพนักงาน">
-        <Row2 k="ชื่อ" v={emp.name} />
-        <Row2 k="ตำแหน่ง" v={hrPos(emp.pos).label} />
-        <Row2 k="รอบ" v={thaiMonth(row.month)} />
-        <Row2 k="ช่วงวันที่" v={`${thaiDate(c.from)} – ${thaiDate(c.to)}`} />
-      </Sect>
-
-      <Sect title="รายได้">
-        {earn
-          .filter(([, v]) => v !== 0)
-          .map(([label, v], i) => (
-            <Row2 key={`${i}-${label}`} k={label} v={baht(v)} />
-          ))}
-        <Row2 k="รวมรายได้" v={baht(gross)} strong />
-      </Sect>
-
-      <Sect title="รายการหัก">
-        {cuts.map(([label, v], i) => (
-          <Row2 key={`${i}-${label}`} k={label} v={baht(v)} />
-        ))}
-        <Row2 k="รวมรายการหัก" v={baht(cut)} strong />
-      </Sect>
-
-      {(x.reimb ?? 0) > 0 && (
-        /* ใบเบิกที่อนุมัติแล้ว จ่ายคืนพร้อมเงินเดือน — ไม่ใช่รายได้ ไม่คิดประกันสังคม */
-        <Sect title="ค่าใช้จ่ายคืน">
-          <Row2 k="ใบเบิกค่าใช้จ่ายที่อนุมัติแล้ว" v={baht(x.reimb ?? 0)} />
-        </Sect>
-      )}
-
-      <Sect title="ยอดสุทธิ">
-        <Row2 k="รับสุทธิ" v={`${baht(x.net)} บาท`} strong />
-      </Sect>
+      <PayslipPaper
+        emp={emp}
+        month={row.month}
+        cycle={c}
+        income={earn.filter(([, v]) => v !== 0)}
+        deductions={cuts}
+        earn={gross}
+        cut={cut}
+        reimb={x.reimb ?? 0}
+        net={x.net}
+        ss={x.ss}
+      />
 
       <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
         ตัวเลขชุดเดียวกับที่ฝ่ายบุคคลปิดรอบไว้ ถ้าเห็นว่าไม่ตรงให้แจ้งฝ่ายบุคคลก่อนสิ้นรอบถัดไป
       </p>
       </div>
     </Sheet>
-  );
-}
-
-function Sect({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-5 first:mt-0">
-      <h3 className="mb-2 border-b border-border pb-2 text-[14px] font-bold">{title}</h3>
-      <dl className="flex flex-col gap-1.5">{children}</dl>
-    </section>
-  );
-}
-
-function Row2({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
-  return (
-    <div
-      className={`flex items-baseline justify-between gap-3 ${
-        strong ? "border-t border-border pt-2" : ""
-      }`}
-    >
-      <dt className={strong ? "text-[13.5px] font-bold" : "text-[13px] text-muted-foreground"}>
-        {k}
-      </dt>
-      <dd className={`num text-right ${strong ? "text-[14px] font-bold" : "text-[13px] font-medium"}`}>
-        {v}
-      </dd>
-    </div>
   );
 }
 
