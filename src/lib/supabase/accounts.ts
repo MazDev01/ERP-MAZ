@@ -1,3 +1,4 @@
+import { passwordOk } from "../password-rule";
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
@@ -99,7 +100,8 @@ export async function createAccount(input: {
   const username = input.username.trim();
   if (!/^[^\s@]{2,40}$/.test(username)) return { ok: false, reason: "bad_username" };
   if (input.roles.length < 1 || input.roles.length > 2) return { ok: false, reason: "bad_roles" };
-  if (input.tempPassword.length < 8) return { ok: false, reason: "weak_password" };
+  /* รหัสชั่วคราวต้องผ่านกติกาเดียวกับรหัสจริง (รอบที่ 150) — ตัวสร้างอัตโนมัติผ่านอยู่แล้ว */
+  if (!passwordOk(input.tempPassword)) return { ok: false, reason: "weak_password" };
 
   const found = await employeeOf(admin, input.employeeId);
   if (!found) return { ok: false, reason: "no_employee" };
@@ -145,7 +147,8 @@ export async function resetPassword(input: {
     const denied = await guardAccount(input.employeeId);
     if (denied) return { ok: false, reason: denied };
   }
-  if (input.tempPassword.length < 8) return { ok: false, reason: "weak_password" };
+  /* รหัสชั่วคราวต้องผ่านกติกาเดียวกับรหัสจริง (รอบที่ 150) — ตัวสร้างอัตโนมัติผ่านอยู่แล้ว */
+  if (!passwordOk(input.tempPassword)) return { ok: false, reason: "weak_password" };
 
   const found = await employeeOf(admin, input.employeeId);
   if (!found?.acc) return { ok: false, reason: "no_account" };
@@ -172,7 +175,8 @@ export async function setOwnPassword(newPassword: string): Promise<AccountResult
   const sb = await serverSupabase();
   const admin = adminAuth();
   if (!sb || !admin) return { ok: false, reason: "no_backend" };
-  if (newPassword.length < 8) return { ok: false, reason: "weak_password" };
+  /* ตรวจชุดเดียวกับหน้าจอ (รอบที่ 150) — ซ่อนปุ่มอย่างเดียวไม่พอ ยิงคำสั่งตรงยังตั้งรหัสง่าย ๆ ได้ */
+  if (!passwordOk(newPassword)) return { ok: false, reason: "weak_password" };
 
   const { data: me } = await sb.auth.getUser();
   if (!me.user) return { ok: false, reason: "not_signed_in" };

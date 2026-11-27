@@ -7,9 +7,19 @@ import { checkPassword, passwordOk, PASSWORD_HINT } from "@/lib/password-rule";
 import { requirePasswordReset } from "@/lib/accounts";
 import { currentRole } from "@/lib/role";
 
+/** เหตุผลจากฝั่งเซิร์ฟเวอร์ — แปลเป็นภาษาที่ผู้ใช้อ่านรู้เรื่อง */
+const SAY: Record<string, string> = {
+  weak_password: "รหัสผ่านยังไม่ตรงตามกติกาด้านล่าง",
+  not_signed_in: "เซสชันหมดอายุ เข้าสู่ระบบใหม่แล้วตั้งรหัสอีกครั้ง",
+  no_backend: "ยังไม่ได้ต่อฐานข้อมูล",
+};
+
 /**
  * ตั้งรหัสผ่านใหม่ — ใช้ทั้งตอนเข้าใช้ครั้งแรกและตอนฝ่ายบุคคลรีเซ็ตให้
- * ยังไม่ต่อหลังบ้าน กดยืนยันแล้วพากลับไปหน้าเข้าสู่ระบบ
+ *
+ * เปลี่ยนรหัสที่ฐานข้อมูลจริง (รอบที่ 150) — ของเดิมแค่ปลดธงในเครื่องแล้วพากลับหน้าเข้าสู่ระบบ
+ * รหัสเดิมจึงยังใช้ได้อยู่ และธง must_change_password ในฐานข้อมูลก็ไม่เคยถูกล้าง
+ * กติกาความซับซ้อนตรวจทั้งสองฝั่ง (password-rule · api/accounts/password)
  */
 export function SetPasswordPage() {
   const router = useRouter();
@@ -18,11 +28,15 @@ export function SetPasswordPage() {
   const [show, setShow] = useState(false);
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** ข้อความผิดพลาดจากฝั่งเซิร์ฟเวอร์ */
+  const [failed, setFailed] = useState("");
 
   const checks = checkPassword(pw);
   const strong = passwordOk(pw);
   const matched = confirm.length > 0 && pw === confirm;
-  const error = !tried
+  const error = failed
+    ? failed
+    : !tried
     ? null
     : !strong
       ? "รหัสผ่านยังไม่ตรงตามกติกาด้านล่าง"
@@ -30,14 +44,36 @@ export function SetPasswordPage() {
         ? "รหัสผ่านทั้งสองช่องไม่ตรงกัน"
         : null;
 
+  async function save() {
+    setBusy(true);
+    setFailed("");
+    try {
+      const res = await fetch("/api/accounts/password", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      const out = (await res.json().catch(() => null)) as { ok?: boolean; reason?: string } | null;
+      if (!out?.ok) {
+        setBusy(false);
+        setFailed(SAY[out?.reason ?? ""] ?? "ตั้งรหัสผ่านไม่สำเร็จ ลองใหม่อีกครั้ง");
+        return;
+      }
+    } catch {
+      setBusy(false);
+      setFailed("ติดต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง");
+      return;
+    }
+    /* ตั้งรหัสใหม่แล้ว ผู้ดูแลระบบไม่ต้องบังคับอีก (ฝั่งฐานข้อมูลล้างธงให้แล้ว) */
+    requirePasswordReset(currentRole(), false);
+    router.push("/login");
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setTried(true);
     if (!strong || !matched || busy) return;
-    /* ตั้งรหัสใหม่แล้ว ผู้ดูแลระบบไม่ต้องบังคับอีก */
-    requirePasswordReset(currentRole(), false);
-    setBusy(true);
-    setTimeout(() => router.push("/login"), 500);
+    void save();
   }
 
   return (
