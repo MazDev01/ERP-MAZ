@@ -78,6 +78,47 @@ export function AdminDataPage() {
   const [restoring, setRestoring] = useState<Backup | null>(null);
   const [fileErr, setFileErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  /* สำรองข้อมูลจริงจากฐานข้อมูล (รอบที่ 159) — ไฟล์ใหญ่ ต้องบอกว่ากำลังทำอยู่ */
+  const [dumping, setDumping] = useState(false);
+
+  async function downloadDatabase() {
+    setDumping(true);
+    setFileErr("");
+    try {
+      const res = await fetch("/api/backup", { cache: "no-store" });
+      if (!res.ok) {
+        const why = res.status === 403
+          ? "สำรองข้อมูลจริงได้เฉพาะฝ่ายบุคคลและผู้บริหาร"
+          : "สำรองข้อมูลจากฐานข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง";
+        setFileErr(why);
+        return;
+      }
+      const body = (await res.json()) as { rows?: number; trouble?: string[] };
+      const blob = new Blob([JSON.stringify(body, null, 1)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const now = new Date();
+      const p2 = (n: number) => String(n).padStart(2, "0");
+      a.download = `erp-maz-ฐานข้อมูล-${now.getFullYear() + 543}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      /* ตารางที่อ่านไม่ได้ต้องบอก ไม่ใช่ปล่อยให้เข้าใจว่าได้ครบ
+         ขึ้นข้อความก่อนลงประวัติ — ประวัติลงไม่สำเร็จไม่ควรทำให้ผู้ใช้ไม่รู้ว่าไฟล์ออกแล้ว */
+      setDone(
+        body.trouble?.length
+          ? `ดาวน์โหลดไฟล์สำรองจากฐานข้อมูลแล้ว ${body.rows ?? 0} แถว · มี ${body.trouble.length} ตารางที่อ่านไม่ได้ (ดูในไฟล์)`
+          : `ดาวน์โหลดไฟล์สำรองจากฐานข้อมูลแล้ว ${body.rows ?? 0} แถว`,
+      );
+      logChange("ข้อมูลตัวอย่าง", `ดาวน์โหลดไฟล์สำรองจากฐานข้อมูล ${body.rows ?? 0} แถว`);
+    } catch {
+      setFileErr("ต่อฐานข้อมูลไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่");
+    } finally {
+      setDumping(false);
+    }
+  }
 
   async function pickFile(file: File | undefined) {
     if (!file) return;
@@ -126,10 +167,25 @@ export function AdminDataPage() {
         </p>
       )}
 
-      {/* สำรองข้อมูล — ยังไม่มีฐานข้อมูลจริง ข้อมูลอยู่ในเครื่องนี้เครื่องเดียว */}
+      {/* สำรองข้อมูลจริง — ข้อมูลงานอยู่บนฐานข้อมูลแล้ว (รอบที่ 159) */}
       <Card
-        title="สำรองข้อมูลและนำกลับเข้ามา"
-        note="ข้อมูลทั้งหมดอยู่ในเครื่องนี้ ถ้าล้างข้อมูลเบราว์เซอร์หรือเปลี่ยนเครื่องจะหาย — ดาวน์โหลดไฟล์สำรองเก็บไว้ แล้วนำกลับเข้ามาทีหลังได้"
+        title="สำรองข้อมูลจริงจากฐานข้อมูล"
+        note="ข้อมูลงานของบริษัททั้งหมดอยู่บนฐานข้อมูล — ดาวน์โหลดเก็บไว้เป็นไฟล์เดียว ทำได้เฉพาะฝ่ายบุคคลและผู้บริหาร"
+      >
+        <button type="button" className="btn solid btn-solid" disabled={dumping} onClick={() => void downloadDatabase()}>
+          {dumping ? "กำลังรวบรวมข้อมูล…" : "ดาวน์โหลดไฟล์สำรองจากฐานข้อมูล"}
+        </button>
+        <p className="mt-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
+          ได้ทะเบียนพนักงาน เวลาทำงาน คำขอ เงินเดือน งานขาย โครงการ บัญชี และการตั้งค่าระบบ ·
+          ไม่รวมรหัสผ่าน (อยู่ในระบบยืนยันตัวตน) และไม่รวมตัวไฟล์แนบในถัง (เก็บมาแต่ที่อยู่ไฟล์) ·
+          นำไฟล์นี้กลับเข้าระบบเองไม่ได้ — ถ้าต้องกู้คืนให้ส่งไฟล์ให้ผู้ดูแลระบบ
+        </p>
+      </Card>
+
+      {/* ค่าที่อยู่ในเครื่องนี้ — ไม่ใช่ข้อมูลงานของบริษัท */}
+      <Card
+        title="สำรองค่าที่อยู่ในเครื่องนี้"
+        note="ร่างที่ยังไม่ได้ส่งและค่าที่จำไว้ให้สะดวกของเครื่องนี้ — ไม่ใช่ข้อมูลงานของบริษัท (ของจริงอยู่บนฐานข้อมูล)"
       >
         <div className="flex flex-wrap items-center gap-2.5">
           <button
@@ -161,7 +217,8 @@ export function AdminDataPage() {
           />
         </div>
         <p className="mt-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
-          ไฟล์สำรองเก็บงานของทุกฝ่าย การตั้งค่าระบบ และข้อมูลส่วนตัวของทุกบทบาทในเครื่องนี้ ·
+          ค่าที่ฐานข้อมูลเป็นเจ้าของ (ตั้งค่าระบบ · เมนูที่ปิดไว้ · ค่าตั้งส่วนตัว · ร่างโปรเจคใหม่)
+          ไม่อยู่ในไฟล์นี้และไม่ถูกเขียนทับตอนนำกลับเข้ามา — ของจริงอยู่บนฐานข้อมูลแล้ว ·
           ไฟล์แนบที่อัปโหลดไว้ไม่รวมอยู่ในไฟล์สำรอง
         </p>
       </Card>
@@ -224,13 +281,13 @@ export function AdminDataPage() {
             ? `ไฟล์สำรองเมื่อ ${backupWhen(restoring.at)} · ${Object.keys(restoring.data).length} รายการ`
             : ""
         }
-        detail="ข้อมูลที่อยู่ในเครื่องตอนนี้จะถูกเขียนทับทั้งหมด แล้วหน้าจอจะโหลดใหม่ · ทำแล้วย้อนกลับไม่ได้"
+        detail="ค่าที่อยู่ในเครื่องนี้จะถูกเขียนทับ แล้วหน้าจอจะโหลดใหม่ · ข้อมูลบนฐานข้อมูลไม่ถูกแตะ · ทำแล้วย้อนกลับไม่ได้"
         confirmLabel="นำกลับเข้ามา"
         tone="destructive"
         onConfirm={() => {
           if (!restoring) return;
-          const n = applyBackup(restoring);
-          logChange("ข้อมูลตัวอย่าง", `นำไฟล์สำรองกลับเข้ามา ${n} รายการ`);
+          const { restored } = applyBackup(restoring);
+          logChange("ข้อมูลตัวอย่าง", `นำไฟล์สำรองกลับเข้ามา ${restored} รายการ`);
           setRestoring(null);
           /* โหลดหน้าใหม่ เพื่อให้ทุกสโตร์อ่านค่าที่เพิ่งเขียนทับ ไม่ใช่ค่าที่ค้างในหน่วยความจำ */
           window.location.reload();

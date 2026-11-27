@@ -1,9 +1,9 @@
 /*
- * สำรองข้อมูลและนำกลับเข้ามา (ผู้ใช้สั่ง 7 ต.ค. 2569)
+ * สำรองค่าที่เก็บอยู่ในเครื่องนี้ และนำกลับเข้ามา (ผู้ใช้สั่ง 7 ต.ค. 2569)
  *
- * ระบบยังไม่มี backend ทุกอย่างอยู่ใน localStorage ของเครื่องเดียว
- * ล้างข้อมูลเบราว์เซอร์ เปลี่ยนเครื่อง หรือเปิดโหมดส่วนตัว = งานที่กรอกไว้หายหมด
- * หน้าข้อมูลตัวอย่างจึงมีปุ่มดาวน์โหลดไฟล์สำรอง และนำไฟล์นั้นกลับเข้ามาทีหลัง
+ * ⚠️ ไฟล์นี้ไม่ใช่การสำรองงานของบริษัท (แก้รอบที่ 159)
+ * ข้อมูลจริงอยู่ในฐานข้อมูลบนคลาวด์แล้ว — สำรองของจริงที่ /api/backup
+ * ที่นี่เหลือแค่ของที่อยู่ในเครื่องจริง ๆ เช่นร่างที่ยังไม่ได้ส่ง และค่าที่จำไว้ให้สะดวก
  *
  * เก็บเฉพาะคีย์ของระบบนี้ (maz-erp.* และ maz-hrm.*) ไม่แตะคีย์ของเว็บอื่นในเครื่อง
  * ไฟล์แนบที่อัปโหลดไว้ (เก็บใน IndexedDB) ไม่รวมมาด้วย — ไฟล์สำรองจะใหญ่เกินไป
@@ -11,6 +11,26 @@
 
 /** คีย์ที่ถือว่าเป็นข้อมูลของระบบนี้ */
 const PREFIX = ["maz-erp.", "maz-hrm."];
+
+/*
+ * คีย์ที่ฐานข้อมูลเป็นเจ้าของ — ไม่สำรองและไม่เขียนทับ (รอบที่ 159)
+ *
+ * ค่าในเครื่องของคีย์พวกนี้เป็นแค่สำเนาไว้เปิดแอปครั้งถัดไปให้ไว
+ * ถ้าเอาไฟล์เก่ามาทับ ค่าเก่าจะถูกดันขึ้นฐานข้อมูล (ดู user-prefs.ts) ทับของจริงที่ใหม่กว่า
+ * หรือถูกฐานข้อมูลทับกลับทันทีจนผู้ใช้เข้าใจว่า "กู้คืนแล้วไม่เห็นเปลี่ยน"
+ */
+const CLOUD_KEYS = [
+  "maz-erp.system-settings.v3",  /* ตั้งค่าระบบ รวมเมนูที่ปิดไว้ (รอบที่ 156) */
+  "maz-erp.dashboard-cards.v1",
+  "maz-erp.botnav.v1",
+  "maz-erp.pipeline-cols.v1",
+  "maz-erp.pm-project-new.v1",
+  "maz-erp.menu-access.v1",      /* คีย์เก่าก่อนย้ายเข้าตั้งค่าระบบ */
+];
+
+function fromCloud(key: string) {
+  return CLOUD_KEYS.includes(key);
+}
 
 /** รุ่นของรูปแบบไฟล์สำรอง — ขึ้นรุ่นเมื่อโครงไฟล์เปลี่ยนจนของเก่าอ่านไม่ได้ */
 const FORMAT = 1;
@@ -23,6 +43,9 @@ export type Backup = {
   data: Record<string, string>;
 };
 
+/** ผลของการนำไฟล์สำรองกลับเข้ามา — skipped = คีย์ที่ข้ามเพราะฐานข้อมูลเป็นเจ้าของ */
+export type RestoreResult = { restored: number; skipped: number };
+
 function ours(key: string) {
   return PREFIX.some((p) => key.startsWith(p));
 }
@@ -33,7 +56,8 @@ export function collectBackup(): Backup {
   try {
     for (let i = 0; i < window.localStorage.length; i++) {
       const k = window.localStorage.key(i);
-      if (!k || !ours(k)) continue;
+      /* ค่าที่ฐานข้อมูลเป็นเจ้าของไม่ต้องสำรอง — ของจริงอยู่บนคลาวด์ */
+      if (!k || !ours(k) || fromCloud(k)) continue;
       const v = window.localStorage.getItem(k);
       if (v !== null) data[k] = v;
     }
@@ -81,7 +105,8 @@ export function readBackup(text: string): { ok: true; backup: Backup } | { ok: f
   if (!b.data || typeof b.data !== "object") return { ok: false, why: "ไฟล์สำรองนี้ไม่มีข้อมูลข้างใน" };
   const data: Record<string, string> = {};
   for (const [k, v] of Object.entries(b.data)) {
-    if (ours(k) && typeof v === "string") data[k] = v;
+    /* ไฟล์เก่าที่สำรองไว้ก่อนรอบที่ 159 มีคีย์ของคลาวด์ปนมา — คัดออกตั้งแต่ตอนอ่านไฟล์ */
+    if (ours(k) && !fromCloud(k) && typeof v === "string") data[k] = v;
   }
   if (!Object.keys(data).length) return { ok: false, why: "ไฟล์สำรองนี้ไม่มีข้อมูลของระบบนี้" };
   return { ok: true, backup: { format: b.format, app: "ERP MAZ", at: String(b.at ?? ""), data } };
@@ -92,15 +117,25 @@ export function readBackup(text: string): { ok: true; backup: Backup } | { ok: f
  * ลบคีย์ของระบบที่มีอยู่ก่อนทั้งหมด เพื่อให้ผลลัพธ์เท่ากับตอนที่สำรองไว้เป๊ะ ๆ
  * ไม่งั้นของที่สร้างหลังสำรองจะค้างปนอยู่ จนตัวเลขไม่ตรงกับไฟล์
  */
-export function applyBackup(backup: Backup): number {
+export function applyBackup(backup: Backup): RestoreResult {
   const keys: string[] = [];
   for (let i = 0; i < window.localStorage.length; i++) {
     const k = window.localStorage.key(i);
-    if (k && ours(k)) keys.push(k);
+    /* ไม่ล้างคีย์ของคลาวด์ — ล้างแล้วแอปจะไปดึงมาใหม่อยู่ดี และระหว่างนั้นหน้าจอว่างเปล่า */
+    if (k && ours(k) && !fromCloud(k)) keys.push(k);
   }
   for (const k of keys) window.localStorage.removeItem(k);
-  for (const [k, v] of Object.entries(backup.data)) window.localStorage.setItem(k, v);
-  return Object.keys(backup.data).length;
+  let restored = 0;
+  let skipped = 0;
+  for (const [k, v] of Object.entries(backup.data)) {
+    if (fromCloud(k)) {
+      skipped += 1;
+      continue;
+    }
+    window.localStorage.setItem(k, v);
+    restored += 1;
+  }
+  return { restored, skipped };
 }
 
 /** วันเวลาที่สำรองไว้ อ่านเป็นภาษาคน */
