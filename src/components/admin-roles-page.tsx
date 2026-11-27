@@ -73,6 +73,8 @@ export function MenuAccessPane() {
   const route = useApprovalRoute();
   const [role, setRole] = useState<Role>("sales");
   const [resetting, setResetting] = useState(false);
+  /* ค่านี้อยู่ที่ฐานข้อมูลตั้งแต่รอบที่ 156 — บันทึกไม่ผ่านต้องบอก ไม่ใช่เงียบ */
+  const [saveErr, setSaveErr] = useState("");
 
   const items = configurableItems(role);
   const hidden = new Set(access[role] ?? []);
@@ -141,14 +143,23 @@ export function MenuAccessPane() {
                     open={!hidden.has(i.href)}
                     last={openCount === 1 && !hidden.has(i.href)}
                     onToggle={(v) => {
-                      setMenuOpen(role, i.href, v);
-                      logChange("บทบาทและสิทธิ์", `${v ? "เปิด" : "ปิด"}เมนู ${i.label} ของ${roleLabel(role)}`);
+                      setSaveErr("");
+                      void setMenuOpen(role, i.href, v).then((res) => {
+                        if (!res.ok) return setSaveErr(res.message);
+                        logChange("บทบาทและสิทธิ์", `${v ? "เปิด" : "ปิด"}เมนู ${i.label} ของ${roleLabel(role)}`);
+                      });
                     }}
                   />
                 ))}
             </ul>
           </div>
         ))}
+
+        {saveErr && (
+          <p className="mt-3 rounded-[12px] bg-destructive/10 px-3.5 py-2.5 text-[12.5px] font-semibold text-destructive">
+            {saveErr}
+          </p>
+        )}
 
         <p className="mt-4 rounded-[12px] bg-muted/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
           {approves
@@ -165,8 +176,11 @@ export function MenuAccessPane() {
         confirmLabel="เปิดทั้งหมด"
         onCancel={() => setResetting(false)}
         onConfirm={() => {
-          resetMenuAccess(role);
-          logChange("บทบาทและสิทธิ์", `เปิดเมนูทั้งหมดของ${roleLabel(role)}`);
+          setSaveErr("");
+          void resetMenuAccess(role).then((res) => {
+            if (!res.ok) return setSaveErr(res.message);
+            logChange("บทบาทและสิทธิ์", `เปิดเมนูทั้งหมดของ${roleLabel(role)}`);
+          });
           setResetting(false);
         }}
       />

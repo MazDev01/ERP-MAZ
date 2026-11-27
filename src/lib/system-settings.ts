@@ -275,6 +275,15 @@ export type SsCeiling = { from: number; to: number; ceiling: number; max: number
 export type PosRoute = Record<string, { leave?: string; ot?: string; expense?: string }>;
 
 /*
+ * เมนูที่ปิดไว้ของแต่ละบทบาท (ย้ายเข้าตั้งค่าระบบ รอบที่ 156)
+ * คีย์ = ชื่อบทบาท · ค่า = รายการ href ที่ปิด · ไม่มีคีย์คือเปิดทุกเมนู
+ *
+ * ของเดิมเก็บใน localStorage ของเครื่องที่ฝ่ายบุคคลกดปิด คนอื่นจึงยังเห็นเมนูนั้นอยู่
+ * เป็นค่าของระบบ ไม่ใช่ค่าของเครื่อง จึงต้องอยู่ในก้อนเดียวกับตั้งค่าอื่น
+ */
+export type MenuAccess = Partial<Record<string, string[]>>;
+
+/*
  * เวลาทำงานและจุดลงเวลาที่มีวันเริ่มใช้ (ต้นแบบ HR-15 "ประวัติการตั้งค่า")
  * at = วันแรกที่ใช้ชุดนี้ · ตั้งล่วงหน้าได้ ระบบสลับให้เองเมื่อถึงวัน เหมือนอัตราใน rateHistory
  * เก็บทั้งเวลาและพิกัดไว้ด้วยกัน เพราะต้นแบบให้บันทึกพร้อมกันครั้งเดียว
@@ -301,6 +310,8 @@ export type SystemSettings = {
   attHistory: AttChange[];
   ssCeiling: SsCeiling[];
   whtHistory: WhtChange[];
+  /** เมนูที่ผู้ดูแล/ฝ่ายบุคคลปิดไว้รายบทบาท — ว่างคือเปิดทุกเมนู (รอบที่ 156) */
+  menuAccess: MenuAccess;
 };
 
 export const DEFAULT_SETTINGS: SystemSettings = {
@@ -427,6 +438,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     { from: 2575, to: 9999, ceiling: 23000, max: 1150 },
   ],
   whtHistory: [],
+  /* ไม่ปิดเมนูไหนไว้ตั้งแต่ต้น (รอบที่ 156) */
+  menuAccess: {},
   approvers: {
     pm: { name: "ชนิกานต์ วัฒนกุล", title: "ผู้จัดการโครงการ" },
     acc: { name: "อรอนงค์ พรหมมา", title: "บัญชีและบุคคล" },
@@ -501,6 +514,8 @@ function fill(v: SystemSettings): SystemSettings {
     approvers: { ...DEFAULT_SETTINGS.approvers, ...(v.approvers ?? {}) },
     /* หมวดนี้เพิ่ม 28 ก.ย. 2569 — เครื่องที่บันทึกไว้ก่อนยังไม่มี ถือว่าไม่มีสายรายตำแหน่ง */
     posRoute: v.posRoute ?? {},
+    /* หมวดนี้เพิ่มรอบที่ 156 — ของที่บันทึกไว้ก่อนถือว่าเปิดทุกเมนู */
+    menuAccess: v.menuAccess ?? {},
     rateHistory: Array.isArray(v.rateHistory) ? v.rateHistory : [],
     /* หมวดนี้เพิ่ม 29 ก.ย. 2569 — เครื่องที่บันทึกไว้ก่อนยังไม่มีประวัติเวลาทำงาน */
     attHistory: Array.isArray(v.attHistory) ? v.attHistory : [],

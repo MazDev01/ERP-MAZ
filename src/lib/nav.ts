@@ -5,9 +5,8 @@
  * ที่ต่างกันคือกลุ่มงานข้างบน — ฝั่งขายได้ "งานขาย" ฝั่ง PM ได้ "งานของ PM"
  */
 
-import { useSyncExternalStore } from "react";
-import { createPersistedStore } from "./persisted-store";
 import { approvesFor, type ApprovalRoute, type Role } from "./role";
+import { saveSection, settings, useSystemSettings } from "./system-settings";
 
 export type IconName =
   | "leads"
@@ -356,21 +355,22 @@ const APPROVALS_ITEM = { label: "รายการรออนุมัติ",
 
 // ─── เมนูที่ผู้ดูแลระบบปิดไว้ ─────────────────────────────────────
 
-/** href ที่ปิดไว้ของแต่ละบทบาท — ไม่มีคือเปิดทั้งหมด */
+/**
+ * href ที่ปิดไว้ของแต่ละบทบาท — ไม่มีคือเปิดทั้งหมด
+ *
+ * ค่านี้อยู่ในตั้งค่าระบบ (ฐานข้อมูล) ตั้งแต่รอบที่ 156
+ * ของเดิมอยู่ใน localStorage ของเครื่องที่กดปิด ผลคือฝ่ายบุคคลปิดเมนูให้บทบาทหนึ่ง
+ * แล้วคนในบทบาทนั้นยังเห็นเมนูเดิมอยู่ เพราะค่าไม่เคยออกจากเครื่องที่กด
+ */
 export type MenuAccess = Partial<Record<Role, string[]>>;
 
-function isAccess(v: unknown): v is MenuAccess {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    Object.values(v).every((x) => Array.isArray(x) && x.every((h) => typeof h === "string"))
-  );
+export function useMenuAccess(): MenuAccess {
+  return useSystemSettings().menuAccess as MenuAccess;
 }
 
-const accessStore = createPersistedStore<MenuAccess>("maz-erp.menu-access.v1", {}, isAccess);
-
-export function useMenuAccess() {
-  return useSyncExternalStore(accessStore.subscribe, accessStore.get, accessStore.getServer);
+/** ค่าที่อ่านได้ตอนนี้ — ใช้นอกคอมโพเนนต์ */
+export function menuAccessNow(): MenuAccess {
+  return settings().menuAccess as MenuAccess;
 }
 
 /** เมนูที่ผู้ดูแลระบบเปิด/ปิดได้ของบทบาทนี้ — ไม่รวมรายการรออนุมัติ เพราะขึ้นกับสายอนุมัติ */
@@ -378,24 +378,27 @@ export function configurableItems(role: Role): NavItem[] {
   return NO_MINE.includes(role) ? BY_ROLE[role].work : [...BY_ROLE[role].work, ...MINE];
 }
 
+/**
+ * เปิด/ปิดเมนูหนึ่งรายการของบทบาทหนึ่ง — บันทึกลงตั้งค่าระบบ (ฝ่ายบุคคลเท่านั้น)
+ * คืนผลให้หน้าจอบอกผู้ใช้ได้เมื่อฐานข้อมูลไม่รับ ไม่ใช่เปลี่ยนหน้าจอแล้วเงียบ
+ */
 export function setMenuOpen(role: Role, href: string, open: boolean) {
-  accessStore.update((a) => {
-    const hidden = new Set(a[role] ?? []);
-    if (open) hidden.delete(href);
-    else hidden.add(href);
-    /* ต้องเหลืออย่างน้อยหนึ่งเมนู ไม่งั้นล็อกอินแล้วไม่มีหน้าให้ไป */
-    if (configurableItems(role).every((i) => hidden.has(i.href))) return a;
-    return { ...a, [role]: [...hidden] };
-  });
+  const all = menuAccessNow();
+  const hidden = new Set(all[role] ?? []);
+  if (open) hidden.delete(href);
+  else hidden.add(href);
+  /* ต้องเหลืออย่างน้อยหนึ่งเมนู ไม่งั้นล็อกอินแล้วไม่มีหน้าให้ไป */
+  if (configurableItems(role).every((i) => hidden.has(i.href))) {
+    return Promise.resolve({ ok: false as const, message: "ต้องเหลือเมนูให้บทบาทนี้อย่างน้อยหนึ่งรายการ" });
+  }
+  return saveSection("menuAccess", { ...all, [role]: [...hidden] });
 }
 
 export function resetMenuAccess(role?: Role) {
-  if (!role) return accessStore.reset();
-  accessStore.update((a) => {
-    const next = { ...a };
-    delete next[role];
-    return next;
-  });
+  if (!role) return saveSection("menuAccess", {});
+  const next = { ...menuAccessNow() };
+  delete next[role];
+  return saveSection("menuAccess", next);
 }
 
 /**
@@ -404,7 +407,7 @@ export function resetMenuAccess(role?: Role) {
  */
 export function navItems(
   role: Role,
-  access: MenuAccess = accessStore.get(),
+  access: MenuAccess = menuAccessNow(),
   route?: ApprovalRoute,
   /** ประเภทการจ้างของคนที่ล็อกอินอยู่ — ตัดเมนู "ของฉัน" ที่ไม่เกี่ยวกับคนนั้นออก */
   empType?: MineEmpType,
@@ -427,7 +430,7 @@ export function navItems(
  */
 export function navItemsOf(
   roles: Role[],
-  access: MenuAccess = accessStore.get(),
+  access: MenuAccess = menuAccessNow(),
   route?: ApprovalRoute,
   empType?: MineEmpType,
 ): NavItem[] {
