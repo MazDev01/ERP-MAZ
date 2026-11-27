@@ -21,6 +21,7 @@ import { memberName, openNudge, postTaskTalk, refreshPmNow, submitWork, taskTalk
 import { useProfile } from "@/lib/profile-data";
 import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
 import { useHydrated } from "@/lib/pwa";
+import { MyAskList, ProposeSheet, useTaskAsks } from "./task-ask-ui";
 import { FileDrop, type PickedFile } from "./file-drop";
 import { Field, Sheet } from "./lead-dialogs";
 import { SearchBox } from "./sales-ui";
@@ -123,6 +124,9 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
   const [query, setQuery] = useState(initialQuery);
   /** การ์ดที่เปิดดูรายละเอียดอยู่ */
   const [viewing, setViewing] = useState<Row | null>(null);
+  /** กำลังกรอกใบเสนองาน (รอบที่ 146) */
+  const [proposing, setProposing] = useState(false);
+  const asks = useTaskAsks();
   /** การ์ดที่กำลังกดรอข้อมูล (รอบที่ 145) */
   const [waiting, setWaiting] = useState<Row | null>(null);
   /** การ์ดที่กำลังกรอกฟอร์มส่งงาน */
@@ -194,7 +198,13 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
         <p className="text-[13px] text-muted-foreground max-sm:hidden">ภาพรวม</p>
         {/* ใช้ช่องค้นหากลางของระบบ — เคยเขียนเองแล้วไอคอนทับตัวอักษร
             เพราะ .field-control กำหนด padding ของตัวเองทับคลาส pl-* */}
-        <SearchBox value={query} onChange={setQuery} placeholder="ค้นหางานหรือโครงการ" />
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchBox value={query} onChange={setQuery} placeholder="ค้นหางานหรือโครงการ" />
+          {/* งานที่ลูกค้าหรือคนในบริษัทสั่งมาตรง ๆ เสนอเข้าระบบได้ ฝ่ายโครงการอนุมัติก่อน (รอบที่ 146) */}
+          <button type="button" className="btn glass-thin" onClick={() => setProposing(true)}>
+            เสนองาน
+          </button>
+        </div>
       </div>
 
       {/* การ์ดสรุปสี่ใบ — กดเพื่อกรองรายการข้างล่าง */}
@@ -238,6 +248,21 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
           ))
         )}
       </div>
+
+      {/* งานที่เสนอไว้เอง รอฝ่ายโครงการตัดสิน (รอบที่ 146) */}
+      <MyAskList rows={asks.rows} />
+
+      {proposing && (
+        <ProposeSheet
+          projects={[...new Map(mine.map((x) => [x.p.pj, x.p])).values()]}
+          onClose={() => setProposing(false)}
+          onSent={(no) => {
+            setProposing(false);
+            asks.reload();
+            setToast(`ส่งใบเสนอ ${no} ให้ฝ่ายโครงการแล้ว`);
+          }}
+        />
+      )}
 
       {viewing && (
         <DetailDialog row={viewing} today={today} onClose={() => setViewing(null)} />

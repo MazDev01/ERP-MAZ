@@ -25,6 +25,7 @@ import { USERS } from "@/lib/mock-data";
 import { useRole } from "@/lib/role";
 import { Sheet } from "./lead-dialogs";
 import { ProposalPreview, QuotationPreview } from "./pm-docs";
+import { PmAskSection } from "./task-ask-ui";
 import { SearchBox } from "./sales-ui";
 import { ReadOnlyNote, usePmReadOnly } from "./pm-readonly";
 import { ThaiDatePicker } from "./thai-date-picker";
@@ -194,6 +195,9 @@ export function PmInboxPage() {
           </button>
         </div>
       )}
+
+      {/* งานที่ทีมเสนอเอง รออนุมัติ (รอบที่ 146) */}
+      <PmAskSection />
 
       <SearchBox value={q} onChange={setQ} placeholder="ค้นหางาน ลูกค้า หรือคนรับงาน" />
 
