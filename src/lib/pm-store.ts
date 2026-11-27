@@ -455,6 +455,15 @@ const readServer = () => {
   return store.getServer();
 };
 
+/**
+ * ข้อมูลฝ่ายโครงการที่อ่านได้ตอนนี้ — ใช้ตอนแก้ข้อมูลหลังงานที่ทำค้าง (async) เสร็จ
+ * ห้ามแก้จากค่าที่ปิดไว้ในรอบวาดก่อน เพราะงานที่เสร็จทีหลังจะทับของที่เพิ่งแก้ไป
+ * (เจอจริงรอบที่ 157: อัปไฟล์โจทย์เสร็จแล้วเขียนทับรายการไฟล์จนว่างเปล่า)
+ */
+export function pmNow(): PmState {
+  return mergedState();
+}
+
 export function usePm() {
   return useSyncExternalStore(subscribeAll, readClient, readServer);
 }

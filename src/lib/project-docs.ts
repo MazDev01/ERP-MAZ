@@ -66,6 +66,24 @@ export async function openProjectDoc(d: ProjectDoc): Promise<string | null> {
 }
 
 /**
+ * เปิดไฟล์ประกอบโจทย์ของงานย่อย (รอบที่ 157)
+ * มีที่อยู่ในถัง → ขอลิงก์ชั่วคราวแล้วเปิด (เปิดได้จากทุกเครื่องที่มีสิทธิ์เห็นโปรเจค)
+ * มีแต่ไฟล์ในเครื่อง → เปิดจากเครื่องนี้ · ไม่มีทั้งสอง → บอกเหตุไปให้หน้าจอแสดง
+ */
+export async function openTaskFile(f: { path?: string; fileId?: string }): Promise<string | null> {
+  if (f.path) {
+    const url = await fileUrl(f.path);
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return null;
+    }
+    return "เปิดไฟล์ไม่ได้ ลองใหม่อีกครั้ง";
+  }
+  if (f.fileId) return openStoredFile(f.fileId);
+  return "ไฟล์นี้แนบไว้ก่อนระบบเก็บไฟล์ให้ จึงเปิดจากที่นี่ไม่ได้ — ขอไฟล์จากผู้จัดการโครงการ";
+}
+
+/**
  * เปิดไฟล์ที่แนบมากับรอบส่งงาน (รอบที่ 154)
  * รอบที่ส่งหลังรอบนี้มีที่อยู่ไฟล์ในถัง — เปิดได้จากทุกเครื่องที่มีสิทธิ์เห็นโปรเจค
  * รอบเก่ามีแต่ชื่อไฟล์ คืนข้อความบอกเหตุไปให้หน้าจอแสดง

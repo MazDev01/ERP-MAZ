@@ -42,6 +42,7 @@ import {
   memberOf,
   replanProject,
   savePlanDraft,
+  pmNow,
   type DraftPhase,
   type DraftTask,
   type PlannedTask,
@@ -62,7 +63,8 @@ import {
   UserIcon,
 } from "./icons";
 import { fileSize } from "./file-drop";
-import { openStoredFile, putFile, removeStoredFile } from "@/lib/file-store";
+import { putFile, removeStoredFile } from "@/lib/file-store";
+import { openTaskFile, uploadProjectFile } from "@/lib/project-docs";
 import { Field, Sheet } from "./lead-dialogs";
 import { ProposalPreview, QuotationPreview } from "./pm-docs";
 import { ThaiDatePicker } from "./thai-date-picker";
@@ -218,7 +220,13 @@ export function PmPlanPage() {
   /* แก้อะไรก็บันทึกร่างทันที ไม่มีปุ่มบันทึก (กติกาเดียวกับใบเสนอราคา) */
   function edit(fn: (b: Board) => void) {
     if (!job) return;
-    const next = cloneBoard(board);
+    /*
+     * อ่านร่างล่าสุดตอนกด ไม่ใช่ค่าที่ปิดไว้ตอนวาดหน้า (รอบที่ 157)
+     * ของเดิมงานที่ทำค้างอยู่ (เช่นอัปไฟล์ขึ้นถัง) พอเสร็จแล้วเขียนทับสิ่งที่แก้ไปก่อนหน้า
+     */
+    const cur = pmNow().drafts[job.pj];
+    const base: Board = cur ? { phases: cur.phases, plan: cur.plan } : job.initial();
+    const next = cloneBoard(base);
     fn(next);
     savePlanDraft(job.pj, next, `${me.name} (PM)`);
   }
@@ -763,6 +771,7 @@ export function PmPlanPage() {
           task={plan[open.phase][open.index]}
           count={plan[open.phase].length}
           onClose={() => setOpen(null)}
+          pj={job.pj}
           onEdit={(fn) =>
             edit((b) => {
               fn(b.plan[open.phase][open.index]);
@@ -1436,6 +1445,7 @@ function TaskDialog({
   spot,
   task,
   count,
+  pj,
   onClose,
   onEdit,
   onDelete,
@@ -1445,6 +1455,8 @@ function TaskDialog({
   spot: Spot;
   task: Draft;
   count: number;
+  /** เลขที่โปรเจค — ใช้ส่งไฟล์โจทย์ขึ้นถังของระบบ (รอบที่ 157) */
+  pj: string;
   onClose: () => void;
   onEdit: (fn: (t: Draft) => void) => void;
   /** ลบงานนี้ออกจากแผน (เจ้าของสั่ง 29 ก.ย. 2569 — ของเดิมเพิ่มได้แต่เอาออกไม่ได้) */
@@ -1460,6 +1472,8 @@ function TaskDialog({
   /* ลบต้องกดสองครั้ง — ลบพลาดแล้วโจทย์กับไฟล์ที่แนบไว้หายไปด้วย */
   const [delAsk, setDelAsk] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  /* ข้อความตอนส่งไฟล์โจทย์ขึ้นถังไม่ได้ หรือเปิดไฟล์ไม่ได้ (รอบที่ 157) */
+  const [fileMsg, setFileMsg] = useState("");
   const role = task.role ?? phase.role;
   const fits = (m: Member) => !role || m.roles.includes(role);
   const offFit = task.whos.filter((id) => {
@@ -1728,6 +1742,22 @@ function TaskDialog({
                 onEdit((t) => {
                   t.files = [...(t.files ?? []), ...added];
                 });
+                /*
+                 * ส่งขึ้นถังของระบบต่อ (รอบที่ 157) — คนรับงานจะได้เปิดไฟล์โจทย์ได้จริง
+                 * ส่งไม่สำเร็จ (เช่นแผนของงานที่ยังไม่เป็นโปรเจค) ไฟล์ยังอยู่ในเครื่องเหมือนเดิม
+                 */
+                setFileMsg("");
+                void (async () => {
+                  for (const f of added) {
+                    if (!f.fileId) continue;
+                    const path = await uploadProjectFile(pj, f.fileId);
+                    if (!path) continue;
+                    onEdit((t) => {
+                      const row = (t.files ?? []).find((x) => x.fileId === f.fileId);
+                      if (row) row.path = path;
+                    });
+                  }
+                })();
               }
               e.target.value = "";
             }}
@@ -1746,11 +1776,11 @@ function TaskDialog({
                       {fileKindLabel(f.n, f.k)} · {f.sz}
                     </em>
                   </span>
-                  {f.fileId && (
+                  {(f.path || f.fileId) && (
                     <button
                       type="button"
                       className="btn glass-thin h-7 flex-none px-2.5 text-[11.5px] max-sm:h-9"
-                      onClick={() => void openStoredFile(f.fileId!)}
+                      onClick={() => void openTaskFile(f).then((msg) => msg && setFileMsg(msg))}
                     >
                       เปิด
                     </button>
@@ -1776,7 +1806,9 @@ function TaskDialog({
               ยังไม่มีไฟล์แนบ — แนบแบบ ภาพตัวอย่าง หรือข้อมูลที่คนทำต้องใช้ได้
             </p>
           )}
-          {/* ไฟล์เก็บอยู่ในเครื่องผู้ใช้ (IndexedDB) · ต่อ backend แล้วย้ายไปอัปโหลดขึ้น storage จริง */}
+          {fileMsg && (
+            <p className="mt-2 text-[11.5px] font-semibold text-destructive">{fileMsg}</p>
+          )}
         </section>
       </div>
     </Sheet>
