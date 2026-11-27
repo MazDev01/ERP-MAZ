@@ -402,6 +402,11 @@ function loadPm() {
 }
 
 /** ขอข้อมูลใหม่หลังเขียน */
+/** สั่งอ่านงานใหม่จากฐานข้อมูล — หน้าจออื่นเรียกหลังเขียนผ่านฟังก์ชันของฐานข้อมูลโดยตรง */
+export function refreshPmNow() {
+  refreshPm();
+}
+
 function refreshPm() {
   if (!live) return;
   pmData = null;

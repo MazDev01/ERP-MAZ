@@ -3,6 +3,7 @@
 import { signedIn, supabase } from "./client";
 import { myId } from "./people";
 import { uploadAttachment } from "./files";
+import { withAuto } from "../task-deps";
 import type {
   Activity,
   ChatMessage,
@@ -82,6 +83,8 @@ type TaskRow = {
   assigned_at: string | null;
   done_at: string | null;
   last_change: unknown;
+  after_names: string[] | null;
+  waiting_on: unknown;
 };
 
 type InboxRow = {
@@ -187,7 +190,7 @@ export async function fetchPm(): Promise<PmData> {
       .from("project_tasks")
       .select(
         "id, project_id, idx, name, phase, whos, reviewers, start_on, due, status, pct, brief," +
-          " files, subs, back, assigned_at, done_at, last_change",
+          " files, subs, back, assigned_at, done_at, last_change, after_names, waiting_on",
       )
       .order("idx"),
     sb.from("project_chat").select("project_id, who, at, tx, files").order("at"),
@@ -226,6 +229,9 @@ export async function fetchPm(): Promise<PmData> {
       assignedAt: r.assigned_at ? stampOf(r.assigned_at) : undefined,
       doneAt: r.done_at ? stampOf(r.done_at) : undefined,
       lastChange: (r.last_change as ProjectTask["lastChange"]) ?? undefined,
+      /* งานรอกันตามลำดับ และรอข้อมูลที่กดเอง (รอบที่ 145) */
+      after: r.after_names?.length ? r.after_names : undefined,
+      waitingOn: (r.waiting_on as ProjectTask["waitingOn"]) ?? undefined,
     };
     (tasksByProj[r.project_id] ??= []).push(task);
   }
@@ -729,8 +735,10 @@ export async function sbCreateProject(input: {
 export async function sbConfirmPlan(
   pj: string,
   phases: ProjectPhase[],
-  tasks: ProjectTask[],
+  tasksIn: ProjectTask[],
 ): Promise<PmWrite> {
+  /* เติมลำดับงานตั้งต้นให้ก่อนบันทึก — ใบที่ตั้งไว้เองแล้วไม่ทับ */
+  const tasks = withAuto(tasksIn);
   const sb = supabase();
   if (!sb || !(await signedIn())) return NO_BACKEND;
   const id = await projIdOf(pj);
@@ -759,6 +767,8 @@ export async function sbConfirmPlan(
     assigned_at: t.assignedAt ? new Date(t.assignedAt.replace(" ", "T") + ":00+07:00").toISOString() : null,
     done_at: t.doneAt ? new Date(t.doneAt.replace(" ", "T") + ":00+07:00").toISOString() : null,
     last_change: t.lastChange ?? null,
+    /* ลำดับงาน — งานในเฟสถัดไปรอทุกงานของเฟสก่อนหน้า (รอบที่ 145) */
+    after_names: t.after ?? [],
   }));
   if (rows.length) {
     const add = await sb.from("project_tasks").upsert(rows, { onConflict: "project_id,idx" });
@@ -841,4 +851,38 @@ export async function sbUploadProjectFile(pj: string, file: File): Promise<strin
   if (!id) return null;
   const got = await uploadAttachment("project", id, file);
   return got.ok ? got.attachment.path : null;
+}
+
+/* ── งานรอกันตามลำดับ และรอข้อมูล (รอบที่ 145) ──────────────────── */
+
+/**
+ * คนทำกด "รอข้อมูล" เอง — ฐานข้อมูลตรวจว่าเป็นคนถืองานใบนั้น (หรือฝ่ายโครงการ)
+ * ไม่ล็อกการส่งงาน แค่บอกทีมว่าค้างเพราะอะไร และกันไม่ให้นับเป็นความช้าของคนทำ
+ */
+export async function sbTaskWaitSet(
+  pj: string,
+  idx: number,
+  kind: "customer" | "file" | "other",
+  note: string,
+): Promise<PmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const id = await projIdOf(pj);
+  if (!id) return { ok: false, reason: "not_found" };
+  const got = await sb.rpc("task_wait_set", { p_project: id, p_idx: idx, p_kind: kind, p_note: note });
+  if (got.error) return { ok: false, reason: why(got.error.message) };
+  const out = got.data as { ok?: boolean; reason?: string } | null;
+  return out?.ok ? { ok: true } : { ok: false, reason: out?.reason ?? "denied" };
+}
+
+/** เลิกรอข้อมูล — ได้ของที่รอแล้ว ทำงานต่อได้ */
+export async function sbTaskWaitClear(pj: string, idx: number): Promise<PmWrite> {
+  const sb = supabase();
+  if (!sb || !(await signedIn())) return NO_BACKEND;
+  const id = await projIdOf(pj);
+  if (!id) return { ok: false, reason: "not_found" };
+  const got = await sb.rpc("task_wait_clear", { p_project: id, p_idx: idx });
+  if (got.error) return { ok: false, reason: why(got.error.message) };
+  const out = got.data as { ok?: boolean; reason?: string } | null;
+  return out?.ok ? { ok: true } : { ok: false, reason: out?.reason ?? "denied" };
 }

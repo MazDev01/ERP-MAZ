@@ -13,9 +13,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { openStoredFile } from "@/lib/file-store";
+import { blockers, manualWaitDays, waitText } from "@/lib/task-deps";
+import { sbTaskWaitClear, sbTaskWaitSet } from "@/lib/supabase/pm";
 import { bkkStamp, daysBetween, thaiDate, thaiStamp, todayIso } from "@/lib/format";
-import { fileKindLabel, lastSub, projName, type Project, type ProjectTask } from "@/lib/pm-data";
-import { memberName, openNudge, postTaskTalk, submitWork, taskTalks, usePm, type TaskTalk } from "@/lib/pm-store";
+import { fileKindLabel, lastSub, projName, WAIT_KIND_LABEL, type Project, type ProjectTask, type WaitKind } from "@/lib/pm-data";
+import { memberName, openNudge, postTaskTalk, refreshPmNow, submitWork, taskTalks, usePm, type TaskTalk } from "@/lib/pm-store";
 import { useProfile } from "@/lib/profile-data";
 import { markTalkRead, unreadCount, useTalkRead } from "@/lib/talk-read";
 import { useHydrated } from "@/lib/pwa";
@@ -121,6 +123,8 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
   const [query, setQuery] = useState(initialQuery);
   /** การ์ดที่เปิดดูรายละเอียดอยู่ */
   const [viewing, setViewing] = useState<Row | null>(null);
+  /** การ์ดที่กำลังกดรอข้อมูล (รอบที่ 145) */
+  const [waiting, setWaiting] = useState<Row | null>(null);
   /** การ์ดที่กำลังกรอกฟอร์มส่งงาน */
   const [sending, setSending] = useState<Row | null>(null);
   /** การ์ดที่กำลังเปิดคุยกับ PM เรื่องงานใบนั้น */
@@ -229,6 +233,7 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
                 setChatDeal(x.p.pj);
                 setChatOpen(true);
               }}
+              onWait={() => (x.t.waitingOn ? void dropWait(x) : setWaiting(x))}
             />
           ))
         )}
@@ -236,6 +241,18 @@ function MyTasks({ initialStage, initialQuery }: { initialStage: Stage; initialQ
 
       {viewing && (
         <DetailDialog row={viewing} today={today} onClose={() => setViewing(null)} />
+      )}
+
+      {/* รอข้อมูลที่กดเอง — ไม่ล็อกการส่งงาน แต่บอกทีมว่าค้างเพราะอะไร (รอบที่ 145) */}
+      {waiting && (
+        <WaitDialog
+          row={waiting}
+          onClose={() => setWaiting(null)}
+          onDone={(msg) => {
+            setWaiting(null);
+            setToast(msg);
+          }}
+        />
       )}
 
       {/* แชทกลุ่มของโปรเจค — สายเดียวกับที่ PM ใช้ในหน้าโปรเจค ส่งในนามคนที่ล็อกอิน */}
@@ -347,6 +364,7 @@ function TaskCard({
   onSend,
   onTalk,
   onChat,
+  onWait,
 }: {
   row: Row;
   today: string;
@@ -360,13 +378,20 @@ function TaskCard({
   onTalk: () => void;
   /** เปิดแชทกลุ่มของโปรเจคที่งานใบนี้อยู่ */
   onChat: () => void;
+  /** กดรอข้อมูล / เลิกรอข้อมูล (รอบที่ 145) */
+  onWait: () => void;
 }) {
   const { p, t } = row;
   const stage = stageOf(t);
   const look = LOOK[stage];
   const Icon = look.icon;
   const late = stage === "recv" && daysBetween(t.due, today) > 0;
-  const canSend = stage === "recv" || stage === "revise";
+  /*
+   * รองานก่อนหน้าอยู่ ส่งงานไม่ได้ (รอบที่ 145) — ฐานข้อมูลกันอีกชั้น
+   * ใบที่ถูกตีกลับมาแก้ไม่เข้ากติกานี้ เพราะเคยส่งไปแล้วและงานก่อนหน้าก็ผ่านไปแล้ว
+   */
+  const stuck = blockers(p.tasks, t);
+  const canSend = (stage === "recv" || stage === "revise") && stuck.length === 0;
 
   return (
     <article className="glass-thin rounded-[16px] px-4 py-4 sm:px-5">
@@ -458,6 +483,27 @@ function TaskCard({
                 </i>
               )}
             </button>
+            {stuck.length > 0 && (
+              <span className="tag t-late" title={stuck.map((x) => x.name).join(" · ")}>
+                <i />
+                {waitText(p.tasks, t)}
+              </span>
+            )}
+            {t.waitingOn && (
+              <span className="tag t-job" title={t.waitingOn.note}>
+                <i />
+                {WAIT_KIND_LABEL[t.waitingOn.kind]} {manualWaitDays(t, today) > 0 ? `${manualWaitDays(t, today)} วัน` : ""}
+              </span>
+            )}
+            {(stage === "recv" || stage === "revise") && (
+              <button
+                type="button"
+                className="text-[12.5px] font-semibold text-muted-foreground hover:underline"
+                onClick={onWait}
+              >
+                {t.waitingOn ? "เลิกรอข้อมูล" : "รอข้อมูล"}
+              </button>
+            )}
             {canSend && (
               <button
                 type="button"
@@ -949,5 +995,95 @@ function ChatButton({ onClick }: { onClick: () => void }) {
       </svg>
       แชทโปรเจค
     </button>
+  );
+}
+
+/* ── รอข้อมูล (รอบที่ 145) ───────────────────────────────────────
+   คนทำกดเองเมื่อค้างเพราะเรื่องนอกแผน เช่น รอรูปจากลูกค้า
+   ไม่ล็อกการส่งงาน — แค่บอกทีม และกันไม่ให้เวลารอกลายเป็นความช้าของคนทำ */
+
+const WAIT_KINDS: WaitKind[] = ["customer", "file", "other"];
+
+/** เลิกรอข้อมูลของใบนี้ — ได้ของที่รอแล้ว */
+async function dropWait(row: Row) {
+  await sbTaskWaitClear(row.p.pj, row.p.tasks.indexOf(row.t));
+  refreshPmNow();
+}
+
+function WaitDialog({
+  row,
+  onClose,
+  onDone,
+}: {
+  row: Row;
+  onClose: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [kind, setKind] = useState<WaitKind>("customer");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function save() {
+    setBusy(true);
+    const res = await sbTaskWaitSet(row.p.pj, row.p.tasks.indexOf(row.t), kind, note);
+    setBusy(false);
+    if (!res.ok) {
+      setErr(res.reason === "not_mine" ? "กดได้เฉพาะคนที่ถืองานใบนี้" : "บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง");
+      return;
+    }
+    refreshPmNow();
+    onDone(`บันทึกว่า${WAIT_KIND_LABEL[kind]}แล้ว`);
+  }
+
+  return (
+    <Sheet
+      title={`รอข้อมูล · ${row.t.name}`}
+      narrow
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn glass-thin" onClick={onClose}>
+            ยกเลิก
+          </button>
+          <button type="button" className="btn solid btn-solid" disabled={busy} onClick={() => void save()}>
+            บันทึก
+          </button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <div>
+          <span className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">รออะไรอยู่</span>
+          <div className="seg glass-thin" role="group" aria-label="เรื่องที่รอ">
+            {WAIT_KINDS.map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={kind === k ? "on" : ""}
+                aria-pressed={kind === k}
+                onClick={() => setKind(k)}
+              >
+                {WAIT_KIND_LABEL[k]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="block">
+          <span className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">รายละเอียด</span>
+          <input
+            value={note}
+            aria-label="รายละเอียดที่รอ"
+            className="field-control"
+            placeholder="เช่น รอรูปสินค้าจากลูกค้า แจ้งไปแล้วเมื่อวาน"
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </label>
+        <p className="text-[11.5px] text-muted-foreground">
+          กดแล้วยังส่งงานได้ตามปกติ · เวลาที่รอจะไม่ถูกนับเป็นความช้าของคนทำ
+        </p>
+        {err && <p className="text-[12.5px] font-semibold text-destructive">{err}</p>}
+      </div>
+    </Sheet>
   );
 }

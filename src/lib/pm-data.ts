@@ -465,6 +465,15 @@ export type Submission = {
 /** ผลตรวจที่ PM ตีกลับมา — ต้องมีเหตุผลเสมอ ไม่งั้นคนทำไม่รู้ว่าต้องแก้อะไร */
 export type SendBack = { why: string; at: string; by: string };
 
+/** เรื่องที่คนทำกด "รอข้อมูล" — รอนอกแผน (รอบที่ 145) */
+export type WaitKind = "customer" | "file" | "other";
+
+export const WAIT_KIND_LABEL: Record<WaitKind, string> = {
+  customer: "รอลูกค้า",
+  file: "รอไฟล์",
+  other: "รอเรื่องอื่น",
+};
+
 export type ProjectTask = {
   name: string;
   /** ดัชนีเฟสที่งานนี้อยู่ */
@@ -495,6 +504,14 @@ export type ProjectTask = {
   lastChange?: { at: string; what: "assign" | "due" | "owner"; by: string };
   /** วันเวลาที่ PM ตรวจผ่าน — มีเฉพาะงานที่ปิดแล้ว */
   doneAt?: string;
+  /*
+   * งานรอกันตามลำดับ (รอบที่ 145 · แผนที่ระบบ 20 ต.ค. 2569)
+   * after = ชื่องานในโปรเจคเดียวกันที่ต้องผ่านก่อน ใบนี้ถึงจะเริ่มและส่งได้
+   * สถานะ "รอ" ไม่เก็บซ้ำ คิดจาก after ทุกครั้ง งานก่อนหน้าผ่านปุ๊บใบนี้เริ่มได้เอง
+   */
+  after?: string[];
+  /** รอข้อมูลที่คนทำกดเอง — รอนอกแผน ไม่ล็อกการส่งงาน แต่บอกทีมว่าค้างเพราะอะไร */
+  waitingOn?: { kind: WaitKind; note: string; since: string; by: string };
   /** ทุกรอบที่เคยส่งมา เรียงจากเก่าไปใหม่ — รอบท้ายสุดคือรอบที่สะท้อนสถานะตอนนี้ */
   subs?: Submission[];
   /** เหตุผลที่ถูกตีกลับรอบล่าสุด — ล้างทิ้งเมื่อส่งใหม่หรือผ่านแล้ว */
